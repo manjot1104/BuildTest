@@ -17,6 +17,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
+import { ThemeToggle } from "../theme-toggle"
 
 export function NavMain({
     items,
@@ -36,6 +37,7 @@ export function NavMain({
         <SidebarGroup>
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
+
                 {items.map((item) => {
                     if (!item.items) {
                         return (
@@ -81,6 +83,11 @@ export function NavMain({
                         </Collapsible>
                     )
                 })}
+                <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                        <ThemeToggle />
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
             </SidebarMenu>
         </SidebarGroup>
     )
