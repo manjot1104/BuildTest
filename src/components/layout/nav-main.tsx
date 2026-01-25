@@ -18,6 +18,7 @@ import {
     SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 import { useTheme } from "next-themes"
+import { useStateMachine } from "@/context/state-machine"
 
 export function NavMain({
     items,
@@ -35,6 +36,7 @@ export function NavMain({
 }) {
 
     const { theme, setTheme } = useTheme()
+    const { toggleHistoryModal } = useStateMachine()
 
     function handleToggle() {
         if (theme === "light") {
@@ -100,10 +102,26 @@ export function NavMain({
                                     <SidebarMenuSub>
                                         {item.items?.map((subItem) => (
                                             <SidebarMenuSubItem key={subItem.title}>
-                                                <SidebarMenuSubButton asChild>
-                                                    <a href={subItem.url}>
+                                                <SidebarMenuSubButton
+                                                    asChild={
+                                                        subItem.title !== 'History'
+                                                    }
+                                                    onClick={
+                                                        subItem.title === 'History'
+                                                            ? (e) => {
+                                                                e.preventDefault()
+                                                                toggleHistoryModal()
+                                                            }
+                                                            : undefined
+                                                    }
+                                                >
+                                                    {subItem.title === 'History' ? (
                                                         <span>{subItem.title}</span>
-                                                    </a>
+                                                    ) : (
+                                                        <a href={subItem.url}>
+                                                            <span>{subItem.title}</span>
+                                                        </a>
+                                                    )}
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
                                         ))}

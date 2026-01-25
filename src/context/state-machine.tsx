@@ -1,4 +1,5 @@
 import { AuthForm } from '@/components/auth-modal'
+import { ChatHistoryDialog } from '@/components/chat-history-dialog'
 import { authClient } from '@/server/better-auth/client'
 import React, { createContext, useContext, useEffect, useState } from 'react'
 
@@ -6,6 +7,8 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 interface StateMachineContextType {
     authModal: boolean
     toggleAuthModal: () => void
+    historyModal: boolean
+    toggleHistoryModal: () => void
 }
 
 
@@ -15,9 +18,14 @@ const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
 
     const { data: session } = authClient.useSession()
     const [authModal, setAuthModal] = useState(false)
+    const [historyModal, setHistoryModal] = useState(false)
 
     const toggleAuthModal = () => {
         setAuthModal(!authModal)
+    }
+
+    const toggleHistoryModal = () => {
+        setHistoryModal(!historyModal)
     }
 
     useEffect(() => {
@@ -29,8 +37,9 @@ const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
     }, [session])
 
     return (
-        <StateMachineContext.Provider value={{ authModal, toggleAuthModal }}>
+        <StateMachineContext.Provider value={{ authModal, toggleAuthModal, historyModal, toggleHistoryModal }}>
             <AuthForm />
+            <ChatHistoryDialog />
             {children}
         </StateMachineContext.Provider>
     )

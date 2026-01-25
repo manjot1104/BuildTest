@@ -6,6 +6,7 @@ import {
   pgTableCreator,
   text,
   timestamp,
+  unique,
 } from "drizzle-orm/pg-core";
 
 export const createTable = pgTableCreator((name) => `pg-drizzle_${name}`);
@@ -102,4 +103,38 @@ export const accountRelations = relations(account, ({ one }) => ({
 
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
+}));
+
+// Chat ownership mapping for V0 chats
+// Maps V0 chat IDs to user IDs for authenticated users
+export const chat_ownerships = createTable(
+  "chat_ownerships",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
+    index("user_id_idx").on(t.user_id),
+    index("v0_chat_id_idx").on(t.v0_chat_id),
+  ],
+);
+
+// Track anonymous chat creation by IP for rate limiting
+export const anonymous_chat_logs = createTable("anonymous_chat_logs", (d) => ({
+  id: d.text("id").primaryKey(),
+  ip_address: d.varchar("ip_address", { length: 45 }).notNull(), // IPv6 can be up to 45 chars
+  v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+  created_at: d
+    .timestamp("created_at", { withTimezone: true })
+    .$defaultFn(() => new Date())
+    .notNull(),
 }));

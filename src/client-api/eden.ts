@@ -1,12 +1,22 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { treaty } from '@elysiajs/eden'
-import { app } from '../app/api/[[...slugs]]/route'
+import { elysiaApp } from '../app/api/[[...slugs]]/elysia'
 
-// .api to enter /api prefix
+// Get base URL - use window.location.origin in browser, or process.env.NEXT_PUBLIC_APP_URL
+const getBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL
+  }
+  return 'http://localhost:3000'
+}
+
+// Create Eden client
+// On server side, use the app directly
+// On client side, use the base URL
 export const api =
-  // process is defined on server side and build time
-  typeof process !== 'undefined'
-    ? treaty(app).api
-    : treaty<typeof app>('localhost:3000').api
+  typeof window === 'undefined'
+    ? treaty(elysiaApp).api
+    : treaty<typeof elysiaApp>(getBaseUrl()).api
 
