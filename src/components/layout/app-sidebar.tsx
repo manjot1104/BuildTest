@@ -5,12 +5,8 @@ import {
     AudioWaveform,
     BookOpen,
     Bot,
-    Command,
-    Frame,
     GalleryVerticalEnd,
-    Map,
     MessageSquare,
-    PieChart,
     Settings2,
     SquareTerminal,
 } from "lucide-react"
