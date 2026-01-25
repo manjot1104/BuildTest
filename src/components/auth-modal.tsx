@@ -92,7 +92,7 @@ export function AuthForm({
                     <Card className="overflow-hidden border-0 p-0 shadow-none">
                         <CardContent className="relative grid w-full p-0 md:grid-cols-2">
                             {/* Close button */}
-                            <Button variant="ghost" size="icon" className="absolute z-10 top-4 right-4" onClick={toggleAuthModal}>
+                            <Button variant="ghost" size="icon" className="absolute bg-background z-10 top-4 right-4" onClick={toggleAuthModal}>
                                 <X className="size-4" />
                             </Button>
 
