@@ -20,6 +20,8 @@
     "noEmit": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "resolvePackageJsonExports": true,
+    "resolvePackageJsonImports": true,
     "jsx": "preserve",
     "plugins": [{ "name": "next" }],
     "incremental": true,
