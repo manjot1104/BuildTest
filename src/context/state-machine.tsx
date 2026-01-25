@@ -1,5 +1,6 @@
 import { AuthForm } from '@/components/auth-modal'
-import React, { createContext, useContext, useState } from 'react'
+import { authClient } from '@/server/better-auth/client'
+import React, { createContext, useContext, useEffect, useState } from 'react'
 
 
 interface StateMachineContextType {
@@ -12,11 +13,20 @@ const StateMachineContext = createContext<StateMachineContextType | null>(null)
 
 const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
 
-    const [authModal, setAuthModal] = useState(true)
+    const { data: session } = authClient.useSession()
+    const [authModal, setAuthModal] = useState(false)
 
     const toggleAuthModal = () => {
         setAuthModal(!authModal)
     }
+
+    useEffect(() => {
+        if (session?.user) {
+            setAuthModal(false)
+        } else {
+            setAuthModal(true)
+        }
+    }, [session])
 
     return (
         <StateMachineContext.Provider value={{ authModal, toggleAuthModal }}>

@@ -7,6 +7,7 @@ import {
     CreditCard,
     LogOut,
     Sparkles,
+    User,
 } from "lucide-react"
 
 import {
@@ -60,7 +61,9 @@ export function NavUser() {
                         onClick={toggleAuthModal}
                     >
                         <Avatar className="h-8 w-8 rounded-lg">
-                            <AvatarFallback className="rounded-lg">?</AvatarFallback>
+                            <AvatarFallback className="rounded-lg">
+                                <User className="size-4" />
+                            </AvatarFallback>
                         </Avatar>
                         <div className="ml-2 flex-1 text-left text-sm leading-tight">
                             <span className="font-medium">Log in</span>

@@ -20,6 +20,7 @@ import {
 import { useStateMachine } from "@/context/state-machine"
 import { authClient } from "@/server/better-auth/client"
 import { toast } from "sonner"
+import { X } from "lucide-react"
 
 export function AuthForm({
     className,
@@ -89,8 +90,13 @@ export function AuthForm({
             >
                 <div className={cn("flex flex-col gap-6", className)} {...props}>
                     <Card className="overflow-hidden border-0 p-0 shadow-none">
-                        <CardContent className="grid w-full p-0 md:grid-cols-2">
-                            <form onSubmit={handleSubmit} className="p-6 md:p-8">
+                        <CardContent className="relative grid w-full p-0 md:grid-cols-2">
+                            {/* Close button */}
+                            <Button variant="ghost" size="icon" className="absolute z-10 top-4 right-4" onClick={toggleAuthModal}>
+                                <X className="size-4" />
+                            </Button>
+
+                            <form onSubmit={handleSubmit} className="p-6 md:p-8 relative">
                                 <FieldGroup>
                                     <div className="flex flex-col items-center gap-2 text-center">
                                         <h1 className="text-2xl font-bold">
@@ -98,8 +104,8 @@ export function AuthForm({
                                         </h1>
                                         <p className="text-muted-foreground text-balance">
                                             {isLogin
-                                                ? "Login to your Acme Inc account"
-                                                : "Sign up for your Acme Inc account"}
+                                                ? "Login to your Technotribes account"
+                                                : "Sign up for your Technotribes account"}
                                         </p>
                                     </div>
 
@@ -109,7 +115,7 @@ export function AuthForm({
                                             <Input
                                                 id="name"
                                                 type="text"
-                                                placeholder="John Doe"
+                                                placeholder="Enter your name"
                                                 value={name}
                                                 onChange={(e) => setName(e.target.value)}
                                             />
@@ -121,7 +127,7 @@ export function AuthForm({
                                         <Input
                                             id="email"
                                             type="email"
-                                            placeholder="m@example.com"
+                                            placeholder="Enter your email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
                                             required
@@ -143,6 +149,7 @@ export function AuthForm({
                                         <Input
                                             id="password"
                                             type="password"
+                                            placeholder="Enter your password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
                                             required
@@ -159,7 +166,7 @@ export function AuthForm({
                                         </Button>
                                     </Field>
 
-                                    <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">
+                                    {/* <FieldSeparator className="*:data-[slot=field-separator-content]:bg-background">
                                         Or continue with
                                     </FieldSeparator>
 
@@ -173,7 +180,7 @@ export function AuthForm({
                                         <Button variant="outline" type="button" disabled>
                                             <span className="sr-only">Login with Meta</span>
                                         </Button>
-                                    </Field>
+                                    </Field> */}
 
                                     <FieldDescription className="text-center">
                                         {isLogin ? (
@@ -203,9 +210,11 @@ export function AuthForm({
                                 </FieldGroup>
                             </form>
 
+
+
                             <div className="bg-muted relative hidden md:block min-h-[520px]">
                                 <img
-                                    src="/placeholder.svg"
+                                    src="https://picsum.photos/200/300"
                                     alt=""
                                     className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
                                 />
