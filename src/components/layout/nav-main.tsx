@@ -1,6 +1,6 @@
 "use client"
 
-import { ChevronRight, type LucideIcon } from "lucide-react"
+import { ChevronRight, Moon, Sun, type LucideIcon } from "lucide-react"
 
 import {
     Collapsible,
@@ -17,7 +17,7 @@ import {
     SidebarMenuSubButton,
     SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
-import { ThemeToggle } from "../theme-toggle"
+import { useTheme } from "next-themes"
 
 export function NavMain({
     items,
@@ -33,6 +33,36 @@ export function NavMain({
         }[]
     }[]
 }) {
+
+    const { theme, setTheme } = useTheme()
+
+    function handleToggle() {
+        if (theme === "light") {
+            setTheme("dark")
+        } else if (theme === "dark") {
+            setTheme("light")
+        } else {
+            setTheme("light")
+        }
+    }
+
+    let icon, label
+    if (theme === "dark") {
+        icon = <Moon className="mr-2 h-4 w-4" />
+        label = "Dark"
+    } else if (theme === "light") {
+        icon = <Sun className="mr-2 h-4 w-4" />
+        label = "Light"
+    } else {
+        icon = (
+            <span className="mr-2 flex items-center">
+                <Sun className="h-4 w-4" />
+                <Moon className="ml-[-0.4rem] h-3 w-3 opacity-70" />
+            </span>
+        )
+        label = "System"
+    }
+
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
@@ -85,7 +115,14 @@ export function NavMain({
                 })}
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild>
-                        <ThemeToggle />
+                        <span
+                            onClick={handleToggle}
+                            aria-label="Toggle theme"
+                            className="w-full"
+                        >
+                            {icon}
+                            <span className="flex-1 text-left">{label} theme</span>
+                        </span>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             </SidebarMenu>

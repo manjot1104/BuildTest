@@ -29,17 +29,60 @@ import {
     SidebarMenuItem,
     useSidebar,
 } from "@/components/ui/sidebar"
+import { authClient } from "@/server/better-auth/client"
+import { useStateMachine } from "@/context/state-machine"
+import { toast } from "sonner"
 
-export function NavUser({
-    user,
-}: {
-    user: {
-        name: string
-        email: string
-        avatar: string
-    }
-}) {
+export function NavUser() {
     const { isMobile } = useSidebar()
+    const { data: session } = authClient.useSession()
+    const { toggleAuthModal } = useStateMachine()
+
+    const handleLogout = async () => {
+        try {
+            await authClient.signOut()
+            toast.success("Signed out successfully")
+            toggleAuthModal()
+        } catch (error) {
+            toast.error("Failed to sign out")
+            console.error(error)
+        }
+    }
+
+    // If not authenticated, show login button or nothing
+    if (!session?.user) {
+        return (
+            <SidebarMenu>
+                <SidebarMenuItem>
+                    <SidebarMenuButton
+                        size="lg"
+                        className="w-full"
+                        onClick={toggleAuthModal}
+                    >
+                        <Avatar className="h-8 w-8 rounded-lg">
+                            <AvatarFallback className="rounded-lg">?</AvatarFallback>
+                        </Avatar>
+                        <div className="ml-2 flex-1 text-left text-sm leading-tight">
+                            <span className="font-medium">Log in</span>
+                        </div>
+                    </SidebarMenuButton>
+                </SidebarMenuItem>
+            </SidebarMenu>
+        )
+    }
+
+    const user = {
+        name: session.user.name ?? session.user.email?.split("@")[0] ?? "User",
+        email: session.user.email ?? "",
+        avatar: session.user.image ?? "",
+    }
+
+    const initials = user.name
+        .split(" ")
+        .map((n) => n[0])
+        .join("")
+        .toUpperCase()
+        .slice(0, 2) || "U"
 
     return (
         <SidebarMenu>
@@ -52,7 +95,7 @@ export function NavUser({
                         >
                             <Avatar className="h-8 w-8 rounded-lg">
                                 <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                                <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                             </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{user.name}</span>
@@ -71,7 +114,7 @@ export function NavUser({
                             <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                                 <Avatar className="h-8 w-8 rounded-lg">
                                     <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                                    <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                                 </Avatar>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
                                     <span className="truncate font-medium">{user.name}</span>
@@ -102,7 +145,7 @@ export function NavUser({
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleLogout}>
                             <LogOut />
                             Log out
                         </DropdownMenuItem>
