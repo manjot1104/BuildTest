@@ -341,15 +341,19 @@ export async function getChatDetailsHandler({
       chatDetails = chatDetailsResult
       console.log('Chat details fetched successfully from V0 API')
 
-      // Update local record with latest demo URL if available
-      if (session?.user?.id && chatDetails.demo) {
-        try {
-          await updateUserChat({
-            v0ChatId: chatId,
-            demoUrl: chatDetails.demo,
-          })
-        } catch (error) {
-          console.error('Failed to update chat demo URL:', error)
+      // Update local record with latest demo URL and title if available
+      if (session?.user?.id) {
+        const hasUpdates = chatDetails.demo || chatDetails.title
+        if (hasUpdates) {
+          try {
+            await updateUserChat({
+              v0ChatId: chatId,
+              demoUrl: chatDetails.demo ?? undefined,
+              title: chatDetails.title ?? undefined,
+            })
+          } catch (error) {
+            console.error('Failed to update chat data:', error)
+          }
         }
       }
     } catch (error) {

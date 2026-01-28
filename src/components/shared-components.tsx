@@ -554,6 +554,19 @@ const CustomTaskSectionWrapper = (props: CustomTaskSectionWrapperProps) => {
     )
   }
 
+  // Force Questions accordion to be open
+  if (type === 'task-ask-user-questions-v1') {
+    return (
+      <TaskSectionWrapper
+        {...restProps}
+        type={type}
+        parts={parts}
+        title={title ?? 'Questions'}
+        collapsed={false}
+      />
+    )
+  }
+
   if (type?.startsWith('task-') && type?.endsWith('-v1')) {
     const taskName = type
       .replace('task-', '')
