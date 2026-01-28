@@ -76,6 +76,7 @@ export default function ChatPage() {
         currentChat: hookCurrentChat,
         chatHistory,
         isLoading: hookIsLoading,
+        isStreaming,
         handleSendMessage: hookHandleSendMessage,
         handleStreamingComplete: hookHandleStreamingComplete,
         handleChatData: hookHandleChatData,
@@ -284,6 +285,7 @@ export default function ChatPage() {
                                 setIsFullscreen={setIsFullscreen}
                                 refreshKey={refreshKey}
                                 setRefreshKey={setRefreshKey}
+                                isBuilding={isLoading || isStreaming}
                             />
                         }
                     />
