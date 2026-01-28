@@ -11,6 +11,16 @@ import {
   getChatCountByIP,
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
+import {
+  getPlansHandler,
+  getUserCreditsHandler,
+  createSubscriptionOrderHandler,
+  createCreditPackOrderHandler,
+  verifyPaymentHandler,
+  getPaymentHistoryHandler,
+  getCreditUsageHistoryHandler,
+  cancelSubscriptionHandler,
+} from '@/server/api/controllers/payment.controller'
 import { getV0Client } from '@/lib/v0-client'
 import {
   type ChatAttachment,
@@ -18,6 +28,19 @@ import {
   type RateLimitErrorResponse,
   isApiError,
 } from '@/types/api.types'
+import {
+  hasEnoughCredits,
+  deductCreditsForPrompt,
+  hasActiveSubscription,
+} from '@/server/services/credits.service'
+
+/** Insufficient credits response type */
+interface InsufficientCreditsResponse {
+  error: 'insufficient_credits'
+  message: string
+  required: number
+  available: number
+}
 
 const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
 const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
@@ -66,6 +89,48 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
                 message:
                   'You have exceeded your maximum number of messages for the day. Please try again later.',
               } satisfies RateLimitErrorResponse
+            }
+
+            // Check credits for authenticated users
+            const isNewChat = !chatId
+            const hasSub = await hasActiveSubscription(session.user.id)
+
+            if (!hasSub) {
+              set.status = 402
+              return {
+                error: 'insufficient_credits',
+                message: 'You need an active subscription to use this service. Please subscribe to continue.',
+                required: isNewChat ? 20 : 30,
+                available: 0,
+              } satisfies InsufficientCreditsResponse
+            }
+
+            const creditCheck = await hasEnoughCredits(session.user.id, isNewChat)
+
+            if (!creditCheck.hasCredits) {
+              set.status = 402
+              return {
+                error: 'insufficient_credits',
+                message: `Insufficient credits. You need ${creditCheck.required} credits but only have ${creditCheck.available}.`,
+                required: creditCheck.required,
+                available: creditCheck.available,
+              } satisfies InsufficientCreditsResponse
+            }
+
+            // Deduct credits before making the API call
+            const deductResult = await deductCreditsForPrompt(
+              session.user.id,
+              isNewChat,
+              chatId,
+            )
+            if (!deductResult.success) {
+              set.status = 402
+              return {
+                error: 'insufficient_credits',
+                message: deductResult.error ?? 'Failed to deduct credits',
+                required: isNewChat ? 20 : 30,
+                available: 0,
+              } satisfies InsufficientCreditsResponse
             }
           } else {
             const clientIP = await getClientIP(request)
@@ -235,6 +300,118 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       if (result.error === 'Failed to fetch chat history') {
         set.status = (result as ApiErrorResponse).status ?? 500
       }
+    }
+
+    return result
+  })
+
+  // ============================================
+  // Payment & Credits Endpoints
+  // ============================================
+
+  // Get all available plans and credit packs - GET /api/payments/plans
+  .get('/payments/plans', async () => {
+    return await getPlansHandler()
+  })
+
+  // Get user's credits and subscription status - GET /api/payments/credits
+  .get('/payments/credits', async ({ set }) => {
+    const result = await getUserCreditsHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // Create subscription order - POST /api/payments/subscribe
+  .post(
+    '/payments/subscribe',
+    async ({ body, set }) => {
+      const result = await createSubscriptionOrderHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        planId: t.String(),
+      }),
+    },
+  )
+
+  // Create credit pack order - POST /api/payments/credits/buy
+  .post(
+    '/payments/credits/buy',
+    async ({ body, set }) => {
+      const result = await createCreditPackOrderHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        packId: t.String(),
+      }),
+    },
+  )
+
+  // Verify payment - POST /api/payments/verify
+  .post(
+    '/payments/verify',
+    async ({ body, set }) => {
+      const result = await verifyPaymentHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        razorpay_order_id: t.String(),
+        razorpay_payment_id: t.String(),
+        razorpay_signature: t.String(),
+      }),
+    },
+  )
+
+  // Get payment history - GET /api/payments/history
+  .get('/payments/history', async ({ set }) => {
+    const result = await getPaymentHistoryHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // Get credit usage history - GET /api/payments/usage
+  .get('/payments/usage', async ({ set }) => {
+    const result = await getCreditUsageHistoryHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // Cancel subscription - POST /api/payments/cancel
+  .post('/payments/cancel', async ({ set }) => {
+    const result = await cancelSubscriptionHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
     }
 
     return result

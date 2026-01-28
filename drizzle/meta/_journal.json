@@ -29,6 +29,13 @@
       "when": 1769586994079,
       "tag": "0003_daily_prodigy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1769621700967,
+      "tag": "0004_tearful_tattoo",
+      "breakpoints": true
     }
   ]
 }

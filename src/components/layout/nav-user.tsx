@@ -1,9 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import {
     BadgeCheck,
     Bell,
     ChevronsUpDown,
+    Coins,
     CreditCard,
     LogOut,
     Sparkles,
@@ -33,11 +35,15 @@ import {
 import { authClient } from "@/server/better-auth/client"
 import { useStateMachine } from "@/context/state-machine"
 import { toast } from "sonner"
+import { useUserCredits } from "@/hooks/use-user-credits"
+import { SubscriptionModal } from "@/components/payments/subscription-modal"
 
 export function NavUser() {
     const { isMobile } = useSidebar()
     const { data: session } = authClient.useSession()
     const { toggleAuthModal } = useStateMachine()
+    const { credits, hasActiveSubscription, isLoading } = useUserCredits()
+    const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false)
 
     const handleLogout = async () => {
         try {
@@ -127,9 +133,21 @@ export function NavUser() {
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                <Sparkles />
-                                Upgrade to Pro
+                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
+                                {hasActiveSubscription ? (
+                                    <>
+                                        <Coins />
+                                        <span className="flex-1">Credits</span>
+                                        <span className="ml-auto text-xs text-muted-foreground">
+                                            {isLoading ? "..." : credits?.totalCredits ?? 0}
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles />
+                                        Buy Pro
+                                    </>
+                                )}
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
@@ -138,7 +156,7 @@ export function NavUser() {
                                 <BadgeCheck />
                                 Account
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
                                 <CreditCard />
                                 Billing
                             </DropdownMenuItem>
@@ -155,6 +173,12 @@ export function NavUser() {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </SidebarMenuItem>
+            <SubscriptionModal
+                open={subscriptionModalOpen}
+                onOpenChange={setSubscriptionModalOpen}
+                hasActiveSubscription={hasActiveSubscription}
+                currentCredits={credits?.totalCredits ?? 0}
+            />
         </SidebarMenu>
     )
 }

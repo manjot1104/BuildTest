@@ -17,6 +17,10 @@ export const env = createEnv({
       .default("development"),
     V0_API_KEY: z.string().min(1),
     V0_API_URL: z.string().url().optional(),
+    // Razorpay
+    RAZORPAY_KEY_ID: z.string().min(1),
+    RAZORPAY_KEY_SECRET: z.string().min(1),
+    RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
   },
 
   /**
@@ -25,7 +29,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
+    NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().min(1),
   },
 
   /**
@@ -38,6 +42,10 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     V0_API_KEY: process.env.V0_API_KEY,
     V0_API_URL: process.env.V0_API_URL,
+    RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
+    RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
+    RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
+    NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
