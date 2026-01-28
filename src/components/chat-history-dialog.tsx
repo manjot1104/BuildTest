@@ -21,8 +21,8 @@ export function ChatHistoryDialog({
   const router = useRouter()
   const { data: chats, isLoading, error } = useChatHistory()
 
-  const handleChatClick = (chatId: string) => {
-    router.push(`/chat?chatId=${chatId}`)
+  const handleChatClick = (v0ChatId: string) => {
+    router.push(`/chat?chatId=${v0ChatId}`)
     toggleHistoryModal()
   }
 
@@ -85,7 +85,7 @@ export function ChatHistoryDialog({
                       {chats.map((chat) => (
                         <button
                           key={chat.id}
-                          onClick={() => handleChatClick(chat.id)}
+                          onClick={() => handleChatClick(chat.v0ChatId)}
                           className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent transition-colors text-left"
                         >
                           <div className="flex-shrink-0">
@@ -93,19 +93,17 @@ export function ChatHistoryDialog({
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">
-                              {chat.demo
-                                ? `Chat ${chat.id.slice(0, 8)}...`
-                                : `Chat ${chat.id.slice(0, 8)}...`}
+                              {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
                             </p>
-                            {chat.created_at && (
+                            {chat.createdAt && (
                               <p className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(chat.created_at), {
+                                {formatDistanceToNow(new Date(chat.createdAt), {
                                   addSuffix: true,
                                 })}
                               </p>
                             )}
                           </div>
-                          {chat.demo && (
+                          {chat.demoUrl && (
                             <div className="flex-shrink-0">
                               <ExternalLink className="h-4 w-4 text-muted-foreground" />
                             </div>

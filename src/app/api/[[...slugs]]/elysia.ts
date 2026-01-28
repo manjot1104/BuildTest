@@ -12,10 +12,29 @@ import {
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import { getV0Client } from '@/lib/v0-client'
+import {
+  type ChatAttachment,
+  type ApiErrorResponse,
+  type RateLimitErrorResponse,
+  isApiError,
+} from '@/types/api.types'
 
 const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
 const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
 
+/** Streaming error response type */
+interface StreamingErrorResponse {
+  error: string
+  details: string
+}
+
+/** Chat request body interface (matches Elysia schema) */
+interface ChatRequestBody {
+  message: string
+  chatId?: string
+  streaming?: boolean
+  attachments?: ChatAttachment[]
+}
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
   // Chat endpoint - POST /api/chat
@@ -24,12 +43,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   .post(
     '/chat',
     async ({ body, request, set }) => {
-      const { message, chatId, streaming, attachments } = body as {
-        message: string
-        chatId?: string
-        streaming?: boolean
-        attachments?: Array<{ url: string }>
-      }
+      const { message, chatId, streaming, attachments } = body as ChatRequestBody
 
       const v0 = await getV0Client()
 
@@ -51,7 +65,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
                 error: 'rate_limit:chat',
                 message:
                   'You have exceeded your maximum number of messages for the day. Please try again later.',
-              }
+              } satisfies RateLimitErrorResponse
             }
           } else {
             const clientIP = await getClientIP(request)
@@ -66,7 +80,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
                 error: 'rate_limit:chat',
                 message:
                   'You have exceeded your maximum number of messages for the day. Please try again later.',
-              }
+              } satisfies RateLimitErrorResponse
             }
           }
 
@@ -126,15 +140,15 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           return {
             error: 'Failed to process streaming request',
             details: error instanceof Error ? error.message : 'Unknown error',
-          }
+          } satisfies StreamingErrorResponse
         }
       }
 
       // Non-streaming requests use the controller
       const result = await createChatHandler({ body, request })
-      
+
       // Handle error responses with status codes
-      if ('error' in result) {
+      if (isApiError(result)) {
         if (result.error === 'Message is required') {
           set.status = 400
         } else if (result.error === 'rate_limit:chat') {
@@ -143,7 +157,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           set.status = 500
         }
       }
-      
+
       return result
     },
     {
@@ -162,9 +176,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     '/chats/:chatId',
     async ({ params, set }) => {
       const result = await getChatDetailsHandler({ params })
-      
+
       // Handle error responses with status codes
-      if ('error' in result) {
+      if (isApiError(result)) {
         if (result.error === 'Chat ID is required') {
           set.status = 400
         } else if (result.error === 'Chat not found') {
@@ -175,7 +189,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           set.status = 500
         }
       }
-      
+
       return result
     },
     {
@@ -185,13 +199,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Chat ownership endpoint - POST /api/chat/ownership
+  // Used to save chat metadata after streaming (prompt, demoUrl, etc.)
   .post(
     '/chat/ownership',
     async ({ body, set }) => {
       const result = await createChatOwnershipHandler({ body })
-      
+
       // Handle error responses with status codes
-      if ('error' in result) {
+      if (isApiError(result)) {
         if (result.error === 'Chat ID is required') {
           set.status = 400
         } else if (result.error === 'Unauthorized') {
@@ -200,25 +215,27 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           set.status = 500
         }
       }
-      
+
       return result
     },
     {
       body: t.Object({
         chatId: t.String(),
+        prompt: t.Optional(t.String()),
+        demoUrl: t.Optional(t.String()),
       }),
     },
   )
   // Chat history endpoint - GET /api/chats
   .get('/chats', async ({ set }) => {
     const result = await getChatHistoryHandler()
-    
+
     // Handle error responses with status codes
-    if ('error' in result) {
+    if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
-        set.status = result.status || 500
+        set.status = (result as ApiErrorResponse).status ?? 500
       }
     }
-    
+
     return result
   })

@@ -1,94 +1,210 @@
 'use server'
 
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  gte,
-  type SQL,
-} from 'drizzle-orm'
+import { and, count, desc, eq, gte } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import {
-  user,
-  chat_ownerships,
-  anonymous_chat_logs,
-} from './schema'
+import { user_chats, anonymous_chat_logs } from './schema'
 import { db } from './index'
 
-export type ChatOwnership = typeof chat_ownerships.$inferSelect
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+export type UserChat = typeof user_chats.$inferSelect
+export type UserChatInsert = typeof user_chats.$inferInsert
 export type AnonymousChatLog = typeof anonymous_chat_logs.$inferSelect
 
-// Chat ownership functions
-export async function createChatOwnership({
-  v0ChatId,
-  userId,
-}: {
+/** Parameters for creating a new user chat */
+export interface CreateUserChatParams {
   v0ChatId: string
   userId: string
-}) {
+  title?: string
+  prompt?: string
+  demoUrl?: string
+  previewUrl?: string
+}
+
+/** Parameters for updating an existing user chat */
+export interface UpdateUserChatParams {
+  v0ChatId: string
+  title?: string
+  demoUrl?: string
+  previewUrl?: string
+}
+
+// Legacy type alias for backward compatibility
+export type ChatOwnership = UserChat
+
+// ============================================================================
+// User Chat Functions
+// ============================================================================
+
+/**
+ * Creates a new user chat record
+ * Stores chat metadata locally for efficient history retrieval
+ */
+export async function createUserChat({
+  v0ChatId,
+  userId,
+  title,
+  prompt,
+  demoUrl,
+  previewUrl,
+}: CreateUserChatParams): Promise<void> {
   try {
-    return await db
-      .insert(chat_ownerships)
+    await db
+      .insert(user_chats)
       .values({
         id: randomUUID(),
         v0_chat_id: v0ChatId,
         user_id: userId,
+        title: title ?? null,
+        prompt: prompt ?? null,
+        demo_url: demoUrl ?? null,
+        preview_url: previewUrl ?? null,
       })
-      .onConflictDoNothing({ target: chat_ownerships.v0_chat_id })
+      .onConflictDoNothing({ target: user_chats.v0_chat_id })
   } catch (error) {
-    console.error('Failed to create chat ownership in database')
+    console.error('Failed to create user chat in database:', error)
     throw error
   }
 }
 
-export async function getChatOwnership({ v0ChatId }: { v0ChatId: string }) {
+/**
+ * Updates an existing user chat record
+ * Used to update metadata after v0 responds (title, demo URL, etc.)
+ */
+export async function updateUserChat({
+  v0ChatId,
+  title,
+  demoUrl,
+  previewUrl,
+}: UpdateUserChatParams): Promise<void> {
   try {
-    const [ownership] = await db
-      .select()
-      .from(chat_ownerships)
-      .where(eq(chat_ownerships.v0_chat_id, v0ChatId))
-      .limit(1)
-    return ownership
+    const updates: Partial<UserChatInsert> = {
+      updated_at: new Date(),
+    }
+
+    if (title !== undefined) updates.title = title
+    if (demoUrl !== undefined) updates.demo_url = demoUrl
+    if (previewUrl !== undefined) updates.preview_url = previewUrl
+
+    await db
+      .update(user_chats)
+      .set(updates)
+      .where(eq(user_chats.v0_chat_id, v0ChatId))
   } catch (error) {
-    console.error('Failed to get chat ownership from database')
+    console.error('Failed to update user chat in database:', error)
     throw error
   }
 }
 
+/**
+ * Gets a user chat by v0 chat ID
+ */
+export async function getUserChat({
+  v0ChatId,
+}: {
+  v0ChatId: string
+}): Promise<UserChat | undefined> {
+  try {
+    const [chat] = await db
+      .select()
+      .from(user_chats)
+      .where(eq(user_chats.v0_chat_id, v0ChatId))
+      .limit(1)
+    return chat
+  } catch (error) {
+    console.error('Failed to get user chat from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets all chats for a user, ordered by most recent first
+ * This is the main function for chat history - no v0 API call needed
+ */
+export async function getUserChatsByUserId({
+  userId,
+  limit = 50,
+}: {
+  userId: string
+  limit?: number
+}): Promise<UserChat[]> {
+  try {
+    const chats = await db
+      .select()
+      .from(user_chats)
+      .where(eq(user_chats.user_id, userId))
+      .orderBy(desc(user_chats.updated_at))
+      .limit(limit)
+
+    return chats
+  } catch (error) {
+    console.error('Failed to get user chats from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets just the chat IDs for a user (legacy function for backward compatibility)
+ */
 export async function getChatIdsByUserId({
   userId,
 }: {
   userId: string
 }): Promise<string[]> {
   try {
-    const ownerships = await db
-      .select({ v0ChatId: chat_ownerships.v0_chat_id })
-      .from(chat_ownerships)
-      .where(eq(chat_ownerships.user_id, userId))
-      .orderBy(desc(chat_ownerships.created_at))
+    const chats = await db
+      .select({ v0ChatId: user_chats.v0_chat_id })
+      .from(user_chats)
+      .where(eq(user_chats.user_id, userId))
+      .orderBy(desc(user_chats.created_at))
 
-    return ownerships.map((o: { v0ChatId: string }) => o.v0ChatId)
+    return chats.map((c) => c.v0ChatId)
   } catch (error) {
-    console.error('Failed to get chat IDs by user from database')
+    console.error('Failed to get chat IDs by user from database:', error)
     throw error
   }
 }
 
-export async function deleteChatOwnership({ v0ChatId }: { v0ChatId: string }) {
+/**
+ * Deletes a user chat
+ */
+export async function deleteUserChat({
+  v0ChatId,
+}: {
+  v0ChatId: string
+}): Promise<void> {
   try {
-    return await db
-      .delete(chat_ownerships)
-      .where(eq(chat_ownerships.v0_chat_id, v0ChatId))
+    await db.delete(user_chats).where(eq(user_chats.v0_chat_id, v0ChatId))
   } catch (error) {
-    console.error('Failed to delete chat ownership from database')
+    console.error('Failed to delete user chat from database:', error)
     throw error
   }
 }
 
-// Rate limiting functions
+// ============================================================================
+// Legacy Aliases (for backward compatibility)
+// ============================================================================
+
+/** @deprecated Use createUserChat instead */
+export const createChatOwnership = createUserChat
+
+/** @deprecated Use getUserChat instead */
+export const getChatOwnership = getUserChat
+
+/** @deprecated Use deleteUserChat instead */
+export const deleteChatOwnership = deleteUserChat
+
+// ============================================================================
+// Rate Limiting Functions
+// ============================================================================
+
+/**
+ * Gets the count of chats created by a user within a time window
+ * Used for rate limiting authenticated users
+ */
 export async function getChatCountByUserId({
   userId,
   differenceInHours,
@@ -100,22 +216,26 @@ export async function getChatCountByUserId({
     const hoursAgo = new Date(Date.now() - differenceInHours * 60 * 60 * 1000)
 
     const [stats] = await db
-      .select({ count: count(chat_ownerships.id) })
-      .from(chat_ownerships)
+      .select({ count: count(user_chats.id) })
+      .from(user_chats)
       .where(
         and(
-          eq(chat_ownerships.user_id, userId),
-          gte(chat_ownerships.created_at, hoursAgo),
+          eq(user_chats.user_id, userId),
+          gte(user_chats.created_at, hoursAgo),
         ),
       )
 
     return stats?.count ?? 0
   } catch (error) {
-    console.error('Failed to get chat count by user from database')
+    console.error('Failed to get chat count by user from database:', error)
     throw error
   }
 }
 
+/**
+ * Gets the count of anonymous chats created from an IP within a time window
+ * Used for rate limiting anonymous users
+ */
 export async function getChatCountByIP({
   ipAddress,
   differenceInHours,
@@ -138,26 +258,30 @@ export async function getChatCountByIP({
 
     return stats?.count ?? 0
   } catch (error) {
-    console.error('Failed to get chat count by IP from database')
+    console.error('Failed to get chat count by IP from database:', error)
     throw error
   }
 }
 
+/**
+ * Creates a log entry for anonymous chat creation
+ * Used for rate limiting anonymous users
+ */
 export async function createAnonymousChatLog({
   ipAddress,
   v0ChatId,
 }: {
   ipAddress: string
   v0ChatId: string
-}) {
+}): Promise<void> {
   try {
-    return await db.insert(anonymous_chat_logs).values({
+    await db.insert(anonymous_chat_logs).values({
       id: randomUUID(),
       ip_address: ipAddress,
       v0_chat_id: v0ChatId,
     })
   } catch (error) {
-    console.error('Failed to create anonymous chat log in database')
+    console.error('Failed to create anonymous chat log in database:', error)
     throw error
   }
 }
