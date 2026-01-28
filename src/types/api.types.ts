@@ -307,6 +307,14 @@ export interface RateLimitErrorResponse {
   message: string
 }
 
+/** Insufficient credits error response */
+export interface InsufficientCreditsErrorResponse {
+  error: 'insufficient_credits'
+  message: string
+  required: number
+  available: number
+}
+
 // ============================================================================
 // Type Guards
 // ============================================================================
@@ -515,5 +523,14 @@ export function isRateLimitError(
 ): response is RateLimitErrorResponse {
   return (
     isApiError(response) && (response as RateLimitErrorResponse).error === 'rate_limit:chat'
+  )
+}
+
+/** Check if response is an insufficient credits error */
+export function isInsufficientCreditsError(
+  response: unknown,
+): response is InsufficientCreditsErrorResponse {
+  return (
+    isApiError(response) && (response as InsufficientCreditsErrorResponse).error === 'insufficient_credits'
   )
 }

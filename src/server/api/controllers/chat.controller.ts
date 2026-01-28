@@ -11,6 +11,11 @@ import {
   getUserChat,
   getUserChatsByUserId,
 } from '@/server/db/queries'
+import {
+  hasEnoughCredits,
+  deductCreditsForPrompt,
+  hasActiveSubscription,
+} from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
 import {
   type ChatRequestBody,
@@ -27,6 +32,14 @@ import {
 /** Rate limiting constants */
 const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
 const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
+
+/** Insufficient credits response */
+interface InsufficientCreditsResponse {
+  error: 'insufficient_credits'
+  message: string
+  required: number
+  available: number
+}
 
 /** Session type from better-auth */
 interface Session {
@@ -56,6 +69,7 @@ type CreateChatResponse =
   | CreateChatSuccessResponse
   | ErrorResponse
   | RateLimitErrorResponse
+  | InsufficientCreditsResponse
 
 /** Response type for getChatDetailsHandler */
 type GetChatDetailsResponse = ChatDetail | ErrorResponse
@@ -130,6 +144,40 @@ async function checkRateLimit(
 }
 
 /**
+ * Checks if authenticated user has enough credits for the action
+ * Returns error response if insufficient credits, null otherwise
+ */
+async function checkCredits(
+  userId: string,
+  isNewChat: boolean,
+): Promise<InsufficientCreditsResponse | null> {
+  // Check if user has active subscription
+  const hasSub = await hasActiveSubscription(userId)
+
+  if (!hasSub) {
+    return {
+      error: 'insufficient_credits',
+      message: 'You need an active subscription to use this service. Please subscribe to continue.',
+      required: isNewChat ? 20 : 30,
+      available: 0,
+    }
+  }
+
+  const creditCheck = await hasEnoughCredits(userId, isNewChat)
+
+  if (!creditCheck.hasCredits) {
+    return {
+      error: 'insufficient_credits',
+      message: `Insufficient credits. You need ${creditCheck.required} credits but only have ${creditCheck.available}.`,
+      required: creditCheck.required,
+      available: creditCheck.available,
+    }
+  }
+
+  return null
+}
+
+/**
  * Type guard to check if result is a ChatDetail (not a stream)
  */
 function isChatDetail(
@@ -183,11 +231,37 @@ export async function createChatHandler({
       return rateLimitResponse
     }
 
+    // Determine if this is a new chat or follow-up
+    const isNewChat = !chatId
+
+    // Check credits for authenticated users
+    if (session?.user?.id) {
+      const creditsResponse = await checkCredits(session.user.id, isNewChat)
+      if (creditsResponse) {
+        return creditsResponse
+      }
+
+      // Deduct credits before making the API call
+      const deductResult = await deductCreditsForPrompt(
+        session.user.id,
+        isNewChat,
+        chatId,
+      )
+      if (!deductResult.success) {
+        return {
+          error: 'insufficient_credits',
+          message: deductResult.error ?? 'Failed to deduct credits',
+          required: isNewChat ? 20 : 30,
+          available: 0,
+        }
+      }
+    }
+
     let chatResult: ChatDetail | ReadableStream<Uint8Array>
 
     const v0 = await getV0Client()
 
-    let isNewChat = false
+    let wasNewChat = isNewChat
 
     if (chatId) {
       try {
@@ -213,7 +287,7 @@ export async function createChatHandler({
             responseMode: 'sync',
             ...(attachments && attachments.length > 0 && { attachments }),
           })
-          isNewChat = true
+          wasNewChat = true
         } else {
           // Re-throw other errors
           throw error
@@ -226,7 +300,7 @@ export async function createChatHandler({
         responseMode: 'sync',
         ...(attachments && attachments.length > 0 && { attachments }),
       })
-      isNewChat = true
+      wasNewChat = true
     }
 
     // Type guard to ensure we have a ChatDetail and not a stream
@@ -240,7 +314,7 @@ export async function createChatHandler({
     if (chat.id) {
       try {
         if (session?.user?.id) {
-          if (isNewChat) {
+          if (wasNewChat) {
             // Create new chat record with prompt and metadata
             await createUserChat({
               v0ChatId: chat.id,
@@ -258,7 +332,7 @@ export async function createChatHandler({
           }
         } else {
           // Anonymous user - just log for rate limiting
-          if (isNewChat) {
+          if (wasNewChat) {
             const clientIP = await getClientIP(request)
             await createAnonymousChatLog({
               ipAddress: clientIP,
