@@ -42,7 +42,7 @@ export function useChatActions() {
   if (!context) {
     // Return a no-op if not within provider (for non-interactive rendering)
     return {
-      sendMessage: () => {},
+      sendMessage: (_message: string) => undefined,
       isAnswering: false,
       isAvailable: false,
     }
