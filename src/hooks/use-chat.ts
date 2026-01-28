@@ -202,11 +202,11 @@ export function useChat(chatId?: string) {
       return updated
     })
 
-    // Try to extract chat ID from the final content if we don't have one yet
+    // Try to extract chat ID from the final content
     // This is a fallback - the primary way to get chatId is via onChatData callback
     let extractedChatId: string | undefined
 
-    if (!currentChat?.id && finalContent && Array.isArray(finalContent)) {
+    if (finalContent && Array.isArray(finalContent)) {
       const searchForChatId = (obj: unknown): void => {
         if (obj && typeof obj === 'object') {
           const objRecord = obj as Record<string, unknown>
@@ -245,27 +245,56 @@ export function useChat(chatId?: string) {
       finalContent.forEach(searchForChatId)
     }
 
-    // Update URL if we found a new chat ID
-    if (extractedChatId && !currentChat?.id) {
+    // Get chatId from URL (most reliable source as it's updated during streaming)
+    const urlParams = new URLSearchParams(window.location.search)
+    const urlChatId = urlParams.get('chatId')
+
+    // Update URL if we found a new chat ID and URL doesn't have one
+    if (extractedChatId && !urlChatId) {
       updateUrlWithChatId(extractedChatId)
       setCurrentChat({ id: extractedChatId })
     }
 
-    // Determine which chatId to use for invalidating the query
-    // Priority: extractedChatId > currentChat.id > chatId from URL
-    const chatIdToInvalidate = extractedChatId ?? currentChat?.id ?? chatId
+    // Determine which chatId to use for fetching - URL is most reliable
+    const chatIdToFetch = urlChatId ?? extractedChatId ?? chatId
 
-    // Invalidate the query to trigger a refetch and get the latest chat data including demo URL
-    if (chatIdToInvalidate) {
-      // Wait a bit to allow backend to process chat creation, then invalidate
+    console.log('Streaming complete, chatId to fetch:', chatIdToFetch)
+
+    // Fetch chat details to get demo URL and title
+    if (chatIdToFetch) {
+      // Function to fetch and check for demo URL with retries
+      const fetchChatDetails = async (attempt: number) => {
+        console.log(`Fetching chat details, attempt ${attempt}`)
+
+        // Force refetch by invalidating first
+        await queryClient.invalidateQueries({ queryKey: ['chat', chatIdToFetch] })
+
+        // Then refetch
+        const result = await queryClient.fetchQuery({
+          queryKey: ['chat', chatIdToFetch],
+          staleTime: 0, // Force fresh fetch
+        })
+
+        const data = result as { demo?: string; latestVersion?: { demoUrl?: string } } | undefined
+        const demoUrl = data?.demo ?? data?.latestVersion?.demoUrl
+
+        if (!demoUrl && attempt < 5) {
+          // Retry with exponential backoff (1s, 2s, 3s, 4s, 5s)
+          console.log(`No demo URL yet, retrying in ${attempt}s...`)
+          setTimeout(() => {
+            void fetchChatDetails(attempt + 1)
+          }, 1000 * attempt)
+        } else if (demoUrl) {
+          console.log('Demo URL available:', demoUrl)
+        } else {
+          console.log('Max retries reached, demo URL not available')
+        }
+      }
+
+      // Start fetching after a short delay to allow backend to process
       setTimeout(() => {
-        void queryClient.invalidateQueries({ queryKey: ['chat', chatIdToInvalidate] })
-        
-        // If demo URL is still not available, retry after another delay
-        setTimeout(() => {
-          void queryClient.invalidateQueries({ queryKey: ['chat', chatIdToInvalidate] })
-        }, 2000)
-      }, 1000)
+        void fetchChatDetails(1)
+      }, 500)
     }
   }
 

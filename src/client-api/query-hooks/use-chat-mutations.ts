@@ -1,26 +1,18 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/client-api/eden'
+import {
+  type ChatRequestBody,
+  type ChatResponse,
+  type ChatOwnershipResponse,
+} from '@/types/api.types'
 
-export interface ChatRequest {
-  message: string
-  chatId?: string
-  streaming?: boolean
-  attachments?: Array<{ url: string }>
+/** Eden error response structure */
+interface EdenErrorValue {
+  message?: string
 }
 
-export interface ChatResponse {
-  id: string
-  demo?: string
-  messages?: Array<{
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    experimental_content?: unknown
-  }>
-}
-
-export interface CreateOwnershipResponse {
-  success: boolean
+interface EdenError {
+  value?: EdenErrorValue
 }
 
 /**
@@ -31,15 +23,16 @@ export function useCreateChatOwnership() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (chatId: string) => {
+    mutationFn: async (chatId: string): Promise<ChatOwnershipResponse> => {
       try {
         const response = await api.chat.ownership.post({ chatId })
 
         if (response.error) {
+          const edenError = response.error as EdenError
           const errorMessage =
-            typeof response.error.value?.message === 'string'
-              ? response.error.value?.message
-              : response.error.value?.message ?? 'Failed to create chat ownership'
+            typeof edenError?.value?.message === 'string'
+              ? edenError.value.message
+              : 'Failed to create chat ownership'
           throw new Error(errorMessage)
         }
 
@@ -47,7 +40,7 @@ export function useCreateChatOwnership() {
           throw new Error('Failed to create chat ownership')
         }
 
-        return response.data
+        return response.data as ChatOwnershipResponse
       } catch (error) {
         // Fallback to fetch if Eden fails
         console.warn('Eden request failed, falling back to fetch:', error)
@@ -59,12 +52,12 @@ export function useCreateChatOwnership() {
         if (!fetchResponse.ok) {
           throw new Error('Failed to create chat ownership')
         }
-        return (await fetchResponse.json()) as CreateOwnershipResponse
+        return (await fetchResponse.json()) as ChatOwnershipResponse
       }
     },
     onSuccess: async (_, chatId) => {
       // Invalidate chat details to refresh ownership
-     await queryClient.invalidateQueries({
+      await queryClient.invalidateQueries({
         queryKey: ['chat', chatId],
       })
     },
@@ -80,7 +73,7 @@ export function useCreateChat() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (data: ChatRequest): Promise<ChatResponse> => {
+    mutationFn: async (data: ChatRequestBody): Promise<ChatResponse> => {
       // Skip if streaming is requested (should use fetch directly)
       if (data.streaming) {
         throw new Error(
@@ -92,10 +85,11 @@ export function useCreateChat() {
         const response = await api.chat.post(data)
 
         if (response.error) {
+          const edenError = response.error as EdenError
           const errorMessage =
-            typeof response.error.value?.message === 'string'
-              ? response.error.value?.message
-              : response.error.value?.message ?? 'Failed to create chat'
+            typeof edenError?.value?.message === 'string'
+              ? edenError.value.message
+              : 'Failed to create chat'
           throw new Error(errorMessage)
         }
 
@@ -121,16 +115,19 @@ export function useCreateChat() {
     onSuccess: async (response, variables) => {
       // Invalidate chat details if we got a chat ID back
       if (response.id) {
-       await queryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: ['chat', response.id],
         })
       }
       // Also invalidate if chatId was provided
       if (variables.chatId) {
-       await queryClient.invalidateQueries({
+        await queryClient.invalidateQueries({
           queryKey: ['chat', variables.chatId],
         })
       }
     },
   })
 }
+
+// Re-export types for convenience
+export type { ChatRequestBody, ChatResponse, ChatOwnershipResponse }

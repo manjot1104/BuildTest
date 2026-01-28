@@ -105,10 +105,10 @@ export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
 
-// Chat ownership mapping for V0 chats
-// Maps V0 chat IDs to user IDs for authenticated users
-export const chat_ownerships = createTable(
-  "chat_ownerships",
+// User chats - stores chat data locally for efficient history retrieval
+// Maps V0 chat IDs to user IDs and stores chat metadata
+export const user_chats = createTable(
+  "user_chats",
   (d) => ({
     id: d.text("id").primaryKey(),
     v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
@@ -116,17 +116,32 @@ export const chat_ownerships = createTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // Chat metadata
+    title: d.text("title"), // Generated title or first prompt summary
+    prompt: d.text("prompt"), // First user message/prompt
+    // V0 response data
+    demo_url: d.text("demo_url"), // URL to the demo preview
+    preview_url: d.text("preview_url"), // URL to preview image
+    // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
-    index("user_id_idx").on(t.user_id),
-    index("v0_chat_id_idx").on(t.v0_chat_id),
+    index("user_chats_user_id_idx").on(t.user_id),
+    index("user_chats_v0_chat_id_idx").on(t.v0_chat_id),
+    index("user_chats_created_at_idx").on(t.created_at),
   ],
 );
+
+// Legacy alias for backward compatibility during migration
+export const chat_ownerships = user_chats;
 
 // Track anonymous chat creation by IP for rate limiting
 export const anonymous_chat_logs = createTable("anonymous_chat_logs", (d) => ({

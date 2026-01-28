@@ -15,6 +15,20 @@
       "when": 1769366818794,
       "tag": "0001_salty_sway",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769500000000,
+      "tag": "0002_user_chats_enhancement",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1769586994079,
+      "tag": "0003_daily_prodigy",
+      "breakpoints": true
     }
   ]
 }

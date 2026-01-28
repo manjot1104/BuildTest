@@ -25,6 +25,7 @@ import { PreviewPanel } from '@/components/chat/preview-panel'
 import { ResizableLayout } from '@/components/shared/resizable-layout'
 import { BottomToolbar } from '@/components/shared/bottom-toolbar'
 import { useChat } from '@/hooks/use-chat'
+import { ChatActionsProvider } from '@/context/chat-actions'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
@@ -75,6 +76,7 @@ export default function ChatPage() {
         currentChat: hookCurrentChat,
         chatHistory,
         isLoading: hookIsLoading,
+        isStreaming,
         handleSendMessage: hookHandleSendMessage,
         handleStreamingComplete: hookHandleStreamingComplete,
         handleChatData: hookHandleChatData,
@@ -236,17 +238,18 @@ export default function ChatPage() {
 
     if (showChatInterface || chatHistory.length > 0) {
         return (
-            <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
-                {/* Handle search params with Suspense boundary */}
-                <Suspense fallback={null}>
-                    <SearchParamsHandler
-                        onReset={handleReset}
-                        onChatIdChange={handleChatIdChange}
-                    />
-                </Suspense>
+            <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
+                    {/* Handle search params with Suspense boundary */}
+                    <Suspense fallback={null}>
+                        <SearchParamsHandler
+                            onReset={handleReset}
+                            onChatIdChange={handleChatIdChange}
+                        />
+                    </Suspense>
 
-                <div className="flex flex-col h-[calc(100vh-64px-40px)] md:h-[calc(100vh-64px)]">
-                    <ResizableLayout
+                    <div className="flex flex-col h-[calc(100vh-64px-40px)] md:h-[calc(100vh-64px)]">
+                        <ResizableLayout
                         className="flex-1 min-h-0"
                         singlePanelMode={false}
                         activePanel={activePanel === 'chat' ? 'left' : 'right'}
@@ -282,6 +285,7 @@ export default function ChatPage() {
                                 setIsFullscreen={setIsFullscreen}
                                 refreshKey={refreshKey}
                                 setRefreshKey={setRefreshKey}
+                                isBuilding={isLoading || isStreaming}
                             />
                         }
                     />
@@ -295,6 +299,7 @@ export default function ChatPage() {
                     </div>
                 </div>
             </div>
+            </ChatActionsProvider>
         )
     }
 

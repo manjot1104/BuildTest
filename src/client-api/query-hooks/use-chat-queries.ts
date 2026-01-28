@@ -1,30 +1,22 @@
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/client-api/eden'
+import {
+  type ChatDetails,
+  type ChatHistoryItem,
+} from '@/types/api.types'
 
-export interface ChatDetails {
-  id: string
-  demo?: string
-  url?: string
-  messages?: Array<{
-    id: string
-    role: 'user' | 'assistant'
-    content: string
-    experimental_content?: unknown
-  }>
-  latestVersion?: {
-    demoUrl?: string
-  }
+/** Eden error response structure */
+interface EdenErrorValue {
+  message?: string
 }
 
-export interface ChatHistoryItem {
-  id: string
-  demo?: string
-  url?: string
-  object?: string
-  shareable?: boolean
-  privacy?: string
-  created_at?: string
-  updated_at?: string
+interface EdenError {
+  value?: EdenErrorValue
+}
+
+/** Eden response with data wrapper */
+interface ChatHistoryDataResponse {
+  data?: ChatHistoryItem[]
 }
 
 /**
@@ -44,11 +36,12 @@ export function useChatDetails(chatId: string | undefined) {
 
         // Eden returns { data, error, status } structure
         if (response.error) {
-          throw new Error(
-            typeof response.error?.value?.message === 'string'
-              ? response.error?.value?.message
-              : response.error?.value?.message ?? 'Failed to fetch chat details',
-          )
+          const edenError = response.error as EdenError
+          const errorMessage =
+            typeof edenError?.value?.message === 'string'
+              ? edenError.value.message
+              : 'Failed to fetch chat details'
+          throw new Error(errorMessage)
         }
 
         if (!response.data) {
@@ -84,10 +77,9 @@ export function useChatHistory() {
         const response = await api.chats.get()
 
         if (response.error) {
-          const errorValue = (response.error as { value?: { message?: string } })
-            ?.value
+          const edenError = response.error as EdenError
           const errorMessage =
-            errorValue?.message ?? 'Failed to fetch chat history'
+            edenError?.value?.message ?? 'Failed to fetch chat history'
           throw new Error(errorMessage)
         }
 
@@ -95,7 +87,7 @@ export function useChatHistory() {
           throw new Error('Failed to fetch chat history')
         }
 
-        const responseData = response.data as { data?: ChatHistoryItem[] }
+        const responseData = response.data as ChatHistoryDataResponse
         return responseData?.data ?? []
       } catch {
         throw new Error('Failed to fetch chat history')
@@ -105,3 +97,6 @@ export function useChatHistory() {
     retry: 1,
   })
 }
+
+// Re-export types for convenience
+export type { ChatDetails, ChatHistoryItem }

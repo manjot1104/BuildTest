@@ -19,12 +19,13 @@ import {
   SquareIcon,
   XIcon,
 } from 'lucide-react'
+import Image from 'next/image'
 import type {
   ComponentProps,
   HTMLAttributes,
   KeyboardEventHandler,
 } from 'react'
-import { Children, useCallback, useEffect, useRef, useState } from 'react'
+import { Children, useCallback, useRef } from 'react'
 
 // Chat status type (from ai package)
 export type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error'
@@ -225,6 +226,11 @@ export const PromptInputTextarea = ({
         'focus-visible:ring-0',
         className,
       )}
+      style={{
+        minHeight,
+        maxHeight,
+        ...props.style,
+      }}
       name="message"
       onChange={(e) => {
         onChange?.(e)
@@ -343,7 +349,7 @@ export const PromptInputModelSelectTrigger = ({
   <SelectTrigger
     className={cn(
       'border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors',
-      'hover:bg-accent hover:text-foreground [&[aria-expanded="true"]]:bg-accent [&[aria-expanded="true"]]:text-foreground',
+      'hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground',
       className,
     )}
     {...props}
@@ -494,10 +500,13 @@ export const PromptInputImagePreview = ({
           key={attachment.id}
           className="relative group rounded-lg overflow-hidden border bg-muted"
         >
-          <img
+          <Image
             src={attachment.preview}
             alt={attachment.file.name}
+            width={64}
+            height={64}
             className="w-16 h-16 object-cover"
+            unoptimized
           />
           {onRemove && (
             <button

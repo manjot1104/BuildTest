@@ -1,11 +1,17 @@
-// Export all query hooks
-export * from './use-chat-queries'
-export * from './use-chat-mutations'
+// Query hooks
+export { useChatDetails, useChatHistory } from './use-chat-queries'
 
-// Re-export types for convenience
+// Mutation hooks
+export { useCreateChat, useCreateChatOwnership } from './use-chat-mutations'
+
+// Re-export types from centralized types file
 export type {
-  ChatRequest,
+  ChatDetails,
+  ChatHistoryItem,
+} from './use-chat-queries'
+
+export type {
+  ChatRequestBody,
   ChatResponse,
-  CreateOwnershipResponse,
+  ChatOwnershipResponse,
 } from './use-chat-mutations'
-export type { ChatHistoryItem as ChatHistoryItemFromQueries } from './use-chat-queries'

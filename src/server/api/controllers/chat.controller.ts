@@ -3,28 +3,83 @@
 import { type ChatDetail } from 'v0-sdk'
 import { getSession } from '@/server/better-auth/server'
 import {
-  createChatOwnership,
+  createUserChat,
+  updateUserChat,
   createAnonymousChatLog,
   getChatCountByUserId,
   getChatCountByIP,
-  getChatOwnership,
-  getChatIdsByUserId,
+  getUserChat,
+  getUserChatsByUserId,
 } from '@/server/db/queries'
 import { getV0Client } from '@/lib/v0-client'
+import {
+  type ChatRequestBody,
+  type ChatMessage,
+  type RateLimitErrorResponse,
+  type ChatOwnershipResponse,
+  type ChatHistoryItem,
+} from '@/types/api.types'
 
-// Rate limiting constants
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+/** Rate limiting constants */
 const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
 const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
 
+/** Session type from better-auth */
+interface Session {
+  user?: {
+    id?: string
+    name?: string
+    email?: string
+  }
+}
 
+/** Error response with optional status */
+interface ErrorResponse {
+  error: string
+  details?: string
+  status?: number
+}
 
-// Utility function to get client IP from request
+/** Success response for chat creation */
+interface CreateChatSuccessResponse {
+  id: string
+  demo?: string
+  messages?: ChatMessage[]
+}
+
+/** Response type for createChatHandler */
+type CreateChatResponse =
+  | CreateChatSuccessResponse
+  | ErrorResponse
+  | RateLimitErrorResponse
+
+/** Response type for getChatDetailsHandler */
+type GetChatDetailsResponse = ChatDetail | ErrorResponse
+
+/** Response type for createChatOwnershipHandler */
+type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
+
+/** Response type for getChatHistoryHandler */
+type GetChatHistoryResponse = { data: ChatHistoryItem[] } | ErrorResponse
+
+// ============================================================================
+// Utility Functions
+// ============================================================================
+
+/**
+ * Extracts client IP address from request headers
+ * Supports x-forwarded-for and x-real-ip headers
+ */
 export async function getClientIP(request: Request): Promise<string> {
   const forwarded = request.headers.get('x-forwarded-for')
   const realIP = request.headers.get('x-real-ip')
 
   if (forwarded) {
-    return forwarded?.split?.(',')?.[0]?.trim() ?? 'unknown'
+    return forwarded.split(',')[0]?.trim() ?? 'unknown'
   }
 
   if (realIP) {
@@ -34,11 +89,14 @@ export async function getClientIP(request: Request): Promise<string> {
   return 'unknown'
 }
 
-// Rate limiting check
+/**
+ * Checks rate limiting for the current user or IP
+ * Returns error response if rate limit exceeded, null otherwise
+ */
 async function checkRateLimit(
-  session: { user?: { id?: string } } | null,
+  session: Session | null,
   request: Request,
-): Promise<{ error: string; message: string } | null> {
+): Promise<RateLimitErrorResponse | null> {
   if (session?.user?.id) {
     const chatCount = await getChatCountByUserId({
       userId: session.user.id,
@@ -71,30 +129,46 @@ async function checkRateLimit(
   return null
 }
 
-// Chat request body type
-interface ChatRequestBody {
-  message: string
-  chatId?: string
-  streaming?: boolean
-  attachments?: Array<{ url: string }>
-}
-
-// Type guard to check if result is a ChatDetail (not a stream)
+/**
+ * Type guard to check if result is a ChatDetail (not a stream)
+ */
 function isChatDetail(
   result: ChatDetail | ReadableStream<Uint8Array>,
 ): result is ChatDetail {
   return !(result instanceof ReadableStream)
 }
 
-// Handler for creating chat or sending message (non-streaming only)
-// Note: Streaming requests should use fetch directly, not this controller
+/**
+ * Generates a title from the prompt (first 50 chars or first sentence)
+ */
+function generateTitleFromPrompt(prompt: string): string {
+  // Take first sentence or first 50 characters
+  const firstSentence = prompt.split(/[.!?]/)[0]
+  if (firstSentence && firstSentence.length <= 60) {
+    return firstSentence.trim()
+  }
+  // Truncate to 50 chars with ellipsis
+  if (prompt.length > 50) {
+    return prompt.substring(0, 50).trim() + '...'
+  }
+  return prompt.trim()
+}
+
+// ============================================================================
+// Handler Functions
+// ============================================================================
+
+/**
+ * Handler for creating chat or sending message (non-streaming only)
+ * Note: Streaming requests should use fetch directly, not this controller
+ */
 export async function createChatHandler({
   body,
   request,
 }: {
   body: ChatRequestBody
   request: Request
-}) {
+}): Promise<CreateChatResponse> {
   try {
     const session = await getSession()
     const { message, chatId, attachments } = body
@@ -132,9 +206,7 @@ export async function createChatHandler({
           errorMessage.includes('not_found') ||
           errorMessage.includes('Chat not found')
         ) {
-          console.warn(
-            `Chat ${chatId} not found, creating new chat instead`,
-          )
+          console.warn(`Chat ${chatId} not found, creating new chat instead`)
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
             message,
@@ -164,23 +236,39 @@ export async function createChatHandler({
 
     const chat: ChatDetail = chatResult
 
-    // Create ownership mapping or anonymous log for new chat
-    if (isNewChat && chat.id) {
+    // Save or update chat data locally
+    if (chat.id) {
       try {
         if (session?.user?.id) {
-          await createChatOwnership({
-            v0ChatId: chat.id,
-            userId: session.user.id,
-          })
+          if (isNewChat) {
+            // Create new chat record with prompt and metadata
+            await createUserChat({
+              v0ChatId: chat.id,
+              userId: session.user.id,
+              title: generateTitleFromPrompt(message),
+              prompt: message,
+              demoUrl: chat.demo ?? undefined,
+            })
+          } else {
+            // Update existing chat with latest demo URL
+            await updateUserChat({
+              v0ChatId: chat.id,
+              demoUrl: chat.demo ?? undefined,
+            })
+          }
         } else {
-          const clientIP = await getClientIP(request)
-          await createAnonymousChatLog({
-            ipAddress: clientIP,
-            v0ChatId: chat.id,
-          })
+          // Anonymous user - just log for rate limiting
+          if (isNewChat) {
+            const clientIP = await getClientIP(request)
+            await createAnonymousChatLog({
+              ipAddress: clientIP,
+              v0ChatId: chat.id,
+            })
+          }
         }
       } catch (error) {
-        console.error('Failed to create chat ownership/log:', error)
+        console.error('Failed to save chat data locally:', error)
+        // Don't fail the request, just log the error
       }
     }
 
@@ -188,7 +276,9 @@ export async function createChatHandler({
       id: chat.id,
       demo: chat.demo,
       messages: chat.messages?.map((msg) => ({
-        ...msg,
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: typeof msg.content === 'string' ? msg.content : '',
         experimental_content: msg.experimental_content,
       })),
     }
@@ -202,12 +292,14 @@ export async function createChatHandler({
   }
 }
 
-// Handler for getting chat details by ID
+/**
+ * Handler for getting chat details by ID
+ */
 export async function getChatDetailsHandler({
   params,
 }: {
   params: { chatId: string }
-}) {
+}): Promise<GetChatDetailsResponse> {
   try {
     const session = await getSession()
     const { chatId } = params
@@ -218,7 +310,23 @@ export async function getChatDetailsHandler({
       return { error: 'Chat ID is required', status: 400 }
     }
 
-    // Fetch chat details using v0 SDK first
+    // For authenticated users, check ownership first (fast local check)
+    if (session?.user?.id) {
+      const userChat = await getUserChat({ v0ChatId: chatId })
+
+      if (!userChat) {
+        // No ownership record - user doesn't own this chat
+        console.log('No ownership record found for authenticated user')
+        return { error: 'Chat not found', status: 404 }
+      }
+
+      // Check if user owns this chat
+      if (userChat.user_id !== session.user.id) {
+        return { error: 'Forbidden', status: 403 }
+      }
+    }
+
+    // Fetch chat details from v0 API
     const v0 = await getV0Client()
 
     let chatDetails: ChatDetail
@@ -232,9 +340,26 @@ export async function getChatDetailsHandler({
 
       chatDetails = chatDetailsResult
       console.log('Chat details fetched successfully from V0 API')
+
+      // Update local record with latest demo URL and title if available
+      if (session?.user?.id) {
+        const hasUpdates = chatDetails.demo || chatDetails.title
+        if (hasUpdates) {
+          try {
+            await updateUserChat({
+              v0ChatId: chatId,
+              demoUrl: chatDetails.demo ?? undefined,
+              title: chatDetails.title ?? undefined,
+            })
+          } catch (error) {
+            console.error('Failed to update chat data:', error)
+          }
+        }
+      }
     } catch (error) {
       // Handle 404 errors from V0 API - chat doesn't exist
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorMessage =
+        error instanceof Error ? error.message : String(error)
       if (
         errorMessage.includes('404') ||
         errorMessage.includes('not_found') ||
@@ -245,29 +370,6 @@ export async function getChatDetailsHandler({
       }
       // Re-throw other errors
       throw error
-    }
-
-    // For authenticated users, check ownership after confirming chat exists
-    if (session?.user?.id) {
-      const ownership = await getChatOwnership({ v0ChatId: chatId })
-
-      if (!ownership) {
-        // Chat exists in V0 API but no ownership record
-        // Ownership should have been created when user sent first message
-        // Return 404 to indicate chat not found (from user's perspective)
-        console.log(
-          'Chat exists in V0 API but no ownership found for authenticated user',
-        )
-        return { error: 'Chat not found', status: 404 }
-      }
-
-      // Check if user owns this chat
-      if (ownership.user_id !== session.user.id) {
-        return { error: 'Forbidden', status: 403 }
-      }
-    } else {
-      // Anonymous user - allow access to any chat (they can only access via direct URL)
-      console.log('Anonymous access to chat:', chatId)
     }
 
     return chatDetails
@@ -288,15 +390,19 @@ export async function getChatDetailsHandler({
   }
 }
 
-// Handler for creating chat ownership
+/**
+ * Handler for creating chat ownership (used for streaming chats)
+ * When streaming, the chat is created on the client side, so we need
+ * to create the ownership record separately
+ */
 export async function createChatOwnershipHandler({
   body,
 }: {
-  body: { chatId: string }
-}) {
+  body: { chatId: string; prompt?: string; demoUrl?: string }
+}): Promise<CreateChatOwnershipResponse> {
   try {
     const session = await getSession()
-    const { chatId } = body
+    const { chatId, prompt, demoUrl } = body
 
     if (!chatId) {
       return { error: 'Chat ID is required' }
@@ -306,10 +412,25 @@ export async function createChatOwnershipHandler({
       return { error: 'Unauthorized' }
     }
 
-    await createChatOwnership({
-      v0ChatId: chatId,
-      userId: session.user.id,
-    })
+    // Create or update the chat record
+    const existingChat = await getUserChat({ v0ChatId: chatId })
+
+    if (existingChat) {
+      // Update existing chat
+      await updateUserChat({
+        v0ChatId: chatId,
+        demoUrl: demoUrl ?? undefined,
+      })
+    } else {
+      // Create new chat record
+      await createUserChat({
+        v0ChatId: chatId,
+        userId: session.user.id,
+        title: prompt ? generateTitleFromPrompt(prompt) : undefined,
+        prompt: prompt ?? undefined,
+        demoUrl: demoUrl ?? undefined,
+      })
+    }
 
     return { success: true }
   } catch (error) {
@@ -321,8 +442,11 @@ export async function createChatOwnershipHandler({
   }
 }
 
-// Handler for getting chat history
-export async function getChatHistoryHandler() {
+/**
+ * Handler for getting chat history
+ * Uses local database - no v0 API call needed!
+ */
+export async function getChatHistoryHandler(): Promise<GetChatHistoryResponse> {
   try {
     const session = await getSession()
 
@@ -333,24 +457,27 @@ export async function getChatHistoryHandler() {
 
     console.log('Fetching chats for user:', session.user.id)
 
-    // Get user's chat IDs from our ownership mapping
-    const userChatIds = await getChatIdsByUserId({ userId: session.user.id })
+    // Get user's chats from local database (fast!)
+    const userChats = await getUserChatsByUserId({
+      userId: session.user.id,
+      limit: 50,
+    })
 
-    if (userChatIds.length === 0) {
-      return { data: [] }
-    }
+    // Map to ChatHistoryItem format
+    const chatHistory: ChatHistoryItem[] = userChats.map((chat) => ({
+      id: chat.id,
+      v0ChatId: chat.v0_chat_id,
+      title: chat.title,
+      prompt: chat.prompt,
+      demoUrl: chat.demo_url,
+      previewUrl: chat.preview_url,
+      createdAt: chat.created_at.toISOString(),
+      updatedAt: chat.updated_at.toISOString(),
+    }))
 
-    // Fetch actual chat data from v0 API
-    const v0 = await getV0Client()
-    const allChats = await v0.chats.find()
+    console.log('Chats fetched successfully:', chatHistory.length, 'chats')
 
-    // Filter to only include chats owned by this user
-    const userChats =
-      allChats.data?.filter((chat) => userChatIds.includes(chat.id)) || []
-
-    console.log('Chats fetched successfully:', userChats.length, 'chats')
-
-    return { data: userChats }
+    return { data: chatHistory }
   } catch (error) {
     console.error('Error fetching chat history:', error)
 
