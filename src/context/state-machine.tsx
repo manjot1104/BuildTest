@@ -2,6 +2,7 @@ import { AuthForm } from '@/components/auth-modal'
 import { ChatHistoryDialog } from '@/components/chat-history-dialog'
 import { authClient } from '@/server/better-auth/client'
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 
 interface StateMachineContextType {
@@ -16,11 +17,16 @@ const StateMachineContext = createContext<StateMachineContextType | null>(null)
 
 const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
 
-    const { data: session } = authClient.useSession()
+    const { data: session, isPending } = authClient.useSession()
     const [authModal, setAuthModal] = useState(false)
     const [historyModal, setHistoryModal] = useState(false)
 
     const toggleAuthModal = () => {
+        if (!session?.user) {
+            toast.error('Please sign in to continue')
+            setAuthModal(true)
+            return
+        }
         setAuthModal(!authModal)
     }
 
@@ -38,8 +44,8 @@ const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
 
     return (
         <StateMachineContext.Provider value={{ authModal, toggleAuthModal, historyModal, toggleHistoryModal }}>
-            <AuthForm />
-            <ChatHistoryDialog />
+            {!isPending && <AuthForm />}
+            {!isPending && <ChatHistoryDialog />}
             {children}
         </StateMachineContext.Provider>
     )
