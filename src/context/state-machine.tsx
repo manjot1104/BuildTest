@@ -1,49 +1,41 @@
 import { AuthForm } from '@/components/auth-modal'
 import { ChatHistoryDialog } from '@/components/chat-history-dialog'
 import { authClient } from '@/server/better-auth/client'
-import React, { createContext, useContext, useEffect, useState } from 'react'
-import { toast } from 'sonner'
+import React, { createContext, useContext, useState } from 'react'
 
 
 interface StateMachineContextType {
     authModal: boolean
     toggleAuthModal: () => void
+    openAuthModal: () => void
     historyModal: boolean
     toggleHistoryModal: () => void
+    session: typeof authClient.$Infer.Session | null
+    isPending: boolean
 }
 
 
 const StateMachineContext = createContext<StateMachineContextType | null>(null)
 
 const StateMachineProvider = ({ children }: { children: React.ReactNode }) => {
-
     const { data: session, isPending } = authClient.useSession()
     const [authModal, setAuthModal] = useState(false)
     const [historyModal, setHistoryModal] = useState(false)
 
     const toggleAuthModal = () => {
-        if (!session?.user) {
-            toast.error('Please sign in to continue')
-            setAuthModal(true)
-            return
-        }
         setAuthModal(!authModal)
+    }
+
+    const openAuthModal = () => {
+        setAuthModal(true)
     }
 
     const toggleHistoryModal = () => {
         setHistoryModal(!historyModal)
     }
 
-    useEffect(() => {
-        if (session?.user) {
-            setAuthModal(false)
-        } else {
-            setAuthModal(true)
-        }
-    }, [session])
-
     return (
-        <StateMachineContext.Provider value={{ authModal, toggleAuthModal, historyModal, toggleHistoryModal }}>
+        <StateMachineContext.Provider value={{ authModal, toggleAuthModal, openAuthModal, historyModal, toggleHistoryModal, session: session ?? null, isPending }}>
             {!isPending && <AuthForm />}
             {!isPending && <ChatHistoryDialog />}
             {children}

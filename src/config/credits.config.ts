@@ -3,7 +3,14 @@
  * Centralized configuration for all credits-related values
  */
 
-// Subscription Plans
+import {
+  type SupportedCurrency,
+  convertFromINR,
+  formatPrice,
+  BASE_CURRENCY,
+} from "./currency.config";
+
+// Subscription Plans (base prices in INR)
 export const SUBSCRIPTION_PLANS = {
   STARTER: {
     id: "starter",
@@ -100,4 +107,88 @@ export function getAllCreditPacks(): CreditPack[] {
 // Calculate credit cost based on whether it's a new chat or follow-up
 export function calculateCreditCost(isNewChat: boolean): number {
   return isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT;
+}
+
+// Localized pricing types
+export interface LocalizedPlan extends Omit<SubscriptionPlan, "price" | "currency"> {
+  basePrice: number; // Original price in INR
+  baseCurrency: typeof BASE_CURRENCY;
+  displayPrice: number; // Converted price in user's currency
+  displayCurrency: SupportedCurrency;
+  formattedPrice: string; // e.g., "$6.00" or "₹500"
+}
+
+export interface LocalizedCreditPack extends Omit<CreditPack, "price" | "currency"> {
+  basePrice: number;
+  baseCurrency: typeof BASE_CURRENCY;
+  displayPrice: number;
+  displayCurrency: SupportedCurrency;
+  formattedPrice: string;
+}
+
+/**
+ * Get subscription plan with localized pricing
+ */
+export function getLocalizedSubscriptionPlan(
+  plan: SubscriptionPlan,
+  currency: SupportedCurrency
+): LocalizedPlan {
+  const displayPrice = convertFromINR(plan.price, currency);
+
+  return {
+    id: plan.id,
+    name: plan.name,
+    credits: plan.credits,
+    interval: plan.interval,
+    description: plan.description,
+    ...("popular" in plan && { popular: plan.popular }),
+    basePrice: plan.price,
+    baseCurrency: BASE_CURRENCY,
+    displayPrice,
+    displayCurrency: currency,
+    formattedPrice: formatPrice(displayPrice, currency),
+  };
+}
+
+/**
+ * Get credit pack with localized pricing
+ */
+export function getLocalizedCreditPack(
+  pack: CreditPack,
+  currency: SupportedCurrency
+): LocalizedCreditPack {
+  const displayPrice = convertFromINR(pack.price, currency);
+
+  return {
+    id: pack.id,
+    name: pack.name,
+    credits: pack.credits,
+    basePrice: pack.price,
+    baseCurrency: BASE_CURRENCY,
+    displayPrice,
+    displayCurrency: currency,
+    formattedPrice: formatPrice(displayPrice, currency),
+  };
+}
+
+/**
+ * Get all subscription plans with localized pricing
+ */
+export function getAllLocalizedSubscriptionPlans(
+  currency: SupportedCurrency
+): LocalizedPlan[] {
+  return Object.values(SUBSCRIPTION_PLANS).map((plan) =>
+    getLocalizedSubscriptionPlan(plan, currency)
+  );
+}
+
+/**
+ * Get all credit packs with localized pricing
+ */
+export function getAllLocalizedCreditPacks(
+  currency: SupportedCurrency
+): LocalizedCreditPack[] {
+  return Object.values(CREDIT_PACKS).map((pack) =>
+    getLocalizedCreditPack(pack, currency)
+  );
 }

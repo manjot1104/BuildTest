@@ -13,6 +13,7 @@ import {
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
   getPlansHandler,
+  getLocalizedPlansHandler,
   getUserCreditsHandler,
   createSubscriptionOrderHandler,
   createCreditPackOrderHandler,
@@ -314,6 +315,20 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return await getPlansHandler()
   })
 
+  // Get localized plans with currency conversion - GET /api/payments/plans/localized
+  .get(
+    '/payments/plans/localized',
+    async ({ query }) => {
+      return await getLocalizedPlansHandler({ query })
+    },
+    {
+      query: t.Object({
+        currency: t.Optional(t.String()),
+        country: t.Optional(t.String()),
+      }),
+    },
+  )
+
   // Get user's credits and subscription status - GET /api/payments/credits
   .get('/payments/credits', async ({ set }) => {
     const result = await getUserCreditsHandler()
@@ -340,6 +355,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     {
       body: t.Object({
         planId: t.String(),
+        displayCurrency: t.Optional(t.String()),
       }),
     },
   )
@@ -359,6 +375,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     {
       body: t.Object({
         packId: t.String(),
+        displayCurrency: t.Optional(t.String()),
       }),
     },
   )

@@ -1,10 +1,26 @@
-// Query hooks
+// Chat Query hooks
 export { useChatDetails, useChatHistory } from './use-chat-queries'
 
-// Mutation hooks
+// Chat Mutation hooks
 export { useCreateChat, useCreateChatOwnership } from './use-chat-mutations'
 
-// Re-export types from centralized types file
+// Payment Query hooks
+export {
+  useUserCredits,
+  useLocalizedPlans,
+  usePaymentHistory,
+  useCreditUsageHistory,
+} from './use-payment-queries'
+
+// Payment Mutation hooks
+export {
+  useSubscribe,
+  useBuyCredits,
+  useVerifyPayment,
+  useCancelSubscription,
+} from './use-payment-mutations'
+
+// Re-export types from chat hooks
 export type {
   ChatDetails,
   ChatHistoryItem,
@@ -15,3 +31,21 @@ export type {
   ChatResponse,
   ChatOwnershipResponse,
 } from './use-chat-mutations'
+
+// Re-export types from payment hooks
+export type {
+  UserCreditsResponse,
+  LocalizedPricingResponse,
+  PaymentTransaction,
+  CreditUsageLog,
+} from './use-payment-queries'
+
+export type {
+  SubscribeRequest,
+  SubscribeResponse,
+  BuyCreditsRequest,
+  BuyCreditsResponse,
+  VerifyPaymentRequest,
+  VerifyPaymentResponse,
+  CancelSubscriptionResponse,
+} from './use-payment-mutations'
