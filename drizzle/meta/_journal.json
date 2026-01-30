@@ -36,6 +36,13 @@
       "when": 1769621700967,
       "tag": "0004_tearful_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1769696008723,
+      "tag": "0005_fuzzy_stardust",
+      "breakpoints": true
     }
   ]
 }

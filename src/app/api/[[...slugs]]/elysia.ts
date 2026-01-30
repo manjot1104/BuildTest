@@ -33,6 +33,10 @@ import {
   deductCreditsForPrompt,
   hasActiveSubscription,
 } from '@/server/services/credits.service'
+import {
+  toggleStarChat,
+  getStarredChats,
+} from '@/server/api/controllers/star.controller'
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -263,6 +267,81 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
+  // Star / Unstar chat
+  .post(
+    '/chat/star',
+    async ({ body, set }) => {
+      const session = await getSession()
+
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+
+      const { chatId, isStarred } = body as {
+        chatId: string
+        isStarred: boolean
+      }
+
+      // const { db } = await import('@/server/db')
+      // const { user_chats } = await import('@/server/db/schema')
+      // const { and, eq } = await import('drizzle-orm')
+
+      // await db
+      //   .update(user_chats)
+      //   .set({
+      //     is_starred: isStarred,
+      //     updated_at: new Date(),
+      //   })
+      //   .where(
+      //     and(
+      //       eq(user_chats.id, chatId),
+      //       eq(user_chats.user_id, session.user.id),
+      //     ),
+      //   )
+      await toggleStarChat({
+  userId: session.user.id,
+  chatId,       
+  isStarred,
+})
+
+
+      return { success: true }
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        isStarred: t.Boolean(),
+      }),
+    },
+  )
+   .get('/chat/starred', async ({ set }) => {
+    const session = await getSession()
+
+    if (!session?.user?.id) {
+      set.status = 401
+      return { error: 'Unauthorized' }
+    }
+
+    // const { db } = await import('@/server/db')
+    // const { user_chats } = await import('@/server/db/schema')
+    // const { and, eq, desc } = await import('drizzle-orm')
+
+    // const starredChats = await db
+    //   .select()
+    //   .from(user_chats)
+    //   .where(
+    //     and(
+    //       eq(user_chats.user_id, session.user.id),
+    //       eq(user_chats.is_starred, true),
+    //     ),
+    //   )
+    //   .orderBy(desc(user_chats.updated_at))
+
+    // return starredChats
+    return getStarredChats(session.user.id)
+
+  })
   // Chat ownership endpoint - POST /api/chat/ownership
   // Used to save chat metadata after streaming (prompt, demoUrl, etc.)
   .post(
