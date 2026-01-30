@@ -18,7 +18,6 @@ import {
     clearPromptFromStorage,
     type ImageAttachment,
 } from '@/components/ai-elements/prompt-input'
-import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import { ChatInput } from '@/components/chat/chat-input'
 import { PreviewPanel } from '@/components/chat/preview-panel'
@@ -27,6 +26,14 @@ import { BottomToolbar } from '@/components/shared/bottom-toolbar'
 import { useChat } from '@/hooks/use-chat'
 import { ChatActionsProvider } from '@/context/chat-actions'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
+import {
+    Layout,
+    CheckSquare,
+    BarChart3,
+    FileText,
+    ShoppingCart,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function SearchParamsHandler({
@@ -250,57 +257,89 @@ export default function ChatPage() {
 
                     <div className="flex flex-col h-[calc(100vh-64px-40px)] md:h-[calc(100vh-64px)]">
                         <ResizableLayout
-                        className="flex-1 min-h-0"
-                        singlePanelMode={false}
-                        activePanel={activePanel === 'chat' ? 'left' : 'right'}
-                        leftPanel={
-                            <div className="flex flex-col h-full">
-                                <div className="flex-1 overflow-y-auto">
-                                    <ChatMessages
-                                        chatHistory={chatHistory}
+                            className="flex-1 min-h-0"
+                            singlePanelMode={false}
+                            activePanel={activePanel === 'chat' ? 'left' : 'right'}
+                            leftPanel={
+                                <div className="flex flex-col h-full">
+                                    <div className="flex-1 overflow-y-auto">
+                                        <ChatMessages
+                                            chatHistory={chatHistory}
+                                            isLoading={isLoading}
+                                            currentChat={hookCurrentChat}
+                                            onStreamingComplete={handleStreamingComplete}
+                                            onChatData={handleChatData}
+                                            onStreamingStarted={() => setIsLoading(false)}
+                                        />
+                                    </div>
+
+                                    <ChatInput
+                                        message={message}
+                                        setMessage={setMessage}
+                                        onSubmit={handleSendMessage}
                                         isLoading={isLoading}
-                                        currentChat={hookCurrentChat}
-                                        onStreamingComplete={handleStreamingComplete}
-                                        onChatData={handleChatData}
-                                        onStreamingStarted={() => setIsLoading(false)}
+                                        showSuggestions={false}
+                                        attachments={attachments}
+                                        onAttachmentsChange={setAttachments}
+                                        textareaRef={textareaRef}
                                     />
                                 </div>
-
-                                <ChatInput
-                                    message={message}
-                                    setMessage={setMessage}
-                                    onSubmit={handleSendMessage}
-                                    isLoading={isLoading}
-                                    showSuggestions={false}
-                                    attachments={attachments}
-                                    onAttachmentsChange={setAttachments}
-                                    textareaRef={textareaRef}
+                            }
+                            rightPanel={
+                                <PreviewPanel
+                                    currentChat={hookCurrentChat}
+                                    isFullscreen={isFullscreen}
+                                    setIsFullscreen={setIsFullscreen}
+                                    refreshKey={refreshKey}
+                                    setRefreshKey={setRefreshKey}
+                                    isBuilding={isLoading || isStreaming}
                                 />
-                            </div>
-                        }
-                        rightPanel={
-                            <PreviewPanel
-                                currentChat={hookCurrentChat}
-                                isFullscreen={isFullscreen}
-                                setIsFullscreen={setIsFullscreen}
-                                refreshKey={refreshKey}
-                                setRefreshKey={setRefreshKey}
-                                isBuilding={isLoading || isStreaming}
-                            />
-                        }
-                    />
-
-                    <div className="md:hidden">
-                        <BottomToolbar
-                            activePanel={activePanel}
-                            onPanelChange={setActivePanel}
-                            hasPreview={!!hookCurrentChat?.demo}
+                            }
                         />
+
+                        <div className="md:hidden">
+                            <BottomToolbar
+                                activePanel={activePanel}
+                                onPanelChange={setActivePanel}
+                                hasPreview={!!hookCurrentChat?.demo}
+                            />
+                        </div>
                     </div>
                 </div>
-            </div>
             </ChatActionsProvider>
         )
+    }
+
+    const suggestions = [
+        {
+            label: 'Landing Page',
+            text: 'Design a modern SaaS landing page with strong visual hierarchy: a bold hero section with headline, supporting subtext, and primary call-to-action; feature sections arranged in clean content grids; tiered pricing cards with visual emphasis on the recommended plan; testimonial carousels for social proof; and a conversion-focused footer. Use a 12-column grid, generous whitespace, soft gradients, rounded surfaces, subtle shadows, and smooth hover and scroll animations. Ensure mobile-first responsiveness, accessible contrast ratios, and clear CTA affordances.',
+            icon: Layout,
+        },
+        {
+            label: 'Task Management',
+            text: 'Build a productivity-focused task management application using a Kanban-style layout with draggable task cards, status columns, and a collapsible sidebar for projects and filters. Include inline editing, due-date indicators, priority color cues, and completion feedback animations. Define clear hover, active, drag, empty, and loading states, support keyboard navigation, and reduce cognitive load through consistent spacing and grouping.',
+            icon: CheckSquare,
+        },
+        {
+            label: 'Dashboard',
+            text: 'Create a structured analytics dashboard featuring KPI summary cards, interactive charts, and persistent filter controls. Apply strong visual hierarchy to guide attention, consistent color semantics for data interpretation, and contextual tooltips for clarity. Use a dark UI theme with high contrast, subtle dividers, loading skeletons, and smooth transitions for real-time updates without overwhelming the user.',
+            icon: BarChart3,
+        },
+        {
+            label: 'Blog',
+            text: 'Develop a content-first blog platform with a typography-driven layout optimized for reading comfort. Include markdown-based authoring, category and tag filtering, sticky table of contents for long-form articles, and reading-progress indicators. Focus on accessibility, readable font scales, rhythmic spacing, and distraction-free article pages.',
+            icon: FileText,
+        },
+        {
+            label: 'Shop',
+            text: 'Design a high-conversion e-commerce experience with scannable product cards, clear pricing, ratings, and prominent call-to-action placement. Build detailed product pages with image galleries, variant selectors, reviews, and trust signals. Streamline cart and checkout flows using step indicators, inline validation, minimal form friction, responsive layouts, and subtle feedback animations.',
+            icon: ShoppingCart,
+        },
+    ]
+
+    const handleSuggestionClick = (text: string) => {
+        setMessage(text)
     }
 
     return (
@@ -315,18 +354,17 @@ export default function ChatPage() {
 
             {/* Main Content */}
             <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-                <div className="max-w-4xl w-full">
-                    <div className="text-center mb-8 md:mb-12">
-                        <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground mb-4">
-                            What can we build together?
-                        </h2>
-                    </div>
+                <div className="max-w-2xl w-full">
+                    {/* Title */}
+                    <h1 className="text-2xl sm:text-3xl font-semibold text-center text-foreground mb-8">
+                        Technotribes AI
+                    </h1>
 
                     {/* Prompt Input */}
-                    <div className="max-w-2xl mx-auto">
+                    <div className="w-full">
                         <PromptInput
                             onSubmit={handleSendMessage}
-                            className="w-full relative"
+                            className="w-full shadow-sm"
                             onImageDrop={handleImageFiles}
                             isDragOver={isDragOver}
                             onDragOver={handleDragOver}
@@ -342,7 +380,7 @@ export default function ChatPage() {
                                 onChange={(e) => setMessage(e.target.value)}
                                 value={message}
                                 placeholder="Describe what you want to build..."
-                                className="min-h-[80px] text-base"
+                                className="min-h-[100px] text-base"
                                 disabled={isLoading}
                             />
                             <PromptInputToolbar>
@@ -374,71 +412,33 @@ export default function ChatPage() {
                     </div>
 
                     {/* Suggestions */}
-                    <div className="mt-4 max-w-2xl mx-auto">
-                        <Suggestions>
-                            <Suggestion
-                                onClick={() => {
-                                    setMessage('Landing page')
-                                    // Submit after setting message
-                                    setTimeout(() => {
-                                        const form = textareaRef.current?.form
-                                        if (form) {
-                                            form.requestSubmit()
-                                        }
-                                    }, 0)
-                                }}
-                                suggestion="Landing page"
-                            />
-                            <Suggestion
-                                onClick={() => {
-                                    setMessage('Todo app')
-                                    setTimeout(() => {
-                                        const form = textareaRef.current?.form
-                                        if (form) {
-                                            form.requestSubmit()
-                                        }
-                                    }, 0)
-                                }}
-                                suggestion="Todo app"
-                            />
-                            <Suggestion
-                                onClick={() => {
-                                    setMessage('Dashboard')
-                                    setTimeout(() => {
-                                        const form = textareaRef.current?.form
-                                        if (form) {
-                                            form.requestSubmit()
-                                        }
-                                    }, 0)
-                                }}
-                                suggestion="Dashboard"
-                            />
-                            <Suggestion
-                                onClick={() => {
-                                    setMessage('Blog')
-                                    setTimeout(() => {
-                                        const form = textareaRef.current?.form
-                                        if (form) {
-                                            form.requestSubmit()
-                                        }
-                                    }, 0)
-                                }}
-                                suggestion="Blog"
-                            />
-                            <Suggestion
-                                onClick={() => {
-                                    setMessage('E-commerce')
-                                    setTimeout(() => {
-                                        const form = textareaRef.current?.form
-                                        if (form) {
-                                            form.requestSubmit()
-                                        }
-                                    }, 0)
-                                }}
-                                suggestion="E-commerce"
-                            />
-                        </Suggestions>
+                    <div className="mt-4">
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                            {suggestions.map((suggestion) => {
+                                const Icon = suggestion.icon
+                                return (
+                                    <button
+                                        key={suggestion.text}
+                                        onClick={() => handleSuggestionClick(suggestion.text)}
+                                        className={cn(
+                                            "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg",
+                                            "bg-muted/50 hover:bg-muted border border-border/50 hover:border-border",
+                                            "text-sm text-muted-foreground hover:text-foreground",
+                                            "transition-colors duration-150"
+                                        )}
+                                    >
+                                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                                        {suggestion.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
                     </div>
+
+                    {/* Keyboard hint */}
+                    <p className="text-xs text-muted-foreground/50 text-center mt-6">
+                        Press <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[10px] font-mono">Enter</kbd> to send
+                    </p>
                 </div>
             </div>
         </div>
