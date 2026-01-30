@@ -21,16 +21,28 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, CreditCard, Sparkles, Zap, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Check, CreditCard, Sparkles, Zap, Loader2, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { env } from "@/env";
 import {
-  getAllSubscriptionPlans,
-  getAllCreditPacks,
-  type SubscriptionPlan,
-  type CreditPack,
+  type LocalizedPlan,
+  type LocalizedCreditPack,
   CREDIT_COSTS,
 } from "@/config/credits.config";
+import { useLocalizedPricing } from "@/hooks/use-localized-pricing";
+import { type SupportedCurrency } from "@/config/currency.config";
+import {
+  useSubscribe,
+  useBuyCredits,
+  useVerifyPayment,
+} from "@/client-api/query-hooks/use-payment-mutations";
 
 interface SubscriptionModalProps {
   children?: React.ReactNode;
@@ -47,12 +59,26 @@ export function SubscriptionModal({
   hasActiveSubscription = false,
   currentCredits = 0,
 }: SubscriptionModalProps) {
-  const [isLoading, setIsLoading] = useState(false);
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
 
-  const subscriptionPlans = getAllSubscriptionPlans();
-  const creditPacks = getAllCreditPacks();
+  const {
+    data: pricingData,
+    isLoading: isPricingLoading,
+    currency,
+    changeCurrency,
+    availableCurrencies,
+  } = useLocalizedPricing();
+
+  // Eden-based mutation hooks
+  const subscribeMutation = useSubscribe();
+  const buyCreditsMutation = useBuyCredits();
+  const verifyPaymentMutation = useVerifyPayment();
+
+  const subscriptionPlans = pricingData?.subscriptionPlans ?? [];
+  const creditPacks = pricingData?.creditPacks ?? [];
+
+  const isLoading = subscribeMutation.isPending || buyCreditsMutation.isPending;
 
   // Load Razorpay script
   useEffect(() => {
@@ -67,34 +93,38 @@ export function SubscriptionModal({
     };
   }, []);
 
+  const handleCurrencyChange = (value: string) => {
+    changeCurrency(value as SupportedCurrency);
+  };
+
   const handlePaymentSuccess = async (response: RazorpayResponse) => {
     try {
-      const verifyRes = await fetch("/api/payments/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(response),
+      const result = await verifyPaymentMutation.mutateAsync({
+        razorpay_order_id: response.razorpay_order_id,
+        razorpay_payment_id: response.razorpay_payment_id,
+        razorpay_signature: response.razorpay_signature,
       });
 
-      const data = await verifyRes.json();
-
-      if (data.success) {
-        toast.success(data.message);
+      if (result.success) {
+        toast.success(result.message);
         onOpenChange?.(false);
         // Refresh the page to update credits
         window.location.reload();
       } else {
-        toast.error(data.error || "Payment verification failed");
+        toast.error("Payment verification failed");
       }
-    } catch {
-      toast.error("Failed to verify payment");
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to verify payment";
+      toast.error(errorMessage);
     }
   };
 
   const initiatePayment = (
     orderId: string,
     amount: number,
-    currency: string,
-    description: string,
+    paymentCurrency: string,
+    description: string
   ) => {
     if (!window.Razorpay) {
       toast.error("Payment system not loaded. Please refresh and try again.");
@@ -104,7 +134,7 @@ export function SubscriptionModal({
     const options: RazorpayOptions = {
       key: env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       amount,
-      currency,
+      currency: paymentCurrency,
       name: "Techo Builder",
       description,
       order_id: orderId,
@@ -116,7 +146,6 @@ export function SubscriptionModal({
       },
       modal: {
         ondismiss: () => {
-          setIsLoading(false);
           setLoadingPlanId(null);
           // Reopen the subscription modal when Razorpay is dismissed
           onOpenChange?.(true);
@@ -132,78 +161,58 @@ export function SubscriptionModal({
     razorpay.open();
   };
 
-  const handleSubscribe = async (plan: SubscriptionPlan) => {
+  const handleSubscribe = async (plan: LocalizedPlan) => {
     if (!razorpayLoaded) {
       toast.error("Payment system is loading. Please wait.");
       return;
     }
 
-    setIsLoading(true);
     setLoadingPlanId(plan.id);
 
     try {
-      const res = await fetch("/api/payments/subscribe", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planId: plan.id }),
+      const data = await subscribeMutation.mutateAsync({
+        planId: plan.id,
+        displayCurrency: currency,
       });
-
-      const data = await res.json();
-
-      if (data.error) {
-        toast.error(data.error);
-        setIsLoading(false);
-        setLoadingPlanId(null);
-        return;
-      }
 
       initiatePayment(
         data.orderId,
         data.amount,
         data.currency,
-        `${plan.name} Plan - ${plan.credits} Credits/month`,
+        `${plan.name} Plan - ${plan.credits} Credits/month`
       );
-    } catch {
-      toast.error("Failed to create order");
-      setIsLoading(false);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create order";
+      toast.error(errorMessage);
       setLoadingPlanId(null);
     }
   };
 
-  const handleBuyCredits = async (pack: CreditPack) => {
+  const handleBuyCredits = async (pack: LocalizedCreditPack) => {
     if (!razorpayLoaded) {
       toast.error("Payment system is loading. Please wait.");
       return;
     }
 
-    setIsLoading(true);
     setLoadingPlanId(pack.id);
 
     try {
-      const res = await fetch("/api/payments/credits/buy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ packId: pack.id }),
+      const data = await buyCreditsMutation.mutateAsync({
+        packId: pack.id,
+        displayCurrency: currency,
       });
-
-      const data = await res.json();
-
-      if (data.error) {
-        toast.error(data.error);
-        setIsLoading(false);
-        setLoadingPlanId(null);
-        return;
-      }
 
       initiatePayment(
         data.orderId,
         data.amount,
         data.currency,
-        `${pack.credits} Additional Credits`,
+        `${pack.credits} Additional Credits`
       );
-    } catch {
-      toast.error("Failed to create order");
-      setIsLoading(false);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to create order";
+      toast.error(errorMessage);
       setLoadingPlanId(null);
     }
   };
@@ -222,15 +231,32 @@ export function SubscriptionModal({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Current Credits Display */}
+        {/* Current Credits Display & Currency Selector */}
         <div className="bg-muted/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
           <div>
             <p className="text-sm text-muted-foreground">Current Balance</p>
             <p className="text-2xl font-bold">{currentCredits} Credits</p>
           </div>
-          <div className="text-left sm:text-right text-sm text-muted-foreground">
-            <p>New prompt: {CREDIT_COSTS.NEW_PROMPT} credits</p>
-            <p>Follow-up: {CREDIT_COSTS.FOLLOW_UP_PROMPT} credits</p>
+          <div className="flex flex-col sm:items-end gap-2">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <Select value={currency} onValueChange={handleCurrencyChange}>
+                <SelectTrigger className="w-[140px] h-8">
+                  <SelectValue placeholder="Currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableCurrencies.map((curr) => (
+                    <SelectItem key={curr.code} value={curr.code}>
+                      {curr.symbol} {curr.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-left sm:text-right text-sm text-muted-foreground">
+              <p>New prompt: {CREDIT_COSTS.NEW_PROMPT} credits</p>
+              <p>Follow-up: {CREDIT_COSTS.FOLLOW_UP_PROMPT} credits</p>
+            </div>
           </div>
         </div>
 
@@ -250,72 +276,83 @@ export function SubscriptionModal({
           </TabsList>
 
           <TabsContent value="subscription" className="mt-4">
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {subscriptionPlans.map((plan) => (
-                <Card
-                  key={plan.id}
-                  className={`relative ${"popular" in plan && plan.popular
-                      ? "border-primary shadow-md"
-                      : ""
+            {isPricingLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                {subscriptionPlans.map((plan) => (
+                  <Card
+                    key={plan.id}
+                    className={`relative ${
+                      "popular" in plan &&
+                      (plan as { popular?: boolean }).popular
+                        ? "border-primary shadow-md"
+                        : ""
                     }`}
-                >
-                  {"popular" in plan && plan.popular && (
-                    <Badge className="absolute -top-2 left-1/2 -translate-x-1/2">
-                      Most Popular
-                    </Badge>
-                  )}
-                  <CardHeader className="pb-4">
-                    <CardTitle>{plan.name}</CardTitle>
-                    <CardDescription>{plan.description}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="pb-4">
-                    <div className="mb-4">
-                      <span className="text-3xl font-bold">
-                        {plan.currency === "INR" ? "₹" : "$"}
-                        {plan.price}
-                      </span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    <ul className="space-y-2 text-sm">
-                      <li className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-500" />
-                        {plan.credits} credits/month
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-500" />
-                        {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)} new
-                        prompts
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-500" />
-                        Buy additional credits
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="h-4 w-4 text-green-500" />
-                        Priority support
-                      </li>
-                    </ul>
-                  </CardContent>
-                  <CardFooter>
-                    <Button
-                      className="w-full"
-                      variant={
-                        "popular" in plan && plan.popular ? "default" : "outline"
-                      }
-                      onClick={() => handleSubscribe(plan)}
-                      disabled={isLoading || hasActiveSubscription}
-                    >
-                      {loadingPlanId === plan.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
-                      {hasActiveSubscription
-                        ? "Already Subscribed"
-                        : "Subscribe"}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
+                  >
+                    {"popular" in plan &&
+                      (plan as { popular?: boolean }).popular && (
+                        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2">
+                          Most Popular
+                        </Badge>
+                      )}
+                    <CardHeader className="pb-4">
+                      <CardTitle>{plan.name}</CardTitle>
+                      <CardDescription>{plan.description}</CardDescription>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="mb-4">
+                        <span className="text-3xl font-bold">
+                          {plan.formattedPrice}
+                        </span>
+                        <span className="text-muted-foreground">/month</span>
+                      </div>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          {plan.credits} credits/month
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)}{" "}
+                          new prompts
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          Buy additional credits
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <Check className="h-4 w-4 text-green-500" />
+                          Priority support
+                        </li>
+                      </ul>
+                    </CardContent>
+                    <CardFooter>
+                      <Button
+                        className="w-full"
+                        variant={
+                          "popular" in plan &&
+                          (plan as { popular?: boolean }).popular
+                            ? "default"
+                            : "outline"
+                        }
+                        onClick={() => handleSubscribe(plan)}
+                        disabled={isLoading || hasActiveSubscription}
+                      >
+                        {loadingPlanId === plan.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : null}
+                        {hasActiveSubscription
+                          ? "Already Subscribed"
+                          : "Subscribe"}
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            )}
 
             {hasActiveSubscription && (
               <p className="text-sm text-muted-foreground text-center mt-4">
@@ -326,12 +363,14 @@ export function SubscriptionModal({
           </TabsContent>
 
           <TabsContent value="credits" className="mt-4">
-            {!hasActiveSubscription ? (
+            {isPricingLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : !hasActiveSubscription ? (
               <div className="text-center py-8">
                 <Zap className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-medium">
-                  Subscription Required
-                </p>
+                <p className="text-lg font-medium">Subscription Required</p>
                 <p className="text-muted-foreground">
                   You need an active subscription to purchase additional
                   credits.
@@ -352,8 +391,7 @@ export function SubscriptionModal({
                       <CardContent className="pb-2">
                         <div className="mb-2">
                           <span className="text-2xl font-bold">
-                            {pack.currency === "INR" ? "₹" : "$"}
-                            {pack.price}
+                            {pack.formattedPrice}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground">

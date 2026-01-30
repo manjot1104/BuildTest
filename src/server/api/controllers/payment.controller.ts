@@ -24,7 +24,18 @@ import {
 import {
   getAllSubscriptionPlans,
   getAllCreditPacks,
+  getAllLocalizedSubscriptionPlans,
+  getAllLocalizedCreditPacks,
+  type LocalizedPlan,
+  type LocalizedCreditPack,
 } from "@/config/credits.config";
+import {
+  isSupportedCurrency,
+  type SupportedCurrency,
+  DEFAULT_CURRENCY,
+  getCurrencyByCountry,
+  getAllCurrencies,
+} from "@/config/currency.config";
 import type { ApiErrorResponse } from "@/types/api.types";
 
 /**
@@ -34,6 +45,37 @@ export async function getPlansHandler() {
   return {
     subscriptionPlans: getAllSubscriptionPlans(),
     creditPacks: getAllCreditPacks(),
+  };
+}
+
+/**
+ * Get all available plans and packs with localized pricing
+ */
+export async function getLocalizedPlansHandler({
+  query,
+}: {
+  query: { currency?: string; country?: string };
+}): Promise<{
+  subscriptionPlans: LocalizedPlan[];
+  creditPacks: LocalizedCreditPack[];
+  currency: SupportedCurrency;
+  availableCurrencies: ReturnType<typeof getAllCurrencies>;
+}> {
+  let currency: SupportedCurrency = DEFAULT_CURRENCY;
+
+  // Priority: explicit currency > country detection
+  if (query.currency && isSupportedCurrency(query.currency)) {
+    currency = query.currency;
+  } else if (query.country) {
+    const currencyConfig = getCurrencyByCountry(query.country);
+    currency = currencyConfig.code;
+  }
+
+  return {
+    subscriptionPlans: getAllLocalizedSubscriptionPlans(currency),
+    creditPacks: getAllLocalizedCreditPacks(currency),
+    currency,
+    availableCurrencies: getAllCurrencies(),
   };
 }
 
@@ -71,11 +113,13 @@ export async function getUserCreditsHandler(): Promise<
 
 /**
  * Create order for subscription purchase
+ * Note: Razorpay orders are always created in INR (base currency)
+ * The displayCurrency is for UI purposes to show the user the converted amount
  */
 export async function createSubscriptionOrderHandler({
   body,
 }: {
-  body: { planId: string };
+  body: { planId: string; displayCurrency?: string };
 }): Promise<
   | {
       orderId: string;
@@ -83,6 +127,8 @@ export async function createSubscriptionOrderHandler({
       currency: string;
       planId: string;
       planName: string;
+      displayCurrency?: string;
+      displayAmount?: number;
     }
   | ApiErrorResponse
 > {
@@ -92,7 +138,7 @@ export async function createSubscriptionOrderHandler({
     return { error: "Unauthorized", status: 401 };
   }
 
-  const { planId } = body;
+  const { planId, displayCurrency } = body;
   const plan = getSubscriptionPlan(planId);
 
   if (!plan) {
@@ -139,9 +185,12 @@ export async function createSubscriptionOrderHandler({
     return {
       orderId: order.id,
       amount: plan.price * 100,
-      currency: plan.currency,
+      currency: plan.currency, // Always INR for Razorpay
       planId: plan.id,
       planName: plan.name,
+      ...(displayCurrency && displayCurrency !== plan.currency && {
+        displayCurrency,
+      }),
     };
   } catch (error) {
     console.error("Failed to create subscription order:", error);
@@ -151,11 +200,12 @@ export async function createSubscriptionOrderHandler({
 
 /**
  * Create order for credit pack purchase
+ * Note: Razorpay orders are always created in INR (base currency)
  */
 export async function createCreditPackOrderHandler({
   body,
 }: {
-  body: { packId: string };
+  body: { packId: string; displayCurrency?: string };
 }): Promise<
   | {
       orderId: string;
@@ -163,6 +213,7 @@ export async function createCreditPackOrderHandler({
       currency: string;
       packId: string;
       credits: number;
+      displayCurrency?: string;
     }
   | ApiErrorResponse
 > {
@@ -172,7 +223,7 @@ export async function createCreditPackOrderHandler({
     return { error: "Unauthorized", status: 401 };
   }
 
-  const { packId } = body;
+  const { packId, displayCurrency } = body;
   const pack = getCreditPack(packId);
 
   if (!pack) {
@@ -207,9 +258,12 @@ export async function createCreditPackOrderHandler({
     return {
       orderId: order.id,
       amount: pack.price * 100,
-      currency: pack.currency,
+      currency: pack.currency, // Always INR for Razorpay
       packId: pack.id,
       credits: pack.credits,
+      ...(displayCurrency && displayCurrency !== pack.currency && {
+        displayCurrency,
+      }),
     };
   } catch (error) {
     console.error("Failed to create credit pack order:", error);
