@@ -82,7 +82,49 @@ export function PreviewPanel({
   isBuilding = false,
 }: PreviewPanelProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [refreshKey, setRefreshKey] = useState(0)
+  // const [refreshKey, setRefreshKey] = useState(0)
+type PreviewVersion = {
+  id: string
+  label: string
+  previewUrl: string
+  createdAt: string
+}
+
+const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
+const [isReloading, setIsReloading] = useState(false)
+
+const [versions, setVersions] = useState<PreviewVersion[]>([])
+const [activeVersion, setActiveVersion] = useState<PreviewVersion | null>(null)
+const [historyOpen, setHistoryOpen] = useState(false)
+useEffect(() => {
+  if (currentChat?.demo) {
+    setIframeSrc(currentChat.demo)
+  }
+}, [currentChat?.demo])
+useEffect(() => {
+  if (!iframeSrc || isReloading) return
+
+  const newVersion: PreviewVersion = {
+    id: crypto.randomUUID(),
+    label: `Auto version ${versions.length + 1}`,
+    previewUrl: iframeSrc,
+    createdAt: new Date().toLocaleString(),
+  }
+
+  setVersions((prev) => {
+    if (prev[0]?.previewUrl === iframeSrc) return prev
+    return [newVersion, ...prev]
+  })
+}, [iframeSrc, isReloading]) 
+
+
+const previewUrl = activeVersion
+  ? `${activeVersion.previewUrl}&_v=${activeVersion.id}`
+  : iframeSrc
+
+
+
+
 
   const showBuildingLoader = isBuilding && !currentChat?.demo
 
@@ -108,12 +150,36 @@ export function PreviewPanel({
         {/* ---------------- NAV BAR ---------------- */}
         <WebPreviewNavigation>
           <WebPreviewNavigationButton
-            onClick={() => setRefreshKey((p) => p + 1)}
-            tooltip="Refresh preview"
-            disabled={!currentChat?.demo}
-          >
-            <RefreshCw className="h-4 w-4" />
-          </WebPreviewNavigationButton>
+  tooltip="Version history"
+  onClick={() => setHistoryOpen(true)}
+  disabled={!iframeSrc}
+>
+  🕘
+</WebPreviewNavigationButton>
+
+          <WebPreviewNavigationButton
+  tooltip="Refresh preview"
+  disabled={!iframeSrc}
+  onClick={() => {
+  if (!iframeSrc) return
+
+  // const newVersion: PreviewVersion = {
+  //   id: crypto.randomUUID(),
+  //   label: `Version ${versions.length + 1}`,
+  //   previewUrl: iframeSrc,
+  //   createdAt: new Date().toLocaleString(),
+  // }
+
+  // setVersions((prev) => [newVersion, ...prev])
+  // setActiveVersion(null)
+
+  setIsReloading(true)
+  setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
+}}
+>
+  <RefreshCw className="h-4 w-4" />
+</WebPreviewNavigationButton>
+
 
           <WebPreviewUrl
             readOnly
@@ -180,26 +246,45 @@ export function PreviewPanel({
         </WebPreviewNavigation>
 
         {/* ---------------- PREVIEW AREA ---------------- */}
-        {currentChat?.demo ? (
-          <div className="flex-1 bg-gray-100 dark:bg-black overflow-auto">
-            <div className="flex justify-center h-full">
-              <div
-                style={{
-                  width: DEVICE_WIDTHS[device],
-                  height: '100%',
-                  transition: 'width 0.3s ease',
-                }}
-                className="bg-white dark:bg-black shadow-md"
-              >
-                <WebPreviewBody
-                  key={refreshKey}
-                  src={currentChat.demo}
-                  className="h-full w-full"
-                />
+        {iframeSrc ? (
+  <div className="flex-1 bg-gray-100 dark:bg-black overflow-auto">
+    <div className="flex justify-center h-full">
+      <div
+        style={{
+          width: DEVICE_WIDTHS[device],
+          height: '100%',
+          transition: 'width 0.3s ease',
+        }}
+        className="relative bg-white dark:bg-black shadow-md"
+      >
+       <WebPreviewBody
+  key={previewUrl}   
+  src={previewUrl}
+  className="h-full w-full"
+  onLoad={() => setIsReloading(false)}
+/>
+
+
+        {isReloading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:150ms]" />
+                <span className="w-2 h-2 bg-blue-500 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
+              <p className="text-sm text-white/90">
+                Reloading preview…
+              </p>
             </div>
           </div>
-        ) : showBuildingLoader ? (
+        )}
+      </div>
+    </div>
+  </div>
+)
+
+         : showBuildingLoader ? (
           <BuildingLoader />
         ) : (
           <div className="flex-1 flex items-center justify-center bg-gray-50 dark:bg-black">
@@ -208,6 +293,46 @@ export function PreviewPanel({
             </p>
           </div>
         )}
+        {historyOpen && (
+  <div className="fixed inset-0 z-50 flex">
+    <div
+      className="flex-1 bg-black/30"
+      onClick={() => setHistoryOpen(false)}
+    />
+
+    <div className="w-72 bg-white dark:bg-black border-l p-4">
+      <h3 className="text-sm font-semibold mb-3">
+        Version History
+      </h3>
+
+      <div className="space-y-2">
+        {versions.map((v, idx) => (
+          <button
+            key={v.id}
+            className={cn(
+              'w-full text-left rounded px-2 py-1 text-sm',
+              activeVersion?.id === v.id
+                ? 'bg-blue-500 text-white'
+                : 'hover:bg-muted'
+            )}
+            onClick={() => {
+              setActiveVersion(v)
+              setHistoryOpen(false)
+            }}
+          >
+            <div className="font-medium">
+              {idx === 0 ? `${v.label} (Latest)` : v.label}
+            </div>
+            <div className="text-xs opacity-70">
+              {v.createdAt}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
+
       </WebPreview>
     </div>
   )
