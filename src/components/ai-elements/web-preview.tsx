@@ -65,7 +65,7 @@ export const WebPreview = ({
   return (
     <WebPreviewContext.Provider value={contextValue}>
       <div
-        className={cn('flex size-full flex-col bg-card', className)}
+        className={cn('flex size-full min-h-0 flex-col bg-card', className)}
         {...props}
       >
         {children}
@@ -157,8 +157,8 @@ export type WebPreviewBodyProps = ComponentProps<'iframe'> & {
 
 export const WebPreviewBody = ({
   className,
-  loading,
   src,
+  loading,
   ...props
 }: WebPreviewBodyProps) => {
   const { url } = useWebPreview()
@@ -176,6 +176,9 @@ export const WebPreviewBody = ({
     </div>
   )
 }
+
+
+
 
 export type WebPreviewConsoleProps = ComponentProps<'div'> & {
   logs?: Array<{
