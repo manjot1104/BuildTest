@@ -157,6 +157,7 @@ export const user_chats = createTable(
       .timestamp("updated_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
+    is_starred: d.boolean("is_starred").default(false).notNull()
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user

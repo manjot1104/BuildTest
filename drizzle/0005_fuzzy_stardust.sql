@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_user_chats" ADD COLUMN "is_starred" boolean DEFAULT false NOT NULL;

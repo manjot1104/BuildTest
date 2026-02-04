@@ -21,19 +21,23 @@ import { useTheme } from "next-themes"
 import { useStateMachine } from "@/context/state-machine"
 
 export function NavMain({
-    items,
+  items,
+  onStarredClick,
 }: {
-    items: {
-        title: string
-        url: string
-        icon?: LucideIcon
-        isActive?: boolean
-        items?: {
-            title: string
-            url: string
-        }[]
+  items: {
+    title: string
+    url?: string
+    icon?: LucideIcon
+    isActive?: boolean
+    items?: {
+      title: string
+      url?: string
+      onClick?: () => void
     }[]
+  }[]
+  onStarredClick: () => void
 }) {
+
 
     const { theme, setTheme } = useTheme()
     const { toggleHistoryModal } = useStateMachine()
@@ -103,24 +107,27 @@ export function NavMain({
                                         {item.items?.map((subItem) => (
                                             <SidebarMenuSubItem key={subItem.title}>
                                                 <SidebarMenuSubButton
-                                                    asChild={
-                                                        subItem.title !== 'History'
-                                                    }
-                                                    onClick={
-                                                        subItem.title === 'History'
-                                                            ? (e) => {
-                                                                e.preventDefault()
-                                                                toggleHistoryModal()
-                                                            }
-                                                            : undefined
-                                                    }
+                                                   asChild={subItem.title !== 'History' && subItem.title !== 'Starred'}
+  onClick={
+    subItem.title === 'History'
+      ? (e) => {
+          e.preventDefault()
+          toggleHistoryModal()
+        }
+      : subItem.title === 'Starred'
+      ? (e) => {
+          e.preventDefault()
+          onStarredClick()
+        }
+      : undefined
+  }
                                                 >
-                                                    {subItem.title === 'History' ? (
-                                                        <span>{subItem.title}</span>
-                                                    ) : (
-                                                        <a href={subItem.url}>
-                                                            <span>{subItem.title}</span>
-                                                        </a>
+                                                    {subItem.title === 'History' || subItem.title === 'Starred' ? (
+  <span>{subItem.title}</span>
+) : (
+  <a href={subItem.url}>
+    <span>{subItem.title}</span>
+  </a>
                                                     )}
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
