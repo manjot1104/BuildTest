@@ -175,7 +175,7 @@ export function PreviewPanel({
             readOnly
             placeholder="Your app will appear here..."
             value={currentChat?.id ? `https://ai.buildify.sh/apps/${currentChat.id}` : ''}
-          />//ask what we write
+          /> 
           <WebPreviewNavigationButton
             onClick={() => setIsFullscreen(!isFullscreen)}
             tooltip={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
