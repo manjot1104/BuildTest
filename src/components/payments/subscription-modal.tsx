@@ -135,7 +135,7 @@ export function SubscriptionModal({
       key: env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       amount,
       currency: paymentCurrency,
-      name: "Techo Builder",
+      name: "Buildify",
       description,
       order_id: orderId,
       handler: (response) => {

@@ -121,7 +121,7 @@ export default function LoginPage() {
                         <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
                             <Sparkles className="size-4 text-primary-foreground" />
                         </div>
-                        <span className="font-semibold text-lg">Technotribes AI</span>
+                        <span className="font-semibold text-lg">Buildify</span>
                     </Link>
                     <Button
                         variant="ghost"
@@ -159,8 +159,8 @@ export default function LoginPage() {
                                         </h1>
                                         <p className="text-muted-foreground text-sm">
                                             {isLogin
-                                                ? 'Login to your Technotribes account'
-                                                : 'Sign up for your Technotribes account'}
+                                                ? 'Login to your Buildify account'
+                                                : 'Sign up for your Buildify account'}
                                         </p>
                                     </motion.div>
 
