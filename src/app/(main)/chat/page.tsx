@@ -88,6 +88,11 @@ export default function ChatPage() {
         handleStreamingComplete: hookHandleStreamingComplete,
         handleChatData: hookHandleChatData,
     } = useChat(urlChatId ?? undefined)
+    const shouldShowPreview =
+    !!hookCurrentChat?.demo &&
+    !!hookCurrentChat?.id &&
+    !isStreaming
+
 
     // Sync loading state
     useEffect(() => {
@@ -231,17 +236,16 @@ export default function ChatPage() {
         await hookHandleStreamingComplete(finalContent)
     }
 
-    // Effect to refresh preview when demo URL becomes available after streaming
     useEffect(() => {
-        if (hookCurrentChat?.demo) {
-            setRefreshKey((prev) => prev + 1)
+    if (shouldShowPreview) {
+        setRefreshKey((prev) => prev + 1)
 
-            // Update preview panel on mobile after demo URL is available
-            if (window.innerWidth < 768) {
-                setActivePanel('preview')
-            }
+        if (window.innerWidth < 768) {
+            setActivePanel('preview')
         }
-    }, [hookCurrentChat?.demo])
+    }
+}, [shouldShowPreview])
+
 
     if (showChatInterface || chatHistory.length > 0) {
         return (
@@ -258,7 +262,7 @@ export default function ChatPage() {
                     <div className="flex flex-col h-[calc(100vh-64px-40px)] md:h-[calc(100vh-64px)]">
                         <ResizableLayout
                             className="flex-1 min-h-0"
-                            singlePanelMode={false}
+                            singlePanelMode={!shouldShowPreview}
                             activePanel={activePanel === 'chat' ? 'left' : 'right'}
                             leftPanel={
                                 <div className="flex flex-col h-full">
@@ -285,16 +289,19 @@ export default function ChatPage() {
                                     />
                                 </div>
                             }
-                            rightPanel={
-                                <PreviewPanel
-                                    currentChat={hookCurrentChat}
-                                    isFullscreen={isFullscreen}
-                                    setIsFullscreen={setIsFullscreen}
-                                    refreshKey={refreshKey}
-                                    setRefreshKey={setRefreshKey}
-                                    isBuilding={isLoading || isStreaming}
-                                />
-                            }
+                          rightPanel={
+    shouldShowPreview ? (
+        <PreviewPanel
+            currentChat={hookCurrentChat}
+            isFullscreen={isFullscreen}
+            setIsFullscreen={setIsFullscreen}
+            refreshKey={refreshKey}
+            setRefreshKey={setRefreshKey}
+            isBuilding={false}
+        />
+    ) : null
+}
+
                         />
 
                         <div className="md:hidden">
