@@ -188,3 +188,9 @@ body {
     @apply bg-background text-foreground;
   }
 }
+/* Hide default WebPreview device switcher icons */
+[data-web-preview-device],
+[data-web-preview-device-switcher],
+.web-preview-device-switcher {
+  display: none !important;
+}

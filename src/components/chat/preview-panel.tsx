@@ -146,58 +146,83 @@ const previewUrl = activeVersion
         isFullscreen && 'fixed inset-0 z-50 bg-white dark:bg-black',
       )}
     >
-      <WebPreview defaultUrl={currentChat?.demo ?? ''}>
-        {/* ---------------- NAV BAR ---------------- */}
-        <WebPreviewNavigation>
-          <WebPreviewNavigationButton
-  tooltip="Version history"
-  onClick={() => setHistoryOpen(true)}
-  disabled={!iframeSrc}
->
-  🕘
-</WebPreviewNavigationButton>
+   <WebPreview defaultUrl={currentChat?.demo ?? ''}>
 
-          <WebPreviewNavigationButton
-  tooltip="Refresh preview"
-  disabled={!iframeSrc}
-  onClick={() => {
-  if (!iframeSrc) return
+  {/* ---------------- NAV BAR ---------------- */}
+  <WebPreviewNavigation>
+    {/* LEFT: history + refresh */}
+    <div className="flex items-center gap-1">
+      <WebPreviewNavigationButton
+        tooltip="Version history"
+        onClick={() => setHistoryOpen(true)}
+        disabled={!iframeSrc}
+      >
+        🕘
+      </WebPreviewNavigationButton>
 
-  // const newVersion: PreviewVersion = {
-  //   id: crypto.randomUUID(),
-  //   label: `Version ${versions.length + 1}`,
-  //   previewUrl: iframeSrc,
-  //   createdAt: new Date().toLocaleString(),
-  // }
+      <WebPreviewNavigationButton
+        tooltip="Refresh preview"
+        disabled={!iframeSrc}
+        onClick={() => {
+          if (!iframeSrc) return
+          setIsReloading(true)
+          setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
+        }}
+      >
+        <RefreshCw className="h-4 w-4" />
+      </WebPreviewNavigationButton>
+    </div>
 
-  // setVersions((prev) => [newVersion, ...prev])
-  // setActiveVersion(null)
+    {/* CENTER: URL bar */}
+    <WebPreviewUrl
+      readOnly
+      placeholder="Your app will appear here..."
+      value={
+        currentChat?.id
+          ? `https://ai.buildify.sh/apps/${currentChat.id}`
+          : ''
+      }
+    />
 
-  setIsReloading(true)
-  setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
-}}
->
-  <RefreshCw className="h-4 w-4" />
-</WebPreviewNavigationButton>
+    {/* RIGHT: device switcher + fullscreen */}
+    <div className="flex items-center gap-1">
+      <WebPreviewNavigationButton
+        tooltip="Mobile view"
+        onClick={() => setDevice('mobile')}
+        className={device === 'mobile' ? 'bg-muted' : ''}
+      >
+        <Smartphone className="h-4 w-4" />
+      </WebPreviewNavigationButton>
 
+      <WebPreviewNavigationButton
+        tooltip="Tablet view"
+        onClick={() => setDevice('tablet')}
+        className={device === 'tablet' ? 'bg-muted' : ''}
+      >
+        <Tablet className="h-4 w-4" />
+      </WebPreviewNavigationButton>
 
-          <WebPreviewUrl
-            readOnly
-            placeholder="Your app will appear here..."
-            value={currentChat?.id ? `https://ai.buildify.sh/apps/${currentChat.id}` : ''}
-          /> 
-          <WebPreviewNavigationButton
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            tooltip={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-            disabled={!currentChat?.demo}
-          >
-            {isFullscreen ? (
-              <Minimize className="h-4 w-4" />
-            ) : (
-              <Maximize className="h-4 w-4" />
-            )}
-          </WebPreviewNavigationButton>
-        </WebPreviewNavigation>
+      <WebPreviewNavigationButton
+        tooltip="Desktop view"
+        onClick={() => setDevice('desktop')}
+        className={device === 'desktop' ? 'bg-muted' : ''}
+      >
+        <Monitor className="h-4 w-4" />
+      </WebPreviewNavigationButton>
+
+      <WebPreviewNavigationButton
+        onClick={() => setIsFullscreen(!isFullscreen)}
+        tooltip={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+        disabled={!currentChat?.demo}
+      >
+        {isFullscreen ? (
+          <Minimize className="h-4 w-4" />
+        ) : (
+          <Maximize className="h-4 w-4" />
+        )}
+      </WebPreviewNavigationButton>
+    </div>
+  </WebPreviewNavigation>
 
         {/* ---------------- PREVIEW AREA ---------------- */}
         {iframeSrc ? (
