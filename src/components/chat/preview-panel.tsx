@@ -184,67 +184,6 @@ const previewUrl = activeVersion
           <WebPreviewUrl
             readOnly
             placeholder="Your app will appear here..."
-<<<<<<< HEAD
-            value={
-              currentChat?.id
-                ? `https://ai.technotribes.com/apps/${currentChat.id}`
-                : ''
-            }
-          />
-
-          <div className="ml-auto flex items-center gap-1">
-            <WebPreviewNavigationButton
-              onClick={() => setDevice('mobile')}
-              tooltip="Mobile preview"
-              disabled={!currentChat?.demo}
-            >
-              <Smartphone
-                className={cn(
-                  'h-4 w-4',
-                  device === 'mobile' && 'text-blue-500',
-                )}
-              />
-            </WebPreviewNavigationButton>
-
-            <WebPreviewNavigationButton
-              onClick={() => setDevice('tablet')}
-              tooltip="Tablet preview"
-              disabled={!currentChat?.demo}
-            >
-              <Tablet
-                className={cn(
-                  'h-4 w-4',
-                  device === 'tablet' && 'text-blue-500',
-                )}
-              />
-            </WebPreviewNavigationButton>
-
-            <WebPreviewNavigationButton
-              onClick={() => setDevice('desktop')}
-              tooltip="Desktop preview"
-              disabled={!currentChat?.demo}
-            >
-              <Monitor
-                className={cn(
-                  'h-4 w-4',
-                  device === 'desktop' && 'text-blue-500',
-                )}
-              />
-            </WebPreviewNavigationButton>
-
-            <WebPreviewNavigationButton
-              onClick={() => setIsFullscreen(!isFullscreen)}
-              tooltip={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-              disabled={!currentChat?.demo}
-            >
-              {isFullscreen ? (
-                <Minimize className="h-4 w-4" />
-              ) : (
-                <Maximize className="h-4 w-4" />
-              )}
-            </WebPreviewNavigationButton>
-          </div>
-=======
             value={currentChat?.id ? `https://ai.buildify.sh/apps/${currentChat.id}` : ''}
           /> 
           <WebPreviewNavigationButton
@@ -258,7 +197,6 @@ const previewUrl = activeVersion
               <Maximize className="h-4 w-4" />
             )}
           </WebPreviewNavigationButton>
->>>>>>> feat/preview-panel
         </WebPreviewNavigation>
 
         {/* ---------------- PREVIEW AREA ---------------- */}
