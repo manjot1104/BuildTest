@@ -59,7 +59,7 @@ export default function LandingPage() {
                         <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
                             <Sparkles className="size-4 text-primary-foreground" />
                         </div>
-                        <span className="font-semibold text-lg">Technotribes AI</span>
+                        <span className="font-semibold text-lg">Buildify</span>
                     </Link>
 
                     <div className="flex items-center gap-3">
@@ -289,10 +289,10 @@ export default function LandingPage() {
                         <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
                             <Sparkles className="size-4 text-primary-foreground" />
                         </div>
-                        <span className="font-semibold">Technotribes AI</span>
+                        <span className="font-semibold">Buildify</span>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                        {new Date().getFullYear()} Technotribes. All rights reserved.
+                        {new Date().getFullYear()} Buildify. All rights reserved.
                     </p>
                 </div>
             </footer>

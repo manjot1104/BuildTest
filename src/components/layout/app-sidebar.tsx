@@ -45,15 +45,15 @@ const buildSidebarData = ({
   },
         platforms: [
             {
-                name: "Technotribes.ai",
+                name: "Buildify",
                 logo: AudioWaveform,
                 url: "#",
                 isActive: true,
             },
             {
-                name: "Technotribes",
+                name: "Buildify",
                 logo: GalleryVerticalEnd,
-                url: "https://technotribes.com",
+                url: "https://buildify.sh",
             },
         ],
         navMain: [

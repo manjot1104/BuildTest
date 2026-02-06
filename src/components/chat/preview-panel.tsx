@@ -184,6 +184,7 @@ const previewUrl = activeVersion
           <WebPreviewUrl
             readOnly
             placeholder="Your app will appear here..."
+<<<<<<< HEAD
             value={
               currentChat?.id
                 ? `https://ai.technotribes.com/apps/${currentChat.id}`
@@ -243,6 +244,21 @@ const previewUrl = activeVersion
               )}
             </WebPreviewNavigationButton>
           </div>
+=======
+            value={currentChat?.id ? `https://ai.buildify.sh/apps/${currentChat.id}` : ''}
+          /> 
+          <WebPreviewNavigationButton
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            tooltip={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            disabled={!currentChat?.demo}
+          >
+            {isFullscreen ? (
+              <Minimize className="h-4 w-4" />
+            ) : (
+              <Maximize className="h-4 w-4" />
+            )}
+          </WebPreviewNavigationButton>
+>>>>>>> feat/preview-panel
         </WebPreviewNavigation>
 
         {/* ---------------- PREVIEW AREA ---------------- */}

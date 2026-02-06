@@ -103,8 +103,8 @@ export function AuthForm({
                                         </h1>
                                         <p className="text-muted-foreground text-balance">
                                             {isLogin
-                                                ? "Login to your Technotribes account"
-                                                : "Sign up for your Technotribes account"}
+                                                ? "Login to your Buildify account"
+                                                : "Sign up for your Buildify account"}
                                         </p>
                                     </div>
 

@@ -5,8 +5,8 @@ import { type Metadata } from "next";
 import { Geist } from "next/font/google";
 
 export const metadata: Metadata = {
-  title: "Technotribes AI",
-  description: "Technotribes AI",
+  title: "Buildify",
+  description: "Buildify - AI powered app builder",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
