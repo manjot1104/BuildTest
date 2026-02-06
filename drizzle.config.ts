@@ -8,5 +8,5 @@ export default {
   dbCredentials: {
     url: env.DATABASE_URL,
   },
-  tablesFilter: ["techo-builder_*"],
+  tablesFilter: ["Buildify_*"],
 } satisfies Config;

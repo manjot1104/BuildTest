@@ -357,7 +357,7 @@ export default function ChatPage() {
                 <div className="max-w-2xl w-full">
                     {/* Title */}
                     <h1 className="text-2xl sm:text-3xl font-semibold text-center text-foreground mb-8">
-                        Technotribes AI
+                        Buildify
                     </h1>
 
                     {/* Prompt Input */}

@@ -1,5 +1,5 @@
 /**
- * API Types for techo-builder
+ * API Types for Buildify
  * Centralized type definitions for type-safe API interactions
  */
 
