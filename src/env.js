@@ -17,6 +17,7 @@ export const env = createEnv({
       .default("development"),
     V0_API_KEY: z.string().min(1),
     V0_API_URL: z.string().url().optional(),
+    ELEVENLABS_API_KEY: z.string().min(1).optional(),
     // Razorpay
     RAZORPAY_KEY_ID: z.string().min(1),
     RAZORPAY_KEY_SECRET: z.string().min(1),
@@ -42,6 +43,7 @@ export const env = createEnv({
     NODE_ENV: process.env.NODE_ENV,
     V0_API_KEY: process.env.V0_API_KEY,
     V0_API_URL: process.env.V0_API_URL,
+    ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,
