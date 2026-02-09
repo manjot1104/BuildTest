@@ -22,13 +22,27 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar"
 
-const getData = ({ userName, userEmail, userAvatar }: { userName: string, userEmail: string, userAvatar: string }) => {
-    return {
-        user: {
-            name: userName,
-            email: userEmail,
-            avatar: userAvatar,
-        },
+type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
+  onStarredClick: () => void
+}
+
+// ---------- data builder ----------
+const buildSidebarData = ({
+  userName,
+  userEmail,
+  userAvatar,
+  onStarredClick,
+}: {
+  userName: string
+  userEmail: string
+  userAvatar: string
+  onStarredClick: () => void
+}) => ({
+  user: {
+    name: userName,
+    email: userEmail,
+    avatar: userAvatar,
+  },
         platforms: [
             {
                 name: "Buildify",
@@ -60,7 +74,8 @@ const getData = ({ userName, userEmail, userAvatar }: { userName: string, userEm
                     },
                     {
                         title: "Starred",
-                        url: "#",
+                        // url: "#",
+                        onClick: onStarredClick,
                     },
                     {
                         title: "Settings",
@@ -134,29 +149,35 @@ const getData = ({ userName, userEmail, userAvatar }: { userName: string, userEm
                 ],
             },
         ],
-    }
-}
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-
-    const data = getData({
-        userName: "John Doe",
-        userEmail: "john.doe@example.com",
-        userAvatar: "/avatars/john-doe.jpg",
     })
 
-    return (
-        <Sidebar collapsible="icon" {...props}>
-            <SidebarHeader>
-                <PlatformSwitcher platforms={data.platforms} />
-            </SidebarHeader>
-            <SidebarContent>
-                <NavMain items={data.navMain} />
-            </SidebarContent>
-            <SidebarFooter>
-                <NavUser />
-            </SidebarFooter>
-            <SidebarRail />
-        </Sidebar>
-    )
+
+export function AppSidebar({
+  onStarredClick,
+  ...props
+}: AppSidebarProps) {
+  const data = buildSidebarData({
+    userName: "John Doe",
+    userEmail: "john.doe@example.com",
+    userAvatar: "/avatars/john-doe.jpg",
+    onStarredClick,
+  })
+
+  return (
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <PlatformSwitcher platforms={data.platforms} />
+      </SidebarHeader>
+
+      <SidebarContent>
+        <NavMain items={data.navMain} onStarredClick={onStarredClick} />
+      </SidebarContent>
+
+      <SidebarFooter>
+        <NavUser />
+      </SidebarFooter>
+
+      <SidebarRail />
+    </Sidebar>
+  )
 }

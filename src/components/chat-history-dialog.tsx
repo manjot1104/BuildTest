@@ -1,5 +1,8 @@
-'use client'
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+'use client'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,9 +12,10 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Loader2 } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Loader2, Star } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
+import React from 'react'
 
 export function ChatHistoryDialog({
   className,
@@ -20,12 +24,47 @@ export function ChatHistoryDialog({
   const { historyModal, toggleHistoryModal } = useStateMachine()
   const router = useRouter()
   const { data: chats, isLoading, error } = useChatHistory()
+  const [localChats, setLocalChats] = React.useState<any[]>([])
+React.useEffect(() => {
+  if (chats) {
+    setLocalChats(
+      chats.map((chat) => ({
+        ...chat,
+        isStarred: false, // default
+      }))
+    )
+  }
+}, [chats])
 
   const handleChatClick = (v0ChatId: string) => {
     router.push(`/chat?chatId=${v0ChatId}`)
     toggleHistoryModal()
   }
+const handleStarToggle = async (
+  e: React.MouseEvent,
+  chatId: string,
+  isStarred: boolean
+) => {
+  e.stopPropagation(); 
 
+  await fetch('/api/chat/star', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chatId,
+      isStarred: !isStarred,
+    }),
+  });
+
+
+  setLocalChats((prev) =>
+    prev.map((chat) =>
+      chat.v0ChatId === chatId
+        ? { ...chat, isStarred: !isStarred }
+        : chat
+    )
+  );
+};
   return (
     <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
       <AlertDialogContent
@@ -82,7 +121,7 @@ export function ChatHistoryDialog({
 
                   {!isLoading && !error && chats && chats.length > 0 && (
                     <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
-                      {chats.map((chat) => (
+                      {localChats.map((chat) => (
                         <button
                           key={chat.id}
                           onClick={() => handleChatClick(chat.v0ChatId)}
@@ -108,6 +147,20 @@ export function ChatHistoryDialog({
                               <ExternalLink className="h-4 w-4 text-muted-foreground" />
                             </div>
                           )}
+                          <button
+  type="button"
+  onClick={(e) =>
+    handleStarToggle(e, chat.v0ChatId, chat.isStarred)
+  }
+  className="ml-auto flex-shrink-0"
+><Star
+    className={cn(
+      'h-4 w-4',
+      chat.isStarred
+        ? 'fill-yellow-400 text-yellow-400'
+        : 'text-muted-foreground'
+    )}
+  /></button>
                         </button>
                       ))}
                     </div>
