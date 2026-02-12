@@ -27,6 +27,7 @@ interface Chat {
 interface ChatMessagesProps {
   chatHistory: ChatMessage[]
   isLoading: boolean
+  isStreaming?: boolean
   currentChat: Chat | null
   onStreamingComplete: (finalContent: MessageBinaryFormat) => void
   onChatData: (chatData: { id?: string; webUrl?: string; url?: string }) => void
@@ -155,11 +156,17 @@ function preprocessMessageContent(
 export function ChatMessages({
   chatHistory,
   isLoading,
+  isStreaming,
   onStreamingComplete,
   onChatData,
   onStreamingStarted,
 }: ChatMessagesProps) {
   const streamingStartedRef = useRef(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   // Reset the streaming started flag when a new message starts loading
   useEffect(() => {
@@ -167,6 +174,20 @@ export function ChatMessages({
       streamingStartedRef.current = false
     }
   }, [isLoading])
+
+  // Auto-scroll when new messages are added
+  useEffect(() => {
+    scrollToBottom()
+  }, [chatHistory.length])
+
+  // Auto-scroll when loading or streaming state changes
+  useEffect(() => {
+    if (isLoading || isStreaming) {
+      scrollToBottom()
+    }
+  }, [isLoading, isStreaming])
+
+  const showBottomLoader = isLoading || isStreaming
 
   if (chatHistory.length === 0) {
     return (
@@ -198,6 +219,8 @@ export function ChatMessages({
                     streamingStartedRef.current = true
                     onStreamingStarted()
                   }
+                  // Auto-scroll on each streaming chunk
+                  scrollToBottom()
                 }}
                 onError={(error) => console.error('Streaming error:', error)}
                 components={sharedComponents}
@@ -215,11 +238,15 @@ export function ChatMessages({
             )}
           </MessageWrapper>
         ))}
-        {isLoading && (
-          <div className="flex justify-center py-4">
+        {showBottomLoader && (
+          <div className="flex items-center justify-center gap-2 py-4">
             <Loader size={16} className="text-gray-500 dark:text-gray-400" />
+            <span className="text-xs text-muted-foreground">
+              {isLoading && !isStreaming ? 'Thinking...' : 'Generating...'}
+            </span>
           </div>
         )}
+        <div ref={messagesEndRef} />
       </ConversationContent>
     </Conversation>
   )

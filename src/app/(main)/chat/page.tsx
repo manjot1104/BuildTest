@@ -282,6 +282,7 @@ export default function ChatPage() {
                                         <ChatMessages
                                             chatHistory={chatHistory}
                                             isLoading={isLoading}
+                                            isStreaming={isStreaming}
                                             currentChat={hookCurrentChat}
                                             onStreamingComplete={handleStreamingComplete}
                                             onChatData={handleChatData}
