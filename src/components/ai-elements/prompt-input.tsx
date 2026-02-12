@@ -30,12 +30,8 @@ import { Children, useCallback, useRef, useState, useEffect } from 'react'
 // Type declarations for Web Speech API
 declare global {
   interface Window {
-    SpeechRecognition: {
-      new (): ISpeechRecognition
-    }
-    webkitSpeechRecognition: {
-      new (): ISpeechRecognition
-    }
+    SpeechRecognition: new () => ISpeechRecognition
+    webkitSpeechRecognition: new () => ISpeechRecognition
   }
 }
 
@@ -46,10 +42,10 @@ interface ISpeechRecognition extends EventTarget {
   start(): void
   stop(): void
   abort(): void
-  onstart: ((this: ISpeechRecognition, ev: Event) => any) | null
-  onresult: ((this: ISpeechRecognition, ev: ISpeechRecognitionEvent) => any) | null
-  onerror: ((this: ISpeechRecognition, ev: ISpeechRecognitionErrorEvent) => any) | null
-  onend: ((this: ISpeechRecognition, ev: Event) => any) | null
+  onstart: ((this: ISpeechRecognition, ev: Event) => void) | null
+  onresult: ((this: ISpeechRecognition, ev: ISpeechRecognitionEvent) => void) | null
+  onerror: ((this: ISpeechRecognition, ev: ISpeechRecognitionErrorEvent) => void) | null
+  onend: ((this: ISpeechRecognition, ev: Event) => void) | null
 }
 
 interface ISpeechRecognitionEvent extends Event {
@@ -460,8 +456,8 @@ export const PromptInputMicButton = ({
   useEffect(() => {
     // Check if browser supports Web Speech API
     const SpeechRecognition =
-      (window as any).SpeechRecognition ||
-      (window as any).webkitSpeechRecognition
+      window.SpeechRecognition ||
+      window.webkitSpeechRecognition
 
     if (!SpeechRecognition) {
       // Browser doesn't support speech recognition
