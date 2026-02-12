@@ -8,6 +8,8 @@ interface Chat {
   id: string
   demo?: string
   url?: string
+  isOwner?: boolean
+  files?: Array<{ name: string; content: string }>
   messages?: Array<{
     id: string
     role: 'user' | 'assistant'
@@ -43,10 +45,16 @@ export function useChat(chatId?: string) {
   useEffect(() => {
     if (chatData) {
       const demoUrl = chatData.demo ?? chatData.latestVersion?.demoUrl
+      const files = chatData.latestVersion?.files?.map((f) => ({
+        name: f.name,
+        content: f.content,
+      }))
       setCurrentChat({
         id: chatData.id,
         demo: demoUrl,
         url: chatData.url,
+        isOwner: (chatData as { isOwner?: boolean }).isOwner ?? true,
+        files,
       })
 
       // Only update chat history if it's empty (initial load)
@@ -61,31 +69,12 @@ export function useChat(chatId?: string) {
     }
   }, [chatData, chatHistory.length])
 
-  // Handle chat loading errors - clear chatId from URL if chat doesn't exist
+  // Log chat loading errors (page handles the UI)
   useEffect(() => {
     if (chatError && chatId) {
       console.error('Error loading chat:', chatError)
-      // Clear chatId from URL if chat not found (404)
-      const errorMessage =
-        chatError instanceof Error ? chatError.message : String(chatError)
-      if (
-        errorMessage.includes('404') ||
-        errorMessage.includes('not_found') ||
-        errorMessage.includes('Chat not found')
-      ) {
-        // Remove chatId from URL
-        const newUrl = new URL(window.location.href)
-        newUrl.searchParams.delete('chatId')
-        router.replace(newUrl.pathname + newUrl.search, { scroll: false })
-        // Clear current chat state
-        setCurrentChat(null)
-        setChatHistory([])
-      } else {
-        // For other errors, redirect to chat page
-        router.push('/chat')
-      }
     }
-  }, [chatError, chatId, router])
+  }, [chatError, chatId])
 
   const handleSendMessage = async (
     message: string,
@@ -340,6 +329,7 @@ export function useChat(chatId?: string) {
     isStreaming,
     chatHistory,
     isLoadingChat,
+    chatError,
     handleSendMessage,
     handleStreamingComplete,
     handleChatData,

@@ -2,7 +2,7 @@
 export { useChatDetails, useChatHistory } from './use-chat-queries'
 
 // Chat Mutation hooks
-export { useCreateChat, useCreateChatOwnership } from './use-chat-mutations'
+export { useCreateChat, useCreateChatOwnership, useForkChat } from './use-chat-mutations'
 
 // Payment Query hooks
 export {
@@ -30,6 +30,7 @@ export type {
   ChatRequestBody,
   ChatResponse,
   ChatOwnershipResponse,
+  ForkChatResponse,
 } from './use-chat-mutations'
 
 // Re-export types from payment hooks

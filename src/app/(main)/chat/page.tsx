@@ -20,6 +20,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import { ChatInput } from '@/components/chat/chat-input'
+import { ForkBanner } from '@/components/chat/fork-banner'
 import { PreviewPanel } from '@/components/chat/preview-panel'
 import { ResizableLayout } from '@/components/shared/resizable-layout'
 import { BottomToolbar } from '@/components/shared/bottom-toolbar'
@@ -27,6 +28,8 @@ import { useChat } from '@/hooks/use-chat'
 import { ChatActionsProvider } from '@/context/chat-actions'
 import { SubscriptionModal } from '@/components/payments/subscription-modal'
 import { useUserCredits } from '@/hooks/use-user-credits'
+import { useForkChat } from '@/client-api/query-hooks'
+import { useStateMachine } from '@/context/state-machine'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
 import {
     Layout,
@@ -34,6 +37,8 @@ import {
     BarChart3,
     FileText,
     ShoppingCart,
+    AlertCircle,
+    RotateCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -78,7 +83,12 @@ export default function ChatPage() {
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [refreshKey, setRefreshKey] = useState(0)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
-    const [urlChatId, setUrlChatId] = useState<string | null>(null)
+    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('chatId')
+        }
+        return null
+    })
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     const {
@@ -86,6 +96,8 @@ export default function ChatPage() {
         chatHistory,
         isLoading: hookIsLoading,
         isStreaming,
+        isLoadingChat,
+        chatError,
         handleSendMessage: hookHandleSendMessage,
         handleStreamingComplete: hookHandleStreamingComplete,
         handleChatData: hookHandleChatData,
@@ -94,6 +106,25 @@ export default function ChatPage() {
     } = useChat(urlChatId ?? undefined)
 
     const { credits, hasActiveSubscription } = useUserCredits()
+    const { session, openAuthModal } = useStateMachine()
+    const forkChat = useForkChat()
+
+    const isViewingOthersChat = !!urlChatId && !!hookCurrentChat?.id && hookCurrentChat.isOwner === false
+
+    const handleFork = async () => {
+        if (!urlChatId) return
+        try {
+            const result = await forkChat.mutateAsync(urlChatId)
+            if (result.newChatId) {
+                const newUrl = new URL(window.location.href)
+                newUrl.searchParams.set('chatId', result.newChatId)
+                window.location.href = newUrl.pathname + newUrl.search
+            }
+        } catch (error) {
+            console.error('Failed to fork chat:', error)
+        }
+    }
+
     const shouldShowPreview =
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
@@ -253,7 +284,7 @@ export default function ChatPage() {
 }, [shouldShowPreview])
 
 
-    if (showChatInterface || chatHistory.length > 0) {
+    if (showChatInterface || chatHistory.length > 0 || urlChatId) {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
                 <SubscriptionModal
@@ -278,28 +309,85 @@ export default function ChatPage() {
                             activePanel={activePanel === 'chat' ? 'left' : 'right'}
                             leftPanel={
                                 <div className="flex flex-col h-full">
-                                    <div className="flex-1 overflow-y-auto">
-                                        <ChatMessages
-                                            chatHistory={chatHistory}
-                                            isLoading={isLoading}
-                                            isStreaming={isStreaming}
-                                            currentChat={hookCurrentChat}
-                                            onStreamingComplete={handleStreamingComplete}
-                                            onChatData={handleChatData}
-                                            onStreamingStarted={() => setIsLoading(false)}
-                                        />
-                                    </div>
+                                    {chatError && chatHistory.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center px-4">
+                                            <div className="text-center max-w-sm">
+                                                <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
+                                                <h3 className="text-base font-medium text-foreground mb-1">
+                                                    Failed to load chat
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground mb-4">
+                                                    {chatError instanceof Error
+                                                        ? chatError.message
+                                                        : 'Something went wrong while loading this chat.'}
+                                                </p>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => window.location.reload()}
+                                                        className={cn(
+                                                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
+                                                            "bg-primary text-primary-foreground hover:bg-primary/90",
+                                                            "transition-colors"
+                                                        )}
+                                                    >
+                                                        <RotateCw className="w-3.5 h-3.5" />
+                                                        Retry
+                                                    </button>
+                                                    <button
+                                                        onClick={handleReset}
+                                                        className={cn(
+                                                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
+                                                            "bg-muted text-muted-foreground hover:bg-muted/80",
+                                                            "transition-colors"
+                                                        )}
+                                                    >
+                                                        New chat
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : isLoadingChat && chatHistory.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center">
+                                            <div className="text-center">
+                                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                                <p className="text-sm text-muted-foreground">Loading chat...</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex-1 overflow-y-auto">
+                                                <ChatMessages
+                                                    chatHistory={chatHistory}
+                                                    isLoading={isLoading}
+                                                    isStreaming={isStreaming}
+                                                    currentChat={hookCurrentChat}
+                                                    onStreamingComplete={handleStreamingComplete}
+                                                    onChatData={handleChatData}
+                                                    onStreamingStarted={() => setIsLoading(false)}
+                                                />
+                                            </div>
 
-                                    <ChatInput
-                                        message={message}
-                                        setMessage={setMessage}
-                                        onSubmit={handleSendMessage}
-                                        isLoading={isLoading}
-                                        showSuggestions={false}
-                                        attachments={attachments}
-                                        onAttachmentsChange={setAttachments}
-                                        textareaRef={textareaRef}
-                                    />
+                                            {isViewingOthersChat ? (
+                                                <ForkBanner
+                                                    isAuthenticated={!!session?.user}
+                                                    isForking={forkChat.isPending}
+                                                    onFork={handleFork}
+                                                    onSignIn={openAuthModal}
+                                                />
+                                            ) : (
+                                                <ChatInput
+                                                    message={message}
+                                                    setMessage={setMessage}
+                                                    onSubmit={handleSendMessage}
+                                                    isLoading={isLoading}
+                                                    showSuggestions={false}
+                                                    attachments={attachments}
+                                                    onAttachmentsChange={setAttachments}
+                                                    textareaRef={textareaRef}
+                                                />
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             }
                           rightPanel={

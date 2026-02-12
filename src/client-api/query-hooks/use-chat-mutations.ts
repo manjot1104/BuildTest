@@ -4,6 +4,7 @@ import {
   type ChatRequestBody,
   type ChatResponse,
   type ChatOwnershipResponse,
+  type ForkChatResponse,
 } from '@/types/api.types'
 
 /** Eden error response structure */
@@ -129,5 +130,53 @@ export function useCreateChat() {
   })
 }
 
+/**
+ * Mutation hook for forking a chat
+ * Creates a copy of an existing chat for the current user
+ */
+export function useForkChat() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (chatId: string): Promise<ForkChatResponse> => {
+      try {
+        const response = await api.chat.fork.post({ chatId })
+
+        if (response.error) {
+          const edenError = response.error as EdenError
+          const errorMessage =
+            typeof edenError?.value?.message === 'string'
+              ? edenError.value.message
+              : 'Failed to fork chat'
+          throw new Error(errorMessage)
+        }
+
+        if (!response.data) {
+          throw new Error('Failed to fork chat')
+        }
+
+        return response.data as ForkChatResponse
+      } catch (error) {
+        // Fallback to fetch if Eden fails
+        console.warn('Eden request failed, falling back to fetch:', error)
+        const fetchResponse = await fetch('/api/chat/fork', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId }),
+        })
+        if (!fetchResponse.ok) {
+          throw new Error('Failed to fork chat')
+        }
+        return (await fetchResponse.json()) as ForkChatResponse
+      }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ['chat-history'],
+      })
+    },
+  })
+}
+
 // Re-export types for convenience
-export type { ChatRequestBody, ChatResponse, ChatOwnershipResponse }
+export type { ChatRequestBody, ChatResponse, ChatOwnershipResponse, ForkChatResponse }

@@ -5,7 +5,16 @@
       "Bash(SKIP_ENV_VALIDATION=1 bun run build:*)",
       "Bash(node:*)",
       "WebSearch",
-      "Bash(bun remove:*)"
+      "Bash(bun remove:*)",
+      "Bash(bun run typecheck:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(bun run check:*)",
+      "Bash(bun run lint:*)",
+      "Bash(bun run build:*)"
     ]
   }
 }

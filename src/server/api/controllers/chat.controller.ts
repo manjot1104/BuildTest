@@ -17,11 +17,13 @@ import {
   hasActiveSubscription,
 } from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
+import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatRequestBody,
   type ChatMessage,
   type RateLimitErrorResponse,
   type ChatOwnershipResponse,
+  type ForkChatResponse,
   type ChatHistoryItem,
 } from '@/types/api.types'
 
@@ -72,7 +74,7 @@ type CreateChatResponse =
   | InsufficientCreditsResponse
 
 /** Response type for getChatDetailsHandler */
-type GetChatDetailsResponse = ChatDetail | ErrorResponse
+type GetChatDetailsResponse = (ChatDetail & { isOwner?: boolean }) | ErrorResponse
 
 /** Response type for createChatOwnershipHandler */
 type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
@@ -283,7 +285,7 @@ export async function createChatHandler({
           console.warn(`Chat ${chatId} not found, creating new chat instead`)
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
-            message,
+            message: enhanceFirstPrompt(message),
             responseMode: 'sync',
             ...(attachments && attachments.length > 0 && { attachments }),
           })
@@ -294,9 +296,9 @@ export async function createChatHandler({
         }
       }
     } else {
-      // Create new chat (non-streaming)
+      // Create new chat with enhanced first prompt (non-streaming)
       chatResult = await v0.chats.create({
-        message,
+        message: enhanceFirstPrompt(message),
         responseMode: 'sync',
         ...(attachments && attachments.length > 0 && { attachments }),
       })
@@ -384,19 +386,12 @@ export async function getChatDetailsHandler({
       return { error: 'Chat ID is required', status: 400 }
     }
 
-    // For authenticated users, check ownership first (fast local check)
+    // Check ownership (non-blocking - allows non-owners to view)
+    let isOwner = false
     if (session?.user?.id) {
       const userChat = await getUserChat({ v0ChatId: chatId })
-
-      if (!userChat) {
-        // No ownership record - user doesn't own this chat
-        console.log('No ownership record found for authenticated user')
-        return { error: 'Chat not found', status: 404 }
-      }
-
-      // Check if user owns this chat
-      if (userChat.user_id !== session.user.id) {
-        return { error: 'Forbidden', status: 403 }
+      if (userChat?.user_id === session.user.id) {
+        isOwner = true
       }
     }
 
@@ -415,8 +410,8 @@ export async function getChatDetailsHandler({
       chatDetails = chatDetailsResult
       console.log('Chat details fetched successfully from V0 API')
 
-      // Update local record with latest demo URL and title if available
-      if (session?.user?.id) {
+      // Only update local record if owner
+      if (isOwner) {
         const hasUpdates = chatDetails.demo || chatDetails.title
         if (hasUpdates) {
           try {
@@ -446,7 +441,7 @@ export async function getChatDetailsHandler({
       throw error
     }
 
-    return chatDetails
+    return { ...chatDetails, isOwner }
   } catch (error) {
     console.error('Error fetching chat details:', error)
 
@@ -512,6 +507,61 @@ export async function createChatOwnershipHandler({
     return {
       error: 'Failed to create chat ownership',
       details: error instanceof Error ? error.message : 'Unknown error',
+    }
+  }
+}
+
+/**
+ * Handler for forking a chat (creating a copy for the current user)
+ * Requires authentication. No credit charge.
+ */
+export async function forkChatHandler({
+  body,
+}: {
+  body: { chatId: string }
+}): Promise<ForkChatResponse | ErrorResponse> {
+  try {
+    const session = await getSession()
+
+    if (!session?.user?.id) {
+      return { error: 'Unauthorized', status: 401 }
+    }
+
+    const { chatId } = body
+
+    if (!chatId) {
+      return { error: 'Chat ID is required', status: 400 }
+    }
+
+    const v0 = await getV0Client()
+    const forkedChat = await v0.chats.fork({ chatId })
+
+    // Type guard
+    if (!isChatDetail(forkedChat)) {
+      throw new Error('Unexpected streaming response from fork')
+    }
+
+    // Create ownership record for the forking user
+    await createUserChat({
+      v0ChatId: forkedChat.id,
+      userId: session.user.id,
+      title: forkedChat.title
+        ? `Fork: ${forkedChat.title}`
+        : 'Forked chat',
+      demoUrl: forkedChat.demo ?? undefined,
+    })
+
+    return {
+      success: true,
+      newChatId: forkedChat.id,
+      demoUrl: forkedChat.demo ?? undefined,
+    }
+  } catch (error) {
+    console.error('Error forking chat:', error)
+    return {
+      error: 'Failed to fork chat',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      status: 500,
     }
   }
 }

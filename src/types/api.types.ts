@@ -243,14 +243,24 @@ export interface ChatResponse {
   messages?: ChatMessage[]
 }
 
+/** V0 version file */
+export interface V0VersionFile {
+  object: 'file'
+  name: string
+  content: string
+  locked: boolean
+}
+
 /** Chat details from API */
 export interface ChatDetails {
   id: string
   demo?: string
   url?: string
   messages?: ChatMessage[]
+  isOwner?: boolean
   latestVersion?: {
     demoUrl?: string
+    files?: V0VersionFile[]
   }
 }
 
@@ -269,6 +279,13 @@ export interface ChatHistoryItem {
 /** Chat ownership response */
 export interface ChatOwnershipResponse {
   success: boolean
+}
+
+/** Fork chat response */
+export interface ForkChatResponse {
+  success: boolean
+  newChatId: string
+  demoUrl?: string
 }
 
 /** Parameters for creating a user chat */

@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia'
 import { getSession } from '@/server/better-auth/server'
 import {
   createChatOwnershipHandler,
+  forkChatHandler,
   getChatDetailsHandler,
   getChatHistoryHandler,
   getClientIP,
@@ -23,6 +24,7 @@ import {
   cancelSubscriptionHandler,
 } from '@/server/api/controllers/payment.controller'
 import { getV0Client } from '@/lib/v0-client'
+import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatAttachment,
   type ApiErrorResponse,
@@ -179,7 +181,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
                 )
                 // Create new chat with streaming
                 stream = (await v0.chats.create({
-                  message,
+                  message: enhanceFirstPrompt(message),
                   responseMode: 'experimental_stream',
                   ...(attachments && attachments.length > 0 && { attachments }),
                 })) as ReadableStream<Uint8Array>
@@ -189,9 +191,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               }
             }
           } else {
-            // Create new chat with streaming
+            // Create new chat with streaming (enhanced first prompt)
             stream = (await v0.chats.create({
-              message,
+              message: enhanceFirstPrompt(message),
               responseMode: 'experimental_stream',
               ...(attachments && attachments.length > 0 && { attachments }),
             })) as ReadableStream<Uint8Array>
@@ -253,8 +255,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           set.status = 400
         } else if (result.error === 'Chat not found') {
           set.status = 404
-        } else if (result.error === 'Forbidden') {
-          set.status = 403
         } else if (result.error === 'Failed to fetch chat details') {
           set.status = 500
         }
@@ -343,6 +343,31 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return getStarredChats(session.user.id)
 
   })
+  // Fork chat endpoint - POST /api/chat/fork
+  // Creates a copy of an existing chat for the current user
+  .post(
+    '/chat/fork',
+    async ({ body, set }) => {
+      const result = await forkChatHandler({ body })
+
+      if (isApiError(result)) {
+        if (result.error === 'Unauthorized') {
+          set.status = 401
+        } else if (result.error === 'Chat ID is required') {
+          set.status = 400
+        } else if (result.error === 'Failed to fork chat') {
+          set.status = 500
+        }
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+      }),
+    },
+  )
   // Chat ownership endpoint - POST /api/chat/ownership
   // Used to save chat metadata after streaming (prompt, demoUrl, etc.)
   .post(
