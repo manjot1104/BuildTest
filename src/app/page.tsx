@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Sparkles, Zap, Shield, Code2, Layers, Globe, ChevronDown, Moon, Sun } from 'lucide-react'
+import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { useRef } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
@@ -279,6 +280,35 @@ export default function LandingPage() {
                             </motion.div>
                         ))}
                     </div>
+                </div>
+            </section>
+
+            {/* Community Builds Section */}
+            <section className="relative py-32 px-6">
+                <div className="max-w-7xl mx-auto">
+                    <motion.div
+                        initial={{ opacity: 0, y: 40 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-100px" }}
+                        transition={{ duration: 0.6 }}
+                        className="text-center mb-12"
+                    >
+                        <h2 className="text-3xl md:text-5xl font-bold mb-4">
+                            Built by the Community
+                        </h2>
+                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                            Explore what developers are building with Buildify. Get inspired, fork and make it your own.
+                        </p>
+                    </motion.div>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 40 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: "-50px" }}
+                        transition={{ duration: 0.6, delay: 0.2 }}
+                    >
+                        <CommunityBuildsGrid showHeader={false} />
+                    </motion.div>
                 </div>
             </section>
 

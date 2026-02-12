@@ -11,6 +11,7 @@ import {
   getUserChat,
   getUserChatsByUserId,
   getCommunityChats,
+  getCommunityChatsCount,
 } from '@/server/db/queries'
 import {
   hasEnoughCredits,
@@ -27,6 +28,7 @@ import {
   type ForkChatResponse,
   type ChatHistoryItem,
   type CommunityBuildItem,
+  type CommunityBuildsPage,
 } from '@/types/api.types'
 
 // ============================================================================
@@ -85,7 +87,7 @@ type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
 type GetChatHistoryResponse = { data: ChatHistoryItem[] } | ErrorResponse
 
 /** Response type for getCommunityBuildsHandler */
-type GetCommunityBuildsResponse = { data: CommunityBuildItem[] } | ErrorResponse
+type GetCommunityBuildsResponse = CommunityBuildsPage | ErrorResponse
 
 // ============================================================================
 // Utility Functions
@@ -626,11 +628,22 @@ export async function getChatHistoryHandler(): Promise<GetChatHistoryResponse> {
 
 /**
  * Handler for getting community builds (public endpoint)
- * Returns chats with demo_url set, including author info
+ * Returns paginated chats with demo_url set, including author info
  */
-export async function getCommunityBuildsHandler(): Promise<GetCommunityBuildsResponse> {
+export async function getCommunityBuildsHandler({
+  query,
+}: {
+  query: { page?: string; limit?: string }
+}): Promise<GetCommunityBuildsResponse> {
   try {
-    const chats = await getCommunityChats({ limit: 12 })
+    const page = Math.max(1, parseInt(query.page ?? '1', 10) || 1)
+    const limit = Math.min(30, Math.max(1, parseInt(query.limit ?? '12', 10) || 12))
+    const offset = (page - 1) * limit
+
+    const [chats, total] = await Promise.all([
+      getCommunityChats({ limit, offset }),
+      getCommunityChatsCount(),
+    ])
 
     const data: CommunityBuildItem[] = chats.map((chat) => ({
       id: chat.id,
@@ -645,7 +658,13 @@ export async function getCommunityBuildsHandler(): Promise<GetCommunityBuildsRes
       authorImage: chat.author_image,
     }))
 
-    return { data }
+    return {
+      data,
+      total,
+      page,
+      limit,
+      hasMore: offset + data.length < total,
+    }
   } catch (error) {
     console.error('Error fetching community builds:', error)
     return {

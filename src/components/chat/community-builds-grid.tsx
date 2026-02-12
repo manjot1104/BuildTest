@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCommunityBuilds } from '@/client-api/query-hooks'
 import { type CommunityBuildItem } from '@/types/api.types'
 import { cn } from '@/lib/utils'
-import { Globe, Users, ExternalLink } from 'lucide-react'
+import { Globe, Users, ExternalLink, Loader2 } from 'lucide-react'
 
 const IFRAME_WIDTH = 1280
 const IFRAME_HEIGHT = 720
@@ -198,22 +198,42 @@ function CommunityBuildSkeleton() {
   )
 }
 
-export function CommunityBuildsGrid() {
-  const { data: builds, isLoading, isError } = useCommunityBuilds()
+export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolean }) {
+  const {
+    data,
+    isLoading,
+    isError,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useCommunityBuilds()
+
+  const allBuilds = useMemo(
+    () => data?.pages.flatMap((page) => page.data) ?? [],
+    [data],
+  )
+  const total = data?.pages[0]?.total ?? 0
 
   // Hide section gracefully if no builds or error
   if (isError) return null
-  if (!isLoading && (!builds || builds.length === 0)) return null
+  if (!isLoading && allBuilds.length === 0) return null
 
   return (
-    <section className="mt-12">
+    <section className={showHeader ? 'mt-12' : undefined}>
       {/* Section header */}
-      <div className="flex items-center gap-2 mb-4">
-        <Users className="w-4 h-4 text-muted-foreground" />
-        <h2 className="text-sm font-medium text-muted-foreground">
-          Community Builds
-        </h2>
-      </div>
+      {showHeader && (
+        <div className="flex items-center gap-2 mb-4">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Community Builds
+          </h2>
+          {!isLoading && total > 0 && (
+            <span className="text-xs text-muted-foreground/50">
+              ({total})
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -221,10 +241,38 @@ export function CommunityBuildsGrid() {
           ? Array.from({ length: 6 }).map((_, i) => (
               <CommunityBuildSkeleton key={i} />
             ))
-          : builds?.map((build) => (
+          : allBuilds.map((build) => (
               <CommunityBuildCard key={build.id} build={build} />
             ))}
+        {isFetchingNextPage &&
+          Array.from({ length: 3 }).map((_, i) => (
+            <CommunityBuildSkeleton key={`next-${i}`} />
+          ))}
       </div>
+
+      {/* Load More */}
+      {hasNextPage && !isFetchingNextPage && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={() => fetchNextPage()}
+            className={cn(
+              'inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
+              'bg-muted/50 hover:bg-muted border border-border/50 hover:border-border',
+              'text-muted-foreground hover:text-foreground',
+              'transition-colors duration-150',
+            )}
+          >
+            Load more
+          </button>
+        </div>
+      )}
+
+      {/* Loading indicator for next page */}
+      {isFetchingNextPage && (
+        <div className="flex justify-center mt-6">
+          <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
+        </div>
+      )}
     </section>
   )
 }

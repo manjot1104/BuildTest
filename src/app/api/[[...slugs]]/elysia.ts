@@ -245,15 +245,24 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Community builds endpoint - GET /api/chats/community (must be before :chatId)
-  .get('/chats/community', async ({ set }) => {
-    const result = await getCommunityBuildsHandler()
+  .get(
+    '/chats/community',
+    async ({ query, set }) => {
+      const result = await getCommunityBuildsHandler({ query })
 
-    if (isApiError(result)) {
-      set.status = (result as ApiErrorResponse).status ?? 500
-    }
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
 
-    return result
-  })
+      return result
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.String()),
+        limit: t.Optional(t.String()),
+      }),
+    },
+  )
   // Chat details endpoint - GET /api/chats/:chatId
   .get(
     '/chats/:chatId',

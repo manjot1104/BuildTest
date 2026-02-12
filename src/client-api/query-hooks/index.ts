@@ -25,6 +25,7 @@ export type {
   ChatDetails,
   ChatHistoryItem,
   CommunityBuildItem,
+  CommunityBuildsPage,
 } from './use-chat-queries'
 
 export type {

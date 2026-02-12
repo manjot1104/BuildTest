@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Code2, X, PanelLeftClose, PanelLeft } from 'lucide-react'
+import { Code2, X, PanelLeftClose, PanelLeft, Download } from 'lucide-react'
 import { FileExplorer } from './file-explorer'
 import { CodePane } from './code-pane'
 import { buildFileTree, type FileTreeNodeData } from '@/lib/code-utils'
@@ -51,6 +51,25 @@ function findDefaultFile(files: Array<{ name: string }>): string | null {
   const tsx = files.find((f) => f.name.endsWith('.tsx'))
   if (tsx) return tsx.name
   return files[0]?.name ?? null
+}
+
+/* -------------------- ZIP Download -------------------- */
+
+async function downloadZip(files: Array<{ name: string; content: string }>) {
+  const JSZip = (await import('jszip')).default
+  const zip = new JSZip()
+  for (const file of files) {
+    zip.file(file.name, file.content)
+  }
+  const blob = await zip.generateAsync({ type: 'blob' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'source-code.zip'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 /* -------------------- Component -------------------- */
@@ -171,6 +190,16 @@ export function CodeViewerDialog({
             </Badge>
           </div>
           <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs"
+              onClick={() => void downloadZip(files)}
+              title="Download as ZIP"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download ZIP</span>
+            </Button>
             <Button
               variant="ghost"
               size="sm"

@@ -145,6 +145,7 @@ export function PreviewPanel({
                 onClick={() => setCodeDialogOpen(true)}
               >
                 <Code className="h-4 w-4" />
+                <span className="text-xs">Code</span>
               </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton

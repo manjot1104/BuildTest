@@ -290,6 +290,15 @@ export interface CommunityBuildItem {
   authorImage?: string | null
 }
 
+/** Paginated community builds response */
+export interface CommunityBuildsPage {
+  data: CommunityBuildItem[]
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
+}
+
 /** Chat ownership response */
 export interface ChatOwnershipResponse {
   success: boolean

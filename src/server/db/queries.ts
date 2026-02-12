@@ -190,8 +190,10 @@ export async function deleteUserChat({
  */
 export async function getCommunityChats({
   limit = 12,
+  offset = 0,
 }: {
   limit?: number
+  offset?: number
 } = {}): Promise<
   {
     id: string
@@ -225,10 +227,28 @@ export async function getCommunityChats({
       .where(isNotNull(user_chats.demo_url))
       .orderBy(desc(user_chats.created_at))
       .limit(limit)
+      .offset(offset)
 
     return chats
   } catch (error) {
     console.error('Failed to get community chats from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets total count of community chats (chats with demo_url)
+ */
+export async function getCommunityChatsCount(): Promise<number> {
+  try {
+    const [result] = await db
+      .select({ count: count(user_chats.id) })
+      .from(user_chats)
+      .where(isNotNull(user_chats.demo_url))
+
+    return result?.count ?? 0
+  } catch (error) {
+    console.error('Failed to get community chats count from database:', error)
     throw error
   }
 }

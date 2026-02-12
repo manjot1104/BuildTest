@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query'
 import { api } from '@/client-api/eden'
 import {
   type ChatDetails,
   type ChatHistoryItem,
   type CommunityBuildItem,
+  type CommunityBuildsPage,
 } from '@/types/api.types'
 
 /** Eden error response structure */
@@ -20,10 +21,8 @@ interface ChatHistoryDataResponse {
   data?: ChatHistoryItem[]
 }
 
-/** Eden response with community builds data wrapper */
-interface CommunityBuildsDataResponse {
-  data?: CommunityBuildItem[]
-}
+/** Paginated community builds response from API */
+type CommunityBuildsApiResponse = CommunityBuildsPage
 
 /**
  * Query hook for fetching chat details by ID
@@ -105,47 +104,30 @@ export function useChatHistory() {
 }
 
 /**
- * Query hook for fetching community builds (public)
- * Uses Eden client for type-safe API calls
+ * Infinite query hook for fetching paginated community builds (public)
+ * Uses fetch for reliable query-string support
  */
-export function useCommunityBuilds() {
-  return useQuery({
-    queryKey: ['community-builds'],
-    queryFn: async (): Promise<CommunityBuildItem[]> => {
-      try {
-        const response = await api.chats.community.get()
-
-        if (response.error) {
-          const edenError = response.error as EdenError
-          const errorMessage =
-            edenError?.value?.message ?? 'Failed to fetch community builds'
-          throw new Error(errorMessage)
-        }
-
-        if (!response.data) {
-          throw new Error('Failed to fetch community builds')
-        }
-
-        const responseData = response.data as CommunityBuildsDataResponse
-        return responseData?.data ?? []
-      } catch {
-        // Fallback to fetch if Eden fails
-        try {
-          const fetchResponse = await fetch('/api/chats/community')
-          if (!fetchResponse.ok) {
-            throw new Error('Failed to fetch community builds')
-          }
-          const json = (await fetchResponse.json()) as CommunityBuildsDataResponse
-          return json?.data ?? []
-        } catch {
-          throw new Error('Failed to fetch community builds')
-        }
+export function useCommunityBuilds(limit = 12) {
+  return useInfiniteQuery<CommunityBuildsApiResponse>({
+    queryKey: ['community-builds', limit],
+    queryFn: async ({ pageParam }): Promise<CommunityBuildsApiResponse> => {
+      const params = new URLSearchParams({
+        page: String(pageParam),
+        limit: String(limit),
+      })
+      const res = await fetch(`/api/chats/community?${params}`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch community builds')
       }
+      return (await res.json()) as CommunityBuildsApiResponse
     },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.page + 1 : undefined,
     staleTime: 1000 * 60 * 5, // 5 minutes
     retry: 1,
   })
 }
 
 // Re-export types for convenience
-export type { ChatDetails, ChatHistoryItem, CommunityBuildItem }
+export type { ChatDetails, ChatHistoryItem, CommunityBuildItem, CommunityBuildsPage }
