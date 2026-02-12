@@ -30,48 +30,67 @@ export function ResizableLayout({
   const containerRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }, [])
-
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isDragging || !containerRef.current) return
-
+  const updateWidth = useCallback(
+    (clientX: number) => {
+      if (!containerRef.current) return
       const containerRect = containerRef.current.getBoundingClientRect()
       const newLeftWidth =
-        ((e.clientX - containerRect.left) / containerRect.width) * 100
-
-      // Clamp the width between min and max
+        ((clientX - containerRect.left) / containerRect.width) * 100
       const clampedWidth = Math.min(
         Math.max(newLeftWidth, minLeftWidth),
         maxLeftWidth,
       )
       setLeftWidth(clampedWidth)
     },
-    [isDragging, minLeftWidth, maxLeftWidth],
+    [minLeftWidth, maxLeftWidth],
   )
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false)
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
   }, [])
 
   useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'col-resize'
-      document.body.style.userSelect = 'none'
+    if (!isDragging) return
 
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
+    const handleMouseMove = (e: MouseEvent) => {
+      e.preventDefault()
+      updateWidth(e.clientX)
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches[0]) {
+        updateWidth(e.touches[0].clientX)
       }
     }
-  }, [isDragging, handleMouseMove, handleMouseUp])
+
+    const handleEnd = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleEnd)
+    document.addEventListener('touchmove', handleTouchMove, { passive: true })
+    document.addEventListener('touchend', handleEnd)
+    document.addEventListener('touchcancel', handleEnd)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleEnd)
+      document.removeEventListener('touchmove', handleTouchMove)
+      document.removeEventListener('touchend', handleEnd)
+      document.removeEventListener('touchcancel', handleEnd)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isDragging, updateWidth])
 
   if (singlePanelMode) {
     return (
@@ -88,7 +107,7 @@ export function ResizableLayout({
   if (isMobile) {
     return (
       <div ref={containerRef} className={cn('flex h-full', className)}>
-        <div className="flex flex-col h-full w-full">
+        <div className="flex flex-col h-full w-full min-h-0">
           {activePanel === 'left' ? leftPanel : rightPanel}
         </div>
       </div>
@@ -97,29 +116,46 @@ export function ResizableLayout({
 
   // Desktop: Always render both panels to prevent remounting on resize
   return (
-    <div ref={containerRef} className={cn('flex h-full', className)}>
-      <div className="flex flex-col" style={{ width: `${leftWidth}%` }}>
+    <div ref={containerRef} className={cn('flex h-full overflow-hidden', className)}>
+      <div
+        className="flex flex-col min-h-0 min-w-0 overflow-hidden"
+        style={{ width: `${leftWidth}%` }}
+      >
         {leftPanel}
       </div>
 
+      {/* Resize divider */}
       <div
         className={cn(
-          'w-px bg-border dark:bg-input cursor-col-resize transition-all relative group',
-          isDragging && 'bg-blue-500 dark:bg-blue-400',
+          'relative shrink-0 cursor-col-resize select-none',
+          'w-1 bg-border dark:bg-input',
+          'transition-colors duration-150',
+          'hover:bg-primary/50 dark:hover:bg-primary/40',
+          isDragging && 'bg-primary dark:bg-primary',
         )}
         onMouseDown={handleMouseDown}
+        onTouchStart={handleTouchStart}
       >
+        {/* Wider invisible hit area for easier grabbing */}
+        <div className="absolute inset-y-0 -left-1.5 -right-1.5 z-10" />
+        {/* Active indicator line */}
         <div
           className={cn(
-            'absolute inset-y-0 left-1/2 -translate-x-1/2 w-0 bg-blue-500 dark:bg-blue-400 transition-all duration-200',
-            'group-hover:w-[3px]',
+            'absolute inset-y-0 left-1/2 -translate-x-1/2 w-0 rounded-full',
+            'bg-primary transition-all duration-150',
             isDragging && 'w-[3px]',
           )}
         />
-        <div className="absolute inset-y-0 -left-2 -right-2" />
       </div>
 
-      <div className="flex-1 flex flex-col">{rightPanel}</div>
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
+        {rightPanel}
+      </div>
+
+      {/* Overlay to prevent iframe from stealing mouse events during drag */}
+      {isDragging && (
+        <div className="fixed inset-0 z-40 cursor-col-resize" />
+      )}
     </div>
   )
 }

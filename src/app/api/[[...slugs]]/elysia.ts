@@ -11,6 +11,7 @@ import {
 import {
   getChatCountByUserId,
   getChatCountByIP,
+  getChatDemoUrl,
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
@@ -242,6 +243,31 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         attachments: t.Optional(
           t.Array(t.Object({ url: t.String() })),
         ),
+      }),
+    },
+  )
+  // App demo URL endpoint - GET /api/apps/:chatId (public, no auth)
+  // Used by the /apps/[chatId] page to get the demo URL for embedding
+  .get(
+    '/apps/:chatId',
+    async ({ params, set }) => {
+      try {
+        const result = await getChatDemoUrl({ v0ChatId: params.chatId })
+
+        if (!result) {
+          set.status = 404
+          return { error: 'App not found' }
+        }
+
+        return result
+      } catch (_error) {
+        set.status = 500
+        return { error: 'Failed to fetch app' }
+      }
+    },
+    {
+      params: t.Object({
+        chatId: t.String(),
       }),
     },
   )

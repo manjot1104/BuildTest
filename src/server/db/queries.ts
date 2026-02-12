@@ -121,6 +121,33 @@ export async function getUserChat({
 }
 
 /**
+ * Gets the demo URL for a chat by v0 chat ID (public, no auth needed)
+ * Used for the /apps/[chatId] page to render the deployed app
+ */
+export async function getChatDemoUrl({
+  v0ChatId,
+}: {
+  v0ChatId: string
+}): Promise<{ demoUrl: string; title: string | null } | undefined> {
+  try {
+    const [chat] = await db
+      .select({
+        demo_url: user_chats.demo_url,
+        title: user_chats.title,
+      })
+      .from(user_chats)
+      .where(eq(user_chats.v0_chat_id, v0ChatId))
+      .limit(1)
+
+    if (!chat?.demo_url) return undefined
+    return { demoUrl: chat.demo_url, title: chat.title }
+  } catch (error) {
+    console.error('Failed to get chat demo URL from database:', error)
+    throw error
+  }
+}
+
+/**
  * Gets all chats for a user, ordered by most recent first
  * This is the main function for chat history - no v0 API call needed
  */

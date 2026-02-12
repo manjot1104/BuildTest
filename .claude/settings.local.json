@@ -14,7 +14,11 @@
       "Bash(wc:*)",
       "Bash(bun run check:*)",
       "Bash(bun run lint:*)",
-      "Bash(bun run build:*)"
+      "Bash(bun run build:*)",
+      "Bash(SKIP_ENV_VALIDATION=1 npx tsc:*)",
+      "Bash(SKIP_ENV_VALIDATION=1 bunx tsc:*)",
+      "Bash(git stash push:*)",
+      "Bash(git show:*)"
     ]
   }
 }

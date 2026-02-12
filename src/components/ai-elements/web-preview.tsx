@@ -82,7 +82,7 @@ export const WebPreviewNavigation = ({
   ...props
 }: WebPreviewNavigationProps) => (
   <div
-    className={cn('flex items-center gap-1 border-b p-2 h-14', className)}
+    className={cn('flex items-center gap-1 border-b p-2 h-14 min-w-0 overflow-hidden', className)}
     {...props}
   >
     {children}
@@ -127,6 +127,7 @@ export const WebPreviewUrl = ({
   value,
   onChange,
   onKeyDown,
+  className,
   ...props
 }: WebPreviewUrlProps) => {
   const { url, setUrl } = useWebPreview()
@@ -141,7 +142,7 @@ export const WebPreviewUrl = ({
 
   return (
     <Input
-      className="h-8 flex-1 text-sm"
+      className={cn('h-8 min-w-0 flex-1 text-sm', className)}
       onChange={onChange}
       onKeyDown={handleKeyDown}
       placeholder="Enter URL..."
@@ -164,7 +165,7 @@ export const WebPreviewBody = ({
   const { url } = useWebPreview()
 
   return (
-    <div className="flex-1 h-full">
+    <div className="flex-1 h-full min-h-0">
       <iframe
         className={cn('size-full', className)}
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"

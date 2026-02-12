@@ -120,7 +120,7 @@ export function PreviewPanel({
     <>
       <div
         className={cn(
-          'flex flex-col h-screen min-h-0 transition-all duration-300',
+          'flex flex-col h-full min-h-0 transition-all duration-300',
           isFullscreen && 'fixed inset-0 z-50 bg-white dark:bg-black',
         )}
       >
@@ -131,21 +131,21 @@ export function PreviewPanel({
             <WebPreviewUrl
               readOnly
               placeholder="Your app will appear here..."
+              className="h-8 min-w-0 flex-1 text-xs"
               value={
                 currentChat?.id
-                  ? `https://ai.buildify.sh/apps/${currentChat.id}`
+                  ? `https://buildify.sh/apps/${currentChat.id}`
                   : ''
               }
             />
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 shrink-0">
               <WebPreviewNavigationButton
                 tooltip="View source code"
                 disabled={!hasFiles}
                 onClick={() => setCodeDialogOpen(true)}
               >
                 <Code className="h-4 w-4" />
-                <span className="text-xs">Code</span>
               </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton

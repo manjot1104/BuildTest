@@ -294,7 +294,7 @@ export default function ChatPage() {
                     hasActiveSubscription={hasActiveSubscription}
                     currentCredits={credits?.totalCredits ?? 0}
                 />
-                <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
+                <div className="bg-background h-[calc(100vh-80px)] flex flex-col overflow-hidden">
                     {/* Handle search params with Suspense boundary */}
                     <Suspense fallback={null}>
                         <SearchParamsHandler
@@ -303,7 +303,7 @@ export default function ChatPage() {
                         />
                     </Suspense>
 
-                    <div className="flex flex-col h-[calc(100vh-64px-40px)] md:h-[calc(100vh-64px)]">
+                    <div className="flex flex-col flex-1 min-h-0">
                         <ResizableLayout
                             className="flex-1 min-h-0"
                             singlePanelMode={!shouldShowPreview}
