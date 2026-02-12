@@ -19,6 +19,7 @@ import {
 import { useStateMachine } from "@/context/state-machine"
 import { authClient } from "@/server/better-auth/client"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import { X } from "lucide-react"
 
 export function AuthForm({
@@ -26,6 +27,7 @@ export function AuthForm({
     ...props
 }: React.ComponentProps<"div">) {
     const { authModal, toggleAuthModal } = useStateMachine()
+    const router = useRouter()
     const [isLogin, setIsLogin] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
     const [email, setEmail] = useState("")
@@ -44,6 +46,11 @@ export function AuthForm({
                 })
 
                 if (result.error) {
+                    if (result.error.status === 403 || result.error.code === "EMAIL_NOT_VERIFIED") {
+                        toggleAuthModal()
+                        router.push(`/check-email?email=${encodeURIComponent(email)}`)
+                        return
+                    }
                     toast.error(result.error.message ?? "Failed to sign in")
                 } else {
                     toast.success("Signed in successfully")
@@ -66,11 +73,8 @@ export function AuthForm({
                 if (result.error) {
                     toast.error(result.error.message ?? "Failed to sign up")
                 } else {
-                    toast.success("Account created successfully")
-                    setIsLogin(true)
-                    setEmail("")
-                    setPassword("")
-                    setName("")
+                    toggleAuthModal()
+                    router.push(`/check-email?email=${encodeURIComponent(email)}`)
                 }
             }
         } catch (error) {
@@ -137,12 +141,16 @@ export function AuthForm({
                                         <div className="flex items-center">
                                             <FieldLabel htmlFor="password">Password</FieldLabel>
                                             {isLogin && (
-                                                <a
-                                                    href="#"
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        toggleAuthModal()
+                                                        router.push('/forgot-password')
+                                                    }}
                                                     className="ml-auto text-sm underline-offset-2 hover:underline"
                                                 >
                                                     Forgot your password?
-                                                </a>
+                                                </button>
                                             )}
                                         </div>
                                         <Input

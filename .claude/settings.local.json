@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun add:*)",
+      "Bash(SKIP_ENV_VALIDATION=1 bun run build:*)",
+      "Bash(node:*)",
+      "WebSearch",
+      "Bash(bun remove:*)"
+    ]
+  }
+}

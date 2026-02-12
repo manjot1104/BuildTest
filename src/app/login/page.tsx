@@ -52,6 +52,10 @@ export default function LoginPage() {
                 })
 
                 if (result.error) {
+                    if (result.error.status === 403 || result.error.code === 'EMAIL_NOT_VERIFIED') {
+                        router.push(`/check-email?email=${encodeURIComponent(email)}`)
+                        return
+                    }
                     toast.error(result.error.message ?? 'Failed to sign in')
                 } else {
                     toast.success('Signed in successfully')
@@ -72,11 +76,7 @@ export default function LoginPage() {
                 if (result.error) {
                     toast.error(result.error.message ?? 'Failed to sign up')
                 } else {
-                    toast.success('Account created successfully')
-                    setIsLogin(true)
-                    setEmail('')
-                    setPassword('')
-                    setName('')
+                    router.push(`/check-email?email=${encodeURIComponent(email)}`)
                 }
             }
         } catch (error) {
@@ -202,12 +202,12 @@ export default function LoginPage() {
                                         <div className="flex items-center">
                                             <FieldLabel htmlFor="password">Password</FieldLabel>
                                             {isLogin && (
-                                                <a
-                                                    href="#"
+                                                <Link
+                                                    href="/forgot-password"
                                                     className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors"
                                                 >
                                                     Forgot password?
-                                                </a>
+                                                </Link>
                                             )}
                                         </div>
                                         <Input
