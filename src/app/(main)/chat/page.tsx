@@ -20,6 +20,7 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { ChatMessages } from '@/components/chat/chat-messages'
 import { ChatInput } from '@/components/chat/chat-input'
+import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { ForkBanner } from '@/components/chat/fork-banner'
 import { PreviewPanel } from '@/components/chat/preview-panel'
 import { ResizableLayout } from '@/components/shared/resizable-layout'
@@ -451,7 +452,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
+        <div className="bg-background min-h-[calc(100vh-80px)] flex flex-col overflow-y-auto">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -467,8 +468,8 @@ export default function ChatPage() {
             </Suspense>
 
             {/* Main Content */}
-            <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-                <div className="max-w-2xl w-full">
+            <div className="pt-[15vh] pb-4 px-4 sm:px-6 lg:px-8">
+                <div className="max-w-2xl w-full mx-auto">
                     {/* Title */}
                     <h1 className="text-2xl sm:text-3xl font-semibold text-center text-foreground mb-8">
                         Buildify
@@ -553,6 +554,13 @@ export default function ChatPage() {
                     <p className="text-xs text-muted-foreground/50 text-center mt-6">
                         Press <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[10px] font-mono">Enter</kbd> to send
                     </p>
+                </div>
+            </div>
+
+            {/* Community Builds - wider container */}
+            <div className="px-4 sm:px-6 lg:px-8 pb-16">
+                <div className="max-w-5xl w-full mx-auto">
+                    <CommunityBuildsGrid />
                 </div>
             </div>
         </div>

@@ -276,6 +276,20 @@ export interface ChatHistoryItem {
   updatedAt: string
 }
 
+/** Community build item - for discovery grid */
+export interface CommunityBuildItem {
+  id: string
+  v0ChatId: string
+  title?: string | null
+  prompt?: string | null
+  demoUrl?: string | null
+  previewUrl?: string | null
+  createdAt: string
+  updatedAt: string
+  authorName: string
+  authorImage?: string | null
+}
+
 /** Chat ownership response */
 export interface ChatOwnershipResponse {
   success: boolean

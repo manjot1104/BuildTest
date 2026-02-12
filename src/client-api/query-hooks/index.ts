@@ -1,5 +1,5 @@
 // Chat Query hooks
-export { useChatDetails, useChatHistory } from './use-chat-queries'
+export { useChatDetails, useChatHistory, useCommunityBuilds } from './use-chat-queries'
 
 // Chat Mutation hooks
 export { useCreateChat, useCreateChatOwnership, useForkChat } from './use-chat-mutations'
@@ -24,6 +24,7 @@ export {
 export type {
   ChatDetails,
   ChatHistoryItem,
+  CommunityBuildItem,
 } from './use-chat-queries'
 
 export type {

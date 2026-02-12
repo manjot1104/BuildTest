@@ -16,12 +16,10 @@ import {
   Smartphone,
   Tablet,
   Monitor,
-  Eye,
   Code,
 } from 'lucide-react'
 
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { CodeViewer } from '@/components/code-viewer/code-viewer'
+import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 
@@ -88,7 +86,7 @@ export function PreviewPanel({
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
   const [isReloading, setIsReloading] = useState(false)
-  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview')
+  const [codeDialogOpen, setCodeDialogOpen] = useState(false)
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
@@ -100,9 +98,16 @@ export function PreviewPanel({
 
   const showBuildingLoader = isBuilding && !currentChat?.demo
 
-  // keyboard fullscreen toggle
+  // keyboard fullscreen toggle (ignore when typing in inputs)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      )
+        return
       if (e.key.toLowerCase() === 'f') {
         setIsFullscreen(!isFullscreen)
       }
@@ -112,95 +117,71 @@ export function PreviewPanel({
   }, [isFullscreen, setIsFullscreen])
 
   return (
-    <div
-      className={cn(
-        'flex flex-col h-screen min-h-0 transition-all duration-300',
-        isFullscreen && 'fixed inset-0 z-50 bg-white dark:bg-black',
-      )}
-    >
-      <Tabs
-        value={activeTab}
-        onValueChange={(v) => setActiveTab(v as 'preview' | 'code')}
-        className="flex flex-col h-full gap-0"
+    <>
+      <div
+        className={cn(
+          'flex flex-col h-screen min-h-0 transition-all duration-300',
+          isFullscreen && 'fixed inset-0 z-50 bg-white dark:bg-black',
+        )}
       >
         <WebPreview defaultUrl={currentChat?.demo ?? ''}>
 
           {/* ---------------- NAV BAR ---------------- */}
           <WebPreviewNavigation>
-            {/* LEFT: Tab switcher */}
+            <WebPreviewUrl
+              readOnly
+              placeholder="Your app will appear here..."
+              value={
+                currentChat?.id
+                  ? `https://ai.buildify.sh/apps/${currentChat.id}`
+                  : ''
+              }
+            />
+
             <div className="flex items-center gap-1">
-              <TabsList className="h-7 p-0.5">
-                <TabsTrigger value="preview" className="h-6 px-2 text-xs gap-1">
-                  <Eye className="h-3 w-3" />
-                  Preview
-                </TabsTrigger>
-                <TabsTrigger
-                  value="code"
-                  className="h-6 px-2 text-xs gap-1"
-                  disabled={!hasFiles}
-                >
-                  <Code className="h-3 w-3" />
-                  Code
-                </TabsTrigger>
-              </TabsList>
-            </div>
+              <WebPreviewNavigationButton
+                tooltip="View source code"
+                disabled={!hasFiles}
+                onClick={() => setCodeDialogOpen(true)}
+              >
+                <Code className="h-4 w-4" />
+              </WebPreviewNavigationButton>
 
-            {/* CENTER: URL bar (preview only) */}
-            {activeTab === 'preview' ? (
-              <WebPreviewUrl
-                readOnly
-                placeholder="Your app will appear here..."
-                value={
-                  currentChat?.id
-                    ? `https://ai.buildify.sh/apps/${currentChat.id}`
-                    : ''
-                }
-              />
-            ) : (
-              <div className="flex-1" />
-            )}
+              <WebPreviewNavigationButton
+                tooltip="Refresh preview"
+                disabled={!iframeSrc}
+                onClick={() => {
+                  if (!iframeSrc) return
+                  setIsReloading(true)
+                  setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
+                }}
+              >
+                <RefreshCw className="h-4 w-4" />
+              </WebPreviewNavigationButton>
 
-            {/* RIGHT: controls */}
-            <div className="flex items-center gap-1">
-              {activeTab === 'preview' && (
-                <>
-                  <WebPreviewNavigationButton
-                    tooltip="Refresh preview"
-                    disabled={!iframeSrc}
-                    onClick={() => {
-                      if (!iframeSrc) return
-                      setIsReloading(true)
-                      setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
-                    }}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </WebPreviewNavigationButton>
+              <WebPreviewNavigationButton
+                tooltip="Mobile view"
+                onClick={() => setDevice('mobile')}
+                className={device === 'mobile' ? 'bg-muted' : ''}
+              >
+                <Smartphone className="h-4 w-4" />
+              </WebPreviewNavigationButton>
 
-                  <WebPreviewNavigationButton
-                    tooltip="Mobile view"
-                    onClick={() => setDevice('mobile')}
-                    className={device === 'mobile' ? 'bg-muted' : ''}
-                  >
-                    <Smartphone className="h-4 w-4" />
-                  </WebPreviewNavigationButton>
+              <WebPreviewNavigationButton
+                tooltip="Tablet view"
+                onClick={() => setDevice('tablet')}
+                className={device === 'tablet' ? 'bg-muted' : ''}
+              >
+                <Tablet className="h-4 w-4" />
+              </WebPreviewNavigationButton>
 
-                  <WebPreviewNavigationButton
-                    tooltip="Tablet view"
-                    onClick={() => setDevice('tablet')}
-                    className={device === 'tablet' ? 'bg-muted' : ''}
-                  >
-                    <Tablet className="h-4 w-4" />
-                  </WebPreviewNavigationButton>
-
-                  <WebPreviewNavigationButton
-                    tooltip="Desktop view"
-                    onClick={() => setDevice('desktop')}
-                    className={device === 'desktop' ? 'bg-muted' : ''}
-                  >
-                    <Monitor className="h-4 w-4" />
-                  </WebPreviewNavigationButton>
-                </>
-              )}
+              <WebPreviewNavigationButton
+                tooltip="Desktop view"
+                onClick={() => setDevice('desktop')}
+                className={device === 'desktop' ? 'bg-muted' : ''}
+              >
+                <Monitor className="h-4 w-4" />
+              </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton
                 onClick={() => setIsFullscreen(!isFullscreen)}
@@ -216,8 +197,8 @@ export function PreviewPanel({
             </div>
           </WebPreviewNavigation>
 
-          {/* ---------------- TAB CONTENT ---------------- */}
-          <TabsContent value="preview" className="flex-1 min-h-0">
+          {/* ---------------- PREVIEW CONTENT ---------------- */}
+          <div className="flex-1 min-h-0">
             {iframeSrc ? (
               <div className="h-full bg-gray-100 dark:bg-black overflow-auto">
                 <div className="flex justify-center h-full">
@@ -262,22 +243,19 @@ export function PreviewPanel({
                 </p>
               </div>
             )}
-          </TabsContent>
-
-          <TabsContent value="code" className="flex-1 min-h-0">
-            {hasFiles ? (
-              <CodeViewer files={currentChat!.files!} />
-            ) : (
-              <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-black">
-                <p className="text-sm text-gray-600 dark:text-gray-300">
-                  No source files available
-                </p>
-              </div>
-            )}
-          </TabsContent>
+          </div>
 
         </WebPreview>
-      </Tabs>
-    </div>
+      </div>
+
+      {/* Code Viewer Dialog */}
+      {hasFiles && (
+        <CodeViewerDialog
+          files={currentChat!.files!}
+          open={codeDialogOpen}
+          onOpenChange={setCodeDialogOpen}
+        />
+      )}
+    </>
   )
 }

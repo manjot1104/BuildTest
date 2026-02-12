@@ -1,9 +1,9 @@
 'use server'
 
-import { and, count, desc, eq, gte } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs } from './schema'
+import { user_chats, anonymous_chat_logs, user } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -180,6 +180,55 @@ export async function deleteUserChat({
     await db.delete(user_chats).where(eq(user_chats.v0_chat_id, v0ChatId))
   } catch (error) {
     console.error('Failed to delete user chat from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets community chats (chats with a demo_url) with author info
+ * Used for the community builds discovery grid
+ */
+export async function getCommunityChats({
+  limit = 12,
+}: {
+  limit?: number
+} = {}): Promise<
+  {
+    id: string
+    v0_chat_id: string
+    title: string | null
+    prompt: string | null
+    demo_url: string | null
+    preview_url: string | null
+    created_at: Date
+    updated_at: Date
+    author_name: string
+    author_image: string | null
+  }[]
+> {
+  try {
+    const chats = await db
+      .select({
+        id: user_chats.id,
+        v0_chat_id: user_chats.v0_chat_id,
+        title: user_chats.title,
+        prompt: user_chats.prompt,
+        demo_url: user_chats.demo_url,
+        preview_url: user_chats.preview_url,
+        created_at: user_chats.created_at,
+        updated_at: user_chats.updated_at,
+        author_name: user.name,
+        author_image: user.image,
+      })
+      .from(user_chats)
+      .innerJoin(user, eq(user_chats.user_id, user.id))
+      .where(isNotNull(user_chats.demo_url))
+      .orderBy(desc(user_chats.created_at))
+      .limit(limit)
+
+    return chats
+  } catch (error) {
+    console.error('Failed to get community chats from database:', error)
     throw error
   }
 }

@@ -10,6 +10,7 @@ import {
   getChatCountByIP,
   getUserChat,
   getUserChatsByUserId,
+  getCommunityChats,
 } from '@/server/db/queries'
 import {
   hasEnoughCredits,
@@ -25,6 +26,7 @@ import {
   type ChatOwnershipResponse,
   type ForkChatResponse,
   type ChatHistoryItem,
+  type CommunityBuildItem,
 } from '@/types/api.types'
 
 // ============================================================================
@@ -81,6 +83,9 @@ type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
 
 /** Response type for getChatHistoryHandler */
 type GetChatHistoryResponse = { data: ChatHistoryItem[] } | ErrorResponse
+
+/** Response type for getCommunityBuildsHandler */
+type GetCommunityBuildsResponse = { data: CommunityBuildItem[] } | ErrorResponse
 
 // ============================================================================
 // Utility Functions
@@ -613,6 +618,38 @@ export async function getChatHistoryHandler(): Promise<GetChatHistoryResponse> {
 
     return {
       error: 'Failed to fetch chat history',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * Handler for getting community builds (public endpoint)
+ * Returns chats with demo_url set, including author info
+ */
+export async function getCommunityBuildsHandler(): Promise<GetCommunityBuildsResponse> {
+  try {
+    const chats = await getCommunityChats({ limit: 12 })
+
+    const data: CommunityBuildItem[] = chats.map((chat) => ({
+      id: chat.id,
+      v0ChatId: chat.v0_chat_id,
+      title: chat.title,
+      prompt: chat.prompt,
+      demoUrl: chat.demo_url,
+      previewUrl: chat.preview_url,
+      createdAt: chat.created_at.toISOString(),
+      updatedAt: chat.updated_at.toISOString(),
+      authorName: chat.author_name,
+      authorImage: chat.author_image,
+    }))
+
+    return { data }
+  } catch (error) {
+    console.error('Error fetching community builds:', error)
+    return {
+      error: 'Failed to fetch community builds',
       details: error instanceof Error ? error.message : 'Unknown error',
       status: 500,
     }

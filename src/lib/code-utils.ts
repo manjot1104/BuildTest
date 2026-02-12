@@ -111,3 +111,35 @@ export function getFileIcon(fileName: string): 'code' | 'file' {
   ])
   return codeExtensions.has(ext) ? 'code' : 'file'
 }
+
+/**
+ * Returns a Tailwind text-color class for a file's icon based on extension.
+ */
+export function getFileIconColor(fileName: string): string {
+  const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
+  const colorMap: Record<string, string> = {
+    ts: 'text-blue-400',
+    tsx: 'text-blue-400',
+    js: 'text-yellow-400',
+    jsx: 'text-yellow-400',
+    json: 'text-yellow-500/80',
+    css: 'text-purple-400',
+    html: 'text-orange-400',
+    md: 'text-sky-400',
+    mdx: 'text-sky-400',
+    py: 'text-green-400',
+    rs: 'text-orange-500',
+    go: 'text-cyan-400',
+    sql: 'text-pink-400',
+    yaml: 'text-red-400',
+    yml: 'text-red-400',
+    toml: 'text-gray-400',
+    xml: 'text-orange-400',
+    svg: 'text-orange-400',
+    sh: 'text-green-400',
+    bash: 'text-green-400',
+    graphql: 'text-pink-500',
+    gql: 'text-pink-500',
+  }
+  return colorMap[ext] ?? 'text-muted-foreground'
+}

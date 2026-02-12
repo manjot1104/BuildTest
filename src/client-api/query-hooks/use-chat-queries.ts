@@ -3,6 +3,7 @@ import { api } from '@/client-api/eden'
 import {
   type ChatDetails,
   type ChatHistoryItem,
+  type CommunityBuildItem,
 } from '@/types/api.types'
 
 /** Eden error response structure */
@@ -17,6 +18,11 @@ interface EdenError {
 /** Eden response with data wrapper */
 interface ChatHistoryDataResponse {
   data?: ChatHistoryItem[]
+}
+
+/** Eden response with community builds data wrapper */
+interface CommunityBuildsDataResponse {
+  data?: CommunityBuildItem[]
 }
 
 /**
@@ -98,5 +104,48 @@ export function useChatHistory() {
   })
 }
 
+/**
+ * Query hook for fetching community builds (public)
+ * Uses Eden client for type-safe API calls
+ */
+export function useCommunityBuilds() {
+  return useQuery({
+    queryKey: ['community-builds'],
+    queryFn: async (): Promise<CommunityBuildItem[]> => {
+      try {
+        const response = await api.chats.community.get()
+
+        if (response.error) {
+          const edenError = response.error as EdenError
+          const errorMessage =
+            edenError?.value?.message ?? 'Failed to fetch community builds'
+          throw new Error(errorMessage)
+        }
+
+        if (!response.data) {
+          throw new Error('Failed to fetch community builds')
+        }
+
+        const responseData = response.data as CommunityBuildsDataResponse
+        return responseData?.data ?? []
+      } catch {
+        // Fallback to fetch if Eden fails
+        try {
+          const fetchResponse = await fetch('/api/chats/community')
+          if (!fetchResponse.ok) {
+            throw new Error('Failed to fetch community builds')
+          }
+          const json = (await fetchResponse.json()) as CommunityBuildsDataResponse
+          return json?.data ?? []
+        } catch {
+          throw new Error('Failed to fetch community builds')
+        }
+      }
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: 1,
+  })
+}
+
 // Re-export types for convenience
-export type { ChatDetails, ChatHistoryItem }
+export type { ChatDetails, ChatHistoryItem, CommunityBuildItem }

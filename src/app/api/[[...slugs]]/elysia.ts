@@ -5,6 +5,7 @@ import {
   forkChatHandler,
   getChatDetailsHandler,
   getChatHistoryHandler,
+  getCommunityBuildsHandler,
   getClientIP,
 } from '@/server/api/controllers/chat.controller'
 import {
@@ -243,6 +244,16 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
+  // Community builds endpoint - GET /api/chats/community (must be before :chatId)
+  .get('/chats/community', async ({ set }) => {
+    const result = await getCommunityBuildsHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
   // Chat details endpoint - GET /api/chats/:chatId
   .get(
     '/chats/:chatId',
