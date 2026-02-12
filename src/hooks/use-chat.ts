@@ -30,6 +30,7 @@ export function useChat(chatId?: string) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [currentChat, setCurrentChat] = useState<Chat | null>(null)
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
 
   // Use Tanstack Query to fetch chat details
   const {
@@ -117,7 +118,15 @@ export function useChat(chatId?: string) {
           'Sorry, there was an error processing your message. Please try again.'
         try {
           const errorData = (await response.json()) as {
+            error?: string
             message?: string
+          }
+          if (errorData.error === 'insufficient_credits') {
+            setShowSubscriptionModal(true)
+            setIsLoading(false)
+            // Remove the user message we just added since the request didn't go through
+            setChatHistory((prev) => prev.slice(0, -1))
+            return
           }
           if (errorData.message) {
             errorMessage = errorData.message
@@ -334,5 +343,7 @@ export function useChat(chatId?: string) {
     handleSendMessage,
     handleStreamingComplete,
     handleChatData,
+    showSubscriptionModal,
+    setShowSubscriptionModal,
   }
 }

@@ -25,6 +25,8 @@ import { ResizableLayout } from '@/components/shared/resizable-layout'
 import { BottomToolbar } from '@/components/shared/bottom-toolbar'
 import { useChat } from '@/hooks/use-chat'
 import { ChatActionsProvider } from '@/context/chat-actions'
+import { SubscriptionModal } from '@/components/payments/subscription-modal'
+import { useUserCredits } from '@/hooks/use-user-credits'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
 import {
     Layout,
@@ -87,7 +89,11 @@ export default function ChatPage() {
         handleSendMessage: hookHandleSendMessage,
         handleStreamingComplete: hookHandleStreamingComplete,
         handleChatData: hookHandleChatData,
+        showSubscriptionModal,
+        setShowSubscriptionModal,
     } = useChat(urlChatId ?? undefined)
+
+    const { credits, hasActiveSubscription } = useUserCredits()
     const shouldShowPreview =
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
@@ -250,6 +256,12 @@ export default function ChatPage() {
     if (showChatInterface || chatHistory.length > 0) {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                <SubscriptionModal
+                    open={showSubscriptionModal}
+                    onOpenChange={setShowSubscriptionModal}
+                    hasActiveSubscription={hasActiveSubscription}
+                    currentCredits={credits?.totalCredits ?? 0}
+                />
                 <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
                     {/* Handle search params with Suspense boundary */}
                     <Suspense fallback={null}>
@@ -351,6 +363,12 @@ export default function ChatPage() {
 
     return (
         <div className="bg-background h-[calc(100vh-80px)] flex flex-col">
+            <SubscriptionModal
+                open={showSubscriptionModal}
+                onOpenChange={setShowSubscriptionModal}
+                hasActiveSubscription={hasActiveSubscription}
+                currentCredits={credits?.totalCredits ?? 0}
+            />
             {/* Handle search params with Suspense boundary */}
             <Suspense fallback={null}>
                 <SearchParamsHandler
