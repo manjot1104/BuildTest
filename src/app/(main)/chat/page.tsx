@@ -84,6 +84,7 @@ export default function ChatPage() {
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [refreshKey, setRefreshKey] = useState(0)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
+    const [micError, setMicError] = useState<string | null>(null)
     const [urlChatId, setUrlChatId] = useState<string | null>(() => {
         if (typeof window !== 'undefined') {
             return new URLSearchParams(window.location.search).get('chatId')
@@ -508,12 +509,14 @@ export default function ChatPage() {
                                 <PromptInputTools>
                                     <PromptInputMicButton
                                         onTranscript={(transcript) => {
+                                            setMicError(null)
                                             setMessage(
                                                 (prev) => prev + (prev ? ' ' : '') + transcript,
                                             )
                                         }}
                                         onError={(error) => {
-                                            console.error('Speech recognition error:', error)
+                                            setMicError(error)
+                                            setTimeout(() => setMicError(null), 5000)
                                         }}
                                         disabled={isLoading}
                                     />
@@ -524,6 +527,11 @@ export default function ChatPage() {
                                 </PromptInputTools>
                             </PromptInputToolbar>
                         </PromptInput>
+                        {micError && (
+                            <p className="mt-2 text-xs text-destructive animate-in fade-in">
+                                {micError}
+                            </p>
+                        )}
                     </div>
 
                     {/* Suggestions */}

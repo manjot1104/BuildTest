@@ -55,6 +55,11 @@ interface InsufficientCreditsResponse {
 const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
 const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
 
+// Speech-to-text rate limiting (in-memory, per-user, 24h sliding window)
+const MAX_STT_REQUESTS_PER_DAY = 100
+const MAX_STT_BASE64_LENGTH = 15_000_000 // ~15MB base64 string ≈ ~10MB decoded audio
+const sttRateLimitMap = new Map<string, { count: number; windowStart: number }>()
+
 /** Streaming error response type */
 interface StreamingErrorResponse {
   error: string
@@ -462,6 +467,32 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     '/speech-to-text',
     async ({ body, set }) => {
       try {
+        // Auth check
+        const session = await getSession()
+        if (!session?.user?.id) {
+          set.status = 401
+          return { error: 'Unauthorized', message: 'You must be signed in to use speech-to-text.' }
+        }
+
+        const userId = session.user.id
+
+        // Rate limiting (in-memory, 24h sliding window)
+        const now = Date.now()
+        const windowMs = 24 * 60 * 60 * 1000
+        const entry = sttRateLimitMap.get(userId)
+        if (entry && now - entry.windowStart < windowMs) {
+          if (entry.count >= MAX_STT_REQUESTS_PER_DAY) {
+            set.status = 429
+            return {
+              error: 'rate_limit:speech' as const,
+              message: 'You have exceeded the maximum number of speech-to-text requests for the day. Please try again later.',
+            }
+          }
+          entry.count++
+        } else {
+          sttRateLimitMap.set(userId, { count: 1, windowStart: now })
+        }
+
         if (!env.ELEVENLABS_API_KEY) {
           set.status = 500
           return {
@@ -479,32 +510,32 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           }
         }
 
+        // Size validation (~15MB base64 ≈ ~10MB decoded)
+        if (audioData.length > MAX_STT_BASE64_LENGTH) {
+          set.status = 413
+          return {
+            error: 'Payload too large',
+            message: 'Audio data exceeds the maximum allowed size of ~10MB.',
+          }
+        }
+
+        // Detect MIME type from data URL prefix, fallback to audio/webm
+        const mimeMatch = /^data:(audio\/[\w.+-]+);base64,/.exec(audioData)
+        const mimeType = mimeMatch?.[1] ?? 'audio/webm'
+
         // Convert base64 to buffer
-        const base64Data = audioData.replace(/^data:audio\/\w+;base64,/, '')
+        const base64Data = audioData.replace(/^data:audio\/[\w.+-]+;base64,/, '')
         const audioBuffer = Buffer.from(base64Data, 'base64')
 
-        // Create multipart form data for ElevenLabs API
-        const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`
+        // Build FormData using native API
         const modelId = body.modelId || 'scribe_v2'
-        
-        // Build multipart form data manually
-        const parts: Buffer[] = []
-        const CRLF = '\r\n'
-        
-        // Add model_id field
-        parts.push(Buffer.from(`--${boundary}${CRLF}`))
-        parts.push(Buffer.from(`Content-Disposition: form-data; name="model_id"${CRLF}${CRLF}`))
-        parts.push(Buffer.from(modelId))
-        parts.push(Buffer.from(CRLF))
-        
-        // Add audio file
-        parts.push(Buffer.from(`--${boundary}${CRLF}`))
-        parts.push(Buffer.from(`Content-Disposition: form-data; name="audio"; filename="audio.webm"${CRLF}`))
-        parts.push(Buffer.from(`Content-Type: audio/webm${CRLF}${CRLF}`))
-        parts.push(audioBuffer)
-        parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`))
-
-        const formDataBody = Buffer.concat(parts)
+        const formData = new FormData()
+        formData.append('model_id', modelId)
+        formData.append(
+          'audio',
+          new Blob([audioBuffer], { type: mimeType }),
+          'audio.webm',
+        )
 
         const response = await fetch(
           'https://api.elevenlabs.io/v1/speech-to-text',
@@ -512,14 +543,15 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
             method: 'POST',
             headers: {
               'xi-api-key': env.ELEVENLABS_API_KEY,
-              'Content-Type': `multipart/form-data; boundary=${boundary}`,
             },
-            body: formDataBody,
+            body: formData,
           },
         )
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}))
+          const errorData = (await response.json().catch(() => ({}))) as {
+            detail?: { message?: string }
+          }
           set.status = response.status
           return {
             error: 'Speech-to-text conversion failed',
@@ -529,7 +561,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           }
         }
 
-        const data = await response.json()
+        const data = (await response.json()) as { text?: string; language?: string }
         return {
           transcript: data.text || '',
           language: data.language || null,
@@ -546,7 +578,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       body: t.Object({
-        audio: t.String(), // Base64 encoded audio
+        audio: t.String({ maxLength: MAX_STT_BASE64_LENGTH }),
         modelId: t.Optional(t.String()),
       }),
     },

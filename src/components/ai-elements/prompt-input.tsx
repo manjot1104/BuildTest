@@ -437,7 +437,7 @@ export const PromptInputModelSelectValue = ({
   <SelectValue className={cn(className)} {...props} />
 )
 
-export type PromptInputMicButtonProps = ComponentProps<typeof Button> & {
+export type PromptInputMicButtonProps = Omit<ComponentProps<typeof Button>, 'onError'> & {
   onTranscript?: (transcript: string) => void
   onError?: (error: string) => void
 }
@@ -450,11 +450,17 @@ export const PromptInputMicButton = ({
 }: PromptInputMicButtonProps) => {
   const [isListening, setIsListening] = useState(false)
   const recognitionRef = useRef<ISpeechRecognition | null>(null)
+  const onTranscriptRef = useRef(onTranscript)
+  const onErrorRef = useRef(onError)
+
+  // Keep refs in sync with latest callbacks
+  onTranscriptRef.current = onTranscript
+  onErrorRef.current = onError
 
   useEffect(() => {
     // Check if browser supports Web Speech API
-    const SpeechRecognition = 
-      (window as any).SpeechRecognition || 
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition
 
     if (!SpeechRecognition) {
@@ -465,7 +471,7 @@ export const PromptInputMicButton = ({
     const recognition = new SpeechRecognition()
     recognition.continuous = true
     recognition.interimResults = false
-    recognition.lang = 'en-US'
+    recognition.lang = navigator.language || 'en-US'
 
     recognition.onstart = () => {
       setIsListening(true)
@@ -478,16 +484,16 @@ export const PromptInputMicButton = ({
           return firstAlternative.transcript
         })
         .join(' ')
-      
-      if (transcript.trim() && onTranscript) {
-        onTranscript(transcript)
+
+      if (transcript.trim() && onTranscriptRef.current) {
+        onTranscriptRef.current(transcript)
       }
     }
 
     recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
       setIsListening(false)
       let errorMessage = `Speech recognition error: ${event.error}`
-      
+
       if (event.error === 'not-allowed') {
         errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.'
       } else if (event.error === 'no-speech') {
@@ -496,9 +502,9 @@ export const PromptInputMicButton = ({
         // User stopped it, don't show error
         return
       }
-      
-      if (onError) {
-        onError(errorMessage)
+
+      if (onErrorRef.current) {
+        onErrorRef.current(errorMessage)
       } else {
         console.error('Speech recognition error:', errorMessage)
       }
@@ -514,18 +520,18 @@ export const PromptInputMicButton = ({
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop()
-        } catch (e) {
+        } catch (_e) {
           // Ignore errors when cleaning up
         }
       }
     }
-  }, [onTranscript, onError])
+  }, [])
 
   const handleClick = useCallback(() => {
     if (!recognitionRef.current) {
       const errorMessage = 'Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.'
-      if (onError) {
-        onError(errorMessage)
+      if (onErrorRef.current) {
+        onErrorRef.current(errorMessage)
       } else {
         console.error('Speech recognition error:', errorMessage)
       }
@@ -536,7 +542,7 @@ export const PromptInputMicButton = ({
       try {
         recognitionRef.current.stop()
         setIsListening(false)
-      } catch (error) {
+      } catch (_error) {
         // Ignore errors when stopping
       }
     } else {
@@ -544,17 +550,17 @@ export const PromptInputMicButton = ({
         recognitionRef.current.start()
       } catch (error) {
         setIsListening(false)
-        const errorMessage = error instanceof Error 
-          ? error.message 
+        const errorMessage = error instanceof Error
+          ? error.message
           : 'Failed to start speech recognition. Make sure your microphone is connected and permissions are granted.'
-        if (onError) {
-          onError(errorMessage)
+        if (onErrorRef.current) {
+          onErrorRef.current(errorMessage)
         } else {
           console.error('Speech recognition error:', errorMessage)
         }
       }
     }
-  }, [isListening, onError])
+  }, [isListening])
 
   return (
     <PromptInputButton

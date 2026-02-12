@@ -343,7 +343,7 @@ export interface ApiErrorResponse {
 
 /** Rate limit error response */
 export interface RateLimitErrorResponse {
-  error: 'rate_limit:chat'
+  error: 'rate_limit:chat' | 'rate_limit:speech'
   message: string
 }
 
@@ -353,6 +353,18 @@ export interface InsufficientCreditsErrorResponse {
   message: string
   required: number
   available: number
+}
+
+/** Speech-to-text success response */
+export interface SpeechToTextResponse {
+  transcript: string
+  language: string | null
+}
+
+/** Speech-to-text error response */
+export interface SpeechToTextErrorResponse {
+  error: string
+  message: string
 }
 
 // ============================================================================
@@ -561,9 +573,9 @@ export function isApiError(response: unknown): response is ApiErrorResponse {
 export function isRateLimitError(
   response: unknown,
 ): response is RateLimitErrorResponse {
-  return (
-    isApiError(response) && (response as RateLimitErrorResponse).error === 'rate_limit:chat'
-  )
+  if (!isApiError(response)) return false
+  const error = (response as RateLimitErrorResponse).error
+  return error === 'rate_limit:chat' || error === 'rate_limit:speech'
 }
 
 /** Check if response is an insufficient credits error */

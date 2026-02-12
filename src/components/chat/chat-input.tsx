@@ -42,6 +42,7 @@ export function ChatInput({
   textareaRef,
 }: ChatInputProps) {
   const [isDragOver, setIsDragOver] = useState(false)
+  const [micError, setMicError] = useState<string | null>(null)
 
   const handleImageFiles = useCallback(
     async (files: File[]) => {
@@ -146,10 +147,12 @@ export function ChatInput({
             <PromptInputTools>
               <PromptInputMicButton
                 onTranscript={(transcript) => {
+                  setMicError(null)
                   setMessage(message + (message ? ' ' : '') + transcript)
                 }}
                 onError={(error) => {
-                  console.error('Speech recognition error:', error)
+                  setMicError(error)
+                  setTimeout(() => setMicError(null), 5000)
                 }}
               />
               <PromptInputSubmit
@@ -160,6 +163,11 @@ export function ChatInput({
           </PromptInputToolbar>
         </PromptInput>
       </div>
+      {micError && (
+        <p className="max-w-2xl mx-auto mt-2 text-xs text-destructive animate-in fade-in">
+          {micError}
+        </p>
+      )}
       {showSuggestions && (
         <div className="max-w-2xl mx-auto mt-2">
           <Suggestions>
