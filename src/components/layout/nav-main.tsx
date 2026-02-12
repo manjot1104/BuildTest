@@ -104,25 +104,27 @@ export function NavMain({
                                 </CollapsibleTrigger>
                                 <CollapsibleContent>
                                     <SidebarMenuSub>
-                                        {item.items?.map((subItem) => (
+                                        {item.items?.map((subItem) => {
+                                            const hasClickHandler = subItem.title === 'History' || subItem.title === 'Starred' || subItem.onClick
+                                            return (
                                             <SidebarMenuSubItem key={subItem.title}>
                                                 <SidebarMenuSubButton
-                                                   asChild={subItem.title !== 'History' && subItem.title !== 'Starred'}
+                                                   asChild={!hasClickHandler}
   onClick={
     subItem.title === 'History'
-      ? (e) => {
+      ? (e: React.MouseEvent) => {
           e.preventDefault()
           toggleHistoryModal()
         }
-      : subItem.title === 'Starred'
-      ? (e) => {
+      : hasClickHandler
+      ? (e: React.MouseEvent) => {
           e.preventDefault()
-          onStarredClick()
+          subItem.onClick?.()
         }
       : undefined
   }
                                                 >
-                                                    {subItem.title === 'History' || subItem.title === 'Starred' ? (
+                                                    {hasClickHandler ? (
   <span>{subItem.title}</span>
 ) : (
   <a href={subItem.url}>
@@ -131,7 +133,7 @@ export function NavMain({
                                                     )}
                                                 </SidebarMenuSubButton>
                                             </SidebarMenuSubItem>
-                                        ))}
+                                        )})}
                                     </SidebarMenuSub>
                                 </CollapsibleContent>
                             </SidebarMenuItem>

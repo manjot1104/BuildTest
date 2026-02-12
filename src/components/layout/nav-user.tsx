@@ -33,15 +33,15 @@ import {
     useSidebar,
 } from "@/components/ui/sidebar"
 import { authClient } from "@/server/better-auth/client"
-import { useStateMachine } from "@/context/state-machine"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import { useUserCredits } from "@/hooks/use-user-credits"
 import { SubscriptionModal } from "@/components/payments/subscription-modal"
 
 export function NavUser() {
     const { isMobile } = useSidebar()
     const { data: session } = authClient.useSession()
-    const { toggleAuthModal } = useStateMachine()
+    const router = useRouter()
     const { credits, hasActiveSubscription, isLoading } = useUserCredits()
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false)
 
@@ -49,7 +49,7 @@ export function NavUser() {
         try {
             await authClient.signOut()
             toast.success("Signed out successfully")
-            toggleAuthModal()
+            router.push("/login")
         } catch (error) {
             toast.error("Failed to sign out")
             console.error(error)
@@ -64,7 +64,7 @@ export function NavUser() {
                     <SidebarMenuButton
                         size="lg"
                         className="w-full"
-                        onClick={toggleAuthModal}
+                        onClick={() => router.push("/login")}
                     >
                         <Avatar className="h-8 w-8 rounded-lg">
                             <AvatarFallback className="rounded-lg">

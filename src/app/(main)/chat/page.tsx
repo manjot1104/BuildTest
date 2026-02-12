@@ -108,7 +108,7 @@ export default function ChatPage() {
     } = useChat(urlChatId ?? undefined)
 
     const { credits, hasActiveSubscription } = useUserCredits()
-    const { session, openAuthModal } = useStateMachine()
+    const { session } = useStateMachine()
     const forkChat = useForkChat()
 
     const isViewingOthersChat = !!urlChatId && !!hookCurrentChat?.id && hookCurrentChat.isOwner === false
@@ -374,7 +374,7 @@ export default function ChatPage() {
                                                     isAuthenticated={!!session?.user}
                                                     isForking={forkChat.isPending}
                                                     onFork={handleFork}
-                                                    onSignIn={openAuthModal}
+                                                    onSignIn={() => window.location.href = "/login"}
                                                 />
                                             ) : (
                                                 <ChatInput

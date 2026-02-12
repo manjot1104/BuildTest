@@ -4,12 +4,12 @@ import * as React from "react"
 import {
     AudioWaveform,
     BookOpen,
-    Bot,
     GalleryVerticalEnd,
     MessageSquare,
     Settings2,
     SquareTerminal,
 } from "lucide-react"
+import { type SettingsTab } from "@/components/settings-dialog"
 
 import { NavMain } from "@/components/layout/nav-main"
 import { NavUser } from "@/components/layout/nav-user"
@@ -24,6 +24,7 @@ import {
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
   onStarredClick: () => void
+  onSettingsClick: (tab: SettingsTab) => void
 }
 
 // ---------- data builder ----------
@@ -32,11 +33,13 @@ const buildSidebarData = ({
   userEmail,
   userAvatar,
   onStarredClick,
+  onSettingsClick,
 }: {
   userName: string
   userEmail: string
   userAvatar: string
   onStarredClick: () => void
+  onSettingsClick: (tab: SettingsTab) => void
 }) => ({
   user: {
     name: userName,
@@ -63,7 +66,7 @@ const buildSidebarData = ({
                 icon: MessageSquare,
             },
             {
-                title: "Playground",
+                title: "Chat",
                 url: "#",
                 icon: SquareTerminal,
                 isActive: true,
@@ -74,31 +77,7 @@ const buildSidebarData = ({
                     },
                     {
                         title: "Starred",
-                        // url: "#",
                         onClick: onStarredClick,
-                    },
-                    {
-                        title: "Settings",
-                        url: "#",
-                    },
-                ],
-            },
-            {
-                title: "Models",
-                url: "#",
-                icon: Bot,
-                items: [
-                    {
-                        title: "Genesis",
-                        url: "#",
-                    },
-                    {
-                        title: "Explorer",
-                        url: "#",
-                    },
-                    {
-                        title: "Quantum",
-                        url: "#",
                     },
                 ],
             },
@@ -132,19 +111,19 @@ const buildSidebarData = ({
                 items: [
                     {
                         title: "General",
-                        url: "#",
+                        onClick: () => onSettingsClick("general"),
                     },
                     {
                         title: "Team",
-                        url: "#",
+                        onClick: () => onSettingsClick("team"),
                     },
                     {
                         title: "Billing",
-                        url: "#",
+                        onClick: () => onSettingsClick("billing"),
                     },
                     {
                         title: "Limits",
-                        url: "#",
+                        onClick: () => onSettingsClick("limits"),
                     },
                 ],
             },
@@ -154,6 +133,7 @@ const buildSidebarData = ({
 
 export function AppSidebar({
   onStarredClick,
+  onSettingsClick,
   ...props
 }: AppSidebarProps) {
   const data = buildSidebarData({
@@ -161,6 +141,7 @@ export function AppSidebar({
     userEmail: "john.doe@example.com",
     userAvatar: "/avatars/john-doe.jpg",
     onStarredClick,
+    onSettingsClick,
   })
 
   return (

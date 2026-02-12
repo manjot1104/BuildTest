@@ -1,5 +1,6 @@
 'use client'
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
+import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import {
     Breadcrumb,
@@ -18,7 +19,7 @@ import {
 import { CreditsDisplay } from "@/components/payments/credits-display"
 
 import { usePathname } from "next/navigation";
-import { Fragment, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
@@ -32,10 +33,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     };
 
 const [starredOpen, setStarredOpen] = useState(false)
+    const [settingsOpen, setSettingsOpen] = useState(false)
+    const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
+
+    const handleSettingsClick = useCallback((tab: SettingsTab) => {
+        setSettingsTab(tab)
+        setSettingsOpen(true)
+    }, [])
+
     return (
         <Fragment>
             <SidebarProvider>
-                <AppSidebar onStarredClick={() => setStarredOpen(true)} />
+                <AppSidebar
+                    onStarredClick={() => setStarredOpen(true)}
+                    onSettingsClick={handleSettingsClick}
+                />
                 <SidebarInset>
                     <header className="flex flex-col h-16 shrink-0 justify-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex items-center justify-between gap-2 px-4">
@@ -81,6 +93,11 @@ const [starredOpen, setStarredOpen] = useState(false)
             <StarredChatsDialog
   open={starredOpen}
   onOpenChange={setStarredOpen}
+/>
+            <SettingsDialog
+  open={settingsOpen}
+  onOpenChange={setSettingsOpen}
+  defaultTab={settingsTab}
 />
         </Fragment>
     )
