@@ -25,7 +25,59 @@ import type {
   HTMLAttributes,
   KeyboardEventHandler,
 } from 'react'
-import { Children, useCallback, useRef } from 'react'
+import { Children, useCallback, useRef, useState, useEffect } from 'react'
+
+// Type declarations for Web Speech API
+declare global {
+  interface Window {
+    SpeechRecognition: {
+      new (): ISpeechRecognition
+    }
+    webkitSpeechRecognition: {
+      new (): ISpeechRecognition
+    }
+  }
+}
+
+interface ISpeechRecognition extends EventTarget {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  start(): void
+  stop(): void
+  abort(): void
+  onstart: ((this: ISpeechRecognition, ev: Event) => any) | null
+  onresult: ((this: ISpeechRecognition, ev: ISpeechRecognitionEvent) => any) | null
+  onerror: ((this: ISpeechRecognition, ev: ISpeechRecognitionErrorEvent) => any) | null
+  onend: ((this: ISpeechRecognition, ev: Event) => any) | null
+}
+
+interface ISpeechRecognitionEvent extends Event {
+  results: ISpeechRecognitionResultList
+}
+
+interface ISpeechRecognitionErrorEvent extends Event {
+  error: string
+  message: string
+}
+
+interface ISpeechRecognitionResultList {
+  length: number
+  item(index: number): ISpeechRecognitionResult
+  [index: number]: ISpeechRecognitionResult
+}
+
+interface ISpeechRecognitionResult {
+  length: number
+  item(index: number): ISpeechRecognitionAlternative
+  [index: number]: ISpeechRecognitionAlternative
+  isFinal: boolean
+}
+
+interface ISpeechRecognitionAlternative {
+  transcript: string
+  confidence: number
+}
 
 // Chat status type (from ai package)
 export type ChatStatus = 'ready' | 'submitted' | 'streaming' | 'error'
@@ -376,9 +428,7 @@ export const PromptInputModelSelectItem = ({
   <SelectItem className={cn(className)} {...props} />
 )
 
-export type PromptInputModelSelectValueProps = ComponentProps<
-  typeof SelectValue
->
+export type PromptInputModelSelectValueProps = ComponentProps<typeof SelectValue>
 
 export const PromptInputModelSelectValue = ({
   className,
@@ -394,24 +444,134 @@ export type PromptInputMicButtonProps = ComponentProps<typeof Button> & {
 
 export const PromptInputMicButton = ({
   className,
-  // onTranscript,
-  // onError,
+  onTranscript,
+  onError,
   ...props
 }: PromptInputMicButtonProps) => {
-  const isListening = false
+  const [isListening, setIsListening] = useState(false)
+  const recognitionRef = useRef<ISpeechRecognition | null>(null)
+
+  useEffect(() => {
+    // Check if browser supports Web Speech API
+    const SpeechRecognition = 
+      (window as any).SpeechRecognition || 
+      (window as any).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      // Browser doesn't support speech recognition
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.lang = 'en-US'
+
+    recognition.onstart = () => {
+      setIsListening(true)
+    }
+
+    recognition.onresult = (event: ISpeechRecognitionEvent) => {
+      const transcript = Array.from(event.results)
+        .map((result) => {
+          const firstAlternative = result.item(0)
+          return firstAlternative.transcript
+        })
+        .join(' ')
+      
+      if (transcript.trim() && onTranscript) {
+        onTranscript(transcript)
+      }
+    }
+
+    recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
+      setIsListening(false)
+      let errorMessage = `Speech recognition error: ${event.error}`
+      
+      if (event.error === 'not-allowed') {
+        errorMessage = 'Microphone permission denied. Please allow microphone access in your browser settings.'
+      } else if (event.error === 'no-speech') {
+        errorMessage = 'No speech detected. Please try again.'
+      } else if (event.error === 'aborted') {
+        // User stopped it, don't show error
+        return
+      }
+      
+      if (onError) {
+        onError(errorMessage)
+      } else {
+        console.error('Speech recognition error:', errorMessage)
+      }
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+    }
+
+    recognitionRef.current = recognition
+
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop()
+        } catch (e) {
+          // Ignore errors when cleaning up
+        }
+      }
+    }
+  }, [onTranscript, onError])
+
+  const handleClick = useCallback(() => {
+    if (!recognitionRef.current) {
+      const errorMessage = 'Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.'
+      if (onError) {
+        onError(errorMessage)
+      } else {
+        console.error('Speech recognition error:', errorMessage)
+      }
+      return
+    }
+
+    if (isListening) {
+      try {
+        recognitionRef.current.stop()
+        setIsListening(false)
+      } catch (error) {
+        // Ignore errors when stopping
+      }
+    } else {
+      try {
+        recognitionRef.current.start()
+      } catch (error) {
+        setIsListening(false)
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : 'Failed to start speech recognition. Make sure your microphone is connected and permissions are granted.'
+        if (onError) {
+          onError(errorMessage)
+        } else {
+          console.error('Speech recognition error:', errorMessage)
+        }
+      }
+    }
+  }, [isListening, onError])
 
   return (
     <PromptInputButton
       className={cn(
-        'transition-colors',
+        'transition-colors relative',
         isListening &&
-        'bg-red-100 text-red-600 hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30',
+        'bg-green-100 text-green-600 hover:bg-green-200 dark:bg-green-900/20 dark:text-green-400 dark:hover:bg-green-900/30',
         className,
       )}
+      onClick={handleClick}
       {...props}
     >
       {isListening ? (
-        <MicOffIcon className="size-4 text-red-600 dark:text-red-400" />
+        <>
+          <MicIcon className="size-4 text-green-600 dark:text-green-400 relative z-10" />
+          <span className="absolute inset-0 rounded-lg bg-green-500/20 animate-pulse" />
+        </>
       ) : (
         <MicIcon className="size-4" />
       )}

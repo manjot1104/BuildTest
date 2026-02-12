@@ -23,6 +23,7 @@ export const env = createEnv({
     SMTP_USER: z.string().min(1),
     SMTP_PASS: z.string().min(1),
     FROM_EMAIL: z.string().optional(),
+    ELEVENLABS_API_KEY: z.string().min(1).optional(),
     // Razorpay
     RAZORPAY_KEY_ID: z.string().min(1),
     RAZORPAY_KEY_SECRET: z.string().min(1),
@@ -53,6 +54,7 @@ export const env = createEnv({
     SMTP_USER: process.env.SMTP_USER,
     SMTP_PASS: process.env.SMTP_PASS,
     FROM_EMAIL: process.env.FROM_EMAIL,
+    ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     RAZORPAY_KEY_ID: process.env.RAZORPAY_KEY_ID,
     RAZORPAY_KEY_SECRET: process.env.RAZORPAY_KEY_SECRET,
     RAZORPAY_WEBHOOK_SECRET: process.env.RAZORPAY_WEBHOOK_SECRET,

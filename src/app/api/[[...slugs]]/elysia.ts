@@ -41,6 +41,7 @@ import {
   toggleStarChat,
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
+import { env } from '@/env'
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -429,6 +430,101 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
     return result
   })
+
+  // Speech-to-text endpoint - POST /api/speech-to-text
+  .post(
+    '/speech-to-text',
+    async ({ body, set }) => {
+      try {
+        if (!env.ELEVENLABS_API_KEY) {
+          set.status = 500
+          return {
+            error: 'Speech-to-text is not configured',
+            message: 'ElevenLabs API key is not set',
+          }
+        }
+
+        const audioData = body.audio
+        if (!audioData) {
+          set.status = 400
+          return {
+            error: 'Audio data is required',
+            message: 'Please provide audio data',
+          }
+        }
+
+        // Convert base64 to buffer
+        const base64Data = audioData.replace(/^data:audio\/\w+;base64,/, '')
+        const audioBuffer = Buffer.from(base64Data, 'base64')
+
+        // Create multipart form data for ElevenLabs API
+        const boundary = `----WebKitFormBoundary${Math.random().toString(36).substring(2)}`
+        const modelId = body.modelId || 'scribe_v2'
+        
+        // Build multipart form data manually
+        const parts: Buffer[] = []
+        const CRLF = '\r\n'
+        
+        // Add model_id field
+        parts.push(Buffer.from(`--${boundary}${CRLF}`))
+        parts.push(Buffer.from(`Content-Disposition: form-data; name="model_id"${CRLF}${CRLF}`))
+        parts.push(Buffer.from(modelId))
+        parts.push(Buffer.from(CRLF))
+        
+        // Add audio file
+        parts.push(Buffer.from(`--${boundary}${CRLF}`))
+        parts.push(Buffer.from(`Content-Disposition: form-data; name="audio"; filename="audio.webm"${CRLF}`))
+        parts.push(Buffer.from(`Content-Type: audio/webm${CRLF}${CRLF}`))
+        parts.push(audioBuffer)
+        parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`))
+
+        const formDataBody = Buffer.concat(parts)
+
+        const response = await fetch(
+          'https://api.elevenlabs.io/v1/speech-to-text',
+          {
+            method: 'POST',
+            headers: {
+              'xi-api-key': env.ELEVENLABS_API_KEY,
+              'Content-Type': `multipart/form-data; boundary=${boundary}`,
+            },
+            body: formDataBody,
+          },
+        )
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          set.status = response.status
+          return {
+            error: 'Speech-to-text conversion failed',
+            message:
+              errorData.detail?.message ||
+              `ElevenLabs API error: ${response.statusText}`,
+          }
+        }
+
+        const data = await response.json()
+        return {
+          transcript: data.text || '',
+          language: data.language || null,
+        }
+      } catch (error) {
+        console.error('Speech-to-text error:', error)
+        set.status = 500
+        return {
+          error: 'Failed to process speech-to-text',
+          message:
+            error instanceof Error ? error.message : 'Unknown error occurred',
+        }
+      }
+    },
+    {
+      body: t.Object({
+        audio: t.String(), // Base64 encoded audio
+        modelId: t.Optional(t.String()),
+      }),
+    },
+  )
 
   // ============================================
   // Payment & Credits Endpoints
