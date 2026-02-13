@@ -6,6 +6,7 @@ import {
   getChatDetailsHandler,
   getChatHistoryHandler,
   getCommunityBuildsHandler,
+  getFeaturedBuildsHandler,
   getClientIP,
 } from '@/server/api/controllers/chat.controller'
 import {
@@ -274,6 +275,19 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({
         chatId: t.String(),
       }),
+    },
+  )
+  // Featured builds endpoint - GET /api/chats/featured (must be before :chatId)
+  .get(
+    '/chats/featured',
+    async ({ set }) => {
+      const result = await getFeaturedBuildsHandler()
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
     },
   )
   // Community builds endpoint - GET /api/chats/community (must be before :chatId)

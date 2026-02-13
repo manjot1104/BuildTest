@@ -129,5 +129,23 @@ export function useCommunityBuilds(limit = 12) {
   })
 }
 
+/**
+ * Query hook for fetching featured/best community builds (public)
+ */
+export function useFeaturedBuilds() {
+  return useQuery<{ data: CommunityBuildItem[] }>({
+    queryKey: ['featured-builds'],
+    queryFn: async () => {
+      const res = await fetch('/api/chats/featured')
+      if (!res.ok) {
+        throw new Error('Failed to fetch featured builds')
+      }
+      return (await res.json()) as { data: CommunityBuildItem[] }
+    },
+    staleTime: 1000 * 60 * 10, // 10 minutes — these rarely change
+    retry: 1,
+  })
+}
+
 // Re-export types for convenience
 export type { ChatDetails, ChatHistoryItem, CommunityBuildItem, CommunityBuildsPage }

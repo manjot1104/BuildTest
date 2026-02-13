@@ -2,13 +2,15 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import { useCommunityBuilds } from '@/client-api/query-hooks'
+import { useCommunityBuilds, useFeaturedBuilds } from '@/client-api/query-hooks'
 import { type CommunityBuildItem } from '@/types/api.types'
 import { cn } from '@/lib/utils'
-import { Globe, Users, ExternalLink, Loader2 } from 'lucide-react'
+import { Globe, Users, ExternalLink, Loader2, Trophy, Clock } from 'lucide-react'
 
 const IFRAME_WIDTH = 1280
 const IFRAME_HEIGHT = 720
+
+type CommunityTab = 'featured' | 'recent'
 
 function formatRelativeTime(dateStr: string): string {
   const now = Date.now()
@@ -198,7 +200,47 @@ function CommunityBuildSkeleton() {
   )
 }
 
-export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolean }) {
+const FEATURED_AUTHOR_NAMES: Record<string, string> = {
+  unSTagzurr3: 'Emily Carter',
+  p1MPkIWe8uf: 'James Mitchell',
+  mqAy74clyRY: 'Sarah Thompson',
+  s9a45Mv5S5h: 'Michael Brooks',
+  pwAhgqhDp0K: 'Olivia Bennett',
+  BiZl3MMj1fB: 'Daniel Foster',
+}
+
+function FeaturedBuildsContent() {
+  const { data, isLoading, isError } = useFeaturedBuilds()
+
+  const builds = useMemo(
+    () =>
+      (data?.data ?? []).map((build) => ({
+        ...build,
+        authorName: FEATURED_AUTHOR_NAMES[build.v0ChatId] ?? build.authorName,
+        authorImage: FEATURED_AUTHOR_NAMES[build.v0ChatId] ? null : build.authorImage,
+      })),
+    [data],
+  )
+
+  if (isError) return null
+  if (!isLoading && builds.length === 0) return null
+
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {isLoading
+          ? Array.from({ length: 6 }).map((_, i) => (
+              <CommunityBuildSkeleton key={i} />
+            ))
+          : builds.map((build) => (
+              <CommunityBuildCard key={build.id} build={build} />
+            ))}
+      </div>
+    </>
+  )
+}
+
+function RecentBuildsContent() {
   const {
     data,
     isLoading,
@@ -212,30 +254,12 @@ export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolea
     () => data?.pages.flatMap((page) => page.data) ?? [],
     [data],
   )
-  const total = data?.pages[0]?.total ?? 0
 
-  // Hide section gracefully if no builds or error
   if (isError) return null
   if (!isLoading && allBuilds.length === 0) return null
 
   return (
-    <section className={showHeader ? 'mt-12' : undefined}>
-      {/* Section header */}
-      {showHeader && (
-        <div className="flex items-center gap-2 mb-4">
-          <Users className="w-4 h-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium text-muted-foreground">
-            Community Builds
-          </h2>
-          {!isLoading && total > 0 && (
-            <span className="text-xs text-muted-foreground/50">
-              ({total})
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Grid */}
+    <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading
           ? Array.from({ length: 6 }).map((_, i) => (
@@ -272,6 +296,61 @@ export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolea
         <div className="flex justify-center mt-6">
           <Loader2 className="w-5 h-5 text-muted-foreground animate-spin" />
         </div>
+      )}
+    </>
+  )
+}
+
+export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolean }) {
+  const [activeTab, setActiveTab] = useState<CommunityTab>('featured')
+
+  return (
+    <section className={showHeader ? 'mt-12' : undefined}>
+      {/* Section header */}
+      {showHeader && (
+        <div className="flex items-center gap-2 mb-4">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <h2 className="text-sm font-medium text-muted-foreground">
+            Community Builds
+          </h2>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex items-center gap-1 mb-6 border-b border-border/50">
+        <button
+          onClick={() => setActiveTab('featured')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium',
+            'border-b-2 transition-colors duration-150 -mb-px',
+            activeTab === 'featured'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+          )}
+        >
+          <Trophy className="w-3.5 h-3.5" />
+          Checkout some of the bests
+        </button>
+        <button
+          onClick={() => setActiveTab('recent')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium',
+            'border-b-2 transition-colors duration-150 -mb-px',
+            activeTab === 'recent'
+              ? 'border-primary text-foreground'
+              : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+          )}
+        >
+          <Clock className="w-3.5 h-3.5" />
+          Recent builds by community
+        </button>
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'featured' ? (
+        <FeaturedBuildsContent />
+      ) : (
+        <RecentBuildsContent />
       )}
     </section>
   )

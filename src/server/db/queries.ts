@@ -1,6 +1,6 @@
 'use server'
 
-import { and, count, desc, eq, gte, isNotNull } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 import { user_chats, anonymous_chat_logs, user } from './schema'
@@ -259,6 +259,53 @@ export async function getCommunityChats({
     return chats
   } catch (error) {
     console.error('Failed to get community chats from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets featured/best community chats by their v0 chat IDs
+ * Used for the "Checkout some of the bests" tab
+ */
+export async function getFeaturedChats(
+  chatIds: string[],
+): Promise<
+  {
+    id: string
+    v0_chat_id: string
+    title: string | null
+    prompt: string | null
+    demo_url: string | null
+    preview_url: string | null
+    created_at: Date
+    updated_at: Date
+    author_name: string
+    author_image: string | null
+  }[]
+> {
+  try {
+    if (chatIds.length === 0) return []
+
+    const chats = await db
+      .select({
+        id: user_chats.id,
+        v0_chat_id: user_chats.v0_chat_id,
+        title: user_chats.title,
+        prompt: user_chats.prompt,
+        demo_url: user_chats.demo_url,
+        preview_url: user_chats.preview_url,
+        created_at: user_chats.created_at,
+        updated_at: user_chats.updated_at,
+        author_name: user.name,
+        author_image: user.image,
+      })
+      .from(user_chats)
+      .innerJoin(user, eq(user_chats.user_id, user.id))
+      .where(inArray(user_chats.v0_chat_id, chatIds))
+
+    return chats
+  } catch (error) {
+    console.error('Failed to get featured chats from database:', error)
     throw error
   }
 }

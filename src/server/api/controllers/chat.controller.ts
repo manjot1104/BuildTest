@@ -12,6 +12,7 @@ import {
   getUserChatsByUserId,
   getCommunityChats,
   getCommunityChatsCount,
+  getFeaturedChats,
 } from '@/server/db/queries'
 import {
   hasEnoughCredits,
@@ -669,6 +670,50 @@ export async function getCommunityBuildsHandler({
     console.error('Error fetching community builds:', error)
     return {
       error: 'Failed to fetch community builds',
+      details: error instanceof Error ? error.message : 'Unknown error',
+      status: 500,
+    }
+  }
+}
+
+/** Hardcoded featured/best chat IDs */
+const FEATURED_CHAT_IDS = [
+  'unSTagzurr3',
+  'p1MPkIWe8uf',
+  'mqAy74clyRY',
+  's9a45Mv5S5h',
+  'pwAhgqhDp0K',
+  'BiZl3MMj1fB',
+]
+
+/**
+ * Handler for getting featured/best community builds (public endpoint)
+ * Returns the hardcoded best builds with author info
+ */
+export async function getFeaturedBuildsHandler(): Promise<
+  { data: CommunityBuildItem[] } | ErrorResponse
+> {
+  try {
+    const chats = await getFeaturedChats(FEATURED_CHAT_IDS)
+
+    const data: CommunityBuildItem[] = chats.map((chat) => ({
+      id: chat.id,
+      v0ChatId: chat.v0_chat_id,
+      title: chat.title,
+      prompt: chat.prompt,
+      demoUrl: chat.demo_url,
+      previewUrl: chat.preview_url,
+      createdAt: chat.created_at.toISOString(),
+      updatedAt: chat.updated_at.toISOString(),
+      authorName: chat.author_name,
+      authorImage: chat.author_image,
+    }))
+
+    return { data }
+  } catch (error) {
+    console.error('Error fetching featured builds:', error)
+    return {
+      error: 'Failed to fetch featured builds',
       details: error instanceof Error ? error.message : 'Unknown error',
       status: 500,
     }
