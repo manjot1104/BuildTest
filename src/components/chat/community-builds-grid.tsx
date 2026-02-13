@@ -1,11 +1,18 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useCommunityBuilds, useFeaturedBuilds } from '@/client-api/query-hooks'
 import { type CommunityBuildItem } from '@/types/api.types'
 import { cn } from '@/lib/utils'
-import { Globe, Users, ExternalLink, Loader2, Trophy, Clock } from 'lucide-react'
+import { Globe, Users, ExternalLink, Loader2, Trophy, Clock, MessageSquare, Eye } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 
 const IFRAME_WIDTH = 1280
 const IFRAME_HEIGHT = 720
@@ -104,18 +111,120 @@ function DemoThumbnail({ demoUrl, title }: { demoUrl: string; title?: string | n
   )
 }
 
-function CommunityBuildCard({ build }: { build: CommunityBuildItem }) {
+function PreviewDialog({
+  build,
+  open,
+  onOpenChange,
+}: {
+  build: CommunityBuildItem | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
   const router = useRouter()
+  const [iframeLoading, setIframeLoading] = useState(true)
 
+  useEffect(() => {
+    if (open) setIframeLoading(true)
+  }, [open, build?.v0ChatId])
+
+  if (!build) return null
+
+  const title = build.title ?? 'Untitled'
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-5 pt-5 pb-3">
+          <DialogTitle className="truncate pr-8">{title}</DialogTitle>
+          {build.prompt && (
+            <DialogDescription className="line-clamp-1">
+              {build.prompt}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+
+        {/* Preview iframe */}
+        <div className="relative w-full aspect-video bg-muted/30 border-t border-b border-border/50">
+          {iframeLoading && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                <p className="text-xs text-muted-foreground">Loading preview...</p>
+              </div>
+            </div>
+          )}
+          {build.demoUrl ? (
+            <iframe
+              src={build.demoUrl}
+              title={title}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+              onLoad={() => setIframeLoading(false)}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Globe className="w-8 h-8 text-muted-foreground/30" />
+            </div>
+          )}
+        </div>
+
+        {/* Footer with actions */}
+        <div className="flex items-center justify-between px-5 py-4">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <AuthorAvatar name={build.authorName} image={build.authorImage} />
+            <span className="text-xs text-muted-foreground truncate">
+              {build.authorName}
+            </span>
+            <span className="text-xs text-muted-foreground/50 ml-1 shrink-0">
+              {formatRelativeTime(build.createdAt)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                window.open(`/apps/${build.v0ChatId}`, '_blank', 'noopener,noreferrer')
+              }}
+              className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium',
+                'bg-muted/50 hover:bg-muted border border-border/50 hover:border-border',
+                'text-muted-foreground hover:text-foreground',
+                'transition-colors duration-150',
+              )}
+            >
+              <Eye className="w-3.5 h-3.5" />
+              Visit
+            </button>
+            <button
+              onClick={() => {
+                onOpenChange(false)
+                router.push(`/chat?chatId=${build.v0ChatId}`)
+              }}
+              className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium',
+                'bg-primary text-primary-foreground hover:bg-primary/90',
+                'transition-colors duration-150',
+              )}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Chat
+            </button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CommunityBuildCard({
+  build,
+  onSelect,
+}: {
+  build: CommunityBuildItem
+  onSelect: (build: CommunityBuildItem) => void
+}) {
   const handleClick = () => {
-    router.push(`/chat?chatId=${build.v0ChatId}`)
-  }
-
-  const handleDemoClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (build.demoUrl) {
-      window.open(build.demoUrl, '_blank', 'noopener,noreferrer')
-    }
+    onSelect(build)
   }
 
   return (
@@ -139,18 +248,15 @@ function CommunityBuildCard({ build }: { build: CommunityBuildItem }) {
 
         {/* Demo URL overlay button — re-enable pointer-events */}
         {build.demoUrl && (
-          <button
-            onClick={handleDemoClick}
+          <div
             className={cn(
               'absolute top-2 right-2 p-1.5 rounded-lg z-10 pointer-events-auto',
               'bg-black/60 text-white backdrop-blur-sm',
               'opacity-0 group-hover:opacity-100 transition-opacity duration-150',
-              'hover:bg-black/80'
             )}
-            title="Open demo"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-          </button>
+          </div>
         )}
       </div>
 
@@ -209,7 +315,11 @@ const FEATURED_AUTHOR_NAMES: Record<string, string> = {
   BiZl3MMj1fB: 'Daniel Foster',
 }
 
-function FeaturedBuildsContent() {
+function FeaturedBuildsContent({
+  onSelect,
+}: {
+  onSelect: (build: CommunityBuildItem) => void
+}) {
   const { data, isLoading, isError } = useFeaturedBuilds()
 
   const builds = useMemo(
@@ -233,14 +343,18 @@ function FeaturedBuildsContent() {
               <CommunityBuildSkeleton key={i} />
             ))
           : builds.map((build) => (
-              <CommunityBuildCard key={build.id} build={build} />
+              <CommunityBuildCard key={build.id} build={build} onSelect={onSelect} />
             ))}
       </div>
     </>
   )
 }
 
-function RecentBuildsContent() {
+function RecentBuildsContent({
+  onSelect,
+}: {
+  onSelect: (build: CommunityBuildItem) => void
+}) {
   const {
     data,
     isLoading,
@@ -266,7 +380,7 @@ function RecentBuildsContent() {
               <CommunityBuildSkeleton key={i} />
             ))
           : allBuilds.map((build) => (
-              <CommunityBuildCard key={build.id} build={build} />
+              <CommunityBuildCard key={build.id} build={build} onSelect={onSelect} />
             ))}
         {isFetchingNextPage &&
           Array.from({ length: 3 }).map((_, i) => (
@@ -303,6 +417,13 @@ function RecentBuildsContent() {
 
 export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolean }) {
   const [activeTab, setActiveTab] = useState<CommunityTab>('featured')
+  const [selectedBuild, setSelectedBuild] = useState<CommunityBuildItem | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  const handleSelect = useCallback((build: CommunityBuildItem) => {
+    setSelectedBuild(build)
+    setDialogOpen(true)
+  }, [])
 
   return (
     <section className={showHeader ? 'mt-12' : undefined}>
@@ -348,10 +469,17 @@ export function CommunityBuildsGrid({ showHeader = true }: { showHeader?: boolea
 
       {/* Tab content */}
       {activeTab === 'featured' ? (
-        <FeaturedBuildsContent />
+        <FeaturedBuildsContent onSelect={handleSelect} />
       ) : (
-        <RecentBuildsContent />
+        <RecentBuildsContent onSelect={handleSelect} />
       )}
+
+      {/* Preview dialog */}
+      <PreviewDialog
+        build={selectedBuild}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+      />
     </section>
   )
 }
