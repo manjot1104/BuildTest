@@ -4,6 +4,7 @@ import {
   EMAIL_CONFIG,
   getVerificationEmailTemplate,
   getPasswordResetEmailTemplate,
+  getOTPEmailTemplate,
 } from "@/config/email.config";
 
 const transporter = nodemailer.createTransport({
@@ -53,6 +54,23 @@ export async function sendPasswordResetEmail({
     userName,
     resetUrl,
   });
+
+  await transporter.sendMail({
+    from: fromEmail,
+    to,
+    subject,
+    html,
+  });
+}
+
+export async function sendOTPEmail({
+  to,
+  otp,
+}: {
+  to: string;
+  otp: string;
+}) {
+  const { subject, html } = getOTPEmailTemplate({ email: to, otp });
 
   await transporter.sendMail({
     from: fromEmail,

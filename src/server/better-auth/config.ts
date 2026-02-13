@@ -1,10 +1,12 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { emailOTP } from "better-auth/plugins";
 
 import { db } from "@/server/db";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
+  sendOTPEmail,
 } from "@/server/services/email.service";
 
 export const auth = betterAuth({
@@ -33,6 +35,16 @@ export const auth = betterAuth({
       });
     },
   },
+  plugins: [
+    emailOTP({
+      otpLength: 6,
+      expiresIn: 300,
+      disableSignUp: false,
+      async sendVerificationOTP({ email, otp }) {
+        await sendOTPEmail({ to: email, otp });
+      },
+    }),
+  ],
 });
 
 export type Session = typeof auth.$Infer.Session;

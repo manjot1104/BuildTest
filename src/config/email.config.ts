@@ -8,6 +8,7 @@ export const EMAIL_CONFIG = {
   companyName: "Buildify",
   verificationTokenExpiry: 24 * 60 * 60, // 24 hours in seconds
   resetTokenExpiry: 60 * 60, // 1 hour in seconds
+  otpExpiry: 5 * 60, // 5 minutes in seconds
 } as const;
 
 /**
@@ -107,6 +108,35 @@ export function getPasswordResetEmailTemplate({
 
   return {
     subject: `Reset your password - ${EMAIL_CONFIG.companyName}`,
+    html: emailLayout(content),
+  };
+}
+
+/**
+ * OTP verification template
+ */
+export function getOTPEmailTemplate({
+  email,
+  otp,
+}: {
+  email: string;
+  otp: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi,</p>
+    <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6;">Use the following one-time password to sign in to your ${EMAIL_CONFIG.companyName} account (${email}).</p>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+      <tr>
+        <td align="center" style="padding:0 0 24px;">
+          <div style="display:inline-block;background-color:#f4f4f5;border:1px solid #e4e4e7;border-radius:8px;padding:16px 32px;letter-spacing:8px;font-size:32px;font-weight:700;color:#18181b;font-family:monospace;">${otp}</div>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0 0 8px;color:#71717a;font-size:13px;line-height:1.5;">This code expires in 5 minutes.</p>
+    <p style="margin:0;color:#a1a1aa;font-size:12px;">If you didn't request this code, you can safely ignore this email.</p>`;
+
+  return {
+    subject: `Your verification code - ${EMAIL_CONFIG.companyName}`,
     html: emailLayout(content),
   };
 }

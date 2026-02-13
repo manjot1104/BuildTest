@@ -1,10 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import {
+    InputOTP,
+    InputOTPGroup,
+    InputOTPSlot,
+    InputOTPSeparator,
+} from '@/components/ui/input-otp'
 import {
     Field,
     FieldDescription,
@@ -14,9 +20,11 @@ import {
 import { authClient } from '@/server/better-auth/client'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Sparkles, ArrowLeft, Moon, Sun } from 'lucide-react'
+import { Sparkles, ArrowLeft, Moon, Sun, Mail, KeyRound } from 'lucide-react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+
+type AuthMode = 'email-password' | 'otp-email' | 'otp-verify'
 
 const fadeInUp = {
     initial: { opacity: 0, y: 20 },
@@ -24,20 +32,24 @@ const fadeInUp = {
     transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
 }
 
+const OTP_COOLDOWN_SECONDS = 60
+
 export default function LoginPage() {
     const router = useRouter()
     const { data: session } = authClient.useSession()
     const { theme, setTheme } = useTheme()
+    const [authMode, setAuthMode] = useState<AuthMode>('email-password')
     const [isLogin, setIsLogin] = useState(true)
     const [isLoading, setIsLoading] = useState(false)
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [name, setName] = useState('')
+    const [otp, setOtp] = useState('')
+    const [otpCooldown, setOtpCooldown] = useState(0)
+    const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     useEffect(() => {
         if (session?.user) {
-            // ReturnToProvider handles redirect if a returnTo path is stored,
-            // otherwise default to /chat
             const stored = localStorage.getItem('buildify_return_to')
             if (!stored) {
                 router.push('/chat')
@@ -45,7 +57,104 @@ export default function LoginPage() {
         }
     }, [session, router])
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    useEffect(() => {
+        return () => {
+            if (cooldownRef.current) clearInterval(cooldownRef.current)
+        }
+    }, [])
+
+    const startCooldown = useCallback(() => {
+        setOtpCooldown(OTP_COOLDOWN_SECONDS)
+        if (cooldownRef.current) clearInterval(cooldownRef.current)
+        cooldownRef.current = setInterval(() => {
+            setOtpCooldown((prev) => {
+                if (prev <= 1) {
+                    if (cooldownRef.current) clearInterval(cooldownRef.current)
+                    return 0
+                }
+                return prev - 1
+            })
+        }, 1000)
+    }, [])
+
+    const handleRedirectAfterLogin = useCallback(() => {
+        const stored = localStorage.getItem('buildify_return_to')
+        if (!stored) {
+            router.push('/chat')
+        }
+    }, [router])
+
+    const handleSendOTP = async () => {
+        if (!email.trim()) {
+            toast.error('Please enter your email')
+            return
+        }
+        setIsLoading(true)
+        try {
+            const result = await authClient.emailOtp.sendVerificationOtp({
+                email,
+                type: 'sign-in',
+            })
+            if (result.error) {
+                toast.error(result.error.message ?? 'Failed to send OTP')
+            } else {
+                toast.success('OTP sent to your email')
+                setAuthMode('otp-verify')
+                startCooldown()
+            }
+        } catch {
+            toast.error('An unexpected error occurred')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleVerifyOTP = async (value: string) => {
+        if (value.length !== 6) return
+        setIsLoading(true)
+        try {
+            const result = await authClient.signIn.emailOtp({
+                email,
+                otp: value,
+            })
+            if (result.error) {
+                toast.error(result.error.message ?? 'Invalid OTP')
+                setOtp('')
+            } else {
+                toast.success('Signed in successfully')
+                handleRedirectAfterLogin()
+            }
+        } catch {
+            toast.error('An unexpected error occurred')
+            setOtp('')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handleResendOTP = async () => {
+        if (otpCooldown > 0) return
+        setIsLoading(true)
+        try {
+            const result = await authClient.emailOtp.sendVerificationOtp({
+                email,
+                type: 'sign-in',
+            })
+            if (result.error) {
+                toast.error(result.error.message ?? 'Failed to resend OTP')
+            } else {
+                toast.success('OTP resent to your email')
+                setOtp('')
+                startCooldown()
+            }
+        } catch {
+            toast.error('An unexpected error occurred')
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const handlePasswordSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setIsLoading(true)
 
@@ -64,11 +173,7 @@ export default function LoginPage() {
                     toast.error(result.error.message ?? 'Failed to sign in')
                 } else {
                     toast.success('Signed in successfully')
-                    // Let ReturnToProvider handle redirect if returnTo exists
-                    const stored = localStorage.getItem('buildify_return_to')
-                    if (!stored) {
-                        router.push('/chat')
-                    }
+                    handleRedirectAfterLogin()
                 }
             } else {
                 if (!name.trim()) {
@@ -88,12 +193,27 @@ export default function LoginPage() {
                     router.push(`/check-email?email=${encodeURIComponent(email)}`)
                 }
             }
-        } catch (error) {
+        } catch {
             toast.error('An unexpected error occurred')
-            console.error(error)
         } finally {
             setIsLoading(false)
         }
+    }
+
+    const isOtpMode = authMode === 'otp-email' || authMode === 'otp-verify'
+
+    const getTitle = () => {
+        if (authMode === 'otp-verify') return 'Enter verification code'
+        if (authMode === 'otp-email') return 'Sign in with email'
+        return isLogin ? 'Welcome back' : 'Create an account'
+    }
+
+    const getSubtitle = () => {
+        if (authMode === 'otp-verify') return `We sent a 6-digit code to ${email}`
+        if (authMode === 'otp-email') return 'We\'ll send a one-time code to your email'
+        return isLogin
+            ? 'Login to your Buildify account'
+            : 'Sign up for your Buildify account'
     }
 
     return (
@@ -155,7 +275,161 @@ export default function LoginPage() {
                 >
                     <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
                         <CardContent className="p-8">
-                            <form onSubmit={handleSubmit}>
+                            {/* Auth method toggle */}
+                            <div className="flex rounded-lg bg-muted p-1 mb-6">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setAuthMode('email-password')
+                                        setOtp('')
+                                    }}
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                                        !isOtpMode
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                >
+                                    <KeyRound className="size-3.5" />
+                                    Password
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setAuthMode('otp-email')
+                                        setPassword('')
+                                        setName('')
+                                    }}
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                                        isOtpMode
+                                            ? 'bg-background text-foreground shadow-sm'
+                                            : 'text-muted-foreground hover:text-foreground'
+                                    }`}
+                                >
+                                    <Mail className="size-3.5" />
+                                    Email OTP
+                                </button>
+                            </div>
+
+                            {/* Password-based auth form */}
+                            {!isOtpMode && (
+                                <form onSubmit={handlePasswordSubmit}>
+                                    <FieldGroup>
+                                        <motion.div
+                                            variants={fadeInUp}
+                                            initial="initial"
+                                            animate="animate"
+                                            className="flex flex-col items-center gap-2 text-center mb-6"
+                                        >
+                                            <h1 className="text-2xl font-bold">
+                                                {getTitle()}
+                                            </h1>
+                                            <p className="text-muted-foreground text-sm">
+                                                {getSubtitle()}
+                                            </p>
+                                        </motion.div>
+
+                                        {!isLogin && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                exit={{ opacity: 0, height: 0 }}
+                                                transition={{ duration: 0.3 }}
+                                            >
+                                                <Field>
+                                                    <FieldLabel htmlFor="name">Name</FieldLabel>
+                                                    <Input
+                                                        id="name"
+                                                        type="text"
+                                                        placeholder="Enter your name"
+                                                        value={name}
+                                                        onChange={(e) => setName(e.target.value)}
+                                                        className="bg-background/50"
+                                                    />
+                                                </Field>
+                                            </motion.div>
+                                        )}
+
+                                        <Field>
+                                            <FieldLabel htmlFor="email">Email</FieldLabel>
+                                            <Input
+                                                id="email"
+                                                type="email"
+                                                placeholder="Enter your email"
+                                                value={email}
+                                                onChange={(e) => setEmail(e.target.value)}
+                                                required
+                                                className="bg-background/50"
+                                            />
+                                        </Field>
+
+                                        <Field>
+                                            <div className="flex items-center">
+                                                <FieldLabel htmlFor="password">Password</FieldLabel>
+                                                {isLogin && (
+                                                    <Link
+                                                        href="/forgot-password"
+                                                        className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors"
+                                                    >
+                                                        Forgot password?
+                                                    </Link>
+                                                )}
+                                            </div>
+                                            <Input
+                                                id="password"
+                                                type="password"
+                                                placeholder="Enter your password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                required
+                                                className="bg-background/50"
+                                            />
+                                        </Field>
+
+                                        <Field className="pt-2">
+                                            <Button
+                                                type="submit"
+                                                className="w-full h-11"
+                                                disabled={isLoading}
+                                            >
+                                                {isLoading
+                                                    ? 'Loading...'
+                                                    : isLogin
+                                                        ? 'Login'
+                                                        : 'Sign up'}
+                                            </Button>
+                                        </Field>
+
+                                        <FieldDescription className="text-center pt-4">
+                                            {isLogin ? (
+                                                <>
+                                                    Don&apos;t have an account?{' '}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsLogin(false)}
+                                                        className="text-primary underline underline-offset-2 hover:no-underline"
+                                                    >
+                                                        Sign up
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Already have an account?{' '}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setIsLogin(true)}
+                                                        className="text-primary underline underline-offset-2 hover:no-underline"
+                                                    >
+                                                        Sign in
+                                                    </button>
+                                                </>
+                                            )}
+                                        </FieldDescription>
+                                    </FieldGroup>
+                                </form>
+                            )}
+
+                            {/* OTP email step */}
+                            {authMode === 'otp-email' && (
                                 <FieldGroup>
                                     <motion.div
                                         variants={fadeInUp}
@@ -163,114 +437,110 @@ export default function LoginPage() {
                                         animate="animate"
                                         className="flex flex-col items-center gap-2 text-center mb-6"
                                     >
-                                        <h1 className="text-2xl font-bold">
-                                            {isLogin ? 'Welcome back' : 'Create an account'}
-                                        </h1>
-                                        <p className="text-muted-foreground text-sm">
-                                            {isLogin
-                                                ? 'Login to your Buildify account'
-                                                : 'Sign up for your Buildify account'}
-                                        </p>
+                                        <h1 className="text-2xl font-bold">{getTitle()}</h1>
+                                        <p className="text-muted-foreground text-sm">{getSubtitle()}</p>
                                     </motion.div>
 
-                                    {!isLogin && (
-                                        <motion.div
-                                            initial={{ opacity: 0, height: 0 }}
-                                            animate={{ opacity: 1, height: 'auto' }}
-                                            exit={{ opacity: 0, height: 0 }}
-                                            transition={{ duration: 0.3 }}
-                                        >
-                                            <Field>
-                                                <FieldLabel htmlFor="name">Name</FieldLabel>
-                                                <Input
-                                                    id="name"
-                                                    type="text"
-                                                    placeholder="Enter your name"
-                                                    value={name}
-                                                    onChange={(e) => setName(e.target.value)}
-                                                    className="bg-background/50"
-                                                />
-                                            </Field>
-                                        </motion.div>
-                                    )}
-
                                     <Field>
-                                        <FieldLabel htmlFor="email">Email</FieldLabel>
+                                        <FieldLabel htmlFor="otp-email">Email</FieldLabel>
                                         <Input
-                                            id="email"
+                                            id="otp-email"
                                             type="email"
                                             placeholder="Enter your email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            required
-                                            className="bg-background/50"
-                                        />
-                                    </Field>
-
-                                    <Field>
-                                        <div className="flex items-center">
-                                            <FieldLabel htmlFor="password">Password</FieldLabel>
-                                            {isLogin && (
-                                                <Link
-                                                    href="/forgot-password"
-                                                    className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors"
-                                                >
-                                                    Forgot password?
-                                                </Link>
-                                            )}
-                                        </div>
-                                        <Input
-                                            id="password"
-                                            type="password"
-                                            placeholder="Enter your password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            required
                                             className="bg-background/50"
                                         />
                                     </Field>
 
                                     <Field className="pt-2">
                                         <Button
-                                            type="submit"
+                                            type="button"
                                             className="w-full h-11"
-                                            disabled={isLoading}
+                                            disabled={isLoading || !email.trim()}
+                                            onClick={handleSendOTP}
                                         >
-                                            {isLoading
-                                                ? 'Loading...'
-                                                : isLogin
-                                                    ? 'Login'
-                                                    : 'Sign up'}
+                                            {isLoading ? 'Sending...' : 'Send OTP'}
+                                        </Button>
+                                    </Field>
+                                </FieldGroup>
+                            )}
+
+                            {/* OTP verify step */}
+                            {authMode === 'otp-verify' && (
+                                <FieldGroup>
+                                    <motion.div
+                                        variants={fadeInUp}
+                                        initial="initial"
+                                        animate="animate"
+                                        className="flex flex-col items-center gap-2 text-center mb-6"
+                                    >
+                                        <h1 className="text-2xl font-bold">{getTitle()}</h1>
+                                        <p className="text-muted-foreground text-sm">{getSubtitle()}</p>
+                                    </motion.div>
+
+                                    <Field>
+                                        <div className="flex justify-center">
+                                            <InputOTP
+                                                maxLength={6}
+                                                value={otp}
+                                                onChange={(value) => setOtp(value)}
+                                                onComplete={handleVerifyOTP}
+                                                disabled={isLoading}
+                                            >
+                                                <InputOTPGroup>
+                                                    <InputOTPSlot index={0} />
+                                                    <InputOTPSlot index={1} />
+                                                    <InputOTPSlot index={2} />
+                                                </InputOTPGroup>
+                                                <InputOTPSeparator />
+                                                <InputOTPGroup>
+                                                    <InputOTPSlot index={3} />
+                                                    <InputOTPSlot index={4} />
+                                                    <InputOTPSlot index={5} />
+                                                </InputOTPGroup>
+                                            </InputOTP>
+                                        </div>
+                                    </Field>
+
+                                    <Field className="pt-2">
+                                        <Button
+                                            type="button"
+                                            className="w-full h-11"
+                                            disabled={isLoading || otp.length !== 6}
+                                            onClick={() => handleVerifyOTP(otp)}
+                                        >
+                                            {isLoading ? 'Verifying...' : 'Verify & Sign In'}
                                         </Button>
                                     </Field>
 
-                                    <FieldDescription className="text-center pt-4">
-                                        {isLogin ? (
-                                            <>
-                                                Don&apos;t have an account?{' '}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setIsLogin(false)}
-                                                    className="text-primary underline underline-offset-2 hover:no-underline"
-                                                >
-                                                    Sign up
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                Already have an account?{' '}
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setIsLogin(true)}
-                                                    className="text-primary underline underline-offset-2 hover:no-underline"
-                                                >
-                                                    Sign in
-                                                </button>
-                                            </>
-                                        )}
+                                    <div className="flex items-center justify-center gap-2 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleResendOTP}
+                                            disabled={otpCooldown > 0 || isLoading}
+                                            className="text-sm text-primary underline underline-offset-2 hover:no-underline disabled:text-muted-foreground disabled:no-underline disabled:cursor-not-allowed"
+                                        >
+                                            {otpCooldown > 0
+                                                ? `Resend OTP in ${otpCooldown}s`
+                                                : 'Resend OTP'}
+                                        </button>
+                                    </div>
+
+                                    <FieldDescription className="text-center pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setAuthMode('otp-email')
+                                                setOtp('')
+                                            }}
+                                            className="text-primary underline underline-offset-2 hover:no-underline"
+                                        >
+                                            Use a different email
+                                        </button>
                                     </FieldDescription>
                                 </FieldGroup>
-                            </form>
+                            )}
                         </CardContent>
                     </Card>
 
