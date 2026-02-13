@@ -36,7 +36,12 @@ export default function LoginPage() {
 
     useEffect(() => {
         if (session?.user) {
-            router.push('/chat')
+            // ReturnToProvider handles redirect if a returnTo path is stored,
+            // otherwise default to /chat
+            const stored = localStorage.getItem('buildify_return_to')
+            if (!stored) {
+                router.push('/chat')
+            }
         }
     }, [session, router])
 
@@ -59,7 +64,11 @@ export default function LoginPage() {
                     toast.error(result.error.message ?? 'Failed to sign in')
                 } else {
                     toast.success('Signed in successfully')
-                    router.push('/chat')
+                    // Let ReturnToProvider handle redirect if returnTo exists
+                    const stored = localStorage.getItem('buildify_return_to')
+                    if (!stored) {
+                        router.push('/chat')
+                    }
                 }
             } else {
                 if (!name.trim()) {

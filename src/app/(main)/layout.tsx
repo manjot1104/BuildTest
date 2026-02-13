@@ -2,6 +2,7 @@
 
 import DashboardLayout from '@/components/layout/dashboard-layout'
 import { useStateMachine } from '@/context/state-machine'
+import { useReturnTo } from '@/context/return-to'
 import { useRouter } from 'next/navigation'
 import React, { useEffect } from 'react'
 import { motion } from 'framer-motion'
@@ -9,12 +10,17 @@ import { motion } from 'framer-motion'
 const Layout = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter()
     const { session, isPending } = useStateMachine()
+    const { setReturnTo } = useReturnTo()
 
     useEffect(() => {
         if (!session?.user && !isPending) {
+            const currentPath = window.location.pathname + window.location.search
+            if (currentPath && currentPath !== '/login') {
+                setReturnTo(currentPath)
+            }
             router.push('/login')
         }
-    }, [session, isPending, router])
+    }, [session, isPending, router, setReturnTo])
 
     if (isPending || !session?.user) {
         return (
