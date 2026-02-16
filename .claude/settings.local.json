@@ -19,7 +19,9 @@
       "Bash(SKIP_ENV_VALIDATION=1 bunx tsc:*)",
       "Bash(git stash push:*)",
       "Bash(git show:*)",
-      "Bash(head:*)"
+      "Bash(head:*)",
+      "Bash(xargs:*)",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }

@@ -6,6 +6,7 @@ import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Sparkles, Zap, Shield, Code2, Layers, Globe, ChevronDown, Moon, Sun } from 'lucide-react'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
+import { Footer } from '@/components/layout/footer'
 import { useRef } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
@@ -213,7 +214,7 @@ export default function LandingPage() {
             </motion.section>
 
             {/* Features Section */}
-            <section className="relative py-32 px-6">
+            <section id="features" className="relative py-32 px-6">
                 <div className="max-w-7xl mx-auto">
                     <motion.div
                         initial={{ opacity: 0, y: 40 }}
@@ -284,7 +285,7 @@ export default function LandingPage() {
             </section>
 
             {/* Community Builds Section */}
-            <section className="relative py-32 px-6">
+            <section id="community" className="relative py-32 px-6">
                 <div className="max-w-7xl mx-auto">
                     <motion.div
                         initial={{ opacity: 0, y: 40 }}
@@ -313,19 +314,7 @@ export default function LandingPage() {
             </section>
 
             {/* Footer */}
-            <footer className="border-t border-border/40 py-12 px-6">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Sparkles className="size-4 text-primary-foreground" />
-                        </div>
-                        <span className="font-semibold">Buildify</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                        {new Date().getFullYear()} Buildify. All rights reserved.
-                    </p>
-                </div>
-            </footer>
+            <Footer />
         </div>
     )
 }

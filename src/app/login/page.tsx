@@ -551,11 +551,11 @@ export default function LoginPage() {
                         className="text-center text-xs text-muted-foreground mt-6"
                     >
                         By continuing, you agree to our{' '}
-                        <a href="#" className="underline underline-offset-2 hover:no-underline">
+                        <a href="/terms" className="underline underline-offset-2 hover:no-underline">
                             Terms of Service
                         </a>{' '}
                         and{' '}
-                        <a href="#" className="underline underline-offset-2 hover:no-underline">
+                        <a href="/terms#privacy" className="underline underline-offset-2 hover:no-underline">
                             Privacy Policy
                         </a>
                         .
