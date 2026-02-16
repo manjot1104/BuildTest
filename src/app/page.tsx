@@ -184,8 +184,8 @@ export default function LandingPage() {
                             className="grid grid-cols-3 gap-8 pt-12 max-w-lg mx-auto"
                         >
                             {[
-                                { value: '10K+', label: 'Developers' },
-                                { value: '1M+', label: 'Lines Generated' },
+                                { value: '2K+', label: 'Developers' },
+                                { value: '100K+', label: 'Lines Generated' },
                                 { value: '99.9%', label: 'Uptime' }
                             ].map((stat, index) => (
                                 <div key={index} className="text-center">
