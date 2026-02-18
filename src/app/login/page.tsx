@@ -20,7 +20,8 @@ import {
 import { authClient } from '@/server/better-auth/client'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { Sparkles, ArrowLeft, Moon, Sun, Mail, KeyRound } from 'lucide-react'
+import { ArrowLeft, Moon, Sun, Mail, KeyRound } from 'lucide-react'
+import { BuildifyLogo } from '@/components/buildify-logo'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 
@@ -247,9 +248,7 @@ export default function LoginPage() {
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2 group">
                         <ArrowLeft className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Sparkles className="size-4 text-primary-foreground" />
-                        </div>
+                        <BuildifyLogo size="md" />
                         <span className="font-semibold text-lg">Buildify</span>
                     </Link>
                     <Button

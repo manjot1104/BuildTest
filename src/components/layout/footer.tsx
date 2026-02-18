@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Sparkles } from 'lucide-react'
+import { BuildifyLogo } from '@/components/buildify-logo'
 import { Separator } from '@/components/ui/separator'
 
 const footerLinks = {
@@ -23,9 +23,7 @@ export function Footer() {
                     {/* Brand */}
                     <div className="space-y-4">
                         <Link href="/" className="flex items-center gap-2">
-                            <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                                <Sparkles className="size-4 text-primary-foreground" />
-                            </div>
+                            <BuildifyLogo size="md" />
                             <span className="font-semibold text-lg">Buildify</span>
                         </Link>
                         <p className="text-sm text-muted-foreground max-w-xs">

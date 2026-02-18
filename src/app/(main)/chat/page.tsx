@@ -42,6 +42,7 @@ import {
     RotateCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { BuildifyLogo } from '@/components/buildify-logo'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function SearchParamsHandler({
@@ -472,9 +473,12 @@ export default function ChatPage() {
             <div className="pt-[15vh] pb-4 px-4 sm:px-6 lg:px-8">
                 <div className="max-w-2xl w-full mx-auto">
                     {/* Title */}
-                    <h1 className="text-2xl sm:text-3xl font-semibold text-center text-foreground mb-8">
-                        Buildify
-                    </h1>
+                    <div className="flex items-center justify-center gap-3 mb-8">
+                        <BuildifyLogo size="lg" />
+                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground">
+                            Buildify
+                        </h1>
+                    </div>
 
                     {/* Prompt Input */}
                     <div className="w-full">

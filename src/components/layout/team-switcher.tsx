@@ -23,7 +23,7 @@ export function PlatformSwitcher({
 }: {
     platforms: {
         name: string
-        logo: React.ElementType
+        logo: React.ComponentType<{ size?: "sm" | "md" | "lg" }>
         url: string
         isActive?: boolean
     }[]
@@ -45,8 +45,8 @@ export function PlatformSwitcher({
                             size="lg"
                             className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                                <activePlatform.logo className="size-4" />
+                            <div className="flex aspect-square size-8 items-center justify-center">
+                                <activePlatform.logo size="sm" />
                             </div>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{activePlatform.name}</span>
@@ -70,7 +70,7 @@ export function PlatformSwitcher({
                                 className="gap-2 p-2"
                             >
                                 <div className="flex size-6 items-center justify-center rounded-md border">
-                                    <platform.logo className="size-3.5 shrink-0" />
+                                    <platform.logo size="sm" />
                                 </div>
                                 {platform.name}
                                 <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut>

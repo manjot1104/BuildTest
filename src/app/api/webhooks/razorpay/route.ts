@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
     const signature = request.headers.get("x-razorpay-signature");
 
     // Verify webhook signature
-    if (signature && !verifyWebhookSignature(body, signature)) {
+    if (!signature) {
+      console.warn("Razorpay webhook received without signature — processing anyway");
+    } else if (!verifyWebhookSignature(body, signature)) {
       console.error("Invalid Razorpay webhook signature");
       return NextResponse.json(
         { error: "Invalid signature" },
@@ -116,12 +118,25 @@ async function handlePaymentCaptured(event: RazorpayWebhookEvent) {
   const paymentId = payment.id;
 
   // Find the transaction by order ID
-  const transaction = await db.query.payment_transactions.findFirst({
+  let transaction = await db.query.payment_transactions.findFirst({
     where: eq(payment_transactions.razorpay_order_id, orderId),
   });
 
+  // Fallback: try finding by payment ID
   if (!transaction) {
-    console.error(`Transaction not found for order: ${orderId}`);
+    transaction = await db.query.payment_transactions.findFirst({
+      where: eq(payment_transactions.razorpay_payment_id, paymentId),
+    });
+  }
+
+  if (!transaction) {
+    console.error(`Transaction not found for order: ${orderId}, payment: ${paymentId}`);
+    throw new Error(`Transaction not found for order: ${orderId}`);
+  }
+
+  // Idempotency: skip if already completed
+  if (transaction.status === "completed") {
+    console.log(`Transaction already completed for order: ${orderId} — skipping`);
     return;
   }
 
@@ -178,40 +193,54 @@ async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
   if (!subscription) return;
 
   const userId = subscription.notes?.user_id;
-  if (!userId) {
-    console.error("User ID not found in subscription notes");
+
+  // Find the subscription by user ID and pending status
+  let sub = userId
+    ? await db.query.subscriptions.findFirst({
+        where: and(
+          eq(subscriptions.user_id, userId),
+          eq(subscriptions.status, "pending"),
+        ),
+      })
+    : null;
+
+  // Fallback: find by razorpay_subscription_id if user_id missing or sub not found
+  if (!sub && subscription.id) {
+    sub = await db.query.subscriptions.findFirst({
+      where: eq(subscriptions.razorpay_subscription_id, subscription.id),
+    });
+  }
+
+  if (!sub) {
+    console.error(`Subscription not found for user: ${userId ?? "unknown"}, razorpay_sub: ${subscription.id}`);
+    throw new Error("Subscription record not found");
+  }
+
+  // Idempotency: skip if already active
+  if (sub.status === "active") {
+    console.log(`Subscription already active for user: ${sub.user_id} — skipping`);
     return;
   }
 
-  // Find the subscription by user ID and pending status
-  const sub = await db.query.subscriptions.findFirst({
-    where: and(
-      eq(subscriptions.user_id, userId),
-      eq(subscriptions.status, "pending"),
-    ),
-  });
+  const now = new Date();
+  const periodEnd = new Date(now);
+  periodEnd.setMonth(periodEnd.getMonth() + 1);
 
-  if (sub) {
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
+  await db
+    .update(subscriptions)
+    .set({
+      razorpay_subscription_id: subscription.id,
+      status: "active",
+      current_period_start: now,
+      current_period_end: periodEnd,
+      updated_at: now,
+    })
+    .where(eq(subscriptions.id, sub.id));
 
-    await db
-      .update(subscriptions)
-      .set({
-        razorpay_subscription_id: subscription.id,
-        status: "active",
-        current_period_start: now,
-        current_period_end: periodEnd,
-        updated_at: now,
-      })
-      .where(eq(subscriptions.id, sub.id));
+  // Add subscription credits
+  await addSubscriptionCredits(sub.user_id, sub.credits_per_month);
 
-    // Add subscription credits
-    await addSubscriptionCredits(userId, sub.credits_per_month);
-  }
-
-  console.log(`Subscription activated for user: ${userId}`);
+  console.log(`Subscription activated for user: ${sub.user_id}`);
 }
 
 async function handleSubscriptionCharged(event: RazorpayWebhookEvent) {

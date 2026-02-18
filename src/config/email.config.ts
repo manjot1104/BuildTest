@@ -28,8 +28,8 @@ function emailLayout(content: string): string {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="padding:32px 32px 0;text-align:center;">
-              <div style="display:inline-block;background-color:#18181b;border-radius:8px;padding:8px;margin-bottom:16px;">
-                <span style="color:#fafafa;font-size:16px;font-weight:bold;">B</span>
+              <div style="display:inline-block;background-color:#3B7EFF;border-radius:8px;padding:8px 10px;margin-bottom:16px;">
+                <span style="color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:-0.5px;">B</span>
               </div>
               <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
             </td>
@@ -137,6 +137,39 @@ export function getOTPEmailTemplate({
 
   return {
     subject: `Your verification code - ${EMAIL_CONFIG.companyName}`,
+    html: emailLayout(content),
+  };
+}
+
+/**
+ * Welcome email template — sent after email verification
+ */
+export function getWelcomeEmailTemplate({
+  userName,
+}: {
+  userName: string;
+}): { subject: string; html: string } {
+  const content = `
+    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${userName},</p>
+    <p style="margin:0 0 16px;color:#52525b;font-size:14px;line-height:1.6;">Welcome to ${EMAIL_CONFIG.companyName}! Your email has been verified and your account is ready to go.</p>
+    <p style="margin:0 0 16px;color:#52525b;font-size:14px;line-height:1.6;">${EMAIL_CONFIG.companyName} is an AI-powered app builder. Describe what you want to build in chat, and we'll generate working code for you — from landing pages to full dashboards.</p>
+    <div style="background-color:#f4f4f5;border-radius:8px;padding:16px;margin:0 0 24px;">
+      <p style="margin:0 0 8px;color:#18181b;font-size:13px;font-weight:600;">How credits work:</p>
+      <p style="margin:0 0 4px;color:#52525b;font-size:13px;line-height:1.5;">• New chat: 20 credits</p>
+      <p style="margin:0 0 4px;color:#52525b;font-size:13px;line-height:1.5;">• Follow-up message: 30 credits</p>
+      <p style="margin:0;color:#52525b;font-size:13px;line-height:1.5;">• Subscription credits reset monthly. Additional credits never expire.</p>
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+      <tr>
+        <td align="center" style="padding:0 0 24px;">
+          <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/chat" style="display:inline-block;background-color:#3B7EFF;color:#ffffff;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Start Building</a>
+        </td>
+      </tr>
+    </table>
+    <p style="margin:0;color:#a1a1aa;font-size:12px;">Need help? Check out our <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/docs" style="color:#3b82f6;text-decoration:none;">documentation</a>.</p>`;
+
+  return {
+    subject: `Welcome to ${EMAIL_CONFIG.companyName}!`,
     html: emailLayout(content),
   };
 }

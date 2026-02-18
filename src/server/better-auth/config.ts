@@ -7,6 +7,7 @@ import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendOTPEmail,
+  sendWelcomeEmail,
 } from "@/server/services/email.service";
 
 export const auth = betterAuth({
@@ -45,6 +46,33 @@ export const auth = betterAuth({
       },
     }),
   ],
+  databaseHooks: {
+    user: {
+      update: {
+        after: async (user) => {
+          // Send welcome email when email gets verified for the first time
+          // emailVerified is set to a Date when verification succeeds
+          if (user.emailVerified) {
+            const verifiedAt = new Date(user.emailVerified as unknown as string)
+            const now = new Date()
+            const diffMs = now.getTime() - verifiedAt.getTime()
+            // Only send if verification happened within the last 2 minutes
+            // This prevents re-sending on subsequent profile updates
+            if (diffMs < 2 * 60 * 1000) {
+              try {
+                await sendWelcomeEmail({
+                  to: user.email,
+                  userName: user.name ?? user.email.split("@")[0] ?? "there",
+                });
+              } catch (error) {
+                console.error("Failed to send welcome email:", error);
+              }
+            }
+          }
+        },
+      },
+    },
+  },
 });
 
 export type Session = typeof auth.$Infer.Session;

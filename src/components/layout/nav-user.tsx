@@ -37,13 +37,20 @@ import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useUserCredits } from "@/hooks/use-user-credits"
 import { SubscriptionModal } from "@/components/payments/subscription-modal"
+import { NotificationsDialog } from "@/components/notifications-dialog"
+import { type SettingsTab } from "@/components/settings-dialog"
 
-export function NavUser() {
+interface NavUserProps {
+    onSettingsClick?: (tab: SettingsTab) => void
+}
+
+export function NavUser({ onSettingsClick }: NavUserProps) {
     const { isMobile } = useSidebar()
     const { data: session } = authClient.useSession()
     const router = useRouter()
     const { credits, hasActiveSubscription, isLoading } = useUserCredits()
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false)
+    const [notificationsOpen, setNotificationsOpen] = useState(false)
 
     const handleLogout = async () => {
         try {
@@ -152,7 +159,7 @@ export function NavUser() {
                         </DropdownMenuGroup>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onSettingsClick?.("general")}>
                                 <BadgeCheck />
                                 Account
                             </DropdownMenuItem>
@@ -160,7 +167,7 @@ export function NavUser() {
                                 <CreditCard />
                                 Billing
                             </DropdownMenuItem>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setNotificationsOpen(true)}>
                                 <Bell />
                                 Notifications
                             </DropdownMenuItem>
@@ -178,6 +185,10 @@ export function NavUser() {
                 onOpenChange={setSubscriptionModalOpen}
                 hasActiveSubscription={hasActiveSubscription}
                 currentCredits={credits?.totalCredits ?? 0}
+            />
+            <NotificationsDialog
+                open={notificationsOpen}
+                onOpenChange={setNotificationsOpen}
             />
         </SidebarMenu>
     )

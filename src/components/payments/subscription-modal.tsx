@@ -29,6 +29,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Check, CreditCard, Sparkles, Zap, Loader2, Globe } from "lucide-react";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { env } from "@/env";
 import {
@@ -43,6 +48,7 @@ import {
   useBuyCredits,
   useVerifyPayment,
 } from "@/client-api/query-hooks/use-payment-mutations";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface SubscriptionModalProps {
   children?: React.ReactNode;
@@ -61,6 +67,8 @@ export function SubscriptionModal({
 }: SubscriptionModalProps) {
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const queryClient = useQueryClient();
 
   const {
     data: pricingData,
@@ -98,6 +106,7 @@ export function SubscriptionModal({
   };
 
   const handlePaymentSuccess = async (response: RazorpayResponse) => {
+    setVerifying(true);
     try {
       const result = await verifyPaymentMutation.mutateAsync({
         razorpay_order_id: response.razorpay_order_id,
@@ -107,16 +116,29 @@ export function SubscriptionModal({
 
       if (result.success) {
         toast.success(result.message);
-        onOpenChange?.(false);
-        // Refresh the page to update credits
-        window.location.reload();
+        // Invalidate credits and subscription queries instead of hard reload
+        await queryClient.invalidateQueries({ queryKey: ["user-credits"] });
+        // Small delay so the toast is visible before closing
+        setTimeout(() => {
+          onOpenChange?.(false);
+          setVerifying(false);
+          setLoadingPlanId(null);
+        }, 800);
       } else {
-        toast.error("Payment verification failed");
+        toast.error("Payment verification failed. Please contact support if your payment was deducted.");
+        setVerifying(false);
+        setLoadingPlanId(null);
+        // Reopen modal so user can retry
+        onOpenChange?.(true);
       }
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to verify payment";
       toast.error(errorMessage);
+      setVerifying(false);
+      setLoadingPlanId(null);
+      // Reopen modal so user can see the state
+      onOpenChange?.(true);
     }
   };
 
@@ -330,24 +352,37 @@ export function SubscriptionModal({
                       </ul>
                     </CardContent>
                     <CardFooter>
-                      <Button
-                        className="w-full"
-                        variant={
-                          "popular" in plan &&
-                          (plan as { popular?: boolean }).popular
-                            ? "default"
-                            : "outline"
-                        }
-                        onClick={() => handleSubscribe(plan)}
-                        disabled={isLoading || hasActiveSubscription}
-                      >
-                        {loadingPlanId === plan.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : null}
-                        {hasActiveSubscription
-                          ? "Already Subscribed"
-                          : "Subscribe"}
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="w-full">
+                            <Button
+                              className="w-full"
+                              variant={
+                                "popular" in plan &&
+                                (plan as { popular?: boolean }).popular
+                                  ? "default"
+                                  : "outline"
+                              }
+                              onClick={() => handleSubscribe(plan)}
+                              disabled={isLoading || hasActiveSubscription || verifying}
+                            >
+                              {loadingPlanId === plan.id || verifying ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                              ) : null}
+                              {verifying
+                                ? "Verifying..."
+                                : hasActiveSubscription
+                                  ? "Already Subscribed"
+                                  : "Subscribe"}
+                            </Button>
+                          </span>
+                        </TooltipTrigger>
+                        {hasActiveSubscription && (
+                          <TooltipContent>
+                            You already have an active subscription. Buy credits instead.
+                          </TooltipContent>
+                        )}
+                      </Tooltip>
                     </CardFooter>
                   </Card>
                 ))}

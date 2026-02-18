@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Sparkles, Zap, Users, Target, Heart, Code2, Globe, Moon, Sun } from 'lucide-react'
+import { BuildifyLogo } from '@/components/buildify-logo'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Footer } from '@/components/layout/footer'
@@ -93,9 +94,7 @@ export default function AboutPage() {
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2 group">
                         <ArrowLeft className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Sparkles className="size-4 text-primary-foreground" />
-                        </div>
+                        <BuildifyLogo size="md" />
                         <span className="font-semibold text-lg">Buildify</span>
                     </Link>
                     <Button

@@ -6,6 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Coins, CreditCard } from "lucide-react";
 import { SubscriptionModal } from "./subscription-modal";
 import { useUserCredits } from "@/hooks/use-user-credits";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 interface CreditsDisplayProps {
   variant?: "badge" | "button" | "full";
@@ -47,14 +52,19 @@ export function CreditsDisplay({
   if (variant === "button") {
     return (
       <>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => showModal && setModalOpen(true)}
-        >
-          <CreditCard className="h-4 w-4 mr-2" />
-          {isLoading ? "..." : `${totalCredits} Credits`}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => showModal && setModalOpen(true)}
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              {isLoading ? "..." : `${totalCredits} Credits`}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>View subscription &amp; credits</TooltipContent>
+        </Tooltip>
         {showModal && (
           <SubscriptionModal
             open={modalOpen}

@@ -2,14 +2,13 @@
 
 import * as React from "react"
 import {
-    AudioWaveform,
     BookOpen,
-    GalleryVerticalEnd,
     MessageSquare,
     Settings2,
     SquareTerminal,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
+import { BuildifyLogo } from "@/components/buildify-logo"
 
 import { NavMain } from "@/components/layout/nav-main"
 import { NavUser } from "@/components/layout/nav-user"
@@ -49,13 +48,13 @@ const buildSidebarData = ({
         platforms: [
             {
                 name: "Buildify",
-                logo: AudioWaveform,
-                url: "#",
+                logo: BuildifyLogo,
+                url: "/chat",
                 isActive: true,
             },
             {
-                name: "Buildify",
-                logo: GalleryVerticalEnd,
+                name: "Buildify Web",
+                logo: BuildifyLogo,
                 url: "https://buildify.sh",
             },
         ],
@@ -83,24 +82,24 @@ const buildSidebarData = ({
             },
             {
                 title: "Documentation",
-                url: "#",
+                url: "/docs",
                 icon: BookOpen,
                 items: [
                     {
                         title: "Introduction",
-                        url: "#",
+                        url: "/docs",
                     },
                     {
                         title: "Get Started",
-                        url: "#",
+                        url: "/docs/get-started",
                     },
                     {
                         title: "Tutorials",
-                        url: "#",
+                        url: "/docs/tutorials",
                     },
                     {
                         title: "Changelog",
-                        url: "#",
+                        url: "/docs/changelog",
                     },
                 ],
             },
@@ -155,7 +154,7 @@ export function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser />
+        <NavUser onSettingsClick={onSettingsClick} />
       </SidebarFooter>
 
       <SidebarRail />

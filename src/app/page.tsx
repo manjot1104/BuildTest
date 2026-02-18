@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Sparkles, Zap, Shield, Code2, Layers, Globe, ChevronDown, Moon, Sun } from 'lucide-react'
+import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
 import { useRef } from 'react'
@@ -58,9 +59,7 @@ export default function LandingPage() {
             >
                 <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2">
-                        <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Sparkles className="size-4 text-primary-foreground" />
-                        </div>
+                        <BuildifyLogo size="md" />
                         <span className="font-semibold text-lg">Buildify</span>
                     </Link>
 
@@ -168,13 +167,6 @@ export default function LandingPage() {
                             >
                                 Get Started Free
                                 <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                            </Button>
-                            <Button
-                                size="lg"
-                                variant="outline"
-                                className="h-12 px-8 text-base"
-                            >
-                                Watch Demo
                             </Button>
                         </motion.div>
 
