@@ -1,66 +1,34 @@
-'use client'
+import React from 'react'
+import { redirect } from 'next/navigation'
+import { eq } from 'drizzle-orm'
+import { headers } from "next/headers";
 
-import DashboardLayout from '@/components/layout/dashboard-layout'
-import { useStateMachine } from '@/context/state-machine'
-import { useReturnTo } from '@/context/return-to'
-import { useRouter } from 'next/navigation'
-import React, { useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { auth } from "@/server/better-auth";
+import { db } from "@/server/db";
+import { user } from "@/server/db/schema";
+import MainLayoutClient from './main-layout-client';
 
-const Layout = ({ children }: { children: React.ReactNode }) => {
-    const router = useRouter()
-    const { session, isPending } = useStateMachine()
-    const { setReturnTo } = useReturnTo()
 
-    useEffect(() => {
-        if (!session?.user && !isPending) {
-            const currentPath = window.location.pathname + window.location.search
-            if (currentPath && currentPath !== '/login') {
-                setReturnTo(currentPath)
-            }
-            router.push('/login')
+export default async function Layout({ children }: { children: React.ReactNode }) {
+    const requestHeaders = await headers();
+    const session = await auth.api.getSession({
+        headers: requestHeaders,
+    });
+
+    if (session?.user?.email) {
+        const dbUser = await db.query.user.findFirst({
+            where: eq(user.email, session.user.email),
+            columns: {
+                role: true,
+            },
+        });
+
+        if (dbUser?.role === "admin") {
+            redirect("/admin/users");
         }
-    }, [session, isPending, router, setReturnTo])
-
-    if (isPending || !session?.user) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-background">
-                <div className="flex flex-col items-center space-y-4">
-                    <motion.div
-                        className="relative w-12 h-12"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        <motion.div
-                            className="absolute inset-0 rounded-full border-4 border-primary/20"
-                        />
-                        <motion.div
-                            className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent"
-                            animate={{ rotate: 360 }}
-                            transition={{
-                                repeat: Infinity,
-                                duration: 1,
-                                ease: "linear"
-                            }}
-                        />
-                    </motion.div>
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1, duration: 0.4 }}
-                        className="text-sm font-medium text-foreground"
-                    >
-                        Loading...
-                    </motion.div>
-                </div>
-            </div>
-        )
     }
-
-    return (
-        <DashboardLayout>{children}</DashboardLayout>
-    )
+    
+    // Non-admins or users whose role couldn't be fetched will proceed.
+    // The MainLayoutClient will then handle redirecting unauthenticated users.
+    return <MainLayoutClient>{children}</MainLayoutClient>
 }
-
-export default Layout
