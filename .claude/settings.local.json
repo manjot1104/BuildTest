@@ -21,7 +21,8 @@
       "Bash(git show:*)",
       "Bash(head:*)",
       "Bash(xargs:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(SKIP_ENV_VALIDATION=1 npx next build:*)"
     ]
   }
 }
