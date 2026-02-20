@@ -54,7 +54,12 @@ export const posts = createTable(
   ],
 );
 
-export const userRoleEnum = pgEnum("user_role", ["user", "admin"]);
+export const userRoleEnum = pgEnum("user_role", [
+  "user",
+  "admin",
+  "manager",
+  "team_member",
+]);
 
 
 export const user = pgTable("user", {
@@ -71,7 +76,7 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),
- role: userRoleEnum("role").default("user").notNull(),
+roles: userRoleEnum("roles").array().default(["user"]).notNull(),
 
 
 });

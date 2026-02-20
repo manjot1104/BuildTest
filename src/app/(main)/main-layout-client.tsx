@@ -8,7 +8,13 @@ import DashboardLayout from '@/components/layout/dashboard-layout'
 import { useStateMachine } from '@/context/state-machine'
 import { useReturnTo } from '@/context/return-to'
 
-export default function MainLayoutClient({ children }: { children: React.ReactNode }) {
+export default function MainLayoutClient({
+  children,
+  isAdmin,
+}: {
+  children: React.ReactNode
+  isAdmin: boolean
+}) {
     const router = useRouter()
     const { session, isPending } = useStateMachine()
     const { setReturnTo } = useReturnTo()
@@ -59,7 +65,9 @@ export default function MainLayoutClient({ children }: { children: React.ReactNo
         )
     }
 
-    return (
-        <DashboardLayout>{children}</DashboardLayout>
-    )
+   return (
+  <DashboardLayout isAdmin={isAdmin}>
+    {children}
+  </DashboardLayout>
+)
 }

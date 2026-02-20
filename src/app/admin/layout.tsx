@@ -25,18 +25,27 @@ export default async function AdminLayout({
     where: eq(user.email, session.user.email),
   });
 
-  if (!dbUser || dbUser.role !== "admin") {
-    redirect("/");
-  }
+ if (!dbUser || !dbUser.roles.includes("admin")) {
+  redirect("/");
+}
 
  return (
   <div className="min-h-screen bg-black text-white flex">
     
     {/* Sidebar */}
-    <aside className="w-64 border-r border-zinc-800 p-6 space-y-6">
-      <h1 className="text-xl font-semibold tracking-wide">
-        Admin Panel
-      </h1>
+   <aside className="w-64 border-r border-zinc-800 p-6 space-y-6">
+  
+  {/* Back to User Dashboard */}
+  <a
+    href="/chat"
+    className="text-sm text-blue-400 hover:underline"
+  >
+    ← User Dashboard
+  </a>
+
+  <h1 className="text-xl font-semibold tracking-wide mt-4">
+    Admin Panel
+  </h1>
 
       <nav className="flex flex-col space-y-3 text-sm">
         <a

@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
 
@@ -13,51 +23,63 @@ export default function UsersPage() {
   }, []);
 
  return (
-  <div className="p-8">
-    <h1 className="text-3xl font-semibold tracking-tight mb-8">
+  <div className="space-y-8">
+    <h1 className="text-3xl font-semibold tracking-tight">
 All Users</h1>
 
-    <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-      <div className="grid grid-cols-4 px-6 py-4 text-sm text-zinc-400 bg-zinc-800">
-        <div>Email</div>
-        <div>Role</div>
-        <div>User ID</div>
-        <div>Action</div>
-      </div>
+  <div className="rounded-xl border border-border/60 bg-card shadow-md">
+  <Table>
+    <TableHeader>
+      <TableRow>
+        <TableHead className="text-muted-foreground">
+  Email
+</TableHead>
+        <TableHead className="text-muted-foreground">Roles</TableHead>
+        <TableHead className="text-muted-foreground">User ID</TableHead>
+        <TableHead className="text-muted-foreground">Action</TableHead>
+      </TableRow>
+    </TableHeader>
 
+    <TableBody>
       {users.map((u) => (
-        <div
-          key={u.id}
-          className="grid grid-cols-4 px-6 py-4 text-sm border-t border-zinc-800 hover:bg-zinc-800 transition"
-        >
-          <div className="truncate">{u.email}</div>
+        <TableRow
+  key={u.id}
+  className="hover:bg-muted/40 transition-colors"
+>
+          <TableCell className="truncate">
+            {u.email}
+          </TableCell>
 
-          <div className="capitalize">
-            <span
-              className={`px-2 py-1 rounded-md text-xs ${
-                u.role === "admin"
-                  ? "bg-purple-600/20 text-purple-400"
-                  : "bg-blue-600/20 text-blue-400"
-              }`}
-            >
-              {u.role}
-            </span>
-          </div>
+          <TableCell>
+            <div className="flex gap-2 flex-wrap">
+              {u.roles?.map((role: string) => (
+                <Badge
+                  key={role}
+                  variant={role === "admin" ? "default" : "secondary"}
+                  className="capitalize"
+                >
+                  {role}
+                </Badge>
+              ))}
+            </div>
+          </TableCell>
 
-          <div className="text-zinc-500 truncate">{u.id}</div>
+          <TableCell className="text-muted-foreground truncate">
+            {u.id}
+          </TableCell>
 
-          <div>
-            <Link
-              href={`/admin/users/${u.id}`}
-              className="text-blue-400 hover:underline"
-            >
-              View
-            </Link>
-          </div>
-        </div>
+          <TableCell>
+            <Button variant="link" asChild>
+              <Link href={`/admin/users/${u.id}`}>
+                View
+              </Link>
+            </Button>
+          </TableCell>
+        </TableRow>
       ))}
-    </div>
-  </div>
+    </TableBody>
+  </Table>
+</div>
+      </div>
 );
-
 }

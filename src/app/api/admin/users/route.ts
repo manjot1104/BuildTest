@@ -19,9 +19,9 @@ export async function GET() {
     where: (u, { eq }) => eq(u.email, session.user.email),
   });
 
-  if (!adminUser || adminUser.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+ if (!adminUser || !adminUser.roles.includes("admin")) {
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+}
 
   const users = await db.query.user.findMany();
 

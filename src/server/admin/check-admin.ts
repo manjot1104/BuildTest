@@ -18,9 +18,9 @@ export async function requireAdmin() {
     where: (u, { eq }) => eq(u.email, session.user.email),
   });
 
-  if (!adminUser || adminUser.role !== "admin") {
-    throw new Error("FORBIDDEN");
-  }
+ if (!adminUser || !adminUser.roles.includes("admin")) {
+  throw new Error("FORBIDDEN");
+}
 
   return session.user;
 }

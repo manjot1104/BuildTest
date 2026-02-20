@@ -1,4 +1,5 @@
 'use client'
+import Link from "next/link";
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
@@ -21,8 +22,15 @@ import { CreditsDisplay } from "@/components/payments/credits-display"
 import { usePathname } from "next/navigation";
 import { Fragment, useCallback, useState } from "react";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+export default function DashboardLayout({
+  children,
+  isAdmin,
+}: {
+  children: React.ReactNode
+  isAdmin: boolean
+}) {
     const pathname = usePathname();
+    const isOnAdminPage = pathname.startsWith("/admin");
 
     const segments = pathname
         .split('/')
@@ -82,7 +90,26 @@ const [starredOpen, setStarredOpen] = useState(false)
                                     </BreadcrumbList>
                                 </Breadcrumb>
                             </div>
-                            <CreditsDisplay variant="button" />
+                            <div className="flex items-center gap-3">
+  {isAdmin && (
+  isOnAdminPage ? (
+    <Link
+      href="/chat"
+      className="px-3 py-1.5 text-sm rounded-md bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition"
+    >
+      ← User Dashboard
+    </Link>
+  ) : (
+    <Link
+      href="/admin/users"
+      className="px-3 py-1.5 text-sm rounded-md bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition"
+    >
+      Admin Dashboard
+    </Link>
+  )
+)}
+  <CreditsDisplay variant="button" />
+</div>
                         </div>
                     </header>
                     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">

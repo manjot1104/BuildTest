@@ -1,7 +1,7 @@
 import "dotenv/config";
 import postgres from "postgres";
 import { drizzle } from "drizzle-orm/postgres-js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { user } from "../src/server/db/schema";
 
 const connectionString = process.env.DATABASE_URL;
@@ -17,7 +17,9 @@ const db = drizzle(client);
 async function makeAdmin(email: string) {
   await db
     .update(user)
-    .set({ role: "admin" })
+   .set({
+  roles: sql`array_append(${user.roles}, 'admin'::user_role)`
+})
     .where(eq(user.email, email));
 
   console.log(`${email} is now admin ✅`);
