@@ -21,7 +21,14 @@
       "Bash(git show:*)",
       "Bash(head:*)",
       "Bash(xargs:*)",
-      "mcp__ide__getDiagnostics"
+      "mcp__ide__getDiagnostics",
+      "Bash(while read hash msg)",
+      "Bash(do echo \"=== $hash: $msg ===\")",
+      "Bash(done)",
+      "Bash(bun run:*)",
+      "Bash(bun install:*)",
+      "Bash(bun -e \":*)",
+      "Bash(bun -e:*)"
     ]
   }
 }

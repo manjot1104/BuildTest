@@ -1,5 +1,6 @@
 'use client'
 import Link from "next/link";
+import { Shield } from "lucide-react";
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
@@ -91,23 +92,15 @@ const [starredOpen, setStarredOpen] = useState(false)
                                 </Breadcrumb>
                             </div>
                             <div className="flex items-center gap-3">
-  {isAdmin && (
-  isOnAdminPage ? (
+  {isAdmin && !isOnAdminPage && (
     <Link
-      href="/chat"
-      className="px-3 py-1.5 text-sm rounded-md bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition"
+      href="/admin"
+      className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
     >
-      ← User Dashboard
+      <Shield className="size-3.5" />
+      Admin Panel
     </Link>
-  ) : (
-    <Link
-      href="/admin/users"
-      className="px-3 py-1.5 text-sm rounded-md bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition"
-    >
-      Admin Dashboard
-    </Link>
-  )
-)}
+  )}
   <CreditsDisplay variant="button" />
 </div>
                         </div>

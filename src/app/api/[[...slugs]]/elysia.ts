@@ -26,6 +26,16 @@ import {
   getCreditUsageHistoryHandler,
   cancelSubscriptionHandler,
 } from '@/server/api/controllers/payment.controller'
+import {
+  getAdminStatsHandler,
+  getAdminUsersHandler,
+  getAdminUserDetailHandler,
+  assignSubscriptionHandler,
+  cancelUserSubscriptionHandler,
+  addCreditsHandler,
+  deductCreditsHandler,
+  toggleUserRoleHandler,
+} from '@/server/api/controllers/admin.controller'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
@@ -725,3 +735,155 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
     return result
   })
+
+  // ============================================
+  // Admin Endpoints
+  // ============================================
+
+  // Get admin dashboard stats - GET /api/admin/stats
+  .get('/admin/stats', async ({ set }) => {
+    const result = await getAdminStatsHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // List all users - GET /api/admin/users
+  .get('/admin/users', async ({ set }) => {
+    const result = await getAdminUsersHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // Get user details - GET /api/admin/users/:id
+  .get(
+    '/admin/users/:id',
+    async ({ params, set }) => {
+      const result = await getAdminUserDetailHandler({ params })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
+
+  // Assign subscription to user - POST /api/admin/subscription
+  .post(
+    '/admin/subscription',
+    async ({ body, set }) => {
+      const result = await assignSubscriptionHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+        plan_id: t.String(),
+        plan_name: t.String(),
+        plan_price: t.Optional(t.Number()),
+        credits_per_month: t.Number(),
+        startDate: t.String(),
+        endDate: t.String(),
+      }),
+    },
+  )
+
+  // Cancel user subscription - POST /api/admin/subscription/cancel
+  .post(
+    '/admin/subscription/cancel',
+    async ({ body, set }) => {
+      const result = await cancelUserSubscriptionHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+      }),
+    },
+  )
+
+  // Add credits to user - POST /api/admin/credits
+  .post(
+    '/admin/credits',
+    async ({ body, set }) => {
+      const result = await addCreditsHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+        subscriptionCredits: t.Optional(t.Number()),
+        additionalCredits: t.Optional(t.Number()),
+      }),
+    },
+  )
+
+  // Toggle user role - POST /api/admin/users/role
+  .post(
+    '/admin/users/role',
+    async ({ body, set }) => {
+      const result = await toggleUserRoleHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+        role: t.String(),
+        action: t.Union([t.Literal('add'), t.Literal('remove')]),
+      }),
+    },
+  )
+
+  // Deduct credits from user - POST /api/admin/credits/deduct
+  .post(
+    '/admin/credits/deduct',
+    async ({ body, set }) => {
+      const result = await deductCreditsHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        userId: t.String(),
+        deductSubscription: t.Optional(t.Number()),
+        deductAdditional: t.Optional(t.Number()),
+      }),
+    },
+  )

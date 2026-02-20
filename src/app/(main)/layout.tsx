@@ -1,5 +1,4 @@
 import React from 'react'
-import { redirect } from 'next/navigation'
 import { eq } from 'drizzle-orm'
 import { headers } from "next/headers";
 
@@ -15,7 +14,7 @@ export default async function Layout({ children }: { children: React.ReactNode }
     headers: requestHeaders,
   });
 
-  let isAdmin = false; // 👈 default value
+  let isAdmin = false;
 
   if (session?.user?.email) {
     const dbUser = await db.query.user.findFirst({
