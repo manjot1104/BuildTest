@@ -1,107 +1,146 @@
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
+
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import {
-  AlertDialog,
-  AlertDialogContent,
+    AlertDialog,
+    AlertDialogContent,
 } from '@/components/ui/alert-dialog'
-import { X, MessageSquare, ExternalLink } from 'lucide-react'
+import { X, Star, ExternalLink } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 
 async function fetchStarredChats() {
-  const res = await fetch('/api/chat/starred')
-  if (!res.ok) throw new Error('Failed to fetch starred chats')
-  return res.json()
+    const res = await fetch('/api/chat/starred')
+    if (!res.ok) throw new Error('Failed to fetch starred chats')
+    return res.json()
 }
 
 export function StarredChatsDialog({
-  open,
-  onOpenChange,
+    open,
+    onOpenChange,
 }: {
-  open: boolean
-  onOpenChange: (v: boolean) => void
+    open: boolean
+    onOpenChange: (v: boolean) => void
 }) {
-  const router = useRouter()
+    const router = useRouter()
 
-  const { data: chats, isLoading } = useQuery({
-    queryKey: ['starred-chats'],
-    queryFn: fetchStarredChats,
-    enabled: open, // fetch only when dialog opens
-  })
+    const { data: chats, isLoading, error } = useQuery({
+        queryKey: ['starred-chats'],
+        queryFn: fetchStarredChats,
+        enabled: open,
+    })
 
-  const handleChatClick = (v0ChatId: string) => {
-    router.push(`/chat?chatId=${v0ChatId}`)
-    onOpenChange(false)
-  }
+    const handleChatClick = (v0ChatId: string) => {
+        router.push(`/chat?chatId=${v0ChatId}`)
+        onOpenChange(false)
+    }
 
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent
-        className="p-0"
-        style={{ width: '95vw', maxWidth: '55rem' }}
-      >
-        <Card className="border-0 shadow-none">
-          <CardContent className="p-6 relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-4 right-4"
-              onClick={() => onOpenChange(false)}
+    return (
+        <AlertDialog open={open} onOpenChange={onOpenChange}>
+            <AlertDialogContent
+                className="p-0 gap-0 overflow-hidden border-border/50"
+                style={{ width: '95vw', maxWidth: '40rem' }}
             >
-              <X className="h-4 w-4" />
-            </Button>
-
-            <div className="flex flex-col gap-4">
-              <div className="text-center">
-                <h1 className="text-2xl font-bold">Starred Chats</h1>
-                <p className="text-muted-foreground">
-                  Chats you marked as important
-                </p>
-              </div>
-
-              {!isLoading && chats?.length === 0 && (
-                <p className="text-center text-muted-foreground">
-                  No starred chats yet
-                </p>
-              )}
-
-              <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto">
-                {chats?.map((chat: any) => (
-                  <div
-                    key={chat.id}
-                    onClick={() => handleChatClick(chat.v0_chat_id)}
-                    className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent cursor-pointer"
-                  >
-                    <MessageSquare className="h-5 w-5 text-muted-foreground" />
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">
-                        {chat.title ?? 'Untitled Chat'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDistanceToNow(new Date(chat.created_at), {
-                          addSuffix: true,
-                        })}
-                      </p>
+                <div className="flex flex-col">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                        <div>
+                            <h2 className="text-base font-semibold tracking-tight">Starred Chats</h2>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                                Conversations you marked as important
+                            </p>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            <X className="size-3.5" />
+                        </Button>
                     </div>
 
-                    {chat.demo_url && (
-                      <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </AlertDialogContent>
-    </AlertDialog>
-  )
+                    <div className="border-t border-border/40" />
+
+                    {/* Content */}
+                    <div className="px-3 py-3">
+                        {isLoading && (
+                            <div className="flex items-center justify-center py-12">
+                                <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full w-1/2 bg-foreground/20 rounded-full"
+                                        style={{
+                                            animation: 'shimmer 1.5s ease-in-out infinite',
+                                        }}
+                                    />
+                                </div>
+                                <style>{`
+                                    @keyframes shimmer {
+                                        0%, 100% { transform: translateX(-100%); }
+                                        50% { transform: translateX(200%); }
+                                    }
+                                `}</style>
+                            </div>
+                        )}
+
+                        {error && (
+                            <div className="flex items-center justify-center py-12">
+                                <p className="text-xs text-destructive">
+                                    Failed to load starred chats.
+                                </p>
+                            </div>
+                        )}
+
+                        {!isLoading && !error && chats?.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-12 gap-2">
+                                <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
+                                    <Star className="size-5 text-muted-foreground" />
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    No starred conversations yet
+                                </p>
+                            </div>
+                        )}
+
+                        {!isLoading && !error && chats && chats.length > 0 && (
+                            <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">
+                                {chats.map((chat: any) => (
+                                    <button
+                                        key={chat.id}
+                                        onClick={() => handleChatClick(chat.v0_chat_id)}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg",
+                                            "hover:bg-muted/50 transition-colors text-left group"
+                                        )}
+                                    >
+                                        <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">
+                                                {chat.title ?? 'Untitled Chat'}
+                                            </p>
+                                            {chat.created_at && (
+                                                <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                                                    {formatDistanceToNow(new Date(chat.created_at), {
+                                                        addSuffix: true,
+                                                    })}
+                                                </p>
+                                            )}
+                                        </div>
+                                        {chat.demo_url && (
+                                            <ExternalLink className="size-3.5 text-muted-foreground/40" />
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </AlertDialogContent>
+        </AlertDialog>
+    )
 }

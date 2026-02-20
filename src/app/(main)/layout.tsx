@@ -5,7 +5,7 @@ import { useStateMachine } from '@/context/state-machine'
 import { useReturnTo } from '@/context/return-to'
 import { useRouter } from 'next/navigation'
 import React, { useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { BuildifyLogo } from '@/components/buildify-logo'
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
     const router = useRouter()
@@ -25,35 +25,24 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
     if (isPending || !session?.user) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-background">
-                <div className="flex flex-col items-center space-y-4">
-                    <motion.div
-                        className="relative w-12 h-12"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ duration: 0.3 }}
-                    >
-                        <motion.div
-                            className="absolute inset-0 rounded-full border-4 border-primary/20"
-                        />
-                        <motion.div
-                            className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent"
-                            animate={{ rotate: 360 }}
-                            transition={{
-                                repeat: Infinity,
-                                duration: 1,
-                                ease: "linear"
+                <div className="flex flex-col items-center gap-3">
+                    <div className="animate-pulse">
+                        <BuildifyLogo size="lg" />
+                    </div>
+                    <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                        <div className="h-full w-1/2 bg-foreground/20 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]"
+                            style={{
+                                animation: 'shimmer 1.5s ease-in-out infinite',
                             }}
                         />
-                    </motion.div>
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1, duration: 0.4 }}
-                        className="text-sm font-medium text-foreground"
-                    >
-                        Loading...
-                    </motion.div>
+                    </div>
                 </div>
+                <style>{`
+                    @keyframes shimmer {
+                        0%, 100% { transform: translateX(-100%); }
+                        50% { transform: translateX(200%); }
+                    }
+                `}</style>
             </div>
         )
     }

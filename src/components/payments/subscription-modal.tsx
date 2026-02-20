@@ -11,16 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -28,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Check, CreditCard, Sparkles, Zap, Loader2, Globe } from "lucide-react";
+import { Check, Loader2, Globe, Zap } from "lucide-react";
 import {
   Tooltip,
   TooltipTrigger,
@@ -49,6 +40,7 @@ import {
   useVerifyPayment,
 } from "@/client-api/query-hooks/use-payment-mutations";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
 interface SubscriptionModalProps {
   children?: React.ReactNode;
@@ -78,7 +70,6 @@ export function SubscriptionModal({
     availableCurrencies,
   } = useLocalizedPricing();
 
-  // Eden-based mutation hooks
   const subscribeMutation = useSubscribe();
   const buyCreditsMutation = useBuyCredits();
   const verifyPaymentMutation = useVerifyPayment();
@@ -88,7 +79,6 @@ export function SubscriptionModal({
 
   const isLoading = subscribeMutation.isPending || buyCreditsMutation.isPending;
 
-  // Load Razorpay script
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -116,9 +106,7 @@ export function SubscriptionModal({
 
       if (result.success) {
         toast.success(result.message);
-        // Invalidate credits and subscription queries instead of hard reload
         await queryClient.invalidateQueries({ queryKey: ["user-credits"] });
-        // Small delay so the toast is visible before closing
         setTimeout(() => {
           onOpenChange?.(false);
           setVerifying(false);
@@ -128,7 +116,6 @@ export function SubscriptionModal({
         toast.error("Payment verification failed. Please contact support if your payment was deducted.");
         setVerifying(false);
         setLoadingPlanId(null);
-        // Reopen modal so user can retry
         onOpenChange?.(true);
       }
     } catch (error) {
@@ -137,7 +124,6 @@ export function SubscriptionModal({
       toast.error(errorMessage);
       setVerifying(false);
       setLoadingPlanId(null);
-      // Reopen modal so user can see the state
       onOpenChange?.(true);
     }
   };
@@ -169,17 +155,13 @@ export function SubscriptionModal({
       modal: {
         ondismiss: () => {
           setLoadingPlanId(null);
-          // Reopen the subscription modal when Razorpay is dismissed
           onOpenChange?.(true);
         },
       },
     };
 
     const razorpay = new window.Razorpay(options);
-
-    // Close the subscription modal before opening Razorpay
     onOpenChange?.(false);
-
     razorpay.open();
   };
 
@@ -242,218 +224,227 @@ export function SubscriptionModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="w-[95vw] sm:w-[90vw] sm:max-w-4xl lg:w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5" />
+      <DialogContent className="sm:max-w-[640px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto">
+        <DialogHeader className="px-6 pt-6 pb-4">
+          <DialogTitle className="text-lg font-semibold tracking-tight">
             Subscription & Credits
           </DialogTitle>
-          <DialogDescription>
-            Choose a plan or buy additional credits to continue building
+          <DialogDescription className="text-xs text-muted-foreground">
+            Choose a plan or buy additional credits to continue building.
           </DialogDescription>
         </DialogHeader>
 
-        {/* Current Credits Display & Currency Selector */}
-        <div className="bg-muted/50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+        {/* Balance bar */}
+        <div className="mx-6 rounded-xl border border-border/50 p-4 flex items-center justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Current Balance</p>
-            <p className="text-2xl font-bold">{currentCredits} Credits</p>
+            <p className="text-[11px] text-muted-foreground">Current Balance</p>
+            <p className="text-2xl font-bold tabular-nums mt-0.5">{currentCredits}</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-0.5">credits available</p>
           </div>
-          <div className="flex flex-col sm:items-end gap-2">
-            <div className="flex items-center gap-2">
-              <Globe className="h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-1.5">
+              <Globe className="size-3 text-muted-foreground/50" />
               <Select value={currency} onValueChange={handleCurrencyChange}>
-                <SelectTrigger className="w-[140px] h-8">
+                <SelectTrigger className="w-[110px] h-7 text-xs rounded-lg border-border/50">
                   <SelectValue placeholder="Currency" />
                 </SelectTrigger>
                 <SelectContent>
                   {availableCurrencies.map((curr) => (
-                    <SelectItem key={curr.code} value={curr.code}>
+                    <SelectItem key={curr.code} value={curr.code} className="text-xs">
                       {curr.symbol} {curr.code}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="text-left sm:text-right text-sm text-muted-foreground">
-              <p>New prompt: {CREDIT_COSTS.NEW_PROMPT} credits</p>
-              <p>Follow-up: {CREDIT_COSTS.FOLLOW_UP_PROMPT} credits</p>
+            <div className="text-right text-[11px] text-muted-foreground/60">
+              <p>New chat: {CREDIT_COSTS.NEW_PROMPT} cr</p>
+              <p>Follow-up: {CREDIT_COSTS.FOLLOW_UP_PROMPT} cr</p>
             </div>
           </div>
         </div>
 
         <Tabs
           defaultValue={hasActiveSubscription ? "credits" : "subscription"}
-          className="w-full"
+          className="w-full mt-4"
         >
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="subscription">
-              <Sparkles className="h-4 w-4 mr-2" />
-              Subscription Plans
-            </TabsTrigger>
-            <TabsTrigger value="credits" disabled={!hasActiveSubscription}>
-              <Zap className="h-4 w-4 mr-2" />
-              Buy Credits
-            </TabsTrigger>
-          </TabsList>
+          <div className="border-b border-border/40 px-6">
+            <TabsList className="h-9 w-full justify-start bg-transparent p-0 gap-4">
+              <TabsTrigger
+                value="subscription"
+                className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                Plans
+              </TabsTrigger>
+              <TabsTrigger
+                value="credits"
+                disabled={!hasActiveSubscription}
+                className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              >
+                Buy Credits
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="subscription" className="mt-4">
-            {isPricingLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : (
-              <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                {subscriptionPlans.map((plan) => (
-                  <Card
-                    key={plan.id}
-                    className={`relative ${
-                      "popular" in plan &&
-                      (plan as { popular?: boolean }).popular
-                        ? "border-primary shadow-md"
-                        : ""
-                    }`}
-                  >
-                    {"popular" in plan &&
-                      (plan as { popular?: boolean }).popular && (
-                        <Badge className="absolute -top-2 left-1/2 -translate-x-1/2">
-                          Most Popular
-                        </Badge>
-                      )}
-                    <CardHeader className="pb-4">
-                      <CardTitle>{plan.name}</CardTitle>
-                      <CardDescription>{plan.description}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="pb-4">
-                      <div className="mb-4">
-                        <span className="text-3xl font-bold">
-                          {plan.formattedPrice}
-                        </span>
-                        <span className="text-muted-foreground">/month</span>
-                      </div>
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          {plan.credits} credits/month
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)}{" "}
-                          new prompts
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          Buy additional credits
-                        </li>
-                        <li className="flex items-center gap-2">
-                          <Check className="h-4 w-4 text-green-500" />
-                          Priority support
-                        </li>
-                      </ul>
-                    </CardContent>
-                    <CardFooter>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="w-full">
-                            <Button
-                              className="w-full"
-                              variant={
-                                "popular" in plan &&
-                                (plan as { popular?: boolean }).popular
-                                  ? "default"
-                                  : "outline"
-                              }
-                              onClick={() => handleSubscribe(plan)}
-                              disabled={isLoading || hasActiveSubscription || verifying}
-                            >
-                              {loadingPlanId === plan.id || verifying ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                              ) : null}
-                              {verifying
-                                ? "Verifying..."
-                                : hasActiveSubscription
-                                  ? "Already Subscribed"
-                                  : "Subscribe"}
-                            </Button>
-                          </span>
-                        </TooltipTrigger>
-                        {hasActiveSubscription && (
-                          <TooltipContent>
-                            You already have an active subscription. Buy credits instead.
-                          </TooltipContent>
+          <div className="px-6 py-5 min-h-[280px]">
+            <TabsContent value="subscription" className="mt-0">
+              {isPricingLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full w-1/2 bg-foreground/20 rounded-full"
+                      style={{ animation: 'shimmer 1.5s ease-in-out infinite' }}
+                    />
+                  </div>
+                  <style>{`
+                    @keyframes shimmer {
+                      0%, 100% { transform: translateX(-100%); }
+                      50% { transform: translateX(200%); }
+                    }
+                  `}</style>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {subscriptionPlans.map((plan) => {
+                    const isPopular = "popular" in plan && (plan as { popular?: boolean }).popular;
+                    return (
+                      <div
+                        key={plan.id}
+                        className={cn(
+                          "rounded-xl border p-4 transition-colors",
+                          isPopular
+                            ? "border-foreground/20 bg-muted/30"
+                            : "border-border/50"
                         )}
-                      </Tooltip>
-                    </CardFooter>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {hasActiveSubscription && (
-              <p className="text-sm text-muted-foreground text-center mt-4">
-                You already have an active subscription. Switch to the Credits
-                tab to purchase additional credits.
-              </p>
-            )}
-          </TabsContent>
-
-          <TabsContent value="credits" className="mt-4">
-            {isPricingLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : !hasActiveSubscription ? (
-              <div className="text-center py-8">
-                <Zap className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <p className="text-lg font-medium">Subscription Required</p>
-                <p className="text-muted-foreground">
-                  You need an active subscription to purchase additional
-                  credits.
-                </p>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Additional credits never expire and can be used even after
-                  your subscription ends.
-                </p>
-                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                  {creditPacks.map((pack) => (
-                    <Card key={pack.id}>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">{pack.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent className="pb-2">
-                        <div className="mb-2">
-                          <span className="text-2xl font-bold">
-                            {pack.formattedPrice}
-                          </span>
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-medium">{plan.name}</h3>
+                              {isPopular && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-foreground text-background">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[11px] text-muted-foreground mt-0.5">{plan.description}</p>
+                            <div className="flex items-baseline gap-3 mt-2">
+                              <span className="text-lg font-bold tabular-nums">{plan.formattedPrice}</span>
+                              <span className="text-[11px] text-muted-foreground">/month</span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <Check className="size-3 text-emerald-500" />
+                                {plan.credits} credits/mo
+                              </span>
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <Check className="size-3 text-emerald-500" />
+                                {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)} new prompts
+                              </span>
+                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                                <Check className="size-3 text-emerald-500" />
+                                Buy additional credits
+                              </span>
+                            </div>
+                          </div>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button
+                                  size="sm"
+                                  variant={isPopular ? "default" : "outline"}
+                                  className="h-8 rounded-lg px-4 text-xs shrink-0"
+                                  onClick={() => handleSubscribe(plan)}
+                                  disabled={isLoading || hasActiveSubscription || verifying}
+                                >
+                                  {(loadingPlanId === plan.id || verifying) && (
+                                    <Loader2 className="size-3 animate-spin mr-1.5" />
+                                  )}
+                                  {verifying
+                                    ? "Verifying..."
+                                    : hasActiveSubscription
+                                      ? "Subscribed"
+                                      : "Subscribe"}
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            {hasActiveSubscription && (
+                              <TooltipContent className="text-xs">
+                                You already have an active subscription.
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
                         </div>
-                        <p className="text-sm text-muted-foreground">
-                          {Math.floor(pack.credits / CREDIT_COSTS.NEW_PROMPT)}{" "}
-                          new prompts
+                      </div>
+                    );
+                  })}
+
+                  {hasActiveSubscription && (
+                    <p className="text-[11px] text-muted-foreground/60 text-center pt-2">
+                      You have an active subscription. Switch to Buy Credits for more.
+                    </p>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="credits" className="mt-0">
+              {isPricingLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                    <div
+                      className="h-full w-1/2 bg-foreground/20 rounded-full"
+                      style={{ animation: 'shimmer 1.5s ease-in-out infinite' }}
+                    />
+                  </div>
+                </div>
+              ) : !hasActiveSubscription ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-2">
+                  <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
+                    <Zap className="size-5 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-sm font-medium">Subscription Required</h3>
+                  <p className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
+                    You need an active subscription to purchase additional credits.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-[11px] text-muted-foreground/60 mb-3">
+                    Additional credits never expire and persist after subscription ends.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {creditPacks.map((pack) => (
+                      <div
+                        key={pack.id}
+                        className="rounded-xl border border-border/50 p-3.5 flex flex-col"
+                      >
+                        <p className="text-xs font-medium">{pack.name}</p>
+                        <div className="flex items-baseline gap-1 mt-1.5">
+                          <span className="text-lg font-bold tabular-nums">{pack.formattedPrice}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {Math.floor(pack.credits / CREDIT_COSTS.NEW_PROMPT)} new prompts
                         </p>
-                      </CardContent>
-                      <CardFooter>
                         <Button
-                          className="w-full"
                           variant="outline"
                           size="sm"
+                          className="h-7 rounded-lg text-xs mt-3 w-full"
                           onClick={() => handleBuyCredits(pack)}
                           disabled={isLoading}
                         >
-                          {loadingPlanId === pack.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : null}
+                          {loadingPlanId === pack.id && (
+                            <Loader2 className="size-3 animate-spin mr-1.5" />
+                          )}
                           Buy
                         </Button>
-                      </CardFooter>
-                    </Card>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </>
-            )}
-          </TabsContent>
+              )}
+            </TabsContent>
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>
