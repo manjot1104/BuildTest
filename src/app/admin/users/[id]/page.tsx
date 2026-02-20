@@ -12,6 +12,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
 export default function UserDetailPage() {
@@ -20,7 +22,13 @@ const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [data, setData] = useState<any>(null);
 const [openDialog, setOpenDialog] = useState(false);
+  const [openAssignDialog, setOpenAssignDialog] = useState(false);
   const [loadingCancel, setLoadingCancel] = useState(false);
+  const [loadingAssign, setLoadingAssign] = useState(false);
+  const [assignForm, setAssignForm] = useState({
+    credits: "",
+    durationMonths: "1",
+  });
 
 const handleCancelSubscription = async () => {
   if (!id) return;
@@ -49,6 +57,67 @@ const handleCancelSubscription = async () => {
   } finally {
     setLoadingCancel(false);
     setOpenDialog(false);
+  }
+};
+
+const handleAssignSubscription = async () => {
+  if (!id) return;
+
+  const credits = parseInt(assignForm.credits);
+  const durationMonths = parseInt(assignForm.durationMonths);
+
+  if (isNaN(credits) || credits < 0) {
+    toast.error("Please enter a valid number of credits");
+    return;
+  }
+
+  if (isNaN(durationMonths) || durationMonths < 1) {
+    toast.error("Please enter a valid duration (minimum 1 month)");
+    return;
+  }
+
+  try {
+    setLoadingAssign(true);
+
+    const startDate = new Date();
+    const endDate = new Date();
+    endDate.setMonth(endDate.getMonth() + durationMonths);
+
+    const res = await fetch("/api/admin/subscription", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: id,
+        plan_id: "admin",
+        plan_name: "Admin Grant",
+        plan_price: 0,
+        credits_per_month: credits,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      }),
+    });
+
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || "Failed to assign subscription");
+    }
+
+    const updated = await fetch(`/api/admin/users/${id}`).then((r) =>
+      r.json()
+    );
+
+    setData(updated);
+
+    toast.success(
+      `Subscription assigned successfully! ${credits} credits granted for ${durationMonths} month(s).`
+    );
+
+    setAssignForm({ credits: "", durationMonths: "1" });
+    setOpenAssignDialog(false);
+  } catch (error: any) {
+    toast.error(error.message || "Failed to assign subscription");
+  } finally {
+    setLoadingAssign(false);
   }
 };
 
@@ -140,7 +209,12 @@ if (!data) return <p className="text-muted-foreground">Loading...</p>;
     </Card>
 
   </div>
-  <div className="mt-6">
+  <div className="mt-6 flex gap-4">
+  <Button
+  onClick={() => setOpenAssignDialog(true)}
+>
+  Assign Subscription
+</Button>
   <Button
   variant="destructive"
   onClick={() => setOpenDialog(true)}
@@ -175,6 +249,66 @@ if (!data) return <p className="text-muted-foreground">Loading...</p>;
     ))}
   </div>
 </div>
+<Dialog open={openAssignDialog} onOpenChange={setOpenAssignDialog}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Assign Subscription</DialogTitle>
+      <DialogDescription>
+        Manually assign a subscription to this user. This will cancel any existing subscription and grant the specified credits.
+      </DialogDescription>
+    </DialogHeader>
+
+    <div className="space-y-4 py-4">
+      <div className="space-y-2">
+        <Label htmlFor="credits">Credits</Label>
+        <Input
+          id="credits"
+          type="number"
+          min="0"
+          placeholder="Enter number of credits"
+          value={assignForm.credits}
+          onChange={(e) =>
+            setAssignForm({ ...assignForm, credits: e.target.value })
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Number of credits to grant to the user
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="duration">Duration (Months)</Label>
+        <Input
+          id="duration"
+          type="number"
+          min="1"
+          placeholder="Enter duration in months"
+          value={assignForm.durationMonths}
+          onChange={(e) =>
+            setAssignForm({ ...assignForm, durationMonths: e.target.value })
+          }
+        />
+        <p className="text-xs text-muted-foreground">
+          Subscription duration in months
+        </p>
+      </div>
+    </div>
+
+    <DialogFooter>
+      <Button
+        variant="outline"
+        onClick={() => setOpenAssignDialog(false)}
+        disabled={loadingAssign}
+      >
+        Cancel
+      </Button>
+      <Button onClick={handleAssignSubscription} disabled={loadingAssign}>
+        {loadingAssign ? "Assigning..." : "Assign Subscription"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+
 <Dialog open={openDialog} onOpenChange={setOpenDialog}>
   <DialogContent>
     <DialogHeader>
