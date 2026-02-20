@@ -1,9 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
     InputOTP,
@@ -27,13 +26,15 @@ import { useTheme } from 'next-themes'
 
 type AuthMode = 'email-password' | 'otp-email' | 'otp-verify'
 
-const fadeInUp = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] }
-}
-
 const OTP_COOLDOWN_SECONDS = 60
+
+const fadeIn: Variants = {
+    hidden: { opacity: 0 },
+    visible: (delay = 0) => ({
+        opacity: 1,
+        transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1], delay },
+    }),
+}
 
 export default function LoginPage() {
     const router = useRouter()
@@ -213,350 +214,322 @@ export default function LoginPage() {
         if (authMode === 'otp-verify') return `We sent a 6-digit code to ${email}`
         if (authMode === 'otp-email') return 'We\'ll send a one-time code to your email'
         return isLogin
-            ? 'Login to your Buildify account'
-            : 'Sign up for your Buildify account'
+            ? 'Sign in to your Buildify account'
+            : 'Get started with Buildify'
     }
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            {/* Background Elements */}
-            <div className="fixed inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear-gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
-            <motion.div
-                animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.2, 0.3, 0.2]
+            {/* Subtle grain */}
+            <div
+                className="fixed inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
                 }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed top-1/4 -left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[128px]"
-            />
-            <motion.div
-                animate={{
-                    scale: [1.2, 1, 1.2],
-                    opacity: [0.15, 0.25, 0.15]
-                }}
-                transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed bottom-1/4 -right-1/4 w-96 h-96 bg-purple-500/15 rounded-full blur-[128px]"
             />
 
             {/* Navigation */}
             <motion.nav
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="relative z-10 px-6 py-4"
+                variants={fadeIn}
+                initial="hidden"
+                animate="visible"
+                custom={0}
+                className="relative z-10 px-6 h-14 flex items-center"
             >
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
+                <div className="max-w-7xl w-full mx-auto flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2 group">
-                        <ArrowLeft className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <BuildifyLogo size="md" />
-                        <span className="font-semibold text-lg">Buildify</span>
+                        <ArrowLeft className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        <BuildifyLogo size="sm" />
+                        <span className="font-semibold text-sm tracking-tight">Buildify</span>
                     </Link>
-                    <Button
-                        variant="ghost"
-                        size="icon"
+                    <button
                         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="size-9"
+                        className="size-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
                     >
-                        <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                        <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                        <span className="sr-only">Toggle theme</span>
-                    </Button>
+                        <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                        <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    </button>
                 </div>
             </motion.nav>
 
             {/* Main Content */}
             <div className="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
                 <motion.div
-                    initial={{ opacity: 0, y: 40 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                    className="w-full max-w-md"
+                    variants={fadeIn}
+                    initial="hidden"
+                    animate="visible"
+                    custom={0.15}
+                    className="w-full max-w-sm"
                 >
-                    <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
-                        <CardContent className="p-8">
-                            {/* Auth method toggle */}
-                            <div className="flex rounded-lg bg-muted p-1 mb-6">
+                    {/* Auth method toggle */}
+                    <div className="flex rounded-full bg-muted/50 p-1 mb-10 border border-border/40">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAuthMode('email-password')
+                                setOtp('')
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition-all duration-300 ${
+                                !isOtpMode
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <KeyRound className="size-3" />
+                            Password
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setAuthMode('otp-email')
+                                setPassword('')
+                                setName('')
+                            }}
+                            className={`flex-1 flex items-center justify-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition-all duration-300 ${
+                                isOtpMode
+                                    ? 'bg-background text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <Mail className="size-3" />
+                            Email OTP
+                        </button>
+                    </div>
+
+                    {/* Password-based auth form */}
+                    {!isOtpMode && (
+                        <form onSubmit={handlePasswordSubmit}>
+                            <FieldGroup>
+                                <div className="flex flex-col items-center gap-1.5 text-center mb-8">
+                                    <h1 className="text-2xl font-bold tracking-tight">
+                                        {getTitle()}
+                                    </h1>
+                                    <p className="text-sm text-muted-foreground">
+                                        {getSubtitle()}
+                                    </p>
+                                </div>
+
+                                {!isLogin && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        exit={{ opacity: 0, height: 0 }}
+                                        transition={{ duration: 0.3 }}
+                                    >
+                                        <Field>
+                                            <FieldLabel htmlFor="name" className="text-xs font-medium text-muted-foreground">Name</FieldLabel>
+                                            <Input
+                                                id="name"
+                                                type="text"
+                                                placeholder="Enter your name"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                className="h-11 rounded-xl border-border/50 bg-muted/30 text-sm"
+                                            />
+                                        </Field>
+                                    </motion.div>
+                                )}
+
+                                <Field>
+                                    <FieldLabel htmlFor="email" className="text-xs font-medium text-muted-foreground">Email</FieldLabel>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        placeholder="you@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        className="h-11 rounded-xl border-border/50 bg-muted/30 text-sm"
+                                    />
+                                </Field>
+
+                                <Field>
+                                    <div className="flex items-center">
+                                        <FieldLabel htmlFor="password" className="text-xs font-medium text-muted-foreground">Password</FieldLabel>
+                                        {isLogin && (
+                                            <Link
+                                                href="/forgot-password"
+                                                className="ml-auto text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                            >
+                                                Forgot?
+                                            </Link>
+                                        )}
+                                    </div>
+                                    <Input
+                                        id="password"
+                                        type="password"
+                                        placeholder="Enter your password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        className="h-11 rounded-xl border-border/50 bg-muted/30 text-sm"
+                                    />
+                                </Field>
+
+                                <Field className="pt-3">
+                                    <Button
+                                        type="submit"
+                                        className="w-full h-11 rounded-xl text-sm font-medium"
+                                        disabled={isLoading}
+                                    >
+                                        {isLoading
+                                            ? 'Loading...'
+                                            : isLogin
+                                                ? 'Sign in'
+                                                : 'Create account'}
+                                    </Button>
+                                </Field>
+
+                                <FieldDescription className="text-center pt-4">
+                                    <span className="text-xs text-muted-foreground">
+                                        {isLogin ? (
+                                            <>
+                                                Don&apos;t have an account?{' '}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsLogin(false)}
+                                                    className="text-foreground font-medium hover:underline underline-offset-2"
+                                                >
+                                                    Sign up
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                Already have an account?{' '}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsLogin(true)}
+                                                    className="text-foreground font-medium hover:underline underline-offset-2"
+                                                >
+                                                    Sign in
+                                                </button>
+                                            </>
+                                        )}
+                                    </span>
+                                </FieldDescription>
+                            </FieldGroup>
+                        </form>
+                    )}
+
+                    {/* OTP email step */}
+                    {authMode === 'otp-email' && (
+                        <FieldGroup>
+                            <div className="flex flex-col items-center gap-1.5 text-center mb-8">
+                                <h1 className="text-2xl font-bold tracking-tight">{getTitle()}</h1>
+                                <p className="text-sm text-muted-foreground">{getSubtitle()}</p>
+                            </div>
+
+                            <Field>
+                                <FieldLabel htmlFor="otp-email" className="text-xs font-medium text-muted-foreground">Email</FieldLabel>
+                                <Input
+                                    id="otp-email"
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="h-11 rounded-xl border-border/50 bg-muted/30 text-sm"
+                                />
+                            </Field>
+
+                            <Field className="pt-3">
+                                <Button
+                                    type="button"
+                                    className="w-full h-11 rounded-xl text-sm font-medium"
+                                    disabled={isLoading || !email.trim()}
+                                    onClick={handleSendOTP}
+                                >
+                                    {isLoading ? 'Sending...' : 'Send code'}
+                                </Button>
+                            </Field>
+                        </FieldGroup>
+                    )}
+
+                    {/* OTP verify step */}
+                    {authMode === 'otp-verify' && (
+                        <FieldGroup>
+                            <div className="flex flex-col items-center gap-1.5 text-center mb-8">
+                                <h1 className="text-2xl font-bold tracking-tight">{getTitle()}</h1>
+                                <p className="text-sm text-muted-foreground">{getSubtitle()}</p>
+                            </div>
+
+                            <Field>
+                                <div className="flex justify-center">
+                                    <InputOTP
+                                        maxLength={6}
+                                        value={otp}
+                                        onChange={(value) => setOtp(value)}
+                                        onComplete={handleVerifyOTP}
+                                        disabled={isLoading}
+                                    >
+                                        <InputOTPGroup>
+                                            <InputOTPSlot index={0} />
+                                            <InputOTPSlot index={1} />
+                                            <InputOTPSlot index={2} />
+                                        </InputOTPGroup>
+                                        <InputOTPSeparator />
+                                        <InputOTPGroup>
+                                            <InputOTPSlot index={3} />
+                                            <InputOTPSlot index={4} />
+                                            <InputOTPSlot index={5} />
+                                        </InputOTPGroup>
+                                    </InputOTP>
+                                </div>
+                            </Field>
+
+                            <Field className="pt-3">
+                                <Button
+                                    type="button"
+                                    className="w-full h-11 rounded-xl text-sm font-medium"
+                                    disabled={isLoading || otp.length !== 6}
+                                    onClick={() => handleVerifyOTP(otp)}
+                                >
+                                    {isLoading ? 'Verifying...' : 'Verify & Sign In'}
+                                </Button>
+                            </Field>
+
+                            <div className="flex items-center justify-center gap-2 pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => {
-                                        setAuthMode('email-password')
-                                        setOtp('')
-                                    }}
-                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                                        !isOtpMode
-                                            ? 'bg-background text-foreground shadow-sm'
-                                            : 'text-muted-foreground hover:text-foreground'
-                                    }`}
+                                    onClick={handleResendOTP}
+                                    disabled={otpCooldown > 0 || isLoading}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
-                                    <KeyRound className="size-3.5" />
-                                    Password
+                                    {otpCooldown > 0
+                                        ? `Resend in ${otpCooldown}s`
+                                        : 'Resend code'}
                                 </button>
+                            </div>
+
+                            <FieldDescription className="text-center pt-2">
                                 <button
                                     type="button"
                                     onClick={() => {
                                         setAuthMode('otp-email')
-                                        setPassword('')
-                                        setName('')
+                                        setOtp('')
                                     }}
-                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                                        isOtpMode
-                                            ? 'bg-background text-foreground shadow-sm'
-                                            : 'text-muted-foreground hover:text-foreground'
-                                    }`}
+                                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                                 >
-                                    <Mail className="size-3.5" />
-                                    Email OTP
+                                    Use a different email
                                 </button>
-                            </div>
-
-                            {/* Password-based auth form */}
-                            {!isOtpMode && (
-                                <form onSubmit={handlePasswordSubmit}>
-                                    <FieldGroup>
-                                        <motion.div
-                                            variants={fadeInUp}
-                                            initial="initial"
-                                            animate="animate"
-                                            className="flex flex-col items-center gap-2 text-center mb-6"
-                                        >
-                                            <h1 className="text-2xl font-bold">
-                                                {getTitle()}
-                                            </h1>
-                                            <p className="text-muted-foreground text-sm">
-                                                {getSubtitle()}
-                                            </p>
-                                        </motion.div>
-
-                                        {!isLogin && (
-                                            <motion.div
-                                                initial={{ opacity: 0, height: 0 }}
-                                                animate={{ opacity: 1, height: 'auto' }}
-                                                exit={{ opacity: 0, height: 0 }}
-                                                transition={{ duration: 0.3 }}
-                                            >
-                                                <Field>
-                                                    <FieldLabel htmlFor="name">Name</FieldLabel>
-                                                    <Input
-                                                        id="name"
-                                                        type="text"
-                                                        placeholder="Enter your name"
-                                                        value={name}
-                                                        onChange={(e) => setName(e.target.value)}
-                                                        className="bg-background/50"
-                                                    />
-                                                </Field>
-                                            </motion.div>
-                                        )}
-
-                                        <Field>
-                                            <FieldLabel htmlFor="email">Email</FieldLabel>
-                                            <Input
-                                                id="email"
-                                                type="email"
-                                                placeholder="Enter your email"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                required
-                                                className="bg-background/50"
-                                            />
-                                        </Field>
-
-                                        <Field>
-                                            <div className="flex items-center">
-                                                <FieldLabel htmlFor="password">Password</FieldLabel>
-                                                {isLogin && (
-                                                    <Link
-                                                        href="/forgot-password"
-                                                        className="ml-auto text-sm text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors"
-                                                    >
-                                                        Forgot password?
-                                                    </Link>
-                                                )}
-                                            </div>
-                                            <Input
-                                                id="password"
-                                                type="password"
-                                                placeholder="Enter your password"
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                required
-                                                className="bg-background/50"
-                                            />
-                                        </Field>
-
-                                        <Field className="pt-2">
-                                            <Button
-                                                type="submit"
-                                                className="w-full h-11"
-                                                disabled={isLoading}
-                                            >
-                                                {isLoading
-                                                    ? 'Loading...'
-                                                    : isLogin
-                                                        ? 'Login'
-                                                        : 'Sign up'}
-                                            </Button>
-                                        </Field>
-
-                                        <FieldDescription className="text-center pt-4">
-                                            {isLogin ? (
-                                                <>
-                                                    Don&apos;t have an account?{' '}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setIsLogin(false)}
-                                                        className="text-primary underline underline-offset-2 hover:no-underline"
-                                                    >
-                                                        Sign up
-                                                    </button>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    Already have an account?{' '}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setIsLogin(true)}
-                                                        className="text-primary underline underline-offset-2 hover:no-underline"
-                                                    >
-                                                        Sign in
-                                                    </button>
-                                                </>
-                                            )}
-                                        </FieldDescription>
-                                    </FieldGroup>
-                                </form>
-                            )}
-
-                            {/* OTP email step */}
-                            {authMode === 'otp-email' && (
-                                <FieldGroup>
-                                    <motion.div
-                                        variants={fadeInUp}
-                                        initial="initial"
-                                        animate="animate"
-                                        className="flex flex-col items-center gap-2 text-center mb-6"
-                                    >
-                                        <h1 className="text-2xl font-bold">{getTitle()}</h1>
-                                        <p className="text-muted-foreground text-sm">{getSubtitle()}</p>
-                                    </motion.div>
-
-                                    <Field>
-                                        <FieldLabel htmlFor="otp-email">Email</FieldLabel>
-                                        <Input
-                                            id="otp-email"
-                                            type="email"
-                                            placeholder="Enter your email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="bg-background/50"
-                                        />
-                                    </Field>
-
-                                    <Field className="pt-2">
-                                        <Button
-                                            type="button"
-                                            className="w-full h-11"
-                                            disabled={isLoading || !email.trim()}
-                                            onClick={handleSendOTP}
-                                        >
-                                            {isLoading ? 'Sending...' : 'Send OTP'}
-                                        </Button>
-                                    </Field>
-                                </FieldGroup>
-                            )}
-
-                            {/* OTP verify step */}
-                            {authMode === 'otp-verify' && (
-                                <FieldGroup>
-                                    <motion.div
-                                        variants={fadeInUp}
-                                        initial="initial"
-                                        animate="animate"
-                                        className="flex flex-col items-center gap-2 text-center mb-6"
-                                    >
-                                        <h1 className="text-2xl font-bold">{getTitle()}</h1>
-                                        <p className="text-muted-foreground text-sm">{getSubtitle()}</p>
-                                    </motion.div>
-
-                                    <Field>
-                                        <div className="flex justify-center">
-                                            <InputOTP
-                                                maxLength={6}
-                                                value={otp}
-                                                onChange={(value) => setOtp(value)}
-                                                onComplete={handleVerifyOTP}
-                                                disabled={isLoading}
-                                            >
-                                                <InputOTPGroup>
-                                                    <InputOTPSlot index={0} />
-                                                    <InputOTPSlot index={1} />
-                                                    <InputOTPSlot index={2} />
-                                                </InputOTPGroup>
-                                                <InputOTPSeparator />
-                                                <InputOTPGroup>
-                                                    <InputOTPSlot index={3} />
-                                                    <InputOTPSlot index={4} />
-                                                    <InputOTPSlot index={5} />
-                                                </InputOTPGroup>
-                                            </InputOTP>
-                                        </div>
-                                    </Field>
-
-                                    <Field className="pt-2">
-                                        <Button
-                                            type="button"
-                                            className="w-full h-11"
-                                            disabled={isLoading || otp.length !== 6}
-                                            onClick={() => handleVerifyOTP(otp)}
-                                        >
-                                            {isLoading ? 'Verifying...' : 'Verify & Sign In'}
-                                        </Button>
-                                    </Field>
-
-                                    <div className="flex items-center justify-center gap-2 pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={handleResendOTP}
-                                            disabled={otpCooldown > 0 || isLoading}
-                                            className="text-sm text-primary underline underline-offset-2 hover:no-underline disabled:text-muted-foreground disabled:no-underline disabled:cursor-not-allowed"
-                                        >
-                                            {otpCooldown > 0
-                                                ? `Resend OTP in ${otpCooldown}s`
-                                                : 'Resend OTP'}
-                                        </button>
-                                    </div>
-
-                                    <FieldDescription className="text-center pt-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setAuthMode('otp-email')
-                                                setOtp('')
-                                            }}
-                                            className="text-primary underline underline-offset-2 hover:no-underline"
-                                        >
-                                            Use a different email
-                                        </button>
-                                    </FieldDescription>
-                                </FieldGroup>
-                            )}
-                        </CardContent>
-                    </Card>
+                            </FieldDescription>
+                        </FieldGroup>
+                    )}
 
                     <motion.p
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.5 }}
-                        className="text-center text-xs text-muted-foreground mt-6"
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate="visible"
+                        custom={0.4}
+                        className="text-center text-[11px] text-muted-foreground/60 mt-8 leading-relaxed"
                     >
                         By continuing, you agree to our{' '}
-                        <a href="/terms" className="underline underline-offset-2 hover:no-underline">
-                            Terms of Service
-                        </a>{' '}
+                        <Link href="/terms" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">
+                            Terms
+                        </Link>{' '}
                         and{' '}
-                        <a href="/terms#privacy" className="underline underline-offset-2 hover:no-underline">
+                        <Link href="/terms#privacy" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">
                             Privacy Policy
-                        </a>
+                        </Link>
                         .
                     </motion.p>
                 </motion.div>

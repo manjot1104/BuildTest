@@ -1,68 +1,88 @@
 'use client'
 
-import { motion } from 'framer-motion'
-import { ArrowLeft, ArrowRight, Sparkles, Zap, Users, Target, Heart, Code2, Globe, Moon, Sun } from 'lucide-react'
+import { motion, type Variants } from 'framer-motion'
+import { ArrowLeft, ArrowRight, Zap, Users, Target, Heart, Moon, Sun } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { Button } from '@/components/ui/button'
-import { Separator } from '@/components/ui/separator'
 import { Footer } from '@/components/layout/footer'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
 
+const fadeIn: Variants = {
+    hidden: { opacity: 0 },
+    visible: (delay = 0) => ({
+        opacity: 1,
+        transition: { duration: 0.8, ease: [0.25, 0.1, 0.25, 1], delay },
+    }),
+}
+
+const slideUp: Variants = {
+    hidden: { y: '100%' },
+    visible: (delay = 0) => ({
+        y: '0%',
+        transition: { duration: 0.8, ease: [0.77, 0, 0.175, 1], delay },
+    }),
+}
+
+function RevealText({ children, delay = 0, className = '' }: {
+    children: React.ReactNode
+    delay?: number
+    className?: string
+}) {
+    return (
+        <div className={`overflow-hidden ${className}`}>
+            <motion.div
+                variants={slideUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-80px' }}
+                custom={delay}
+            >
+                {children}
+            </motion.div>
+        </div>
+    )
+}
+
+function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+    return (
+        <motion.span
+            variants={fadeIn}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            custom={delay}
+            className="inline-block text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground/80"
+        >
+            {children}
+        </motion.span>
+    )
+}
+
 const values = [
     {
         icon: Zap,
         title: 'Speed',
         description: 'We believe in removing friction from the development process. What used to take days should take minutes.',
-        color: 'text-amber-500',
-        bg: 'bg-amber-500/10',
     },
     {
         icon: Users,
         title: 'Community',
         description: 'Great software is built together. Our community shares, forks, and improves on each other\'s work.',
-        color: 'text-blue-500',
-        bg: 'bg-blue-500/10',
     },
     {
         icon: Target,
         title: 'Quality',
-        description: 'AI-generated code should meet the same standards as hand-written code. We prioritize clean, secure, production-ready output.',
-        color: 'text-emerald-500',
-        bg: 'bg-emerald-500/10',
+        description: 'AI-generated code should meet the same standards as hand-written code. Clean, secure, production-ready.',
     },
     {
         icon: Heart,
         title: 'Accessibility',
         description: 'Everyone should be able to build software. We lower the barrier so ideas matter more than expertise.',
-        color: 'text-pink-500',
-        bg: 'bg-pink-500/10',
     },
 ]
-
-const stats = [
-    { value: '2K+', label: 'Developers', icon: Users },
-    { value: '100K+', label: 'Lines Generated', icon: Code2 },
-    { value: '20+', label: 'Languages', icon: Globe },
-    { value: '99.9%', label: 'Uptime', icon: Zap },
-]
-
-const staggerContainer = {
-    animate: {
-        transition: {
-            staggerChildren: 0.1,
-            delayChildren: 0.2,
-        },
-    },
-}
-
-const fadeInUp = {
-    initial: { opacity: 0, y: 30 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
-}
 
 export default function AboutPage() {
     const { theme, setTheme } = useTheme()
@@ -70,240 +90,231 @@ export default function AboutPage() {
     const router = useRouter()
 
     return (
-        <div className="min-h-screen bg-background flex flex-col">
-            {/* Background */}
-            <div className="fixed inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear-gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
-            <motion.div
-                animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed top-1/4 -left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[128px]"
-            />
-            <motion.div
-                animate={{ scale: [1.2, 1, 1.2], opacity: [0.1, 0.2, 0.1] }}
-                transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed bottom-1/4 -right-1/4 w-96 h-96 bg-purple-500/15 rounded-full blur-[128px]"
+        <div className="min-h-screen bg-background">
+            {/* Subtle grain */}
+            <div
+                className="fixed inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+                }}
             />
 
             {/* Navigation */}
             <motion.nav
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl"
+                variants={fadeIn}
+                initial="hidden"
+                animate="visible"
+                custom={0}
+                className="sticky top-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-2xl"
             >
-                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+                <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2 group">
-                        <ArrowLeft className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <BuildifyLogo size="md" />
-                        <span className="font-semibold text-lg">Buildify</span>
+                        <ArrowLeft className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        <BuildifyLogo size="sm" />
+                        <span className="font-semibold text-sm tracking-tight">Buildify</span>
                     </Link>
-                    <Button
-                        variant="ghost"
-                        size="icon"
+                    <button
                         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="size-9"
+                        className="size-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
                     >
-                        <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                        <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                        <span className="sr-only">Toggle theme</span>
-                    </Button>
+                        <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                        <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    </button>
                 </div>
             </motion.nav>
 
             {/* Hero */}
-            <section className="relative z-10 py-24 md:py-32 px-6">
-                <motion.div
-                    variants={staggerContainer}
-                    initial="initial"
-                    animate="animate"
-                    className="max-w-4xl mx-auto text-center space-y-6"
-                >
-                    <motion.div
-                        variants={fadeInUp}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-background/50 backdrop-blur-sm"
-                    >
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
-                        </span>
-                        <span className="text-sm text-muted-foreground">Our Story</span>
-                    </motion.div>
-
-                    <motion.h1
-                        variants={fadeInUp}
-                        className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
-                    >
-                        <span className="block">Building the future of</span>
-                        <span className="block mt-2 bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                            app development
-                        </span>
-                    </motion.h1>
-
+            <section className="relative py-28 md:py-36 px-6">
+                <div className="max-w-3xl mx-auto">
+                    <SectionLabel>About</SectionLabel>
+                    <div className="mt-4 space-y-2">
+                        <RevealText delay={0.1}>
+                            <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-[0.95]">
+                                Building the future
+                            </h1>
+                        </RevealText>
+                        <RevealText delay={0.2}>
+                            <h1 className="text-4xl md:text-6xl font-bold tracking-tight leading-[0.95] text-muted-foreground/40">
+                                of app development.
+                            </h1>
+                        </RevealText>
+                    </div>
                     <motion.p
-                        variants={fadeInUp}
-                        className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate="visible"
+                        custom={0.5}
+                        className="mt-8 text-base text-muted-foreground leading-relaxed max-w-xl"
                     >
-                        We believe anyone should be able to turn an idea into a working application — no matter their experience level.
+                        We believe anyone should be able to turn an idea into a working
+                        application — no matter their experience level.
                     </motion.p>
-                </motion.div>
+                </div>
             </section>
 
             {/* Stats */}
-            <section className="relative z-10 px-6 pb-20">
-                <div className="max-w-4xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5 }}
-                        className="grid grid-cols-2 md:grid-cols-4 gap-4"
-                    >
-                        {stats.map((stat, index) => (
-                            <motion.div
-                                key={stat.label}
-                                initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.4, delay: index * 0.1 }}
-                                className="relative rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 text-center"
-                            >
-                                <stat.icon className="size-5 text-primary mx-auto mb-3" />
-                                <p className="text-3xl md:text-4xl font-bold">{stat.value}</p>
-                                <p className="text-sm text-muted-foreground mt-1">{stat.label}</p>
-                            </motion.div>
+            <section className="relative border-y border-border/40">
+                <div className="max-w-5xl mx-auto px-6 py-16">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                        {[
+                            { value: '2K+', label: 'Developers' },
+                            { value: '100K+', label: 'Lines Generated' },
+                            { value: '20+', label: 'Languages' },
+                            { value: '99.9%', label: 'Uptime' },
+                        ].map((stat, i) => (
+                            <RevealText key={i} delay={i * 0.08}>
+                                <div className="text-center">
+                                    <div className="text-3xl md:text-4xl font-bold tracking-tight">{stat.value}</div>
+                                    <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground mt-1">{stat.label}</div>
+                                </div>
+                            </RevealText>
                         ))}
-                    </motion.div>
+                    </div>
                 </div>
             </section>
 
             {/* Mission */}
-            <section className="relative z-10 py-20 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0, y: 30 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.6 }}
-                        className="grid md:grid-cols-2 gap-12 items-center"
-                    >
-                        {/* Left: heading */}
+            <section className="relative py-32 md:py-40 px-6">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid md:grid-cols-2 gap-20 md:gap-32 items-start">
+                        {/* Left */}
                         <div>
-                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border/50 bg-background/50 backdrop-blur-sm mb-6">
-                                <Sparkles className="size-3.5 text-primary" />
-                                <span className="text-xs font-medium text-muted-foreground">Our Mission</span>
-                            </div>
-                            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
-                                Software creation, <span className="text-primary">reimagined</span>
-                            </h2>
-                            <p className="text-muted-foreground leading-relaxed">
-                                Building software is still too hard and too slow for most people. We built Buildify to change that.
-                            </p>
+                            <SectionLabel>Our Mission</SectionLabel>
+                            <RevealText delay={0.1} className="mt-4">
+                                <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1]">
+                                    Software creation, reimagined.
+                                </h2>
+                            </RevealText>
+                            <motion.p
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-80px' }}
+                                custom={0.3}
+                                className="mt-6 text-sm text-muted-foreground leading-relaxed"
+                            >
+                                Building software is still too hard and too slow for most people.
+                                We built Buildify to change that.
+                            </motion.p>
                         </div>
 
-                        {/* Right: cards */}
-                        <div className="space-y-4">
+                        {/* Right */}
+                        <motion.div
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.2}
+                            className="space-y-6"
+                        >
                             {[
                                 {
+                                    step: '01',
                                     title: 'The Problem',
                                     body: 'While AI has made incredible advances, turning those capabilities into practical tools that developers actually want to use requires a different approach.',
                                 },
                                 {
+                                    step: '02',
                                     title: 'Our Solution',
                                     body: 'A conversational interface where you describe what you want and get production-ready code in return — whether you\'re a seasoned developer or just starting out.',
                                 },
                                 {
+                                    step: '03',
                                     title: 'The Technology',
-                                    body: 'Our platform is powered by advanced AI that understands context, follows best practices, and generates clean, deployable code across 20+ languages and frameworks.',
+                                    body: 'Our platform is powered by advanced AI that understands context, follows best practices, and generates clean, deployable code across 20+ languages.',
                                 },
-                            ].map((card, index) => (
-                                <motion.div
-                                    key={card.title}
-                                    initial={{ opacity: 0, x: 20 }}
-                                    whileInView={{ opacity: 1, x: 0 }}
-                                    viewport={{ once: true }}
-                                    transition={{ duration: 0.4, delay: index * 0.15 }}
-                                    className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-5"
-                                >
-                                    <h3 className="font-semibold mb-2">{card.title}</h3>
-                                    <p className="text-sm text-muted-foreground leading-relaxed">{card.body}</p>
-                                </motion.div>
+                            ].map((item) => (
+                                <div key={item.step} className="flex gap-5">
+                                    <span className="text-xs font-mono text-muted-foreground/50 mt-1 shrink-0">{item.step}</span>
+                                    <div>
+                                        <h3 className="text-base font-semibold mb-1">{item.title}</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">{item.body}</p>
+                                    </div>
+                                </div>
                             ))}
-                        </div>
-                    </motion.div>
+                        </motion.div>
+                    </div>
                 </div>
             </section>
 
             {/* Values */}
-            <section className="relative z-10 py-20 px-6">
-                <div className="max-w-5xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        transition={{ duration: 0.5 }}
-                        className="text-center mb-12"
-                    >
-                        <h2 className="text-3xl md:text-4xl font-bold mb-4">What we value</h2>
-                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                            The principles that guide everything we build.
-                        </p>
-                    </motion.div>
+            <section className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-6xl mx-auto">
+                    <div className="max-w-xl mb-20">
+                        <SectionLabel>Values</SectionLabel>
+                        <RevealText delay={0.1} className="mt-4">
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                                What we believe in.
+                            </h2>
+                        </RevealText>
+                    </div>
 
-                    <div className="grid sm:grid-cols-2 gap-6">
+                    <div className="grid sm:grid-cols-2 gap-px bg-border/50 rounded-2xl overflow-hidden border border-border/50">
                         {values.map((value, index) => (
                             <motion.div
                                 key={value.title}
-                                initial={{ opacity: 0, y: 30 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
-                                whileHover={{ y: -4 }}
-                                className="group rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 transition-colors hover:border-border"
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-60px' }}
+                                custom={index * 0.08}
+                                className="group bg-background p-8 md:p-10 transition-colors duration-300 hover:bg-muted/30"
                             >
-                                <div className={`size-12 rounded-xl ${value.bg} flex items-center justify-center mb-4 transition-colors`}>
-                                    <value.icon className={`size-6 ${value.color}`} />
+                                <div className="flex items-start gap-4">
+                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-primary/10">
+                                        <value.icon className="size-5 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-semibold mb-1.5">{value.title}</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">{value.description}</p>
+                                    </div>
                                 </div>
-                                <h3 className="text-xl font-semibold mb-2">{value.title}</h3>
-                                <p className="text-muted-foreground leading-relaxed">{value.description}</p>
                             </motion.div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            <Separator className="relative z-10 max-w-5xl mx-auto bg-border/40" />
-
             {/* CTA */}
-            <section className="relative z-10 py-24 px-6">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5 }}
-                    className="max-w-2xl mx-auto text-center"
-                >
-                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-background/50 backdrop-blur-sm mb-6">
-                        <Sparkles className="size-4 text-primary" />
-                        <span className="text-sm text-muted-foreground">Get Started</span>
-                    </div>
-                    <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to start building?</h2>
-                    <p className="text-lg text-muted-foreground mb-8">
-                        Join thousands of developers using Buildify to ship faster.
-                    </p>
-                    <Button
-                        size="lg"
-                        className="h-12 px-8 text-base gap-2 group"
-                        onClick={() => router.push(session?.user ? '/chat' : '/login')}
+            <section className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-3xl mx-auto text-center">
+                    <SectionLabel>Get started</SectionLabel>
+                    <RevealText delay={0.1} className="mt-4">
+                        <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                            Ready to start building?
+                        </h2>
+                    </RevealText>
+                    <motion.p
+                        variants={fadeIn}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-80px' }}
+                        custom={0.3}
+                        className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
-                        {session?.user ? 'Go to Chat' : 'Get Started Free'}
-                        <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                    </Button>
-                </motion.div>
+                        Join thousands of developers shipping faster with AI-powered code generation.
+                    </motion.p>
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-60px' }}
+                        custom={0.5}
+                        className="mt-10"
+                    >
+                        <Button
+                            size="lg"
+                            onClick={() => router.push(session?.user ? '/chat' : '/login')}
+                            className="rounded-full h-12 px-8 text-sm font-medium gap-2 group"
+                        >
+                            {session?.user ? 'Open App' : 'Get Started Free'}
+                            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                        </Button>
+                    </motion.div>
+                </div>
             </section>
 
-            <div className="relative z-10">
-                <Footer />
-            </div>
+            <Footer />
         </div>
     )
 }
