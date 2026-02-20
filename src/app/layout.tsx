@@ -21,10 +21,11 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable}`} suppressHydrationWarning>
       <body>
-        <RootProvider>
-          {children}
-        </RootProvider>
-      </body>
+  <RootProvider>
+    {children}
+   
+  </RootProvider>
+</body>
     </html>
   );
 }

@@ -3,12 +3,54 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function UserDetailPage() {
   const params = useParams();
 const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [data, setData] = useState<any>(null);
+const [openDialog, setOpenDialog] = useState(false);
+  const [loadingCancel, setLoadingCancel] = useState(false);
+
+const handleCancelSubscription = async () => {
+  if (!id) return;
+
+  try {
+    setLoadingCancel(true);
+
+    const res = await fetch("/api/admin/subscription", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId: id }),
+    });
+
+    if (!res.ok) throw new Error();
+
+    const updated = await fetch(`/api/admin/users/${id}`).then((r) =>
+      r.json()
+    );
+
+    setData(updated);
+
+    toast("Subscription cancelled successfully");
+
+  } catch {
+    toast("Failed to cancel subscription");
+  } finally {
+    setLoadingCancel(false);
+    setOpenDialog(false);
+  }
+};
 
   useEffect(() => {
   if (!id) return;
@@ -98,6 +140,14 @@ if (!data) return <p className="text-muted-foreground">Loading...</p>;
     </Card>
 
   </div>
+  <div className="mt-6">
+  <Button
+  variant="destructive"
+  onClick={() => setOpenDialog(true)}
+>
+  Cancel Subscription
+</Button>
+</div>
 </div>
    {/* Chats Section */}
 <div>
@@ -125,7 +175,30 @@ if (!data) return <p className="text-muted-foreground">Loading...</p>;
     ))}
   </div>
 </div>
+<Dialog open={openDialog} onOpenChange={setOpenDialog}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Cancel Subscription</DialogTitle>
+      <DialogDescription>
+        Are you sure you want to cancel this user's subscription?
+        This will remove all subscription credits.
+      </DialogDescription>
+    </DialogHeader>
 
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setOpenDialog(false)}>
+        Cancel
+      </Button>
+      <Button
+        variant="destructive"
+        onClick={handleCancelSubscription}
+        disabled={loadingCancel}
+      >
+        {loadingCancel ? "Cancelling..." : "Confirm"}
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
   </div>
 );
 
