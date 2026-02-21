@@ -52,3 +52,37 @@ export type {
   VerifyPaymentResponse,
   CancelSubscriptionResponse,
 } from './use-payment-mutations'
+
+// Admin Query hooks
+export {
+  useAdminStats,
+  useAdminUsers,
+  useAdminUserDetail,
+} from './use-admin-queries'
+
+// Admin Mutation hooks
+export {
+  useAssignSubscription,
+  useCancelUserSubscription,
+  useAddCredits,
+  useDeductCredits,
+  useToggleUserRole,
+} from './use-admin-mutations'
+
+// Re-export types from admin hooks
+export type {
+  AdminUser,
+  AdminUserCredits,
+  AdminUserChat,
+  AdminActiveSubscription,
+  AdminUserDetail,
+  AdminDashboardStats,
+} from './use-admin-queries'
+
+export type {
+  AssignSubscriptionRequest,
+  CancelUserSubscriptionRequest,
+  AddCreditsRequest,
+  DeductCreditsRequest,
+  ToggleUserRoleRequest,
+} from './use-admin-mutations'

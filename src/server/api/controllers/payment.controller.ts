@@ -40,10 +40,11 @@ import type { ApiErrorResponse } from "@/types/api.types";
 
 /**
  * Get all available plans and packs
+ * Admin plans are excluded from user-facing endpoints
  */
 export async function getPlansHandler() {
   return {
-    subscriptionPlans: getAllSubscriptionPlans(),
+    subscriptionPlans: getAllSubscriptionPlans(false), // Exclude admin plans
     creditPacks: getAllCreditPacks(),
   };
 }
@@ -72,7 +73,7 @@ export async function getLocalizedPlansHandler({
   }
 
   return {
-    subscriptionPlans: getAllLocalizedSubscriptionPlans(currency),
+    subscriptionPlans: getAllLocalizedSubscriptionPlans(currency, false), // Exclude admin plans
     creditPacks: getAllLocalizedCreditPacks(currency),
     currency,
     availableCurrencies: getAllCurrencies(),
@@ -143,6 +144,11 @@ export async function createSubscriptionOrderHandler({
 
   if (!plan) {
     return { error: "Invalid plan ID", status: 400 };
+  }
+
+  // Security: Prevent admin plans from being purchased through normal flow
+  if ("adminOnly" in plan && plan.adminOnly) {
+    return { error: "This plan cannot be purchased", status: 403 };
   }
 
   // Check if user already has an active subscription
