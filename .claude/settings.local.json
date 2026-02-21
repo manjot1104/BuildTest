@@ -30,7 +30,8 @@
       "Bash(bun install:*)",
       "Bash(bun -e \":*)",
       "Bash(bun -e:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
