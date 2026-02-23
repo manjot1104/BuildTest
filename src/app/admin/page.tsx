@@ -7,7 +7,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, MessageSquare, CreditCard, Coins } from "lucide-react";
+import {
+  Users,
+  MessageSquare,
+  CreditCard,
+  Coins,
+} from "lucide-react";
+
 import { useAdminStats } from "@/client-api/query-hooks/use-admin-queries";
 
 export default function AdminDashboard() {
