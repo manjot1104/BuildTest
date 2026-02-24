@@ -56,7 +56,7 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
   <div className="space-y-8">
     {/* Header */}
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">
+      <h1 className="text-3xl font-bold tracking-tight">
         Payments Analytics
       </h1>
       <p className="text-sm text-muted-foreground">
@@ -99,7 +99,8 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
                 {isLoading ? (
                   <Skeleton className="h-8 w-24" />
                 ) : (
-                  <p className="text-2xl font-semibold">
+                  <p className="text-3xl font-bold tracking-tight
+                  ">
                     {item.label === "Failed Payments"
                       ? item.value
                       : `₹ ${item.value.toLocaleString()}`}
@@ -257,33 +258,37 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
      <TabsContent value="usage" className="space-y-6">
 
   {/* Usage Summary Cards */}
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">
-          Total Chats
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold">
-          {usage?.totalChats ?? 0}
-        </p>
-      </CardContent>
-    </Card>
+  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-sm text-muted-foreground">
+        Total Chats (Sessions)
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-3xl font-bold tracking-tight">
+        {usage?.totalChats ?? 0}
+      </p>
+    </CardContent>
+  </Card>
 
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm text-muted-foreground">
-          Total Credits Used
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-2xl font-semibold">
-          {usage?.totalCreditsUsed ?? 0}
-        </p>
-      </CardContent>
-    </Card>
-  </div>
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-sm text-muted-foreground">
+        Total Prompts
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-3xl font-bold tracking-tight">
+        {usage?.totalPrompts ?? 0}
+      </p>
+    </CardContent>
+  </Card>
+
+
+</div>
+
+    
 
   {/* Monthly Chats Graph */}
   <Card>

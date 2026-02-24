@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
+import { credit_usage_logs } from "@/server/db/schema";
 import {
   payment_transactions,
   user,
@@ -109,18 +110,19 @@ export async function GET() {
     // ==========================
 
     const totalChatsResult = await db
-      .select({
-        count: sql<number>`COUNT(*)`,
-      })
-      .from(user_chats);
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(user_chats)
 
-    const totalCreditsUsedResult = await db
-      .select({
-        value: sql<number>`
-          COALESCE(SUM(subscription_credits + additional_credits), 0)
-        `,
-      })
-      .from(user_credits);
+   const totalPromptsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(credit_usage_logs)
+  .where(
+    sql`${credit_usage_logs.action} IN ('new_prompt', 'follow_up_prompt')`
+  )
 
     const topUsers = await db
       .select({
@@ -157,8 +159,9 @@ export async function GET() {
       transactions,
       monthlyRevenue,
       usageAnalytics: {
-        totalChats: totalChatsResult[0]?.count ?? 0,
-        totalCreditsUsed: totalCreditsUsedResult[0]?.value ?? 0,
+       totalChats: totalChatsResult[0]?.count ?? 0,
+  totalPrompts: totalPromptsResult[0]?.count ?? 0,
+       
         topUsers,
         monthlyChats,
       },
