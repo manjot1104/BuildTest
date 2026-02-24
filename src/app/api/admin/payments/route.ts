@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { credit_usage_logs } from "@/server/db/schema";
+import { demo_visits } from "@/server/db/schema";
 import {
   payment_transactions,
   user,
@@ -64,6 +65,7 @@ export async function GET() {
         user_email: user.email,
         subscription_credits: user_credits.subscription_credits,
         additional_credits: user_credits.additional_credits,
+        user_id: subscriptions.user_id,
       })
       .from(subscriptions)
       .leftJoin(user, eq(user.id, subscriptions.user_id))
@@ -144,6 +146,30 @@ export async function GET() {
       .groupBy(sql`TO_CHAR(${user_chats.created_at}, 'Mon YYYY')`)
       .orderBy(sql`MIN(${user_chats.created_at})`);
 
+      // ==========================
+// DEMO VISITS ANALYTICS
+// ==========================
+
+const totalDemoVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits);
+
+const featuredVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .where(eq(demo_visits.demo_type, "featured"));
+
+const communityVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .where(eq(demo_visits.demo_type, "community"));
+
     // ==========================
     // FINAL RETURN
     // ==========================
@@ -159,12 +185,16 @@ export async function GET() {
       transactions,
       monthlyRevenue,
       usageAnalytics: {
-       totalChats: totalChatsResult[0]?.count ?? 0,
+  totalChats: totalChatsResult[0]?.count ?? 0,
   totalPrompts: totalPromptsResult[0]?.count ?? 0,
-       
-        topUsers,
-        monthlyChats,
-      },
+
+  totalDemoVisits: totalDemoVisitsResult[0]?.count ?? 0,
+  featuredVisits: featuredVisitsResult[0]?.count ?? 0,
+  communityVisits: communityVisitsResult[0]?.count ?? 0,
+
+  topUsers,
+  monthlyChats,
+}
     });
   } catch (error) {
     console.error("Payments module error:", error);

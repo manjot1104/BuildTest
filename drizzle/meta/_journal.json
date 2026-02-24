@@ -57,6 +57,13 @@
       "when": 1771561040216,
       "tag": "0007_faithful_ted_forrester",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1771915341920,
+      "tag": "0008_wakeful_cammi",
+      "breakpoints": true
     }
   ]
 }

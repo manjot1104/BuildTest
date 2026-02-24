@@ -38,11 +38,20 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { IndianRupee } from "lucide-react";
 import { useAdminPayments } from "@/client-api/query-hooks/use-admin-payments";
+import { useQuery } from "@tanstack/react-query";
 
 export default function PaymentsPage() {
-  
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [subscriptionSearch, setSubscriptionSearch] = useState("");
   const { data, isLoading, error } = useAdminPayments();
+  const { data: userStats } = useQuery({
+  queryKey: ["user-usage", selectedUser],
+  queryFn: async () => {
+    const res = await fetch(`/api/admin/user-usage?userId=${selectedUser}`);
+    return res.json();
+  },
+  enabled: !!selectedUser,
+});
 const monthlyRevenue = data?.monthlyRevenue ?? [];
   const summary = data?.summary;
   const activeSubscriptions = data?.activeSubscriptions ?? [];
@@ -256,9 +265,28 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
 
       {/* ================= USAGE TAB ================= */}
      <TabsContent value="usage" className="space-y-6">
-
+<Card>
+  <CardHeader>
+    <CardTitle>Select User</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <select
+      className="w-full p-2 bg-black border rounded"
+      onChange={(e) => setSelectedUser(e.target.value)}
+      value={selectedUser ?? ""}
+    >
+      <option value="">Select a user</option>
+      {activeSubscriptions.map((sub: any) => (
+        <option key={sub.user_id} value={sub.user_id}>
+  {sub.user_email}
+</option>
+      ))}
+    </select>
+  </CardContent>
+</Card>
   {/* Usage Summary Cards */}
-  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+ <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
   <Card>
     <CardHeader>
       <CardTitle className="text-sm text-muted-foreground">
@@ -275,6 +303,46 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
   <Card>
     <CardHeader>
       <CardTitle className="text-sm text-muted-foreground">
+        Total Demo Visits
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-3xl font-bold tracking-tight">
+        {usage?.totalDemoVisits ?? 0}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-sm text-muted-foreground">
+        Featured Visits
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-3xl font-bold tracking-tight">
+        {usage?.featuredVisits ?? 0}
+      </p>
+    </CardContent>
+  </Card>
+
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-sm text-muted-foreground">
+        Community Visits
+      </CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p className="text-3xl font-bold tracking-tight">
+        {usage?.communityVisits ?? 0}
+      </p>
+    </CardContent>
+  </Card>
+
+
+  <Card>
+    <CardHeader>
+      <CardTitle className="text-sm text-muted-foreground">
         Total Prompts
       </CardTitle>
     </CardHeader>
@@ -284,6 +352,36 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
       </p>
     </CardContent>
   </Card>
+
+  {selectedUser && (
+  <Card>
+    <CardHeader>
+      <CardTitle>User Demo Visits</CardTitle>
+    </CardHeader>
+    <CardContent className="grid grid-cols-3 gap-4">
+      <div>
+        <h4>Total</h4>
+        <p className="text-2xl font-bold">
+          {userStats?.totalDemoVisits ?? 0}
+        </p>
+      </div>
+
+      <div>
+        <h4>Featured</h4>
+        <p className="text-2xl font-bold">
+          {userStats?.featuredVisits ?? 0}
+        </p>
+      </div>
+
+      <div>
+        <h4>Community</h4>
+        <p className="text-2xl font-bold">
+          {userStats?.communityVisits ?? 0}
+        </p>
+      </div>
+    </CardContent>
+  </Card>
+)}
 
 
 </div>
