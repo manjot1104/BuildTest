@@ -55,6 +55,7 @@ const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] = useState<"chats" | "prompts" | "demo">("chats");
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [subscriptionSearch, setSubscriptionSearch] = useState("");
+  const [userSearch, setUserSearch] = useState("");
   const { data, isLoading, error } = useAdminPayments();
   const { data: userStats } = useQuery({
   queryKey: ["user-usage", selectedUser],
@@ -70,6 +71,9 @@ const monthlyRevenue = data?.monthlyRevenue ?? [];
 const usage = data?.usageAnalytics;
 const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
   sub.user_email?.toLowerCase().includes(subscriptionSearch.toLowerCase())
+);
+const filteredUsers = usersUsage?.filter((u: any) =>
+  u.email?.toLowerCase().includes(userSearch.toLowerCase())
 );
 
 
@@ -422,9 +426,19 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
   </div>
 
   {/* ===== USER ANALYTICS ===== */}
- <Card>
-  <CardHeader>
+<Card>
+  <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <CardTitle>User Analytics</CardTitle>
+
+    <div className="relative w-full sm:w-72">
+      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        placeholder="Search your email..."
+        value={userSearch}
+        onChange={(e) => setUserSearch(e.target.value)}
+        className="pl-9"
+      />
+    </div>
   </CardHeader>
 
   <CardContent>
@@ -439,7 +453,7 @@ const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
       </TableHeader>
 
       <TableBody>
-        {usersUsage?.map((u: any) => (
+       {filteredUsers?.map((u: any) => (
           <>
             <TableRow
               key={u.id}
