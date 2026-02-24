@@ -146,6 +146,27 @@ export async function GET() {
       .groupBy(sql`TO_CHAR(${user_chats.created_at}, 'Mon YYYY')`)
       .orderBy(sql`MIN(${user_chats.created_at})`);
 
+      const monthlyPrompts = await db
+  .select({
+    month: sql<string>`TO_CHAR(${credit_usage_logs.created_at}, 'Mon YYYY')`,
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(credit_usage_logs)
+  .where(
+    sql`${credit_usage_logs.action} IN ('new_prompt', 'follow_up_prompt')`
+  )
+  .groupBy(sql`TO_CHAR(${credit_usage_logs.created_at}, 'Mon YYYY')`)
+  .orderBy(sql`MIN(${credit_usage_logs.created_at})`);
+
+  const monthlyDemoVisits = await db
+  .select({
+    month: sql<string>`TO_CHAR(${demo_visits.visited_at}, 'Mon YYYY')`,
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .groupBy(sql`TO_CHAR(${demo_visits.visited_at}, 'Mon YYYY')`)
+  .orderBy(sql`MIN(${demo_visits.visited_at})`);
+
       // ==========================
 // DEMO VISITS ANALYTICS
 // ==========================
@@ -194,6 +215,8 @@ const communityVisitsResult = await db
 
   topUsers,
   monthlyChats,
+  monthlyPrompts,
+  monthlyDemoVisits,
 }
     });
   } catch (error) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
-import { demo_visits } from "@/server/db/schema";
+import { demo_visits, user_chats, credit_usage_logs } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function GET(request: Request) {
@@ -15,32 +15,33 @@ export async function GET(request: Request) {
       );
     }
 
-    const total = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(demo_visits)
-      .where(eq(demo_visits.owner_user_id, userId));
-
-    const featured = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(demo_visits)
-      .where(
-        sql`${demo_visits.owner_user_id} = ${userId} 
-            AND ${demo_visits.demo_type} = 'featured'`
-      );
-
+    // 🔹 Demo Visits (Community only)
     const community = await db
       .select({ count: sql<number>`COUNT(*)` })
       .from(demo_visits)
       .where(
-        sql`${demo_visits.owner_user_id} = ${userId} 
+        sql`${demo_visits.owner_user_id} = ${userId}
             AND ${demo_visits.demo_type} = 'community'`
       );
 
+    // 🔹 Chats Count
+    const chats = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(user_chats)
+      .where(eq(user_chats.user_id, userId));
+
+    // 🔹 Prompts Count (from credit usage logs)
+    const prompts = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(credit_usage_logs)
+      .where(eq(credit_usage_logs.user_id, userId));
+
     return NextResponse.json({
-      totalDemoVisits: total[0]?.count ?? 0,
-      featuredVisits: featured[0]?.count ?? 0,
+      totalChats: chats[0]?.count ?? 0,
+      totalPrompts: prompts[0]?.count ?? 0,
       communityVisits: community[0]?.count ?? 0,
     });
+
   } catch (error) {
     console.error("User usage error:", error);
     return NextResponse.json(
