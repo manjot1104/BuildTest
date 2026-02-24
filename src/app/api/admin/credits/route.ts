@@ -328,8 +328,8 @@ export async function GET(request: NextRequest) {
     // RETURN RESPONSE
     // ==============================
 
-    const totalCreditsUsed = totalCreditsUsedResult[0]?.value ?? 0;
-    const totalCreditsRemaining = totalCreditsRemainingResult[0]?.value ?? 0;
+    const totalCreditsUsed = Number(totalCreditsUsedResult[0]?.value ?? 0);
+    const totalCreditsRemaining = Number(totalCreditsRemainingResult[0]?.value ?? 0);
     // Define "Issued" as credits that were available to be spent (Used + Remaining).
     // This avoids confusing situations where "issued" appears lower than "used" because
     // subscription credit grants aren't represented in payment_transactions.
