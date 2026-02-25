@@ -6,7 +6,7 @@ import {
     MessageSquare,
     Settings2,
     SquareTerminal,
-    Globe,
+    BrainCircuit,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -37,10 +37,10 @@ const buildNavItems = (
         icon: MessageSquare,
     },
     {
-    title: "OpenRouter Chat",
-    url: "/openrouter-chat",
-    icon: Globe,
-},
+        title: "AI Chat",
+        url: "/ai-chat",
+        icon: BrainCircuit,
+    },
     {
         title: "Chat",
         url: "#",
