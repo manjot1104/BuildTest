@@ -69,13 +69,22 @@ export default function LoginFormClient() {
     }, [])
 
     const handleRedirectAfterLogin = useCallback(() => {
-        const stored = localStorage.getItem('buildify_return_to')
-        if (stored) {
-            router.push(stored)
+        try {
+            const raw = localStorage.getItem('buildify_return_to')
+            if (raw) {
+                // The return-to context stores values via JSON.stringify,
+                // so we need JSON.parse to get the actual path string.
+                const path = JSON.parse(raw) as string
+                localStorage.removeItem('buildify_return_to')
+                if (typeof path === 'string' && path.startsWith('/')) {
+                    router.push(path)
+                    return
+                }
+            }
+        } catch {
             localStorage.removeItem('buildify_return_to')
-        } else {
-            router.push('/chat')
         }
+        router.push('/chat')
     }, [router])
 
     const handleSendOTP = async () => {

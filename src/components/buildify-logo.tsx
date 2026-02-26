@@ -1,6 +1,6 @@
 import { type SVGProps } from "react"
 
-type LogoSize = "sm" | "md" | "lg"
+type LogoSize = "sm" | "md" | "lg" | "xl"
 
 interface BuildifyLogoProps extends Omit<SVGProps<SVGSVGElement>, "children"> {
   size?: LogoSize
@@ -10,6 +10,7 @@ const sizeConfig = {
   sm: { width: 20, height: 18, paneW: 12, paneH: 10, stroke: 1.5, rx: 2, offsetX: 4, offsetY: 3 },
   md: { width: 28, height: 26, paneW: 17, paneH: 15, stroke: 2, rx: 3, offsetX: 5, offsetY: 5 },
   lg: { width: 38, height: 34, paneW: 22, paneH: 20, stroke: 2, rx: 4, offsetX: 7, offsetY: 6 },
+  xl: { width: 52, height: 46, paneW: 30, paneH: 27, stroke: 2.5, rx: 5, offsetX: 10, offsetY: 8 },
 } as const
 
 /**

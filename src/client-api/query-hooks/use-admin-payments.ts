@@ -4,8 +4,10 @@ export function useAdminPayments() {
   return useQuery({
     queryKey: ["admin-payments"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/payments-overview");
-      if (!res.ok) throw new Error("Failed to fetch payments overview");
+      const res = await fetch("/api/admin/payments");
+      if (!res.ok) {
+        throw new Error("Failed to fetch payments");
+      }
       return res.json();
     },
   });

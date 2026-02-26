@@ -21,72 +21,48 @@ import { useTheme } from "next-themes"
 import { useStateMachine } from "@/context/state-machine"
 
 export function NavMain({
-  items,
-  onStarredClick,
+    items,
+    onStarredClick: _onStarredClick,
 }: {
-  items: {
-    title: string
-    url?: string
-    icon?: LucideIcon
-    isActive?: boolean
-    items?: {
-      title: string
-      url?: string
-      onClick?: () => void
+    items: {
+        title: string
+        url?: string
+        icon?: LucideIcon
+        isActive?: boolean
+        items?: {
+            title: string
+            url?: string
+            onClick?: () => void
+        }[]
     }[]
-  }[]
-  onStarredClick: () => void
+    onStarredClick: () => void
 }) {
-
-
+    void _onStarredClick
     const { theme, setTheme } = useTheme()
     const { toggleHistoryModal } = useStateMachine()
 
-    function handleToggle() {
-        if (theme === "light") {
-            setTheme("dark")
-        } else if (theme === "dark") {
-            setTheme("light")
-        } else {
-            setTheme("light")
-        }
-    }
-
-    let icon, label
-    if (theme === "dark") {
-        icon = <Moon className="mr-2 h-4 w-4" />
-        label = "Dark"
-    } else if (theme === "light") {
-        icon = <Sun className="mr-2 h-4 w-4" />
-        label = "Light"
-    } else {
-        icon = (
-            <span className="mr-2 flex items-center">
-                <Sun className="h-4 w-4" />
-                <Moon className="ml-[-0.4rem] h-3 w-3 opacity-70" />
-            </span>
-        )
-        label = "System"
+    const handleToggle = () => {
+        setTheme(theme === "dark" ? "light" : "dark")
     }
 
     return (
         <SidebarGroup>
             <SidebarGroupLabel>Platform</SidebarGroupLabel>
             <SidebarMenu>
-
                 {items.map((item) => {
                     if (!item.items) {
                         return (
                             <SidebarMenuItem key={item.title}>
                                 <SidebarMenuButton asChild>
                                     <a href={item.url}>
-                                        {item.icon && <item.icon />}
+                                        {item.icon && <item.icon className="size-4" />}
                                         <span>{item.title}</span>
                                     </a>
                                 </SidebarMenuButton>
                             </SidebarMenuItem>
                         )
                     }
+
                     return (
                         <Collapsible
                             key={item.title}
@@ -97,58 +73,64 @@ export function NavMain({
                             <SidebarMenuItem>
                                 <CollapsibleTrigger asChild>
                                     <SidebarMenuButton tooltip={item.title}>
-                                        {item.icon && <item.icon />}
+                                        {item.icon && <item.icon className="size-4" />}
                                         <span>{item.title}</span>
-                                        <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                                        <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                                     </SidebarMenuButton>
                                 </CollapsibleTrigger>
                                 <CollapsibleContent>
                                     <SidebarMenuSub>
                                         {item.items?.map((subItem) => {
-                                            const hasClickHandler = subItem.title === 'History' || subItem.title === 'Starred' || subItem.onClick
+                                            const hasClickHandler =
+                                                subItem.title === 'History' ||
+                                                subItem.title === 'Starred' ||
+                                                subItem.onClick
+
+                                            const handleClick = (e: React.MouseEvent) => {
+                                                e.preventDefault()
+                                                if (subItem.title === 'History') {
+                                                    toggleHistoryModal()
+                                                } else {
+                                                    subItem.onClick?.()
+                                                }
+                                            }
+
                                             return (
-                                            <SidebarMenuSubItem key={subItem.title}>
-                                                <SidebarMenuSubButton
-                                                   asChild={!hasClickHandler}
-  onClick={
-    subItem.title === 'History'
-      ? (e: React.MouseEvent) => {
-          e.preventDefault()
-          toggleHistoryModal()
-        }
-      : hasClickHandler
-      ? (e: React.MouseEvent) => {
-          e.preventDefault()
-          subItem.onClick?.()
-        }
-      : undefined
-  }
-                                                >
-                                                    {hasClickHandler ? (
-  <span>{subItem.title}</span>
-) : (
-  <a href={subItem.url}>
-    <span>{subItem.title}</span>
-  </a>
-                                                    )}
-                                                </SidebarMenuSubButton>
-                                            </SidebarMenuSubItem>
-                                        )})}
+                                                <SidebarMenuSubItem key={subItem.title}>
+                                                    <SidebarMenuSubButton
+                                                        asChild={!hasClickHandler}
+                                                        onClick={hasClickHandler ? handleClick : undefined}
+                                                    >
+                                                        {hasClickHandler ? (
+                                                            <span>{subItem.title}</span>
+                                                        ) : (
+                                                            <a href={subItem.url}>
+                                                                <span>{subItem.title}</span>
+                                                            </a>
+                                                        )}
+                                                    </SidebarMenuSubButton>
+                                                </SidebarMenuSubItem>
+                                            )
+                                        })}
                                     </SidebarMenuSub>
                                 </CollapsibleContent>
                             </SidebarMenuItem>
                         </Collapsible>
                     )
                 })}
+
+                {/* Theme toggle */}
                 <SidebarMenuItem>
                     <SidebarMenuButton asChild>
-                        <span
-                            onClick={handleToggle}
-                            aria-label="Toggle theme"
-                            className="w-full"
-                        >
-                            {icon}
-                            <span className="flex-1 text-left">{label} theme</span>
+                        <span onClick={handleToggle} aria-label="Toggle theme" className="w-full cursor-pointer">
+                            {theme === "dark" ? (
+                                <Moon className="size-4" />
+                            ) : (
+                                <Sun className="size-4" />
+                            )}
+                            <span className="flex-1 text-left">
+                                {theme === "dark" ? "Dark" : "Light"} theme
+                            </span>
                         </span>
                     </SidebarMenuButton>
                 </SidebarMenuItem>

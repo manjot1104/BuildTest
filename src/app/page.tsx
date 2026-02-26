@@ -1,44 +1,115 @@
 'use client'
 
-import { motion, useScroll, useTransform } from 'framer-motion'
+import {
+    motion,
+    useScroll,
+    useTransform,
+    useMotionValueEvent,
+    type Variants,
+} from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, Sparkles, Zap, Shield, Code2, Layers, Globe, ChevronDown, Moon, Sun } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 
-const fadeInUp = {
-    initial: { opacity: 0, y: 60 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] }
+// --- Animation Variants ---
+
+const maskReveal: Variants = {
+    hidden: { clipPath: 'inset(0 0 100% 0)' },
+    visible: (delay = 0) => ({
+        clipPath: 'inset(0 0 0% 0)',
+        transition: { duration: 1, ease: [0.77, 0, 0.175, 1], delay },
+    }),
 }
 
-const staggerContainer = {
-    animate: {
-        transition: {
-            staggerChildren: 0.1,
-            delayChildren: 0.3
-        }
-    }
+const slideUp: Variants = {
+    hidden: { y: '100%' },
+    visible: (delay = 0) => ({
+        y: '0%',
+        transition: { duration: 0.8, ease: [0.77, 0, 0.175, 1], delay },
+    }),
 }
+
+const fadeIn: Variants = {
+    hidden: { opacity: 0 },
+    visible: (delay = 0) => ({
+        opacity: 1,
+        transition: { duration: 0.8, ease: [0.25, 0.1, 0.25, 1], delay },
+    }),
+}
+
+const scaleIn: Variants = {
+    hidden: { opacity: 0, scale: 0.95 },
+    visible: (delay = 0) => ({
+        opacity: 1,
+        scale: 1,
+        transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1], delay },
+    }),
+}
+
+// --- Reusable Components ---
+
+function RevealText({ children, delay = 0, className = '' }: {
+    children: React.ReactNode
+    delay?: number
+    className?: string
+}) {
+    return (
+        <div className={`overflow-hidden ${className}`}>
+            <motion.div
+                variants={slideUp}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-80px' }}
+                custom={delay}
+            >
+                {children}
+            </motion.div>
+        </div>
+    )
+}
+
+function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
+    return (
+        <motion.span
+            variants={fadeIn}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-80px' }}
+            custom={delay}
+            className="inline-block text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground/80"
+        >
+            {children}
+        </motion.span>
+    )
+}
+
+// --- Main Page ---
 
 export default function LandingPage() {
     const { session, isPending } = useStateMachine()
     const router = useRouter()
     const { theme, setTheme } = useTheme()
-    const containerRef = useRef<HTMLDivElement>(null)
+    const heroRef = useRef<HTMLDivElement>(null)
+    const [navScrolled, setNavScrolled] = useState(false)
+
     const { scrollYProgress } = useScroll({
-        target: containerRef,
-        offset: ["start start", "end start"]
+        target: heroRef,
+        offset: ['start start', 'end start'],
     })
 
-    const heroY = useTransform(scrollYProgress, [0, 1], [0, 200])
-    const heroOpacity = useTransform(scrollYProgress, [0, 0.5], [1, 0])
+    const heroOpacity = useTransform(scrollYProgress, [0, 0.6], [1, 0])
+    const heroScale = useTransform(scrollYProgress, [0, 0.6], [1, 0.96])
+
+    useMotionValueEvent(scrollYProgress, 'change', (latest) => {
+        setNavScrolled(latest > 0.05)
+    })
 
     const handleGetStarted = () => {
         if (session?.user) {
@@ -49,263 +120,437 @@ export default function LandingPage() {
     }
 
     return (
-        <div ref={containerRef} className="min-h-screen bg-background overflow-hidden">
-            {/* Navigation */}
+        <div className="min-h-screen bg-background">
+            {/* ── Navigation ── */}
             <motion.nav
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: 0.2 }}
-                className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.6, delay: 0.8 }}
+                className="fixed top-0 left-0 right-0 z-50 transition-all duration-500"
             >
-                <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2">
-                        <BuildifyLogo size="md" />
-                        <span className="font-semibold text-lg">Buildify</span>
-                    </Link>
+                <div
+                    className={`mx-auto transition-all duration-500 ${
+                        navScrolled
+                            ? 'max-w-2xl mt-3 rounded-full border border-border/60 bg-background/70 backdrop-blur-2xl shadow-lg px-4'
+                            : 'max-w-7xl border-b border-transparent px-6'
+                    }`}
+                >
+                    <div className="flex items-center justify-between h-14">
+                        <Link href="/" className="flex items-center gap-2 group">
+                            <BuildifyLogo size="sm" />
+                            <span className="font-semibold text-sm tracking-tight">Buildify</span>
+                        </Link>
 
-                    <div className="flex items-center gap-3">
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                            className="size-9"
-                        >
-                            <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                            <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                            <span className="sr-only">Toggle theme</span>
-                        </Button>
-                        {!isPending && (
-                            session?.user ? (
-                                <Button onClick={() => router.push('/chat')} className="gap-2">
-                                    Go to Chat
-                                    <ArrowRight className="size-4" />
-                                </Button>
-                            ) : (
-                                <Button onClick={() => router.push('/login')} variant="default">
-                                    Login
-                                </Button>
-                            )
-                        )}
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                                className="size-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                                <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                            </button>
+                            {!isPending && (
+                                session?.user ? (
+                                    <Button
+                                        size="sm"
+                                        onClick={() => router.push('/chat')}
+                                        className="rounded-full h-8 px-4 text-xs font-medium gap-1.5"
+                                    >
+                                        Open App
+                                        <ArrowRight className="size-3" />
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => router.push('/login')}
+                                        className="rounded-full h-8 px-4 text-xs font-medium"
+                                    >
+                                        Sign in
+                                    </Button>
+                                )
+                            )}
+                        </div>
                     </div>
                 </div>
             </motion.nav>
 
-            {/* Hero Section */}
+            {/* ── Hero Section ── */}
             <motion.section
-                style={{ y: heroY, opacity: heroOpacity }}
-                className="relative min-h-screen flex items-center justify-center pt-16"
+                ref={heroRef}
+                style={{ opacity: heroOpacity, scale: heroScale }}
+                className="relative min-h-[100svh] flex flex-col items-center justify-center px-6"
             >
-                {/* Background Grid */}
-                <div className="absolute inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear-gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
-
-                {/* Gradient Orbs */}
-                <motion.div
-                    animate={{
-                        scale: [1, 1.2, 1],
-                        opacity: [0.3, 0.5, 0.3]
+                {/* Subtle background grain */}
+                <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                    style={{
+                        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
                     }}
-                    transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute top-1/4 -left-1/4 w-96 h-96 bg-primary/30 rounded-full blur-[128px]"
-                />
-                <motion.div
-                    animate={{
-                        scale: [1.2, 1, 1.2],
-                        opacity: [0.2, 0.4, 0.2]
-                    }}
-                    transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-                    className="absolute bottom-1/4 -right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-[128px]"
                 />
 
-                <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
+                <div className="relative z-10 max-w-4xl mx-auto text-center">
+                    {/* Pill badge */}
                     <motion.div
-                        variants={staggerContainer}
-                        initial="initial"
-                        animate="animate"
-                        className="space-y-8"
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate="visible"
+                        custom={0.3}
+                        className="mb-8"
                     >
-                        {/* Badge */}
-                        <motion.div
-                            variants={fadeInUp}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-border/50 bg-background/50 backdrop-blur-sm"
-                        >
-                            <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                            </span>
-                            <span className="text-sm text-muted-foreground">Powered by Advanced AI</span>
-                        </motion.div>
-
-                        {/* Main Heading */}
-                        <motion.h1
-                            variants={fadeInUp}
-                            className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight"
-                        >
-                            <span className="block">Build Faster with</span>
-                            <span className="block mt-2 bg-gradient-to-r from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                                AI-Powered Code
-                            </span>
-                        </motion.h1>
-
-                        {/* Subtitle */}
-                        <motion.p
-                            variants={fadeInUp}
-                            className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto"
-                        >
-                            Transform your ideas into production-ready applications.
-                            Our AI understands your vision and writes clean, efficient code in seconds.
-                        </motion.p>
-
-                        {/* CTA Buttons */}
-                        <motion.div
-                            variants={fadeInUp}
-                            className="flex flex-col sm:flex-row items-center justify-center gap-4"
-                        >
-                            <Button
-                                size="lg"
-                                onClick={handleGetStarted}
-                                className="gap-2 h-12 px-8 text-base group"
-                            >
-                                Get Started Free
-                                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
-                            </Button>
-                        </motion.div>
-
-                        {/* Stats */}
-                        <motion.div
-                            variants={fadeInUp}
-                            className="grid grid-cols-3 gap-8 pt-12 max-w-lg mx-auto"
-                        >
-                            {[
-                                { value: '2K+', label: 'Developers' },
-                                { value: '100K+', label: 'Lines Generated' },
-                                { value: '99.9%', label: 'Uptime' }
-                            ].map((stat, index) => (
-                                <div key={index} className="text-center">
-                                    <div className="text-2xl md:text-3xl font-bold">{stat.value}</div>
-                                    <div className="text-sm text-muted-foreground">{stat.label}</div>
-                                </div>
-                            ))}
-                        </motion.div>
+                        <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground border border-border/60 rounded-full px-4 py-1.5 bg-muted/30">
+                            <span className="size-1.5 rounded-full bg-emerald-500" />
+                            Now in Public Beta
+                        </span>
                     </motion.div>
 
-                    {/* Scroll Indicator */}
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 1.5 }}
-                        className="absolute bottom-8 left-1/2 -translate-x-1/2"
+                    {/* Heading */}
+                    <div className="space-y-2 mb-8">
+                        <RevealText delay={0.4}>
+                            <h1 className="text-[clamp(2.5rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-tighter">
+                                Build apps with
+                            </h1>
+                        </RevealText>
+                        <RevealText delay={0.5}>
+                            <h1 className="text-[clamp(2.5rem,7vw,5.5rem)] font-bold leading-[0.95] tracking-tighter text-muted-foreground/40">
+                                a single prompt.
+                            </h1>
+                        </RevealText>
+                    </div>
+
+                    {/* Subtitle */}
+                    <motion.p
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate="visible"
+                        custom={0.7}
+                        className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto mb-12 leading-relaxed"
                     >
-                        <motion.div
-                            animate={{ y: [0, 8, 0] }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                        Describe what you want. Buildify generates production&#8209;ready
+                        code — complete with UI, logic, and deployable output.
+                    </motion.p>
+
+                    {/* CTA */}
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate="visible"
+                        custom={0.9}
+                        className="flex flex-col sm:flex-row items-center justify-center gap-3"
+                    >
+                        <Button
+                            size="lg"
+                            onClick={handleGetStarted}
+                            className="rounded-full h-12 px-8 text-sm font-medium gap-2 group"
                         >
-                            <ChevronDown className="size-6 text-muted-foreground" />
-                        </motion.div>
+                            Start Building
+                            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="lg"
+                            onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
+                            className="rounded-full h-12 px-8 text-sm font-medium text-muted-foreground"
+                        >
+                            See examples
+                        </Button>
                     </motion.div>
                 </div>
+
+                {/* Scroll line */}
+                <motion.div
+                    variants={fadeIn}
+                    initial="hidden"
+                    animate="visible"
+                    custom={1.5}
+                    className="absolute bottom-12 left-1/2 -translate-x-1/2"
+                >
+                    <motion.div
+                        className="w-px h-12 bg-gradient-to-b from-transparent via-border to-transparent"
+                        animate={{ opacity: [0.3, 0.8, 0.3] }}
+                        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                </motion.div>
             </motion.section>
 
-            {/* Features Section */}
-            <section id="features" className="relative py-32 px-6">
-                <div className="max-w-7xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0, y: 40 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-100px" }}
-                        transition={{ duration: 0.6 }}
-                        className="text-center mb-20"
-                    >
-                        <h2 className="text-3xl md:text-5xl font-bold mb-4">
-                            Everything you need to build
-                        </h2>
-                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                            Powerful features that help you ship faster and focus on what matters most.
-                        </p>
-                    </motion.div>
+            {/* ── Stats Bar ── */}
+            <section className="relative border-y border-border/40">
+                <div className="max-w-5xl mx-auto px-6 py-16">
+                    <div className="grid grid-cols-3 gap-8">
+                        {[
+                            { value: '2K+', label: 'Developers' },
+                            { value: '100K+', label: 'Lines Generated' },
+                            { value: '99.9%', label: 'Uptime' },
+                        ].map((stat, i) => (
+                            <RevealText key={i} delay={i * 0.1}>
+                                <div className="text-center">
+                                    <div className="text-3xl md:text-4xl font-bold tracking-tight">{stat.value}</div>
+                                    <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground mt-1">{stat.label}</div>
+                                </div>
+                            </RevealText>
+                        ))}
+                    </div>
+                </div>
+            </section>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* ── Features Section ── */}
+            <section id="features" className="relative py-32 md:py-40 px-6">
+                <div className="max-w-6xl mx-auto">
+                    {/* Section header */}
+                    <div className="max-w-xl mb-20">
+                        <SectionLabel>Capabilities</SectionLabel>
+                        <RevealText delay={0.1} className="mt-4">
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                                Everything you need,
+                            </h2>
+                        </RevealText>
+                        <RevealText delay={0.2}>
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1] text-muted-foreground/40">
+                                nothing you don&apos;t.
+                            </h2>
+                        </RevealText>
+                    </div>
+
+                    {/* Bento grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border/50 rounded-2xl overflow-hidden border border-border/50">
                         {[
                             {
                                 icon: Zap,
                                 title: 'Lightning Fast',
-                                description: 'Generate production-ready code in seconds, not hours. Our AI understands context and delivers precise results.'
+                                description: 'Generate production-ready code in seconds. Our AI understands context and delivers precise, clean results.',
                             },
                             {
                                 icon: Shield,
                                 title: 'Secure by Default',
-                                description: 'Built-in security best practices. Your code follows industry standards and stays protected.'
+                                description: 'Built-in security best practices. Your code follows industry standards from the first line.',
                             },
                             {
                                 icon: Code2,
-                                title: 'Multiple Languages',
-                                description: 'Support for 20+ programming languages. From React to Python, we have got you covered.'
+                                title: 'Multi-Language',
+                                description: 'Support for 20+ programming languages and frameworks. React, Python, Go, and beyond.',
                             },
                             {
                                 icon: Layers,
-                                title: 'Full Stack Ready',
-                                description: 'Generate complete applications with frontend, backend, and database code in one go.'
+                                title: 'Full Stack',
+                                description: 'Complete applications with frontend, backend, and database — generated from a single conversation.',
                             },
                             {
                                 icon: Globe,
                                 title: 'Deploy Anywhere',
-                                description: 'Export your code and deploy to any platform. Vercel, AWS, or your own infrastructure.'
+                                description: 'Export and deploy to any platform. Vercel, AWS, or your own infrastructure.',
                             },
                             {
                                 icon: Sparkles,
-                                title: 'AI That Learns',
-                                description: 'Our AI improves with every interaction, understanding your coding style and preferences.'
-                            }
+                                title: 'Iterative AI',
+                                description: 'Refine through conversation. Each iteration improves on the last, understanding your preferences.',
+                            },
                         ].map((feature, index) => (
                             <motion.div
                                 key={index}
-                                initial={{ opacity: 0, y: 40 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true, margin: "-50px" }}
-                                transition={{ duration: 0.5, delay: index * 0.1 }}
-                                whileHover={{ y: -5 }}
-                                className="group relative p-6 rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm hover:border-primary/50 transition-colors"
+                                variants={scaleIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-60px' }}
+                                custom={index * 0.05}
+                                className="group relative bg-background p-8 md:p-10 transition-colors duration-300 hover:bg-muted/30"
                             >
-                                <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
-                                    <feature.icon className="size-6 text-primary" />
+                                <div className="flex items-start gap-4">
+                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-primary/10">
+                                        <feature.icon className="size-5 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-base font-semibold mb-1.5">{feature.title}</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
+                                    </div>
                                 </div>
-                                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                                <p className="text-muted-foreground">{feature.description}</p>
                             </motion.div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* Community Builds Section */}
-            <section id="community" className="relative py-32 px-6">
-                <div className="max-w-7xl mx-auto">
-                    <motion.div
-                        initial={{ opacity: 0, y: 40 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-100px" }}
-                        transition={{ duration: 0.6 }}
-                        className="text-center mb-12"
-                    >
-                        <h2 className="text-3xl md:text-5xl font-bold mb-4">
-                            Built by the Community
-                        </h2>
-                        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                            Explore what developers are building with Buildify. Get inspired, fork and make it your own.
-                        </p>
-                    </motion.div>
+            {/* ── Showcase / How It Works ── */}
+            <section className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid md:grid-cols-2 gap-20 md:gap-32 items-center">
+                        {/* Left: Text */}
+                        <div>
+                            <SectionLabel>How it works</SectionLabel>
+                            <RevealText delay={0.1} className="mt-4">
+                                <h2 className="text-3xl md:text-4xl font-bold tracking-tight leading-[1.1]">
+                                    From idea to app in three steps.
+                                </h2>
+                            </RevealText>
+                            <motion.div
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-80px' }}
+                                custom={0.3}
+                                className="mt-10 space-y-8"
+                            >
+                                {[
+                                    { step: '01', title: 'Describe', text: 'Tell Buildify what you want to build using natural language.' },
+                                    { step: '02', title: 'Generate', text: 'AI creates production-ready code with UI components and logic.' },
+                                    { step: '03', title: 'Iterate', text: 'Refine through conversation until it matches your vision perfectly.' },
+                                ].map((item, i) => (
+                                    <div key={i} className="flex gap-5">
+                                        <span className="text-xs font-mono text-muted-foreground/50 mt-1 shrink-0">{item.step}</span>
+                                        <div>
+                                            <h3 className="text-base font-semibold mb-1">{item.title}</h3>
+                                            <p className="text-sm text-muted-foreground leading-relaxed">{item.text}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </motion.div>
+                            <motion.div
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-60px' }}
+                                custom={0.5}
+                                className="mt-10"
+                            >
+                                <Button
+                                    variant="ghost"
+                                    onClick={handleGetStarted}
+                                    className="group rounded-full px-0 text-sm font-medium gap-2 text-foreground hover:bg-transparent"
+                                >
+                                    Try it now
+                                    <ArrowUpRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+                                </Button>
+                            </motion.div>
+                        </div>
+
+                        {/* Right: Visual */}
+                        <motion.div
+                            variants={maskReveal}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-100px' }}
+                            custom={0.2}
+                            className="relative"
+                        >
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-muted/20 overflow-hidden">
+                                {/* Terminal-style UI mockup */}
+                                <div className="h-10 border-b border-border/40 flex items-center px-4 gap-2">
+                                    <div className="flex gap-1.5">
+                                        <div className="size-2.5 rounded-full bg-border" />
+                                        <div className="size-2.5 rounded-full bg-border" />
+                                        <div className="size-2.5 rounded-full bg-border" />
+                                    </div>
+                                    <span className="text-[10px] text-muted-foreground/50 font-mono ml-3">buildify.ai</span>
+                                </div>
+                                <div className="p-6 space-y-4">
+                                    <div className="flex gap-3 items-start">
+                                        <div className="size-6 rounded-full bg-primary/10 shrink-0 mt-0.5" />
+                                        <div className="space-y-2 flex-1">
+                                            <div className="h-3 bg-muted/60 rounded-full w-3/4" />
+                                            <div className="h-3 bg-muted/40 rounded-full w-1/2" />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 items-start">
+                                        <div className="size-6 rounded-full bg-muted/40 shrink-0 mt-0.5" />
+                                        <div className="space-y-2 flex-1">
+                                            <div className="rounded-xl border border-border/40 bg-background/50 p-4 space-y-2">
+                                                <div className="h-2.5 bg-primary/15 rounded-full w-full" />
+                                                <div className="h-2.5 bg-primary/10 rounded-full w-5/6" />
+                                                <div className="h-2.5 bg-primary/8 rounded-full w-2/3" />
+                                                <div className="h-2.5 bg-primary/5 rounded-full w-3/4" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3 items-start">
+                                        <div className="size-6 rounded-full bg-primary/10 shrink-0 mt-0.5" />
+                                        <div className="space-y-2 flex-1">
+                                            <div className="h-3 bg-muted/60 rounded-full w-2/3" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Community Builds Section ── */}
+            <section id="community" className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-6xl mx-auto">
+                    <div className="max-w-xl mb-16">
+                        <SectionLabel>Community</SectionLabel>
+                        <RevealText delay={0.1} className="mt-4">
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                                Built by developers,
+                            </h2>
+                        </RevealText>
+                        <RevealText delay={0.2}>
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1] text-muted-foreground/40">
+                                for developers.
+                            </h2>
+                        </RevealText>
+                        <motion.p
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.3}
+                            className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md"
+                        >
+                            Explore what others are creating with Buildify. Get inspired, fork a project, and make it your own.
+                        </motion.p>
+                    </div>
 
                     <motion.div
-                        initial={{ opacity: 0, y: 40 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: "-50px" }}
-                        transition={{ duration: 0.6, delay: 0.2 }}
+                        variants={fadeIn}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-60px' }}
+                        custom={0.2}
                     >
                         <CommunityBuildsGrid showHeader={false} />
                     </motion.div>
                 </div>
             </section>
 
-            {/* Footer */}
+            {/* ── CTA Section ── */}
+            <section className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-3xl mx-auto text-center">
+                    <SectionLabel>Get started</SectionLabel>
+                    <RevealText delay={0.1} className="mt-4">
+                        <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                            Ready to build?
+                        </h2>
+                    </RevealText>
+                    <motion.p
+                        variants={fadeIn}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-80px' }}
+                        custom={0.3}
+                        className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto"
+                    >
+                        Join thousands of developers shipping faster with AI-powered code generation.
+                    </motion.p>
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        whileInView="visible"
+                        viewport={{ once: true, margin: '-60px' }}
+                        custom={0.5}
+                        className="mt-10"
+                    >
+                        <Button
+                            size="lg"
+                            onClick={handleGetStarted}
+                            className="rounded-full h-12 px-8 text-sm font-medium gap-2 group"
+                        >
+                            Start Building — It&apos;s Free
+                            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                        </Button>
+                    </motion.div>
+                </div>
+            </section>
+
+            {/* ── Footer ── */}
             <Footer />
         </div>
     )

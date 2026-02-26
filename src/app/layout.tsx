@@ -7,7 +7,10 @@ import { Geist } from "next/font/google";
 export const metadata: Metadata = {
   title: "Buildify",
   description: "Buildify - AI powered app builder",
-  icons: [{ rel: "icon", url: "/favicon.ico" }],
+  icons: [
+    { rel: "icon", url: "/favicon.svg", type: "image/svg+xml" },
+    { rel: "icon", url: "/favicon.ico" },
+  ],
 };
 
 const geist = Geist({

@@ -296,7 +296,7 @@ export default function ChatPage() {
                     hasActiveSubscription={hasActiveSubscription}
                     currentCredits={credits?.totalCredits ?? 0}
                 />
-                <div className="bg-background h-[calc(100vh-80px)] flex flex-col overflow-hidden">
+                <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
                     {/* Handle search params with Suspense boundary */}
                     <Suspense fallback={null}>
                         <SearchParamsHandler
@@ -454,14 +454,13 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="bg-background min-h-[calc(100vh-80px)] flex flex-col overflow-y-auto">
+        <div className="bg-background min-h-[calc(100vh-48px)] flex flex-col overflow-y-auto">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
                 hasActiveSubscription={hasActiveSubscription}
                 currentCredits={credits?.totalCredits ?? 0}
             />
-            {/* Handle search params with Suspense boundary */}
             <Suspense fallback={null}>
                 <SearchParamsHandler
                     onReset={handleReset}
@@ -470,21 +469,26 @@ export default function ChatPage() {
             </Suspense>
 
             {/* Main Content */}
-            <div className="pt-[15vh] pb-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pb-4 pt-[15vh]">
                 <div className="max-w-2xl w-full mx-auto">
-                    {/* Title */}
-                    <div className="flex items-center justify-center gap-3 mb-8">
-                        <BuildifyLogo size="lg" />
-                        <h1 className="text-2xl sm:text-3xl font-semibold text-foreground">
+                    {/* Logo + Title */}
+                    <div className="flex items-center justify-center gap-3 mb-3">
+                        <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/10 flex items-center justify-center">
+                            <BuildifyLogo size="lg" />
+                        </div>
+                        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-foreground">
                             Buildify
                         </h1>
                     </div>
+                    <p className="text-sm text-muted-foreground/60 text-center mb-10">
+                        Describe what you want to build
+                    </p>
 
                     {/* Prompt Input */}
                     <div className="w-full">
                         <PromptInput
                             onSubmit={handleSendMessage}
-                            className="w-full shadow-sm"
+                            className="w-full"
                             onImageDrop={handleImageFiles}
                             isDragOver={isDragOver}
                             onDragOver={handleDragOver}
@@ -500,7 +504,7 @@ export default function ChatPage() {
                                 onChange={(e) => setMessage(e.target.value)}
                                 value={message}
                                 placeholder="Describe what you want to build..."
-                                className="min-h-[100px] text-base"
+                                className="min-h-[100px] text-sm"
                                 disabled={isLoading}
                             />
                             <PromptInputToolbar>
@@ -539,8 +543,8 @@ export default function ChatPage() {
                     </div>
 
                     {/* Suggestions */}
-                    <div className="mt-4">
-                        <div className="flex flex-wrap items-center justify-center gap-2">
+                    <div className="mt-3">
+                        <div className="flex flex-wrap items-center justify-center gap-1.5">
                             {suggestions.map((suggestion) => {
                                 const Icon = suggestion.icon
                                 return (
@@ -548,13 +552,13 @@ export default function ChatPage() {
                                         key={suggestion.text}
                                         onClick={() => handleSuggestionClick(suggestion.text)}
                                         className={cn(
-                                            "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg",
-                                            "bg-muted/50 hover:bg-muted border border-border/50 hover:border-border",
-                                            "text-sm text-muted-foreground hover:text-foreground",
-                                            "transition-colors duration-150"
+                                            "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full",
+                                            "hover:bg-muted/60 border border-border/40 hover:border-border/60",
+                                            "text-xs text-muted-foreground hover:text-foreground",
+                                            "transition-all duration-200"
                                         )}
                                     >
-                                        <Icon className="w-3.5 h-3.5 shrink-0" />
+                                        <Icon className="size-3 shrink-0" />
                                         {suggestion.label}
                                     </button>
                                 )
@@ -563,14 +567,14 @@ export default function ChatPage() {
                     </div>
 
                     {/* Keyboard hint */}
-                    <p className="text-xs text-muted-foreground/50 text-center mt-6">
-                        Press <kbd className="px-1.5 py-0.5 rounded bg-muted border border-border/50 text-[10px] font-mono">Enter</kbd> to send
+                    <p className="text-[11px] text-muted-foreground/40 text-center mt-5">
+                        Press <kbd className="px-1 py-0.5 rounded bg-muted/50 border border-border/30 text-[10px] font-mono">Enter</kbd> to send
                     </p>
                 </div>
             </div>
 
-            {/* Community Builds - wider container */}
-            <div className="px-4 sm:px-6 lg:px-8 pb-16">
+            {/* Community Builds */}
+            <div className="px-4 sm:px-6 lg:px-8 pb-12">
                 <div className="max-w-5xl w-full mx-auto">
                     <CommunityBuildsGrid />
                 </div>

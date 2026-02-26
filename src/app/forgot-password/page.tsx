@@ -1,9 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
     Field,
@@ -12,9 +11,18 @@ import {
 } from '@/components/ui/field'
 import { authClient } from '@/server/better-auth/client'
 import { toast } from 'sonner'
-import { Sparkles, ArrowLeft, Moon, Sun } from 'lucide-react'
+import { ArrowLeft, Moon, Sun } from 'lucide-react'
+import { BuildifyLogo } from '@/components/buildify-logo'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+
+const fadeIn: Variants = {
+    hidden: { opacity: 0 },
+    visible: (delay = 0) => ({
+        opacity: 1,
+        transition: { duration: 0.6, ease: [0.25, 0.1, 0.25, 1], delay },
+    }),
+}
 
 export default function ForgotPasswordPage() {
     const { theme, setTheme } = useTheme()
@@ -44,121 +52,118 @@ export default function ForgotPasswordPage() {
 
     return (
         <div className="min-h-screen bg-background flex flex-col">
-            <div className="fixed inset-0 bg-[linear-gradient(to_right,#8882_1px,transparent_1px),linear_gradient(to_bottom,#8882_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_110%)]" />
-            <motion.div
-                animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.3, 0.2] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed top-1/4 -left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[128px]"
-            />
-            <motion.div
-                animate={{ scale: [1.2, 1, 1.2], opacity: [0.15, 0.25, 0.15] }}
-                transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
-                className="fixed bottom-1/4 -right-1/4 w-96 h-96 bg-purple-500/15 rounded-full blur-[128px]"
+            {/* Subtle grain */}
+            <div
+                className="fixed inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                style={{
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+                }}
             />
 
+            {/* Navigation */}
             <motion.nav
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6 }}
-                className="relative z-10 px-6 py-4"
+                variants={fadeIn}
+                initial="hidden"
+                animate="visible"
+                custom={0}
+                className="relative z-10 px-6 h-14 flex items-center"
             >
-                <div className="max-w-7xl mx-auto flex items-center justify-between">
-                    <Link href="/" className="flex items-center gap-2 group">
-                        <ArrowLeft className="size-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-                        <div className="size-8 rounded-lg bg-primary flex items-center justify-center">
-                            <Sparkles className="size-4 text-primary-foreground" />
-                        </div>
-                        <span className="font-semibold text-lg">Buildify</span>
+                <div className="max-w-7xl w-full mx-auto flex items-center justify-between">
+                    <Link href="/login" className="flex items-center gap-2 group">
+                        <ArrowLeft className="size-3.5 text-muted-foreground group-hover:text-foreground transition-colors" />
+                        <BuildifyLogo size="sm" />
+                        <span className="font-semibold text-sm tracking-tight">Buildify</span>
                     </Link>
-                    <Button
-                        variant="ghost"
-                        size="icon"
+                    <button
                         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                        className="size-9"
+                        className="size-8 flex items-center justify-center rounded-full text-muted-foreground hover:text-foreground transition-colors"
                     >
-                        <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                        <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                        <span className="sr-only">Toggle theme</span>
-                    </Button>
+                        <Sun className="size-3.5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                        <Moon className="absolute size-3.5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                    </button>
                 </div>
             </motion.nav>
 
+            {/* Main Content */}
             <div className="flex-1 flex items-center justify-center px-6 py-12 relative z-10">
                 <motion.div
-                    initial={{ opacity: 0, y: 40 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.6, delay: 0.2 }}
-                    className="w-full max-w-md"
+                    variants={fadeIn}
+                    initial="hidden"
+                    animate="visible"
+                    custom={0.15}
+                    className="w-full max-w-sm"
                 >
-                    <Card className="border-border/50 bg-card/80 backdrop-blur-sm shadow-2xl">
-                        <CardContent className="p-8">
-                            {submitted ? (
-                                <div className="flex flex-col items-center gap-4 text-center">
-                                    <h1 className="text-2xl font-bold">Check your email</h1>
-                                    <p className="text-muted-foreground text-sm">
-                                        If an account exists with that email, we&apos;ve sent a password reset link. Please check your inbox and spam folder.
+                    {submitted ? (
+                        <div className="flex flex-col items-center gap-4 text-center">
+                            <div className="size-12 rounded-full border border-border/50 flex items-center justify-center">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-muted-foreground">
+                                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                                </svg>
+                            </div>
+                            <h1 className="text-2xl font-bold tracking-tight">Check your email</h1>
+                            <p className="text-sm text-muted-foreground leading-relaxed">
+                                If an account exists with that email, we&apos;ve sent a password reset link. Check your inbox and spam folder.
+                            </p>
+                            <div className="w-full space-y-2.5 pt-4">
+                                <Button
+                                    onClick={() => setSubmitted(false)}
+                                    variant="outline"
+                                    className="w-full h-11 rounded-xl text-sm font-medium"
+                                >
+                                    Try another email
+                                </Button>
+                                <Link href="/login" className="block">
+                                    <Button variant="ghost" className="w-full h-11 rounded-xl text-sm font-medium text-muted-foreground">
+                                        Back to sign in
+                                    </Button>
+                                </Link>
+                            </div>
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSubmit}>
+                            <FieldGroup>
+                                <div className="flex flex-col items-center gap-1.5 text-center mb-8">
+                                    <h1 className="text-2xl font-bold tracking-tight">Forgot password?</h1>
+                                    <p className="text-sm text-muted-foreground">
+                                        Enter your email and we&apos;ll send you a reset link.
                                     </p>
-                                    <div className="w-full space-y-3 pt-4">
-                                        <Button
-                                            onClick={() => setSubmitted(false)}
-                                            variant="outline"
-                                            className="w-full h-11"
-                                        >
-                                            Try another email
-                                        </Button>
-                                        <Link href="/login" className="block">
-                                            <Button variant="ghost" className="w-full h-11">
-                                                Back to Login
-                                            </Button>
-                                        </Link>
-                                    </div>
                                 </div>
-                            ) : (
-                                <form onSubmit={handleSubmit}>
-                                    <FieldGroup>
-                                        <div className="flex flex-col items-center gap-2 text-center mb-6">
-                                            <h1 className="text-2xl font-bold">Forgot password?</h1>
-                                            <p className="text-muted-foreground text-sm">
-                                                Enter your email address and we&apos;ll send you a link to reset your password.
-                                            </p>
-                                        </div>
 
-                                        <Field>
-                                            <FieldLabel htmlFor="email">Email</FieldLabel>
-                                            <Input
-                                                id="email"
-                                                type="email"
-                                                placeholder="Enter your email"
-                                                value={email}
-                                                onChange={(e) => setEmail(e.target.value)}
-                                                required
-                                                className="bg-background/50"
-                                            />
-                                        </Field>
+                                <Field>
+                                    <FieldLabel htmlFor="email" className="text-xs font-medium text-muted-foreground">Email</FieldLabel>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        placeholder="you@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        className="h-11 rounded-xl border-border/50 bg-muted/30 text-sm"
+                                    />
+                                </Field>
 
-                                        <Field className="pt-2">
-                                            <Button
-                                                type="submit"
-                                                className="w-full h-11"
-                                                disabled={isLoading}
-                                            >
-                                                {isLoading ? 'Sending...' : 'Send Reset Link'}
-                                            </Button>
-                                        </Field>
+                                <Field className="pt-3">
+                                    <Button
+                                        type="submit"
+                                        className="w-full h-11 rounded-xl text-sm font-medium"
+                                        disabled={isLoading}
+                                    >
+                                        {isLoading ? 'Sending...' : 'Send reset link'}
+                                    </Button>
+                                </Field>
 
-                                        <div className="text-center pt-2">
-                                            <Link
-                                                href="/login"
-                                                className="text-sm text-muted-foreground underline-offset-2 hover:underline hover:text-foreground transition-colors"
-                                            >
-                                                Back to Login
-                                            </Link>
-                                        </div>
-                                    </FieldGroup>
-                                </form>
-                            )}
-                        </CardContent>
-                    </Card>
+                                <div className="text-center pt-4">
+                                    <Link
+                                        href="/login"
+                                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                    >
+                                        Back to sign in
+                                    </Link>
+                                </div>
+                            </FieldGroup>
+                        </form>
+                    )}
                 </motion.div>
             </div>
         </div>

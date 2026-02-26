@@ -1,89 +1,105 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+"use client"
+
+import { motion, type Variants } from "framer-motion"
 import Link from "next/link"
-import { ArrowLeft, Layout, ShoppingCart, FormInput } from "lucide-react"
+import { ArrowLeft, Layout, FormInput, ShoppingCart } from "lucide-react"
+
+const fadeIn: Variants = {
+    hidden: { opacity: 0, y: 8 },
+    visible: (i: number) => ({
+        opacity: 1,
+        y: 0,
+        transition: { delay: i * 0.08, duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
+    }),
+}
+
+const tutorials = [
+    {
+        icon: Layout,
+        title: "Building a Landing Page",
+        prompt: "Create a modern SaaS landing page with a hero section, features grid, pricing table, and footer. Use a blue/white color scheme.",
+        tip: "Then iterate with follow-ups to add animations, refine copy, or adjust the layout.",
+    },
+    {
+        icon: FormInput,
+        title: "Creating a Form with Validation",
+        prompt: "Build a multi-step signup form with email validation, password strength indicator, and profile setup. Include error handling.",
+        tip: "Follow up to add specific validations, connect to an API, or style individual fields.",
+    },
+    {
+        icon: ShoppingCart,
+        title: "Building a Dashboard",
+        prompt: "Create an analytics dashboard with a sidebar, stats cards, a line chart, and a data table. Use a clean, minimal design.",
+        tip: "Iterate to add interactivity, filtering, date range pickers, or export functionality.",
+    },
+]
 
 export default function TutorialsPage() {
-  return (
-    <div className="mx-auto max-w-3xl space-y-8">
-      <div>
-        <Link
-          href="/docs"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-4"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Back to Docs
-        </Link>
-        <h1 className="text-3xl font-bold tracking-tight">Tutorials</h1>
-        <p className="text-muted-foreground mt-2">
-          Learn how to build common types of applications with Buildify.
-        </p>
-      </div>
+    return (
+        <div className="max-w-2xl">
+            <motion.div initial="hidden" animate="visible" variants={fadeIn} custom={0}>
+                <Link
+                    href="/docs"
+                    className="text-xs text-muted-foreground/60 hover:text-foreground inline-flex items-center gap-1.5 mb-6 transition-colors"
+                >
+                    <ArrowLeft className="size-3" />
+                    Docs
+                </Link>
+                <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground/60 font-medium">
+                    Learn
+                </p>
+                <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight mt-3 leading-tight">
+                    Tutorials
+                </h1>
+                <p className="text-sm text-muted-foreground/80 mt-3 leading-relaxed">
+                    Learn how to build common types of applications with Buildify.
+                </p>
+            </motion.div>
 
-      <div className="space-y-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Layout className="h-4 w-4 text-blue-500" />
-              Building a Landing Page
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Start with a prompt like:</p>
-            <div className="rounded bg-muted p-3 font-mono text-xs">
-              &quot;Create a modern SaaS landing page with a hero section, features grid, pricing
-              table, and footer. Use a blue/white color scheme.&quot;
+            <div className="border-t border-border/40 mt-8 pt-8 space-y-6">
+                {tutorials.map((tutorial, i) => {
+                    const Icon = tutorial.icon
+                    return (
+                        <motion.div
+                            key={tutorial.title}
+                            initial="hidden"
+                            animate="visible"
+                            variants={fadeIn}
+                            custom={i + 1}
+                            className="rounded-xl border border-border/50 p-5"
+                        >
+                            <div className="flex items-center gap-2.5 mb-3">
+                                <div className="size-7 rounded-lg bg-muted/50 flex items-center justify-center">
+                                    <Icon className="size-3.5 text-muted-foreground" />
+                                </div>
+                                <h3 className="text-sm font-medium">{tutorial.title}</h3>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground/60 mb-2">Example prompt:</p>
+                            <div className="rounded-lg bg-muted/40 border border-border/30 px-3.5 py-2.5">
+                                <p className="text-xs font-mono text-muted-foreground leading-relaxed">
+                                    &quot;{tutorial.prompt}&quot;
+                                </p>
+                            </div>
+                            <p className="text-xs text-muted-foreground/70 mt-3 leading-relaxed">
+                                {tutorial.tip}
+                            </p>
+                        </motion.div>
+                    )
+                })}
             </div>
-            <p>
-              Then iterate with follow-ups to add animations, refine copy, or adjust the layout.
-            </p>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FormInput className="h-4 w-4 text-blue-500" />
-              Creating a Form with Validation
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Start with a prompt like:</p>
-            <div className="rounded bg-muted p-3 font-mono text-xs">
-              &quot;Build a multi-step signup form with email validation, password strength
-              indicator, and profile setup. Include error handling.&quot;
-            </div>
-            <p>
-              Follow up to add specific validations, connect to an API, or style individual fields.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ShoppingCart className="h-4 w-4 text-blue-500" />
-              Building a Dashboard
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Start with a prompt like:</p>
-            <div className="rounded bg-muted p-3 font-mono text-xs">
-              &quot;Create an analytics dashboard with a sidebar, stats cards, a line chart, and a
-              data table. Use a clean, minimal design.&quot;
-            </div>
-            <p>
-              Iterate to add interactivity, filtering, date range pickers, or export functionality.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="rounded-lg bg-muted/50 p-4">
-        <h3 className="font-medium text-sm">More tutorials coming soon</h3>
-        <p className="text-sm text-muted-foreground mt-1">
-          We&apos;re adding more tutorials regularly. Check the changelog for updates.
-        </p>
-      </div>
-    </div>
-  )
+            <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={fadeIn}
+                custom={5}
+                className="mt-8 rounded-xl border border-border/50 p-4"
+            >
+                <p className="text-xs font-medium text-muted-foreground">More tutorials coming soon</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1 leading-relaxed">
+                    We&apos;re adding more tutorials regularly. Check the changelog for updates.
+                </p>
+            </motion.div>
+        </div>
+    )
 }

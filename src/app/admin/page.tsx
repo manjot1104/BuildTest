@@ -1,65 +1,83 @@
-import { db } from "@/server/db";
-import { user, user_chats } from "@/server/db/schema";
-import { sql } from "drizzle-orm";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-export default async function AdminDashboard() {
-  const totalUsers = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(user);
+"use client";
 
-  const totalChats = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(user_chats);
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Users,
+  MessageSquare,
+  CreditCard,
+  Coins,
+} from "lucide-react";
+
+import { useAdminStats } from "@/client-api/query-hooks/use-admin-queries";
+
+export default function AdminDashboard() {
+  const { data, isLoading, error } = useAdminStats();
+
+  const stats = [
+    {
+      label: "Total Users",
+      value: data?.totalUsers ?? 0,
+      icon: Users,
+    },
+    {
+      label: "Total Chats",
+      value: data?.totalChats ?? 0,
+      icon: MessageSquare,
+    },
+    {
+      label: "Active Subscriptions",
+      value: data?.activeSubscriptions ?? 0,
+      icon: CreditCard,
+    },
+    {
+      label: "Credits in Circulation",
+      value: data?.totalCreditsInCirculation ?? 0,
+      icon: Coins,
+    },
+  ];
 
   return (
-   <div className="space-y-8">
-      <h2 className="text-3xl font-semibold tracking-tight">
-  Dashboard
-</h2>
+    <div className="space-y-8">
+      <div>
+        <h2 className="text-2xl font-semibold tracking-tight">Dashboard</h2>
+        <p className="text-sm text-muted-foreground">
+          Overview of your platform activity.
+        </p>
+      </div>
 
-     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {error && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
+          {error.message}
+        </div>
+      )}
 
- <Card className="shadow-md border-border/60">
-  <CardHeader>
-    <CardTitle className="text-sm text-muted-foreground">
-      Total Users
-    </CardTitle>
-  </CardHeader>
-  <CardContent className="pt-0">
-    <p className="text-4xl font-semibold">
-      {totalUsers[0]?.count ?? 0}
-    </p>
-  </CardContent>
-</Card>
-
- <Card className="shadow-md border-border/60">
-
-    <CardHeader>
-      <CardTitle className="text-sm text-muted-foreground">
-        Total Chats
-      </CardTitle>
-    </CardHeader>
-    <CardContent className="pt-0">
-      <p className="text-3xl font-semibold">
-        {totalChats[0]?.count ?? 0}
-      </p>
-    </CardContent>
-  </Card>
-
-<Card className="shadow-md border-border/60">
-    <CardHeader>
-      <CardTitle className="text-sm text-muted-foreground">
-        System Status
-      </CardTitle>
-    </CardHeader>
-    <CardContent>
-      <p className="text-3xl  text-green-500 font-semibold">
-        Healthy
-      </p>
-    </CardContent>
-  </Card>
-
-</div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {stat.label}
+              </CardTitle>
+              <stat.icon className="size-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="pt-0">
+              {isLoading ? (
+                <Skeleton className="h-9 w-20" />
+              ) : (
+                <p className="text-3xl font-semibold tracking-tight">
+                  {stat.value.toLocaleString()}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

@@ -40,6 +40,16 @@ export const SUBSCRIPTION_PLANS = {
     interval: "monthly" as const,
     description: "For power users and teams",
   },
+  ADMIN: {
+    id: "admin",
+    name: "Admin Grant",
+    price: 0, // INR - Free plan for admin manual assignment
+    credits: 0, // Credits will be set by admin during assignment
+    currency: "INR",
+    interval: "monthly" as const,
+    description: "Admin-only manual subscription assignment",
+    adminOnly: true, // Flag to mark this as admin-only
+  },
 } as const;
 
 // Additional Credit Packs (one-time purchase, infinite validity)
@@ -96,9 +106,6 @@ export function getCreditPackById(id: string): CreditPack | undefined {
   return Object.values(CREDIT_PACKS).find((pack) => pack.id === id);
 }
 
-export function getAllSubscriptionPlans(): SubscriptionPlan[] {
-  return Object.values(SUBSCRIPTION_PLANS);
-}
 
 export function getAllCreditPacks(): CreditPack[] {
   return Object.values(CREDIT_PACKS);
@@ -173,12 +180,23 @@ export function getLocalizedCreditPack(
 
 /**
  * Get all subscription plans with localized pricing
+ * @param includeAdminPlans - If true, includes admin-only plans (default: false)
  */
 export function getAllLocalizedSubscriptionPlans(
-  currency: SupportedCurrency
+  currency: SupportedCurrency,
+  includeAdminPlans = false
 ): LocalizedPlan[] {
-  return Object.values(SUBSCRIPTION_PLANS).map((plan) =>
-    getLocalizedSubscriptionPlan(plan, currency)
+  return Object.values(SUBSCRIPTION_PLANS)
+    .filter((plan) => includeAdminPlans || !("adminOnly" in plan && plan.adminOnly))
+    .map((plan) => getLocalizedSubscriptionPlan(plan, currency));
+}
+
+/**
+ * Get all subscription plans (for admin use)
+ */
+export function getAllSubscriptionPlans(includeAdminPlans = false): SubscriptionPlan[] {
+  return Object.values(SUBSCRIPTION_PLANS).filter(
+    (plan) => includeAdminPlans || !("adminOnly" in plan && plan.adminOnly)
   );
 }
 

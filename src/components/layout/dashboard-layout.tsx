@@ -1,5 +1,6 @@
 'use client'
 import Link from "next/link";
+import { Shield } from "lucide-react";
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
@@ -40,7 +41,7 @@ export default function DashboardLayout({
         return '/' + segments.slice(0, idx + 1).join('/');
     };
 
-const [starredOpen, setStarredOpen] = useState(false)
+    const [starredOpen, setStarredOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
 
@@ -69,9 +70,14 @@ const [starredOpen, setStarredOpen] = useState(false)
                                     <BreadcrumbList>
                                         {segments.map((segment, idx) => {
                                             const isLast = idx === segments.length - 1;
+                                            const SEGMENT_LABELS: Record<string, string> = {
+                                                "ai-chat": "AI Chat",
+                                                "chat": "New Chat",
+                                            };
                                             const title =
-                                                segment.charAt(0).toUpperCase() +
-                                                segment.slice(1).replace(/-/g, " ");
+                                                SEGMENT_LABELS[segment] ??
+                                                (segment.charAt(0).toUpperCase() +
+                                                segment.slice(1).replace(/-/g, " "));
                                             return (
                                                 <Fragment key={buildHref(idx)}>
                                                     {idx !== 0 && <BreadcrumbSeparator className={idx === 0 ? "hidden md:block" : ""} />}
@@ -91,25 +97,17 @@ const [starredOpen, setStarredOpen] = useState(false)
                                 </Breadcrumb>
                             </div>
                             <div className="flex items-center gap-3">
-  {isAdmin && (
-  isOnAdminPage ? (
-    <Link
-      href="/chat"
-      className="px-3 py-1.5 text-sm rounded-md bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 transition"
-    >
-      ← User Dashboard
-    </Link>
-  ) : (
-    <Link
-      href="/admin/users"
-      className="px-3 py-1.5 text-sm rounded-md bg-purple-600/20 text-purple-400 hover:bg-purple-600/30 transition"
-    >
-      Admin Dashboard
-    </Link>
-  )
-)}
-  <CreditsDisplay variant="button" />
-</div>
+                                {isAdmin && !isOnAdminPage && (
+                                    <Link
+                                        href="/admin"
+                                        className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                                    >
+                                        <Shield className="size-3.5" />
+                                        Admin Panel
+                                    </Link>
+                                )}
+                                <CreditsDisplay variant="button" />
+                            </div>
                         </div>
                     </header>
                     <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
@@ -118,14 +116,14 @@ const [starredOpen, setStarredOpen] = useState(false)
                 </SidebarInset>
             </SidebarProvider>
             <StarredChatsDialog
-  open={starredOpen}
-  onOpenChange={setStarredOpen}
-/>
+                open={starredOpen}
+                onOpenChange={setStarredOpen}
+            />
             <SettingsDialog
-  open={settingsOpen}
-  onOpenChange={setSettingsOpen}
-  defaultTab={settingsTab}
-/>
+                open={settingsOpen}
+                onOpenChange={setSettingsOpen}
+                defaultTab={settingsTab}
+            />
         </Fragment>
     )
 }

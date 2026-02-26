@@ -9,22 +9,26 @@ interface CreditAnalyticsParams {
 }
 
 export function useAdminCredits(params?: CreditAnalyticsParams) {
-  const sp = new URLSearchParams();
-  if (params?.page) sp.set("page", params.page.toString());
-  if (params?.limit) sp.set("limit", params.limit.toString());
-  if (params?.search) sp.set("search", params.search);
-  if (params?.sortBy) sp.set("sortBy", params.sortBy);
-  if (params?.sortOrder) sp.set("sortOrder", params.sortOrder);
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", params.page.toString());
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.sortBy) searchParams.set("sortBy", params.sortBy);
+  if (params?.sortOrder) searchParams.set("sortOrder", params.sortOrder);
 
-  const qs = sp.toString();
-  const url = `/api/admin/credits-analytics${qs ? `?${qs}` : ""}`;
+  const queryString = searchParams.toString();
+  const url = `/api/admin/credits${queryString ? `?${queryString}` : ""}`;
 
   return useQuery({
     queryKey: ["admin-credits", params],
     queryFn: async () => {
       const res = await fetch(url);
-      if (!res.ok) throw new Error("Failed to fetch credit analytics");
+      if (!res.ok) {
+        throw new Error("Failed to fetch credit analytics");
+      }
       return res.json();
     },
   });
 }
+
+
