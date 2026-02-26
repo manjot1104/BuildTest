@@ -70,9 +70,14 @@ export default function DashboardLayout({
                                     <BreadcrumbList>
                                         {segments.map((segment, idx) => {
                                             const isLast = idx === segments.length - 1;
+                                            const SEGMENT_LABELS: Record<string, string> = {
+                                                "ai-chat": "AI Chat",
+                                                "chat": "New Chat",
+                                            };
                                             const title =
-                                                segment.charAt(0).toUpperCase() +
-                                                segment.slice(1).replace(/-/g, " ");
+                                                SEGMENT_LABELS[segment] ??
+                                                (segment.charAt(0).toUpperCase() +
+                                                segment.slice(1).replace(/-/g, " "));
                                             return (
                                                 <Fragment key={buildHref(idx)}>
                                                     {idx !== 0 && <BreadcrumbSeparator className={idx === 0 ? "hidden md:block" : ""} />}
