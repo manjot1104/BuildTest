@@ -53,6 +53,11 @@ import {
   toggleStarChat,
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
+import {
+  getGithubStatusHandler,
+  pushToGithubHandler,
+  getGithubRepoForChatHandler,
+} from '@/server/api/controllers/github.controller'
 import { env } from '@/env'
 
 /** Insufficient credits response type */
@@ -885,5 +890,46 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         deductSubscription: t.Optional(t.Number()),
         deductAdditional: t.Optional(t.Number()),
       }),
+    },
+  )
+
+  // ============================================
+  // GitHub Endpoints
+  // ============================================
+
+  // Routes (add at bottom of chain)
+  .get('/github/status', async ({ set }) => {
+    const result = await getGithubStatusHandler()
+    if ('status' in result && result.status) set.status = result.status
+    return result
+  })
+
+  .post(
+    '/github/push',
+    async ({ body, set }) => {
+      const result = await pushToGithubHandler({ body })
+      if ('status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        branchName: t.String(),
+        commitMessage: t.Optional(t.String()),
+        repoName: t.Optional(t.String()),
+        visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
+      }),
+    },
+  )
+
+  .get(
+    '/github/repo/:chatId',
+    async ({ params, set }) => {
+      const result = await getGithubRepoForChatHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
     },
   )
