@@ -22,17 +22,21 @@ export default function AppPage() {
   const [iframeLoading, setIframeLoading] = useState(true)
 
   useEffect(() => {
-    if (!chatId) {
-      setState({ status: 'error', message: 'No app ID provided.' })
-      return
-    }
+  console.log("CHAT ID:", chatId)
 
-    let cancelled = false
+  if (!chatId) {
+    setState({ status: 'error', message: 'No app ID provided.' })
+    return
+  }
 
-    async function fetchApp() {
-      setState({ status: 'loading' })
-      try {
-        const res = await fetch(`/api/apps/${chatId}`)
+  let cancelled = false
+
+  async function fetchApp() {
+    console.log("FETCHING API FOR:", chatId)
+
+    setState({ status: 'loading' })
+    try {
+      const res = await fetch(`/api/apps/${chatId}`)
 
         if (!res.ok) {
           if (res.status === 404) {

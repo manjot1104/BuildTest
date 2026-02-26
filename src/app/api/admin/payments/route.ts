@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
+import { credit_usage_logs } from "@/server/db/schema";
+import { demo_visits } from "@/server/db/schema";
 import {
   payment_transactions,
   user,
@@ -63,6 +65,7 @@ export async function GET() {
         user_email: user.email,
         subscription_credits: user_credits.subscription_credits,
         additional_credits: user_credits.additional_credits,
+        user_id: subscriptions.user_id,
       })
       .from(subscriptions)
       .leftJoin(user, eq(user.id, subscriptions.user_id))
@@ -109,18 +112,19 @@ export async function GET() {
     // ==========================
 
     const totalChatsResult = await db
-      .select({
-        count: sql<number>`COUNT(*)`,
-      })
-      .from(user_chats);
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(user_chats)
 
-    const totalCreditsUsedResult = await db
-      .select({
-        value: sql<number>`
-          COALESCE(SUM(subscription_credits + additional_credits), 0)
-        `,
-      })
-      .from(user_credits);
+   const totalPromptsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(credit_usage_logs)
+  .where(
+    sql`${credit_usage_logs.action} IN ('new_prompt', 'follow_up_prompt')`
+  )
 
     const topUsers = await db
       .select({
@@ -142,6 +146,51 @@ export async function GET() {
       .groupBy(sql`TO_CHAR(${user_chats.created_at}, 'Mon YYYY')`)
       .orderBy(sql`MIN(${user_chats.created_at})`);
 
+      const monthlyPrompts = await db
+  .select({
+    month: sql<string>`TO_CHAR(${credit_usage_logs.created_at}, 'Mon YYYY')`,
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(credit_usage_logs)
+  .where(
+    sql`${credit_usage_logs.action} IN ('new_prompt', 'follow_up_prompt')`
+  )
+  .groupBy(sql`TO_CHAR(${credit_usage_logs.created_at}, 'Mon YYYY')`)
+  .orderBy(sql`MIN(${credit_usage_logs.created_at})`);
+
+  const monthlyDemoVisits = await db
+  .select({
+    month: sql<string>`TO_CHAR(${demo_visits.visited_at}, 'Mon YYYY')`,
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .groupBy(sql`TO_CHAR(${demo_visits.visited_at}, 'Mon YYYY')`)
+  .orderBy(sql`MIN(${demo_visits.visited_at})`);
+
+      // ==========================
+// DEMO VISITS ANALYTICS
+// ==========================
+
+const totalDemoVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits);
+
+const featuredVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .where(eq(demo_visits.demo_type, "featured"));
+
+const communityVisitsResult = await db
+  .select({
+    count: sql<number>`COUNT(*)`,
+  })
+  .from(demo_visits)
+  .where(eq(demo_visits.demo_type, "community"));
+
     // ==========================
     // FINAL RETURN
     // ==========================
@@ -157,11 +206,18 @@ export async function GET() {
       transactions,
       monthlyRevenue,
       usageAnalytics: {
-        totalChats: totalChatsResult[0]?.count ?? 0,
-        totalCreditsUsed: totalCreditsUsedResult[0]?.value ?? 0,
-        topUsers,
-        monthlyChats,
-      },
+  totalChats: totalChatsResult[0]?.count ?? 0,
+  totalPrompts: totalPromptsResult[0]?.count ?? 0,
+
+  totalDemoVisits: totalDemoVisitsResult[0]?.count ?? 0,
+  featuredVisits: featuredVisitsResult[0]?.count ?? 0,
+  communityVisits: communityVisitsResult[0]?.count ?? 0,
+
+  topUsers,
+  monthlyChats,
+  monthlyPrompts,
+  monthlyDemoVisits,
+}
     });
   } catch (error) {
     console.error("Payments module error:", error);

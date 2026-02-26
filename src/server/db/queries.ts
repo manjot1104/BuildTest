@@ -10,6 +10,42 @@ import { db } from './index'
 // Type Definitions
 // ============================================================================
 
+import { demo_visits } from './schema'
+
+
+export async function getTotalDemoVisits(): Promise<number> {
+  const [result] = await db
+    .select({ count: count(demo_visits.id) })
+    .from(demo_visits)
+
+  return result?.count ?? 0
+}
+
+export async function getDemoVisitsByType() {
+  const [featured] = await db
+    .select({ count: count(demo_visits.id) })
+    .from(demo_visits)
+    .where(eq(demo_visits.demo_type, 'featured'))
+
+  const [community] = await db
+    .select({ count: count(demo_visits.id) })
+    .from(demo_visits)
+    .where(eq(demo_visits.demo_type, 'community'))
+
+  return {
+    featured: featured?.count ?? 0,
+    community: community?.count ?? 0,
+  }
+}
+
+export async function getUserDemoVisits(userId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: count(demo_visits.id) })
+    .from(demo_visits)
+    .where(eq(demo_visits.owner_user_id, userId))
+
+  return result?.count ?? 0
+}
 export type UserChat = typeof user_chats.$inferSelect
 export type UserChatInsert = typeof user_chats.$inferInsert
 export type AnonymousChatLog = typeof anonymous_chat_logs.$inferSelect

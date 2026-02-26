@@ -1,21 +1,25 @@
 "use client";
+import { useState } from "react";
 
-import { useMemo, useState } from "react";
+import { CartesianGrid } from "recharts";
+
+import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Coins,
-  IndianRupee,
+ 
   Search,
 } from "lucide-react";
 import {
-  Bar,
-  BarChart,
+  
   Cell,
   Legend,
   Line,
+  BarChart,
+  Bar,
   LineChart,
   Pie,
   PieChart,
@@ -25,9 +29,15 @@ import {
   YAxis,
 } from "recharts";
 
+
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import { useAdminCredits } from "@/client-api/query-hooks/use-admin-credits";
-import { useAdminPayments } from "@/client-api/query-hooks/use-admin-payments";
-import { Badge } from "@/components/ui/badge";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,11 +50,37 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+
+import { IndianRupee } from "lucide-react";
+import { useAdminPayments } from "@/client-api/query-hooks/use-admin-payments";
+import { useQuery } from "@tanstack/react-query";
+
+
+
 
 const CREDIT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
+
+
 export default function PaymentsPage() {
+
+  //  USERS USAGE QUERY
+  const { data: usersUsage } = useQuery({
+    queryKey: ["users-usage"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/users-usage");
+      return res.json();
+    },
+  });
+
+  //  STATES
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [activeMetric, setActiveMetric] =
+    useState<"chats" | "prompts" | "demo">("chats");
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+
+  //  SEARCH PARAMS
   const searchParams = useSearchParams();
   const initialTab = useMemo(
     () => searchParams.get("tab") ?? "overview",
@@ -53,11 +89,24 @@ export default function PaymentsPage() {
 
   const [tab, setTab] = useState<string>(initialTab);
 
+
+
   // ------------------------------
   // Payments analytics query
   // ------------------------------
   const [subscriptionSearch, setSubscriptionSearch] = useState("");
+  const [userSearch, setUserSearch] = useState("");
   const { data, isLoading, error } = useAdminPayments();
+  const { data: userStats } = useQuery({
+  queryKey: ["user-usage", selectedUser],
+  queryFn: async () => {
+    const res = await fetch(`/api/admin/user-usage?userId=${selectedUser}`);
+    return res.json();
+  },
+  enabled: !!selectedUser,
+});
+
+
   const monthlyRevenue = data?.monthlyRevenue ?? [];
   const summary = data?.summary;
   const activeSubscriptions = data?.activeSubscriptions ?? [];
@@ -66,6 +115,9 @@ export default function PaymentsPage() {
   const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
     sub.user_email?.toLowerCase().includes(subscriptionSearch.toLowerCase()),
   );
+  const filteredUsers = usersUsage?.filter((u: any) =>
+  u.email?.toLowerCase().includes(userSearch.toLowerCase())
+);
 
   // ------------------------------
   // Credit analytics query (4th tab)
@@ -111,21 +163,34 @@ export default function PaymentsPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Payments Analytics
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Revenue, subscriptions and usage insights.
-        </p>
-      </div>
+  <div className="space-y-8">
 
-      {error && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-          {error.message}
-        </div>
-      )}
+    {/* ===== HEADER FIRST ===== */}
+    <div>
+      <h1 className="text-3xl font-bold tracking-tight">
+        Payments Analytics
+      </h1>
+      <p className="text-sm text-muted-foreground">
+        Revenue, subscriptions and usage insights.
+      </p>
+    </div>
+
+    {/* ===== TABS BELOW HEADER ===== */}
+    
+   
+
+      
+    
+
+
+  
+
+ 
+
+  
+
+ 
+
 
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList>
@@ -342,7 +407,7 @@ export default function PaymentsPage() {
         </TabsContent>
 
         {/* ================= USAGE TAB ================= */}
-        <TabsContent value="usage" className="space-y-6">
+        {/* <TabsContent value="usage" className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader>
@@ -414,6 +479,233 @@ export default function PaymentsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+   */}
+  
+ {/* ================= USAGE TAB ================= */}
+<TabsContent value="usage" className="space-y-10">
+
+  {/* ===== GLOBAL OVERVIEW ===== */}
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-xl font-semibold">Global Usage Overview</h2>
+      <p className="text-sm text-muted-foreground">
+        Overall platform usage statistics.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm text-muted-foreground">
+            Total Chats
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-4">
+          <p className="text-3xl font-bold">{usage?.totalChats ?? 0}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm text-muted-foreground">
+            Total Prompts
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-4">
+          <p className="text-3xl font-bold">{usage?.totalPrompts ?? 0}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm text-muted-foreground">
+            Total Demo Visits
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-4">
+          <p className="text-3xl font-bold">{usage?.totalDemoVisits ?? 0}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm text-muted-foreground">
+            Active Users
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="py-4">
+          <p className="text-3xl font-bold">
+            {usage?.topUsers?.length ?? 0}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  </div>
+
+  {/* ===== USAGE TRENDS ===== */}
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-xl font-semibold">Usage Trends</h2>
+      <p className="text-sm text-muted-foreground">
+        Monthly growth across chats, prompts and demo visits.
+      </p>
+    </div>
+
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>
+          {activeMetric === "chats" && "Monthly Chats"}
+          {activeMetric === "prompts" && "Monthly Prompts"}
+          {activeMetric === "demo" && "Monthly Demo Visits"}
+        </CardTitle>
+
+        <div className="flex gap-2">
+          {["chats", "prompts", "demo"].map((metric) => (
+            <button
+              key={metric}
+              onClick={() => setActiveMetric(metric as any)}
+              className={`px-3 py-1 text-sm rounded-md transition ${
+                activeMetric === metric
+                  ? "bg-primary text-white"
+                  : "bg-muted hover:bg-muted/70"
+              }`}
+            >
+              {metric === "chats"
+                ? "Chats"
+                : metric === "prompts"
+                ? "Prompts"
+                : "Demo Visits"}
+            </button>
+          ))}
+        </div>
+      </CardHeader>
+
+      <CardContent className="h-72">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart
+            data={
+              activeMetric === "chats"
+                ? usage?.monthlyChats ?? []
+                : activeMetric === "prompts"
+                ? usage?.monthlyPrompts ?? []
+                : usage?.monthlyDemoVisits ?? []
+            }
+          >
+            <CartesianGrid stroke="#1F2937" vertical={false} />
+
+            <XAxis
+              dataKey="month"
+              stroke="#9CA3AF"
+              tick={{ fill: "#9CA3AF", fontSize: 12 }}
+            />
+
+            <YAxis
+              allowDecimals={false}
+              stroke="#9CA3AF"
+              tick={{ fill: "#9CA3AF", fontSize: 12 }}
+            />
+
+            <Tooltip />
+
+            <Bar
+              dataKey="count"
+              fill="#3b82f6"
+              radius={[8, 8, 0, 0]}
+              barSize={40}
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      </CardContent>
+    </Card>
+  </div>
+</TabsContent>
+  {/* ===== USER ANALYTICS ===== */}
+<Card>
+  <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <CardTitle>User Analytics</CardTitle>
+
+    <div className="relative w-full sm:w-72">
+      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        placeholder="Search your email..."
+        value={userSearch}
+        onChange={(e) => setUserSearch(e.target.value)}
+        className="pl-9"
+      />
+    </div>
+  </CardHeader>
+
+  <CardContent>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>User</TableHead>
+          <TableHead>Chats</TableHead>
+          <TableHead>Prompts</TableHead>
+          <TableHead>Community Visits</TableHead>
+        </TableRow>
+      </TableHeader>
+
+      <TableBody>
+       {filteredUsers?.map((u: any) => (
+          <>
+            <TableRow
+              key={u.id}
+              className="cursor-pointer hover:bg-muted/40 transition"
+              onClick={() =>
+                setExpandedUser(expandedUser === u.id ? null : u.id)
+              }
+            >
+              <TableCell>{u.email}</TableCell>
+              <TableCell>{u.total_chats}</TableCell>
+              <TableCell>{u.total_prompts}</TableCell>
+              <TableCell>{u.community_visits}</TableCell>
+            </TableRow>
+
+            {expandedUser === u.id && (
+              <TableRow>
+                <TableCell colSpan={4}>
+                  <div className="p-4 rounded-lg bg-muted/30 border">
+                    <div className="grid grid-cols-3 gap-6">
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Detailed Chats
+                        </p>
+                        <p className="text-2xl font-bold">
+                          {u.total_chats}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Detailed Prompts
+                        </p>
+                        <p className="text-2xl font-bold">
+                          {u.total_prompts}
+                        </p>
+                      </div>
+
+                      <div>
+                        <p className="text-sm text-muted-foreground">
+                          Community Visits
+                        </p>
+                        <p className="text-2xl font-bold">
+                          {u.community_visits}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            )}
+          </>
+        ))}
+      </TableBody>
+    </Table>
+  </CardContent>
+</Card>
+
 
         {/* ================= CREDIT ANALYTICS TAB ================= */}
         <TabsContent value="credits" className="space-y-6">
