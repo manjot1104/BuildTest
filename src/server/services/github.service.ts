@@ -51,13 +51,6 @@ export interface GithubFile {
  */
 export async function getGithubToken(userId: string): Promise<string | null> {
   try {
-    const [githubAccount] = await db
-      .select({ accessToken: account.accessToken, scope: account.scope })
-      .from(account)
-      .where(eq(account.userId, userId))
-      .limit(1)
-
-    // Filter in JS since we can't easily filter on two columns
     const accounts = await db
       .select({ accessToken: account.accessToken, scope: account.scope, providerId: account.providerId })
       .from(account)
@@ -146,6 +139,69 @@ async function githubFetch<T>(
 }
 
 // ============================================================================
+// Existence Checks
+// ============================================================================
+
+export type RepoStatus = 'ok' | 'not_found' | 'archived'
+
+/**
+ * Checks if a repository exists, is accessible, and is not archived.
+ */
+export async function checkRepoStatus(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<RepoStatus> {
+  try {
+    const data = await githubFetch<{ archived: boolean }>(token, `/repos/${owner}/${repo}`)
+    if (data.archived) return 'archived'
+    return 'ok'
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : ''
+    if (msg.includes('404') || msg.includes('Not Found')) return 'not_found'
+    return 'ok' // unknown error — let the real operation surface it
+  }
+}
+
+/**
+ * Checks if a branch exists in a repository.
+ * Returns false if the branch does not exist.
+ */
+export async function checkBranchExists(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<boolean> {
+  try {
+    await githubFetch(token, `/repos/${owner}/${repo}/branches/${branch}`)
+    return true
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : ''
+    if (msg.includes('404') || msg.includes('Not Found')) return false
+    return false
+  }
+}
+
+/**
+ * Checks if a repo name is already taken in the authenticated user's account.
+ */
+export async function checkRepoNameTaken(
+  token: string,
+  owner: string,
+  repoName: string,
+): Promise<boolean> {
+  try {
+    await githubFetch(token, `/repos/${owner}/${repoName}`)
+    return true // repo exists = name is taken
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : ''
+    if (msg.includes('404') || msg.includes('Not Found')) return false
+    return false
+  }
+}
+
+// ============================================================================
 // GitHub API Operations
 // ============================================================================
 
@@ -184,7 +240,7 @@ export async function createGithubRepository(
 }
 
 /**
- * Creates a new branch in a repository from the default branch (main/master)
+ * Creates a new branch in a repository from the default branch HEAD.
  */
 export async function createGithubBranch(
   token: string,
@@ -226,7 +282,6 @@ export async function createGithubBranch(
 
 /**
  * Pushes multiple files to a branch in a single commit using the Git Tree API.
- * This is the correct way to push multiple files atomically.
  */
 export async function pushFilesToBranch(
   token: string,

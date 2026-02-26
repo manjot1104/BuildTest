@@ -916,6 +916,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         chatId: t.String(),
         branchName: t.String(),
         commitMessage: t.Optional(t.String()),
+        confirmExistingBranch: t.Optional(t.Boolean()),
         repoName: t.Optional(t.String()),
         visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
       }),

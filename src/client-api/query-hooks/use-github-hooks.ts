@@ -25,6 +25,7 @@ export interface PushToGithubRequest {
   chatId: string
   branchName: string
   commitMessage?: string
+  confirmExistingBranch?: boolean
   // Only required on first push:
   repoName?: string
   visibility?: 'public' | 'private'
@@ -41,7 +42,18 @@ export interface PushToGithubResponse {
 
 interface ApiErrorResponse {
   error: string
+  code?: string
   details?: string
+}
+
+// Error class that carries the structured code from the API
+export class GithubPushError extends Error {
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'GithubPushError'
+    this.code = code
+  }
 }
 
 // ============================================================================
@@ -99,6 +111,7 @@ export function useGithubRepoForChat(chatId: string | undefined) {
 /**
  * Mutation hook for pushing code to GitHub.
  * Handles both first push (creates repo) and follow-up pushes (new branch).
+ * Throws GithubPushError with a `code` field so the UI can react to specific cases.
  */
 export function usePushToGithub(chatId: string | undefined) {
   const queryClient = useQueryClient()
@@ -114,7 +127,11 @@ export function usePushToGithub(chatId: string | undefined) {
       const result = (await response.json()) as PushToGithubResponse | ApiErrorResponse
 
       if (!response.ok || 'error' in result) {
-        throw new Error('error' in result ? result.error : 'Failed to push to GitHub')
+        const err = result as ApiErrorResponse
+        throw new GithubPushError(
+          err.error ?? 'Failed to push to GitHub',
+          err.code,
+        )
       }
 
       return result as PushToGithubResponse

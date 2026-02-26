@@ -8,6 +8,9 @@ import {
   createGithubRepository,
   createGithubBranch,
   pushFilesToBranch,
+  checkRepoStatus,
+  checkBranchExists,
+  checkRepoNameTaken,
 } from '@/server/services/github.service'
 import {
   createGithubRepo,
@@ -21,6 +24,16 @@ import { getUserChat } from '@/server/db/queries'
 
 interface ErrorResponse {
   error: string
+  // Structured error codes the UI can react to specifically
+  code?:
+    | 'branch_already_exists'
+    | 'repo_not_found'
+    | 'repo_archived'
+    | 'repo_name_taken'
+    | 'github_not_connected'
+    | 'token_expired'
+    | 'no_files'
+    | 'unauthorized'
   details?: string
   status?: number
 }
@@ -89,8 +102,7 @@ export async function getGithubStatusHandler(): Promise<
 > {
   try {
     const session = await getSession()
-    if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
-
+    if (!session?.user?.id) return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
     return await getGithubConnectionStatus(session.user.id)
   } catch (error) {
     console.error('Error getting GitHub status:', error)
@@ -114,7 +126,7 @@ export async function getGithubRepoForChatHandler({
 }): Promise<GithubRepoInfo | null | ErrorResponse> {
   try {
     const session = await getSession()
-    if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
+    if (!session?.user?.id) return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
 
     const userChat = await getUserChat({ v0ChatId: params.chatId })
     if (!userChat) return null
@@ -145,15 +157,16 @@ export async function getGithubRepoForChatHandler({
 /**
  * POST /api/github/push
  *
- * Handles both cases:
+ * Case 1 — First push: { chatId, repoName, branchName, visibility, commitMessage? }
+ * Case 2 — Follow-up push: { chatId, branchName, commitMessage?, confirmExistingBranch? }
  *
- * Case 1 — First push (no existing repo for this chat):
- *   Body: { chatId, repoName, branchName, visibility, commitMessage? }
- *   → Creates repo, creates branch (if different from default), pushes files
- *
- * Case 2 — Follow-up push (repo already exists for this chat):
- *   Body: { chatId, branchName, commitMessage? }
- *   → Skips repo creation, creates new branch in existing repo, pushes files
+ * Error codes returned to UI:
+ * - branch_already_exists  → UI asks user to confirm or rename
+ * - repo_not_found         → existing repo was deleted on GitHub
+ * - repo_name_taken        → chosen repo name already exists in their account
+ * - github_not_connected   → no GitHub account linked
+ * - token_expired          → token invalid/revoked
+ * - no_files               → chat has no generated files yet
  */
 export async function pushToGithubHandler({
   body,
@@ -162,16 +175,16 @@ export async function pushToGithubHandler({
     chatId: string
     branchName: string
     commitMessage?: string
-    // Only required on first push:
+    confirmExistingBranch?: boolean // user confirmed they want to push to existing branch
     repoName?: string
     visibility?: 'public' | 'private'
   }
 }): Promise<PushResponse | ErrorResponse> {
   try {
     const session = await getSession()
-    if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
+    if (!session?.user?.id) return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
 
-    const { chatId, branchName, commitMessage } = body
+    const { chatId, branchName, commitMessage, confirmExistingBranch } = body
 
     if (!chatId || !branchName) {
       return { error: 'chatId and branchName are required', status: 400 }
@@ -182,15 +195,17 @@ export async function pushToGithubHandler({
     if (!token) {
       return {
         error: 'GitHub account not connected. Please sign in with GitHub.',
+        code: 'github_not_connected',
         status: 403,
       }
     }
 
-    // Get GitHub username
+    // Verify token is still valid
     const ghUser = await getGithubUser(token)
     if (!ghUser) {
       return {
-        error: 'Failed to fetch GitHub user. Your token may have expired.',
+        error: 'Your GitHub token has expired or been revoked. Please sign out and sign back in with GitHub.',
+        code: 'token_expired',
         status: 403,
       }
     }
@@ -206,7 +221,8 @@ export async function pushToGithubHandler({
       files = await getFilesForChat(chatId)
     } catch (error) {
       return {
-        error: error instanceof Error ? error.message : 'Failed to get files',
+        error: error instanceof Error ? error.message : 'No generated files found for this chat.',
+        code: 'no_files',
         status: 400,
       }
     }
@@ -222,7 +238,7 @@ export async function pushToGithubHandler({
     let isNewRepo: boolean
 
     if (existingRepo) {
-      // ── Case 2: Follow-up push — use existing repo, new branch ──
+      // ── Case 2: Follow-up push ──
       repoName = existingRepo.repo_name
       repoFullName = existingRepo.repo_full_name
       repoUrl = existingRepo.repo_url
@@ -230,18 +246,59 @@ export async function pushToGithubHandler({
       visibility = existingRepo.visibility
       isNewRepo = false
 
-      // Create the new branch in the existing repo
-      await createGithubBranch(token, {
-        owner: ghUser.login,
-        repo: repoName,
-        branchName,
-      })
+      // Check the repo still exists and is not archived
+      const repoStatus = await checkRepoStatus(token, ghUser.login, repoName)
+      if (repoStatus === 'not_found') {
+        return {
+          error: `Repository "${repoFullName}" could not be found on GitHub. It may have been deleted or renamed.`,
+          code: 'repo_not_found',
+          status: 404,
+        }
+      }
+      if (repoStatus === 'archived') {
+        return {
+          error: `Repository "${repoFullName}" is archived and cannot be pushed to. Unarchive it on GitHub first.`,
+          code: 'repo_archived',
+          status: 403,
+        }
+      }
+
+      // Check if the branch already exists
+      const branchExists = await checkBranchExists(token, ghUser.login, repoName, branchName)
+      if (branchExists && !confirmExistingBranch) {
+        // Return a specific code — UI will ask user to confirm
+        return {
+          error: `Branch "${branchName}" already exists in ${repoFullName}.`,
+          code: 'branch_already_exists',
+          status: 409,
+        }
+      }
+
+      // Create the branch only if it doesn't already exist
+      if (!branchExists) {
+        await createGithubBranch(token, {
+          owner: ghUser.login,
+          repo: repoName,
+          branchName,
+        })
+      }
+      // If branchExists && confirmExistingBranch → skip creation, push to existing branch HEAD
     } else {
-      // ── Case 1: First push — create repo + branch ──
+      // ── Case 1: First push ──
       if (!body.repoName || !body.visibility) {
         return {
           error: 'repoName and visibility are required for the first push',
           status: 400,
+        }
+      }
+
+      // Check repo name isn't already taken
+      const nameTaken = await checkRepoNameTaken(token, ghUser.login, body.repoName)
+      if (nameTaken) {
+        return {
+          error: `A repository named "${body.repoName}" already exists in your GitHub account. Please choose a different name.`,
+          code: 'repo_name_taken',
+          status: 409,
         }
       }
 
@@ -258,13 +315,16 @@ export async function pushToGithubHandler({
       visibility = body.visibility
       isNewRepo = true
 
-      // Only create a separate branch if it differs from the default branch
+      // Create branch if it differs from default
       if (branchName !== repo.default_branch) {
-        await createGithubBranch(token, {
-          owner: ghUser.login,
-          repo: repo.name,
-          branchName,
-        })
+        const branchExists = await checkBranchExists(token, ghUser.login, repo.name, branchName)
+        if (!branchExists) {
+          await createGithubBranch(token, {
+            owner: ghUser.login,
+            repo: repo.name,
+            branchName,
+          })
+        }
       }
     }
 

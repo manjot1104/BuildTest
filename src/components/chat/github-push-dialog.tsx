@@ -2,7 +2,16 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Github, GitBranch, Lock, Globe, ExternalLink, Loader2 } from 'lucide-react'
+import {
+  Github,
+  GitBranch,
+  Lock,
+  Globe,
+  ExternalLink,
+  Loader2,
+  AlertTriangle,
+  Info,
+} from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -31,6 +40,59 @@ interface GithubPushDialogProps {
 
 type Visibility = 'public' | 'private'
 
+type ErrorCode =
+  | 'branch_already_exists'
+  | 'repo_not_found'
+  | 'repo_archived'
+  | 'repo_name_taken'
+  | 'github_not_connected'
+  | 'token_expired'
+  | 'no_files'
+  | 'unauthorized'
+
+interface PushError {
+  message: string
+  code?: ErrorCode
+}
+
+// ============================================================================
+// Inline alert component
+// ============================================================================
+
+function InlineAlert({
+  variant,
+  message,
+  action,
+}: {
+  variant: 'warning' | 'error' | 'info'
+  message: string
+  action?: { label: string; onClick: () => void }
+}) {
+  const styles = {
+    warning: 'bg-yellow-50 border-yellow-200 text-yellow-800 dark:bg-yellow-950/30 dark:border-yellow-800 dark:text-yellow-200',
+    error: 'bg-red-50 border-red-200 text-red-800 dark:bg-red-950/30 dark:border-red-800 dark:text-red-200',
+    info: 'bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-950/30 dark:border-blue-800 dark:text-blue-200',
+  }
+
+  return (
+    <div className={`flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-sm ${styles[variant]}`}>
+      <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+      <div className="flex-1">
+        <p>{message}</p>
+        {action && (
+          <button
+            type="button"
+            onClick={action.onClick}
+            className="mt-1 font-medium underline underline-offset-2 hover:no-underline"
+          >
+            {action.label}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -49,6 +111,11 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   const [visibility, setVisibility] = useState<Visibility>('public')
   const [commitMessage, setCommitMessage] = useState('')
 
+  // Error state — structured so UI can react to specific codes
+  const [pushError, setPushError] = useState<PushError | null>(null)
+  // When true, user confirmed they want to push to an existing branch
+  const [confirmExistingBranch, setConfirmExistingBranch] = useState(false)
+
   // Reset form when dialog opens
   useEffect(() => {
     if (open) {
@@ -56,17 +123,29 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       setBranchName(isFirstPush ? 'main' : `update-${Date.now()}`)
       setVisibility('public')
       setCommitMessage('')
+      setPushError(null)
+      setConfirmExistingBranch(false)
     }
   }, [open, isFirstPush])
 
-  const handlePush = async () => {
+  // Clear error when branch name changes
+  useEffect(() => {
+    if (pushError?.code === 'branch_already_exists' || pushError?.code === 'repo_name_taken') {
+      setPushError(null)
+      setConfirmExistingBranch(false)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [branchName, repoName])
+
+  const handlePush = async (overrideConfirm = false) => {
+    setPushError(null)
+
     if (!branchName.trim()) {
-      toast.error('Branch name is required')
+      setPushError({ message: 'Branch name is required.' })
       return
     }
-
     if (isFirstPush && !repoName.trim()) {
-      toast.error('Repository name is required')
+      setPushError({ message: 'Repository name is required.' })
       return
     }
 
@@ -75,6 +154,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         chatId,
         branchName: branchName.trim(),
         commitMessage: commitMessage.trim() || undefined,
+        confirmExistingBranch: overrideConfirm || confirmExistingBranch,
         ...(isFirstPush && {
           repoName: repoName.trim(),
           visibility,
@@ -83,8 +163,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
 
       toast.success(
         result.isNewRepo
-          ? `Repository created and code pushed to ${result.branchName}!`
-          : `Code pushed to ${result.branchName}!`,
+          ? `Repository created and code pushed to "${result.branchName}"!`
+          : `Code pushed to "${result.branchName}"!`,
         {
           action: {
             label: 'View on GitHub',
@@ -95,7 +175,11 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
 
       onOpenChange(false)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to push to GitHub')
+      const raw = error as { message?: string; code?: ErrorCode }
+      const code = raw?.code
+      const message = raw?.message ?? 'Failed to push to GitHub'
+
+      setPushError({ message, code })
     }
   }
 
@@ -114,9 +198,10 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-4 pt-2">
-            <p className="text-sm text-muted-foreground">
-              Sign out and sign back in using GitHub to enable repository access.
-            </p>
+            <InlineAlert
+              variant="info"
+              message="Sign out and sign back in using the GitHub option to enable repository access."
+            />
             <Button onClick={() => onOpenChange(false)} variant="outline" className="w-full">
               Close
             </Button>
@@ -137,7 +222,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
           <DialogDescription>
             {isFirstPush
               ? 'Create a new repository and push your generated code.'
-              : `Pushing a new branch to ${existingRepo?.repoFullName}`}
+              : `Push a new branch to ${existingRepo?.repoFullName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -164,6 +249,44 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               </div>
             )}
 
+            {/* Repo not found error — repo was deleted */}
+            {pushError?.code === 'repo_not_found' && (
+              <InlineAlert variant="error" message={pushError.message} />
+            )}
+
+            {/* Repo archived */}
+            {pushError?.code === 'repo_archived' && (
+              <InlineAlert
+                variant="error"
+                message={pushError.message}
+                action={{
+                  label: 'Open repository on GitHub',
+                  onClick: () => window.open(existingRepo?.repoUrl, '_blank'),
+                }}
+              />
+            )}
+
+            {/* Token expired */}
+            {pushError?.code === 'token_expired' && (
+              <InlineAlert
+                variant="error"
+                message="Your GitHub session has expired. Please sign out and sign back in with GitHub."
+              />
+            )}
+
+            {/* No files */}
+            {pushError?.code === 'no_files' && (
+              <InlineAlert
+                variant="warning"
+                message="No generated files found for this chat. Build something first, then push."
+              />
+            )}
+
+            {/* Generic error (not one of the specific codes) */}
+            {pushError && !pushError.code && (
+              <InlineAlert variant="error" message={pushError.message} />
+            )}
+
             {/* Repo name (first push only) */}
             {isFirstPush && (
               <div className="flex flex-col gap-1.5">
@@ -172,12 +295,18 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                   id="repo-name"
                   placeholder="my-buildify-app"
                   value={repoName}
-                  onChange={(e) => setRepoName(e.target.value.replace(/\s+/g, '-').toLowerCase())}
-                  className="bg-background/50"
+                  onChange={(e) =>
+                    setRepoName(e.target.value.replace(/\s+/g, '-').toLowerCase())
+                  }
+                  className={`bg-background/50 ${pushError?.code === 'repo_name_taken' ? 'border-red-500' : ''}`}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Only lowercase letters, numbers, and hyphens.
-                </p>
+                {pushError?.code === 'repo_name_taken' ? (
+                  <p className="text-xs text-red-500">{pushError.message}</p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Only lowercase letters, numbers, and hyphens.
+                  </p>
+                )}
               </div>
             )}
 
@@ -192,8 +321,46 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                 placeholder="main"
                 value={branchName}
                 onChange={(e) => setBranchName(e.target.value.replace(/\s+/g, '-'))}
-                className="bg-background/50"
+                className={`bg-background/50 ${pushError?.code === 'branch_already_exists' ? 'border-yellow-500' : ''}`}
               />
+
+              {/* Branch already exists — inline confirm */}
+              {pushError?.code === 'branch_already_exists' && (
+                <div className="rounded-md border border-yellow-200 bg-yellow-50 dark:bg-yellow-950/30 dark:border-yellow-800 px-3 py-2.5 text-sm text-yellow-800 dark:text-yellow-200">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="size-4 mt-0.5 shrink-0" />
+                    <div>
+                      <p>
+                        Branch <strong>{branchName}</strong> already exists. Pushing will add a new
+                        commit to it.
+                      </p>
+                      <div className="flex gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirmExistingBranch(true)
+                            void handlePush(true)
+                          }}
+                          className="font-medium underline underline-offset-2 hover:no-underline"
+                        >
+                          Push anyway
+                        </button>
+                        <span className="text-yellow-600 dark:text-yellow-400">·</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPushError(null)
+                            setBranchName('')
+                          }}
+                          className="font-medium underline underline-offset-2 hover:no-underline"
+                        >
+                          Use a different branch
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Visibility (first push only) */}
@@ -244,38 +411,55 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               />
             </div>
 
-            {/* Actions */}
-            <div className="flex gap-2 pt-1">
+            {/* Actions — hide push button when branch_already_exists (inline confirm handles it) */}
+            {pushError?.code !== 'branch_already_exists' && (
+              <div className="flex gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => onOpenChange(false)}
+                  disabled={pushMutation.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1 gap-2"
+                  onClick={() => void handlePush()}
+                  disabled={
+                    pushMutation.isPending ||
+                    !branchName.trim() ||
+                    (isFirstPush && !repoName.trim()) ||
+                    pushError?.code === 'repo_not_found' ||
+                    pushError?.code === 'repo_archived' ||
+                    pushError?.code === 'token_expired'
+                  }
+                >
+                  {pushMutation.isPending ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Pushing…
+                    </>
+                  ) : (
+                    <>
+                      <Github className="size-4" />
+                      {isFirstPush ? 'Create & Push' : 'Push to Branch'}
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Cancel only when branch_already_exists */}
+            {pushError?.code === 'branch_already_exists' && (
               <Button
                 variant="outline"
-                className="flex-1"
+                className="w-full"
                 onClick={() => onOpenChange(false)}
                 disabled={pushMutation.isPending}
               >
                 Cancel
               </Button>
-              <Button
-                className="flex-1 gap-2"
-                onClick={handlePush}
-                disabled={
-                  pushMutation.isPending ||
-                  !branchName.trim() ||
-                  (isFirstPush && !repoName.trim())
-                }
-              >
-                {pushMutation.isPending ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Pushing…
-                  </>
-                ) : (
-                  <>
-                    <Github className="size-4" />
-                    {isFirstPush ? 'Create & Push' : 'Push to Branch'}
-                  </>
-                )}
-              </Button>
-            </div>
+            )}
           </div>
         )}
       </DialogContent>
