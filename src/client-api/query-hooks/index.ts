@@ -86,3 +86,16 @@ export type {
   DeductCreditsRequest,
   ToggleUserRoleRequest,
 } from './use-admin-mutations'
+
+// GitHub hooks
+export {
+  useGithubStatus,
+  useGithubRepoForChat,
+  usePushToGithub
+} from './use-github-hooks'
+export type {
+  GithubStatusResponse,
+  GithubRepoInfo,
+  PushToGithubRequest,
+  PushToGithubResponse
+} from './use-github-hooks'
