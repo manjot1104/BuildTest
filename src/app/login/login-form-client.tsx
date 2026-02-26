@@ -20,7 +20,7 @@ import {
 import { authClient } from '@/server/better-auth/client'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Moon, Sun, Mail, KeyRound } from 'lucide-react'
+import { ArrowLeft, Moon, Sun, Mail, KeyRound ,Github } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
@@ -284,11 +284,10 @@ export default function LoginFormClient() {
                                         setAuthMode('email-password')
                                         setOtp('')
                                     }}
-                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                                        !isOtpMode
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${!isOtpMode
                                             ? 'bg-background text-foreground shadow-sm'
                                             : 'text-muted-foreground hover:text-foreground'
-                                    }`}
+                                        }`}
                                 >
                                     <KeyRound className="size-3.5" />
                                     Password
@@ -300,11 +299,10 @@ export default function LoginFormClient() {
                                         setPassword('')
                                         setName('')
                                     }}
-                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                                        isOtpMode
+                                    className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${isOtpMode
                                             ? 'bg-background text-foreground shadow-sm'
                                             : 'text-muted-foreground hover:text-foreground'
-                                    }`}
+                                        }`}
                                 >
                                     <Mail className="size-3.5" />
                                     Email OTP
@@ -397,6 +395,33 @@ export default function LoginFormClient() {
                                                     : isLogin
                                                         ? 'Login'
                                                         : 'Sign up'}
+                                            </Button>
+                                        </Field>
+                                        <div className="relative my-2">
+                                            <div className="absolute inset-0 flex items-center">
+                                                <span className="w-full border-t border-border" />
+                                            </div>
+                                            <div className="relative flex justify-center text-xs uppercase">
+                                                <span className="bg-card px-2 text-muted-foreground">or continue with</span>
+                                            </div>
+                                        </div>
+
+                                        <Field>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                className="w-full h-11 flex items-center gap-2"
+                                                disabled={isLoading}
+                                                onClick={async () => {
+                                                    await authClient.signIn.social({
+                                                        provider: 'github',
+                                                        callbackURL: '/chat',
+                                                        errorCallbackURL: '/login?error=github_failed',
+                                                    })
+                                                }}
+                                            >
+                                                <Github className="size-4" />
+                                                Continue with GitHub
                                             </Button>
                                         </Field>
 
