@@ -3,7 +3,7 @@
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -425,6 +425,106 @@ export async function createAnonymousChatLog({
     })
   } catch (error) {
     console.error('Failed to create anonymous chat log in database:', error)
+    throw error
+  }
+}
+
+// ============================================================================
+// GitHub Repo Functions
+// ===============================
+
+export type GithubRepo = typeof github_repos.$inferSelect
+export type GithubRepoInsert = typeof github_repos.$inferInsert
+
+export interface CreateGithubRepoParams {
+  chatId: string
+  userId: string
+  githubRepoId: string
+  repoName: string
+  repoFullName: string
+  repoUrl: string
+  branchName: string
+  visibility: string
+  lastCommitSha?: string
+}
+
+/**
+ * Creates a new github repo record for a chat
+ */
+export async function createGithubRepo({
+  chatId,
+  userId,
+  githubRepoId,
+  repoName,
+  repoFullName,
+  repoUrl,
+  branchName,
+  visibility,
+  lastCommitSha,
+}: CreateGithubRepoParams): Promise<GithubRepo> {
+  try {
+    const [repo] = await db
+      .insert(github_repos)
+      .values({
+        id: randomUUID(),
+        chat_id: chatId,
+        user_id: userId,
+        github_repo_id: githubRepoId,
+        repo_name: repoName,
+        repo_full_name: repoFullName,
+        repo_url: repoUrl,
+        branch_name: branchName,
+        visibility,
+        last_commit_sha: lastCommitSha ?? null,
+      })
+      .returning()
+
+    return repo!
+  } catch (error) {
+    console.error('Failed to create github repo in database:', error)
+    throw error
+  }
+}
+
+/**
+ * Updates last_commit_sha after a push
+ */
+export async function updateGithubRepoCommit({
+  id,
+  lastCommitSha,
+}: {
+  id: string
+  lastCommitSha: string
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ last_commit_sha: lastCommitSha, updated_at: new Date() })
+      .where(eq(github_repos.id, id))
+  } catch (error) {
+    console.error('Failed to update github repo commit sha:', error)
+    throw error
+  }
+}
+
+/**
+ * Gets the github repo record for a chat
+ */
+export async function getGithubRepoByChatId({
+  chatId,
+}: {
+  chatId: string
+}): Promise<GithubRepo | undefined> {
+  try {
+    const [repo] = await db
+      .select()
+      .from(github_repos)
+      .where(eq(github_repos.chat_id, chatId))
+      .orderBy(github_repos.created_at) // oldest first = original repo
+      .limit(1)
+    return repo
+  } catch (error) {
+    console.error('Failed to get github repo from database:', error)
     throw error
   }
 }

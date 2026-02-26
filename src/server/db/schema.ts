@@ -132,6 +132,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   subscriptions: many(subscriptions),
   paymentTransactions: many(payment_transactions),
   creditUsageLogs: many(credit_usage_logs),
+  githubRepos: many(github_repos),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -351,4 +352,43 @@ export const paymentTransactionsRelations = relations(payment_transactions, ({ o
 
 export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) => ({
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
+}));
+
+export const github_repos = createTable(
+  "github_repos",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    chat_id: d
+      .text("chat_id")
+      .notNull()
+      .references(() => user_chats.id, { onDelete: "cascade" }),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    github_repo_id: d.text("github_repo_id").notNull(),
+    repo_name: d.text("repo_name").notNull(),
+    repo_full_name: d.text("repo_full_name").notNull(),
+    repo_url: d.text("repo_url").notNull(),
+    branch_name: d.text("branch_name").notNull(),
+    visibility: d.text("visibility").notNull().default("public"), // "public" | "private"
+    last_commit_sha: d.text("last_commit_sha"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("github_repos_user_id_idx").on(t.user_id),
+    index("github_repos_chat_id_idx").on(t.chat_id),
+  ],
+);
+
+export const githubReposRelations = relations(github_repos, ({ one }) => ({
+  user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
+  chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
 }));
