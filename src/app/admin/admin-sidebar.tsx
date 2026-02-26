@@ -3,6 +3,7 @@ import { CreditCard } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -22,6 +23,12 @@ const navItems = [
 export function AdminSidebar() {
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Prevent hydration mismatch by only rendering theme-dependent content after mount
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-card">
@@ -63,13 +70,23 @@ export function AdminSidebar() {
         <button
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          suppressHydrationWarning
         >
-          {theme === "dark" ? (
-            <Sun className="size-4" />
+          {mounted ? (
+            <>
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
+            </>
           ) : (
-            <Moon className="size-4" />
+            <>
+              <Moon className="size-4" />
+              Dark Mode
+            </>
           )}
-          {theme === "dark" ? "Light Mode" : "Dark Mode"}
         </button>
         <Link
           href="/chat"
