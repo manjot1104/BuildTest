@@ -13,10 +13,11 @@ import {
   checkRepoNameTaken,
 } from '@/server/services/github.service'
 import {
+  getActiveGithubRepo,
+  deactivateGithubReposForChat,
   createGithubRepo,
-  getGithubRepoByChatId,
+  getUserChat,
 } from '@/server/db/queries'
-import { getUserChat } from '@/server/db/queries'
 
 // ============================================================================
 // Types
@@ -58,9 +59,7 @@ interface GithubRepoInfo {
   repoName: string
   repoFullName: string
   repoUrl: string
-  branchName: string
-  visibility: string
-  lastCommitSha: string | null
+  visibility: 'public' | 'private'
   createdAt: string
 }
 
@@ -116,8 +115,8 @@ export async function getGithubStatusHandler(): Promise<
 
 /**
  * GET /api/github/repo/:chatId
- * Returns the latest saved github repo record for a chat (if any).
- * Used by the UI to determine if this is a first push or a follow-up.
+ * Returns the active GitHub repo for a chat, or null if none exists.
+ * Used by the UI to determine first push vs follow-up push vs replace-repo.
  */
 export async function getGithubRepoForChatHandler({
   params,
@@ -131,7 +130,7 @@ export async function getGithubRepoForChatHandler({
     const userChat = await getUserChat({ v0ChatId: params.chatId })
     if (!userChat) return null
 
-    const repo = await getGithubRepoByChatId({ chatId: userChat.id })
+    const repo = await getActiveGithubRepo({ chatId: userChat.id })
     if (!repo) return null
 
     return {
@@ -139,9 +138,7 @@ export async function getGithubRepoForChatHandler({
       repoName: repo.repo_name,
       repoFullName: repo.repo_full_name,
       repoUrl: repo.repo_url,
-      branchName: repo.branch_name,
-      visibility: repo.visibility,
-      lastCommitSha: repo.last_commit_sha,
+      visibility: repo.visibility as 'public' | 'private',
       createdAt: repo.created_at.toISOString(),
     }
   } catch (error) {
@@ -157,16 +154,27 @@ export async function getGithubRepoForChatHandler({
 /**
  * POST /api/github/push
  *
- * Case 1 — First push: { chatId, repoName, branchName, visibility, commitMessage? }
- * Case 2 — Follow-up push: { chatId, branchName, commitMessage?, confirmExistingBranch? }
+ * Case 1 — First push (no active repo for this chat):
+ *   Required: { chatId, repoName, visibility, branchName, commitMessage? }
+ *   Creates the GitHub repo, pushes to specified branch, saves the repo record.
  *
- * Error codes returned to UI:
- * - branch_already_exists  → UI asks user to confirm or rename
- * - repo_not_found         → existing repo was deleted on GitHub
- * - repo_name_taken        → chosen repo name already exists in their account
- * - github_not_connected   → no GitHub account linked
- * - token_expired          → token invalid/revoked
- * - no_files               → chat has no generated files yet
+ * Case 2 — Follow-up push (active repo exists):
+ *   Required: { chatId, branchName, commitMessage?, confirmExistingBranch? }
+ *   Pushes to specified branch on the existing active repo. No DB write.
+ *
+ * Case 3 — Replace repo (user explicitly confirmed):
+ *   Required: { chatId, repoName, visibility, branchName, replaceRepo: true, commitMessage? }
+ *   Deactivates old repo record, creates new GitHub repo, pushes, saves new record.
+ *   UI must show a heavy warning before sending replaceRepo: true.
+ *
+ * Error codes:
+ *   branch_already_exists → UI asks user to confirm or rename
+ *   repo_not_found        → active repo was deleted/renamed on GitHub
+ *   repo_archived         → active repo is archived on GitHub
+ *   repo_name_taken       → chosen repo name already exists in their account
+ *   github_not_connected  → no GitHub account linked
+ *   token_expired         → token invalid/revoked
+ *   no_files              → chat has no generated files yet
  */
 export async function pushToGithubHandler({
   body,
@@ -178,19 +186,20 @@ export async function pushToGithubHandler({
     confirmExistingBranch?: boolean // user confirmed they want to push to existing branch
     repoName?: string
     visibility?: 'public' | 'private'
+    replaceRepo?: boolean // User explicitly confirmed replacing the active repo with a new one
   }
 }): Promise<PushResponse | ErrorResponse> {
   try {
     const session = await getSession()
     if (!session?.user?.id) return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
 
-    const { chatId, branchName, commitMessage, confirmExistingBranch } = body
+    const { chatId, branchName, commitMessage, confirmExistingBranch, replaceRepo } = body
 
     if (!chatId || !branchName) {
       return { error: 'chatId and branchName are required', status: 400 }
     }
 
-    // Get GitHub token
+    // Auth checks
     const token = await getGithubToken(session.user.id)
     if (!token) {
       return {
@@ -227,23 +236,24 @@ export async function pushToGithubHandler({
       }
     }
 
-    // Check if repo already exists for this chat
-    const existingRepo = await getGithubRepoByChatId({ chatId: userChat.id })
+    const activeRepo = await getActiveGithubRepo({ chatId: userChat.id })
+    const isFirstPush = !activeRepo
+    const isReplace = !!activeRepo && !!replaceRepo
 
     let repoName: string
     let repoFullName: string
     let repoUrl: string
     let githubRepoId: string
-    let visibility: string
+    let visibility: 'public' | 'private'
     let isNewRepo: boolean
 
-    if (existingRepo) {
-      // ── Case 2: Follow-up push ──
-      repoName = existingRepo.repo_name
-      repoFullName = existingRepo.repo_full_name
-      repoUrl = existingRepo.repo_url
-      githubRepoId = existingRepo.github_repo_id
-      visibility = existingRepo.visibility
+    if (!isFirstPush && !isReplace) {
+      // ── Case 2: Follow-up push to existing active repo ──
+      repoName = activeRepo.repo_name
+      repoFullName = activeRepo.repo_full_name
+      repoUrl = activeRepo.repo_url
+      githubRepoId = activeRepo.github_repo_id
+      visibility = activeRepo.visibility as 'public' | 'private'
       isNewRepo = false
 
       // Check the repo still exists and is not archived
@@ -276,18 +286,13 @@ export async function pushToGithubHandler({
 
       // Create the branch only if it doesn't already exist
       if (!branchExists) {
-        await createGithubBranch(token, {
-          owner: ghUser.login,
-          repo: repoName,
-          branchName,
-        })
+        await createGithubBranch(token, { owner: ghUser.login, repo: repoName, branchName })
       }
-      // If branchExists && confirmExistingBranch → skip creation, push to existing branch HEAD
     } else {
-      // ── Case 1: First push ──
+      // ── Case 1 or Case 3: Creating a new GitHub repo ──
       if (!body.repoName || !body.visibility) {
         return {
-          error: 'repoName and visibility are required for the first push',
+          error: 'repoName and visibility are required when creating a new repository',
           status: 400,
         }
       }
@@ -300,6 +305,11 @@ export async function pushToGithubHandler({
           code: 'repo_name_taken',
           status: 409,
         }
+      }
+
+      // Deactivate old repo record before creating the new one
+      if (isReplace) {
+        await deactivateGithubReposForChat({ chatId: userChat.id })
       }
 
       const repo = await createGithubRepository(token, {
@@ -315,20 +325,16 @@ export async function pushToGithubHandler({
       visibility = body.visibility
       isNewRepo = true
 
-      // Create branch if it differs from default
+      // Create the requested branch if it differs from the repo default
       if (branchName !== repo.default_branch) {
         const branchExists = await checkBranchExists(token, ghUser.login, repo.name, branchName)
         if (!branchExists) {
-          await createGithubBranch(token, {
-            owner: ghUser.login,
-            repo: repo.name,
-            branchName,
-          })
+          await createGithubBranch(token, { owner: ghUser.login, repo: repo.name, branchName })
         }
       }
     }
 
-    // Push files to the branch
+    // Push files to the specified branch
     const pushResult = await pushFilesToBranch(token, {
       owner: ghUser.login,
       repo: repoName,
@@ -337,18 +343,19 @@ export async function pushToGithubHandler({
       commitMessage: commitMessage ?? 'feat: build update from Buildify',
     })
 
-    // Save push record to DB (one record per push)
-    await createGithubRepo({
-      chatId: userChat.id,
-      userId: session.user.id,
-      githubRepoId,
-      repoName,
-      repoFullName,
-      repoUrl,
-      branchName,
-      visibility,
-      lastCommitSha: pushResult.commitSha,
-    })
+    // Only write to DB when a new repo record is needed (first push or replace)
+    // Follow-up pushes to the same repo don't change the DB at all
+    if (isNewRepo) {
+      await createGithubRepo({
+        chatId: userChat.id,
+        userId: session.user.id,
+        githubRepoId,
+        repoName,
+        repoFullName,
+        repoUrl,
+        visibility,
+      })
+    }
 
     return {
       success: true,
