@@ -76,9 +76,7 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),
-roles: userRoleEnum("roles").array().default(["user"]).notNull(),
-
-
+  roles: userRoleEnum("roles").array().default(["user"]).notNull(),
 });
 
 export const session = pgTable("session", {
@@ -354,6 +352,11 @@ export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) =
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
 }));
 
+// GitHub Repos
+// - One row per GitHub repo (github_repo_id is globally unique)
+// - A chat can have multiple repo rows over time, but only one has is_active = true
+// - When user links a new repo to a chat, old row is set to is_active = false
+// - All pushes target the active repo for the chat
 export const github_repos = createTable(
   "github_repos",
   (d) => ({
@@ -366,13 +369,19 @@ export const github_repos = createTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // GitHub's own repo ID — enforces one chat per repo globally
     github_repo_id: d.text("github_repo_id").notNull(),
     repo_name: d.text("repo_name").notNull(),
     repo_full_name: d.text("repo_full_name").notNull(),
     repo_url: d.text("repo_url").notNull(),
-    branch_name: d.text("branch_name").notNull(),
-    visibility: d.text("visibility").notNull().default("public"), // "public" | "private"
-    last_commit_sha: d.text("last_commit_sha"),
+    // Kept for future: allow changing visibility from the app
+    visibility: d
+      .text("visibility", { enum: ["public", "private"] })
+      .notNull()
+      .default("public"),
+    // Only one repo per chat can be active at a time.
+    // Deactivated repos are kept for history but never pushed to.
+    is_active: d.boolean("is_active").notNull().default(true),
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())
@@ -383,8 +392,12 @@ export const github_repos = createTable(
       .notNull(),
   }),
   (t) => [
+    // A GitHub repo can only ever belong to one chat
+    unique("github_repos_github_repo_id_unique").on(t.github_repo_id),
     index("github_repos_user_id_idx").on(t.user_id),
     index("github_repos_chat_id_idx").on(t.chat_id),
+    // Composite index for the most common query: active repo for a given chat
+    index("github_repos_chat_id_is_active_idx").on(t.chat_id, t.is_active),
   ],
 );
 

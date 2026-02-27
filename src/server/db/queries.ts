@@ -431,7 +431,7 @@ export async function createAnonymousChatLog({
 
 // ============================================================================
 // GitHub Repo Functions
-// ===============================
+// ============================================================================
 
 export type GithubRepo = typeof github_repos.$inferSelect
 export type GithubRepoInsert = typeof github_repos.$inferInsert
@@ -443,13 +443,64 @@ export interface CreateGithubRepoParams {
   repoName: string
   repoFullName: string
   repoUrl: string
-  branchName: string
-  visibility: string
-  lastCommitSha?: string
+  visibility: 'public' | 'private'
 }
 
 /**
- * Creates a new github repo record for a chat
+ * Gets the currently active GitHub repo for a chat.
+ * This is what pushes target.
+ */
+export async function getActiveGithubRepo({
+  chatId,
+}: {
+  chatId: string
+}): Promise<GithubRepo | undefined> {
+  try {
+    const [repo] = await db
+      .select()
+      .from(github_repos)
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+      .limit(1)
+    return repo
+  } catch (error) {
+    console.error('Failed to get active github repo from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Deactivates all currently active repos for a chat.
+ * Called before linking a new repo to the same chat.
+ */
+export async function deactivateGithubReposForChat({
+  chatId,
+}: {
+  chatId: string
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ is_active: false, updated_at: new Date() })
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+  } catch (error) {
+    console.error('Failed to deactivate github repos for chat:', error)
+    throw error
+  }
+}
+
+/**
+ * Creates a new GitHub repo record and marks it as active.
+ * Always call deactivateGithubReposForChat first if the chat already has a repo.
  */
 export async function createGithubRepo({
   chatId,
@@ -458,9 +509,7 @@ export async function createGithubRepo({
   repoName,
   repoFullName,
   repoUrl,
-  branchName,
   visibility,
-  lastCommitSha,
 }: CreateGithubRepoParams): Promise<GithubRepo> {
   try {
     const [repo] = await db
@@ -473,9 +522,8 @@ export async function createGithubRepo({
         repo_name: repoName,
         repo_full_name: repoFullName,
         repo_url: repoUrl,
-        branch_name: branchName,
         visibility,
-        last_commit_sha: lastCommitSha ?? null,
+        is_active: true,
       })
       .returning()
 
@@ -487,44 +535,23 @@ export async function createGithubRepo({
 }
 
 /**
- * Updates last_commit_sha after a push
+ * Updates the visibility of a GitHub repo.
+ * For future use: allow changing visibility from the app.
  */
-export async function updateGithubRepoCommit({
+export async function updateGithubRepoVisibility({
   id,
-  lastCommitSha,
+  visibility,
 }: {
   id: string
-  lastCommitSha: string
+  visibility: 'public' | 'private'
 }): Promise<void> {
   try {
     await db
       .update(github_repos)
-      .set({ last_commit_sha: lastCommitSha, updated_at: new Date() })
+      .set({ visibility, updated_at: new Date() })
       .where(eq(github_repos.id, id))
   } catch (error) {
-    console.error('Failed to update github repo commit sha:', error)
-    throw error
-  }
-}
-
-/**
- * Gets the github repo record for a chat
- */
-export async function getGithubRepoByChatId({
-  chatId,
-}: {
-  chatId: string
-}): Promise<GithubRepo | undefined> {
-  try {
-    const [repo] = await db
-      .select()
-      .from(github_repos)
-      .where(eq(github_repos.chat_id, chatId))
-      .orderBy(github_repos.created_at) // oldest first = original repo
-      .limit(1)
-    return repo
-  } catch (error) {
-    console.error('Failed to get github repo from database:', error)
+    console.error('Failed to update github repo visibility:', error)
     throw error
   }
 }
