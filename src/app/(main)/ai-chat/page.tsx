@@ -35,48 +35,75 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 // All IDs verified against OpenRouter /api/v1/models (Feb 2026)
+// const MODELS = [
+//   {
+//     id: "meta-llama/llama-3.3-70b-instruct:free",
+//     name: "LLaMA 3.3 70B",
+//     provider: "Meta",
+//     description: "Best model for complex reasoning & long context",
+//     badge: "Best",
+//     badgeVariant: "default" as const,
+//   },
+//   {
+//     id: "openai/gpt-oss-120b:free",
+//     name: "GPT OSS 120B",
+//     provider: "OpenAI",
+//     description: "OpenAI's powerful 120B model",
+//     badge: "New",
+//     badgeVariant: "default" as const,
+//   },
+ 
+//   {
+//     id: "mistralai/mistral-small-3.1-24b-instruct:free",
+//     name: "Mistral Small 3.1 24B",
+//     provider: "Mistral AI",
+//     description: "Fast and reliable for everyday tasks",
+//     badge: "Reliable",
+//     badgeVariant: "secondary" as const,
+//   },
+  
+  
+// ] as const;
+
+
 const MODELS = [
+  //  Highest Priority – GPT Models
   {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    name: "LLaMA 3.3 70B",
-    provider: "Meta",
-    description: "Best model for complex reasoning & long context",
-    badge: "Best",
+    id: "openai/gpt-oss-20b:free",
+    name: "GPT OSS 20B (Free)",
+    provider: "OpenAI",
+    description: "Primary GPT model",
+    badge: "Primary",
     badgeVariant: "default" as const,
   },
   {
     id: "openai/gpt-oss-120b:free",
-    name: "GPT OSS 120B",
+    name: "GPT OSS 120B (Free)",
     provider: "OpenAI",
-    description: "OpenAI's powerful 120B model",
-    badge: "New",
-    badgeVariant: "default" as const,
-  },
-  {
-    id: "nousresearch/hermes-3-llama-3.1-405b:free",
-    name: "Hermes 3 405B",
-    provider: "Nous Research",
-    description: "Massive 405B model, excellent at instruction-following",
-    badge: "405B",
+    description: "Larger GPT fallback",
+    badge: "Large",
     badgeVariant: "secondary" as const,
   },
+
+  //  Fallback Free Models
   {
     id: "mistralai/mistral-small-3.1-24b-instruct:free",
-    name: "Mistral Small 3.1 24B",
+    name: "Mistral Small 24B",
     provider: "Mistral AI",
-    description: "Fast and reliable for everyday tasks",
-    badge: "Reliable",
+    description: "Reliable fallback",
+    badge: "Fallback",
     badgeVariant: "secondary" as const,
   },
   {
-    id: "qwen/qwen3-coder:free",
-    name: "Qwen3 Coder",
-    provider: "Alibaba",
-    description: "Specialised for coding tasks and technical questions",
-    badge: "Code",
+    id: "google/gemma-3-12b-it:free",
+    name: "Gemma 3 12B",
+    provider: "Google",
+    description: "Lightweight fallback",
+    badge: "Fallback",
     badgeVariant: "secondary" as const,
   },
   {
@@ -87,17 +114,27 @@ const MODELS = [
     badge: null,
     badgeVariant: "secondary" as const,
   },
+
   {
-    id: "google/gemma-3-12b-it:free",
-    name: "Gemma 3 12B",
-    provider: "Google",
-    description: "Lighter Google model, faster responses",
-    badge: "Fast",
+    id: "qwen/qwen3-coder:free",
+    name: "Qwen3 Coder",
+    provider: "Alibaba",
+    description: "Specialised for coding tasks and technical questions",
+    badge: "Code",
+    badgeVariant: "secondary" as const,
+  },
+   {
+    id: "nousresearch/hermes-3-llama-3.1-405b:free",
+    name: "Hermes 3 405B",
+    provider: "Nous Research",
+    description: "Massive 405B model, excellent at instruction-following",
+    badge: "405B",
     badgeVariant: "secondary" as const,
   },
 ] as const;
 
 type ModelId = (typeof MODELS)[number]["id"];
+
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -109,6 +146,13 @@ type ChatMessage = {
   isFallback?: boolean;
   isError?: boolean;
   timestamp: Date;
+
+  
+  files?: {
+    filename: string;
+    language: string;
+    code: string;
+  }[];
 };
 
 // ─── Markdown Renderer ───────────────────────────────────────────────────────
@@ -464,6 +508,11 @@ function ModelSelector({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OpenRouterChatPage() {
+  const [activeFiles, setActiveFiles] = useState<
+  { filename: string; language: string; code: string }[]
+>([]);
+
+const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
@@ -472,7 +521,16 @@ export default function OpenRouterChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
+useEffect(() => {
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.files && m.files.length > 0);
 
+  if (lastAssistant?.files) {
+    setActiveFiles(lastAssistant.files);
+    setSelectedFileIndex(0);
+  }
+}, [messages]);
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -493,66 +551,92 @@ export default function OpenRouterChatPage() {
       setInput("");
       setIsLoading(true);
 
-      try {
-        const res = await fetch("/api/openrouter-test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-            model: modelId,
-          }),
-        });
+     try {
+  const res = await fetch("/api/openrouter-test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+      model: modelId,
+      stream: true,   // important
+    }),
+  });
 
-        const contentType = res.headers.get("content-type") ?? "";
-        if (!contentType.includes("application/json")) {
-          throw new Error(
-            res.status === 503
-              ? "Service unavailable — check that OPENROUTER_API_KEY is set in .env"
-              : `Server error (${res.status}). Check the terminal for details.`,
-          );
-        }
+  if (!res.body) {
+    throw new Error("No response body");
+  }
 
-        const data = (await res.json()) as {
-          reply?: string;
-          usedModel?: string;
-          fallback?: boolean;
-          originalModel?: string;
-          error?: string;
-        };
+  //  1. Insert empty assistant message first
+  const assistantId = crypto.randomUUID();
 
-        if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+    },
+  ]);
 
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: data.reply ?? "No response received.",
-            modelId: data.usedModel as ModelId | undefined,
-            isFallback: data.fallback,
-            timestamp: new Date(),
-          },
-        ]);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let fullText = "";
+let buffer = "";
 
-        if (data.fallback) {
-          const name = MODELS.find((m) => m.id === data.usedModel)?.name ?? data.usedModel ?? "a fallback";
-          toast.info(`Auto-switched to ${name}`, {
-            description: "The original model was rate-limited.",
-          });
-        }
-      } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: err instanceof Error ? err.message : "Something went wrong. Please try again.",
-            isError: true,
-            timestamp: new Date(),
-          },
-        ]);
-        toast.error("Failed to get a response");
-      } finally {
+while (true) {
+  const { done, value } = await reader.read();
+  if (done) break;
+
+  buffer += decoder.decode(value, { stream: true });
+
+  const lines = buffer.split("\n");
+  buffer = lines.pop() || ""; // keep incomplete JSON
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    const parsed = JSON.parse(line);
+
+    if (parsed.type === "token") {
+      fullText += parsed.content;
+    }
+
+    if (parsed.type === "done") {
+      if (parsed.files?.length > 0) {
+        setActiveFiles(parsed.files);
+        setSelectedFileIndex(0);
+      }
+    }
+  }
+
+  // update assistant message once per chunk
+  setMessages((prev) =>
+    prev.map((msg) =>
+      msg.id === assistantId
+        ? { ...msg, content: fullText }
+        : msg
+    )
+  );
+}
+
+} catch (err) {
+  setMessages((prev) => [
+    ...prev,
+    {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content:
+        err instanceof Error
+          ? err.message
+          : "Something went wrong.",
+      isError: true,
+      timestamp: new Date(),
+    },
+  ]);
+
+  toast.error("Failed to get response");
+} finally {
         setIsLoading(false);
         textareaRef.current?.focus();
       }
@@ -585,10 +669,13 @@ export default function OpenRouterChatPage() {
 
   const hasMessages = messages.length > 0;
 
-  return (
-    <div className="flex h-[calc(100svh-4rem)] flex-col -m-4">
+ return (
+  <div className="flex h-[calc(100svh-4rem)] -m-4">
 
-      {/* ── Minimal header ── */}
+    {/* CHAT COLUMN */}
+    <div className="flex flex-1 flex-col">
+
+      {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b bg-background/95 px-5 py-2.5 backdrop-blur">
         <div className="flex items-center gap-2">
           <BrainCircuit className="size-4 text-primary" />
@@ -596,76 +683,141 @@ export default function OpenRouterChatPage() {
         </div>
         {hasMessages && (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={retryLast} disabled={isLoading}
-              className="h-7 gap-1.5 text-xs text-muted-foreground" title="Retry last">
+            <Button variant="ghost" size="sm" onClick={retryLast} disabled={isLoading}>
               <RotateCcw className="size-3" /> Retry
             </Button>
-            <Button variant="ghost" size="sm" onClick={clearChat} disabled={isLoading}
-              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-destructive" title="Clear chat">
+            <Button variant="ghost" size="sm" onClick={clearChat} disabled={isLoading}>
               <Trash2 className="size-3" /> Clear
             </Button>
           </div>
         )}
       </div>
 
-      {/* ── Messages ── */}
+      {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-4 py-6">
           {!hasMessages && <EmptyState onSuggestion={(t) => void sendMessage(t)} />}
           <div className="space-y-6">
-            {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+            {messages.map((msg) => (
+              <MessageBubble key={msg.id} message={msg} />
+            ))}
             {isLoading && <TypingIndicator modelName={selectedModel.name} />}
             <div ref={scrollAnchorRef} />
           </div>
         </div>
       </div>
 
-      {/* ── Input with inline model selector (t3.chat style) ── */}
+      {/* Input */}
       <div className="shrink-0 border-t bg-background px-4 py-3">
         <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/25">
-            {/* Textarea */}
+          <div className="flex flex-col rounded-2xl border bg-background shadow-sm">
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Ask anything…"
-              className="min-h-[52px] max-h-44 resize-none rounded-t-2xl rounded-b-none border-0 px-4 pt-3.5 pb-1 text-sm shadow-none focus-visible:ring-0"
+              className="min-h-[52px] max-h-44 resize-none rounded-t-2xl rounded-b-none border-0 px-4 pt-3.5 pb-1 text-sm"
               disabled={isLoading}
               autoFocus
             />
-
-            {/* Toolbar row — model selector left, send right */}
             <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
-              {/* Model selector button */}
               <ModelSelector modelId={modelId} onSelect={setModelId} disabled={isLoading} />
-
-              {/* Send button */}
               <Button
                 size="sm"
                 onClick={() => void sendMessage()}
                 disabled={!input.trim() || isLoading}
                 className="h-8 gap-1.5 rounded-xl px-3 text-xs"
               >
-                {isLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+                {isLoading ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Send className="size-3.5" />
+                )}
                 Send
               </Button>
             </div>
           </div>
-
-          <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-            Buildify AI Chat · AI responses may be inaccurate. Verify important information.
-          </p>
         </div>
       </div>
 
-      <style>{`
-        @keyframes bounce {
-          0%, 80%, 100% { transform: translateY(0); }
-          40% { transform: translateY(-4px); }
-        }
-      `}</style>
     </div>
-  );
-}
+
+  {/* SIDEBAR */}
+{activeFiles.length > 0 && (
+  <>
+    {/* Resize Handle */}
+    <div className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" />
+
+    {/* Sidebar */}
+    <div className="w-[420px] border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl">
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
+        <div className="flex items-center gap-2">
+          <BrainCircuit className="size-4 text-primary" />
+          <span className="text-sm font-semibold tracking-tight">
+            Generated Code
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={() => setActiveFiles([])}
+        >
+          ✕
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto border-b">
+        {activeFiles.map((file, index) => (
+          <button
+            key={file.filename}
+            onClick={() => setSelectedFileIndex(index)}
+            className={cn(
+              "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
+              index === selectedFileIndex
+                ? "border-primary text-primary bg-primary/5"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            )}
+          >
+            {file.filename}
+          </button>
+        ))}
+      </div>
+
+      {/* Code Area */}
+      <div className="flex-1 overflow-auto">
+        <div className="flex items-center justify-between border-b px-4 py-1.5">
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {activeFiles[selectedFileIndex]?.language}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={() =>
+              navigator.clipboard.writeText(
+                activeFiles[selectedFileIndex]?.code ?? ""
+              )
+            }
+          >
+            Copy
+          </Button>
+        </div>
+
+        <pre className="p-5 text-sm leading-relaxed overflow-x-auto font-mono bg-muted/30">
+          <code>
+            {activeFiles[selectedFileIndex]?.code}
+          </code>
+        </pre>
+      </div>
+
+    </div>
+  </>
+)}
+
+  </div>
+);}
