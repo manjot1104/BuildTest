@@ -897,7 +897,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // GitHub Endpoints
   // ============================================
 
-  // Routes (add at bottom of chain)
   .get('/github/status', async ({ set }) => {
     const result = await getGithubStatusHandler()
     if ('status' in result && result.status) set.status = result.status
@@ -919,6 +918,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         confirmExistingBranch: t.Optional(t.Boolean()),
         repoName: t.Optional(t.String()),
         visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
+        replaceRepo: t.Optional(t.Boolean()), // True when user confirmed they want to replace the active repo with a new one
       }),
     },
   )

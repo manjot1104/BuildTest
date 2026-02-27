@@ -15,9 +15,7 @@ export interface GithubRepoInfo {
   repoName: string
   repoFullName: string
   repoUrl: string
-  branchName: string
-  visibility: string
-  lastCommitSha: string | null
+  visibility: 'public' | 'private'
   createdAt: string
 }
 
@@ -25,10 +23,10 @@ export interface PushToGithubRequest {
   chatId: string
   branchName: string
   commitMessage?: string
-  confirmExistingBranch?: boolean
-  // Only required on first push:
-  repoName?: string
+  confirmExistingBranch?: boolean // User explicitly confirmed pushing to an existing branch
+  repoName?: string // Required on first push or when replaceRepo is true
   visibility?: 'public' | 'private'
+  replaceRepo?: boolean // User explicitly confirmed replacing the active repo with a new one
 }
 
 export interface PushToGithubResponse {
@@ -81,7 +79,8 @@ export function useGithubStatus() {
 }
 
 /**
- * Returns the latest github repo record for a chat (null if never pushed).
+ * Returns the active GitHub repo for a chat, or null if none exists.
+ * Invalidated after every successful push.
  */
 export function useGithubRepoForChat(chatId: string | undefined) {
   return useQuery({
@@ -110,7 +109,12 @@ export function useGithubRepoForChat(chatId: string | undefined) {
 
 /**
  * Mutation hook for pushing code to GitHub.
- * Handles both first push (creates repo) and follow-up pushes (new branch).
+ *
+ * Handles three cases (all via the same endpoint):
+ *   - First push: pass repoName + visibility
+ *   - Follow-up push to active repo: just chatId + branchName
+ *   - Replace active repo: pass repoName + visibility + replaceRepo: true
+ *
  * Throws GithubPushError with a `code` field so the UI can react to specific cases.
  */
 export function usePushToGithub(chatId: string | undefined) {

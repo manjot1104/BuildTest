@@ -91,11 +91,13 @@ export type {
 export {
   useGithubStatus,
   useGithubRepoForChat,
-  usePushToGithub
+  usePushToGithub,
+  GithubPushError,
 } from './use-github-hooks'
+
 export type {
   GithubStatusResponse,
   GithubRepoInfo,
   PushToGithubRequest,
-  PushToGithubResponse
+  PushToGithubResponse,
 } from './use-github-hooks'
