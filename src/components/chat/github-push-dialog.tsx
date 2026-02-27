@@ -10,7 +10,7 @@ import {
   ExternalLink,
   Loader2,
   AlertTriangle,
-  Info,
+  TriangleAlert,
 } from 'lucide-react'
 import {
   Dialog,
@@ -111,12 +111,24 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   const [visibility, setVisibility] = useState<Visibility>('public')
   const [commitMessage, setCommitMessage] = useState('')
 
+  // Replace repo flow — user wants to create a new repo for this chat
+  // Step 1: user clicks "Use a different repository"
+  // Step 2: heavy warning is shown, user must explicitly confirm
+  // Step 3: on confirm, form switches to new-repo mode with replaceRepo: true sent to API
+  const [showReplaceWarning, setShowReplaceWarning] = useState(false)
+  const [replaceRepo, setReplaceRepo] = useState(false)
+
   // Error state — structured so UI can react to specific codes
   const [pushError, setPushError] = useState<PushError | null>(null)
+
   // When true, user confirmed they want to push to an existing branch
   const [confirmExistingBranch, setConfirmExistingBranch] = useState(false)
 
-  // Reset form when dialog opens
+  // Derived: are we showing the new-repo form?
+  // Either it's a first push, or the user confirmed they want to replace the active repo
+  const showNewRepoForm = isFirstPush || replaceRepo
+
+  // Reset everything when dialog opens
   useEffect(() => {
     if (open) {
       setRepoName('')
@@ -125,10 +137,12 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       setCommitMessage('')
       setPushError(null)
       setConfirmExistingBranch(false)
+      setShowReplaceWarning(false)
+      setReplaceRepo(false)
     }
   }, [open, isFirstPush])
 
-  // Clear error when branch name changes
+  // Clear relevant errors when user edits the field causing the error
   useEffect(() => {
     if (pushError?.code === 'branch_already_exists' || pushError?.code === 'repo_name_taken') {
       setPushError(null)
@@ -144,7 +158,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       setPushError({ message: 'Branch name is required.' })
       return
     }
-    if (isFirstPush && !repoName.trim()) {
+    if (showNewRepoForm && !repoName.trim()) {
       setPushError({ message: 'Repository name is required.' })
       return
     }
@@ -155,9 +169,10 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         branchName: branchName.trim(),
         commitMessage: commitMessage.trim() || undefined,
         confirmExistingBranch: overrideConfirm || confirmExistingBranch,
-        ...(isFirstPush && {
+        ...(showNewRepoForm && {
           repoName: repoName.trim(),
           visibility,
+          replaceRepo: replaceRepo || undefined,
         }),
       })
 
@@ -178,7 +193,6 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       const raw = error as { message?: string; code?: ErrorCode }
       const code = raw?.code
       const message = raw?.message ?? 'Failed to push to GitHub'
-
       setPushError({ message, code })
     }
   }
@@ -211,18 +225,87 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
     )
   }
 
+  // ── Replace repo warning screen ──
+  // Shown when user clicks "Use a different repository" on an existing repo.
+  // User must explicitly confirm before we switch to the new-repo form.
+  if (showReplaceWarning && existingRepo) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <TriangleAlert className="size-5" />
+              Replace Repository?
+            </DialogTitle>
+            <DialogDescription>
+              This will disconnect your chat from its current repository.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-4 py-3 text-sm text-amber-800 dark:text-amber-200 space-y-2">
+              <p className="font-semibold">You are about to unlink this chat from:</p>
+              <div className="flex items-center gap-2">
+                <Github className="size-4 shrink-0" />
+                <span className="font-mono font-medium">{existingRepo.repoFullName}</span>
+                <a
+                  href={existingRepo.repoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto shrink-0"
+                >
+                  <ExternalLink className="size-3.5 opacity-70 hover:opacity-100 transition-opacity" />
+                </a>
+              </div>
+              <ul className="list-disc list-inside space-y-1 pt-1 text-amber-700 dark:text-amber-300">
+                <li>Future pushes from this chat will go to the <strong>new</strong> repository.</li>
+                <li>The old repository is <strong>not deleted</strong> on GitHub.</li>
+                <li>This chat will <strong>no longer be connected</strong> to the old repository.</li>
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowReplaceWarning(false)}
+              >
+                Go back
+              </Button>
+              <Button
+                className="flex-1 gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={() => {
+                  setShowReplaceWarning(false)
+                  setReplaceRepo(true)
+                  setRepoName('')
+                  setBranchName('main')
+                }}
+              >
+                Yes, create a new repository
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Github className="size-5" />
-            {isFirstPush ? 'Push to GitHub' : 'Push Update to GitHub'}
+            {showNewRepoForm && replaceRepo
+              ? 'Create New Repository'
+              : isFirstPush
+                ? 'Push to GitHub'
+                : 'Push Update to GitHub'}
           </DialogTitle>
           <DialogDescription>
-            {isFirstPush
-              ? 'Create a new repository and push your generated code.'
-              : `Push a new branch to ${existingRepo?.repoFullName}`}
+            {showNewRepoForm && replaceRepo
+              ? 'Create a new repository and link it to this chat.'
+              : isFirstPush
+                ? 'Create a new repository and push your generated code.'
+                : `Push a new branch to ${existingRepo?.repoFullName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -233,8 +316,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         ) : (
           <div className="flex flex-col gap-4 pt-2">
 
-            {/* Existing repo info (follow-up push) */}
-            {!isFirstPush && existingRepo && (
+            {/* Existing repo info (follow-up push, not replacing) */}
+            {!isFirstPush && !replaceRepo && existingRepo && (
               <div className="flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2">
                 <Github className="size-4 text-muted-foreground shrink-0" />
                 <span className="text-sm font-medium truncate">{existingRepo.repoFullName}</span>
@@ -287,8 +370,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               <InlineAlert variant="error" message={pushError.message} />
             )}
 
-            {/* Repo name (first push only) */}
-            {isFirstPush && (
+            {/* Repo name (new repo form only) */}
+            {showNewRepoForm && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="repo-name">Repository name</Label>
                 <Input
@@ -363,8 +446,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               )}
             </div>
 
-            {/* Visibility (first push only) */}
-            {isFirstPush && (
+            {/* Visibility (new repo form only) */}
+            {showNewRepoForm && (
               <div className="flex flex-col gap-1.5">
                 <Label>Visibility</Label>
                 <div className="flex gap-2">
@@ -411,7 +494,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               />
             </div>
 
-            {/* Actions — hide push button when branch_already_exists (inline confirm handles it) */}
+            {/* Actions */}
             {pushError?.code !== 'branch_already_exists' && (
               <div className="flex gap-2 pt-1">
                 <Button
@@ -428,7 +511,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                   disabled={
                     pushMutation.isPending ||
                     !branchName.trim() ||
-                    (isFirstPush && !repoName.trim()) ||
+                    (showNewRepoForm && !repoName.trim()) ||
                     pushError?.code === 'repo_not_found' ||
                     pushError?.code === 'repo_archived' ||
                     pushError?.code === 'token_expired'
@@ -442,7 +525,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                   ) : (
                     <>
                       <Github className="size-4" />
-                      {isFirstPush ? 'Create & Push' : 'Push to Branch'}
+                      {showNewRepoForm ? 'Create & Push' : 'Push to Branch'}
                     </>
                   )}
                 </Button>
@@ -460,6 +543,18 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                 Cancel
               </Button>
             )}
+
+            {/* Use a different repository — only shown on follow-up push, not while replacing */}
+            {!isFirstPush && !replaceRepo && (
+              <button
+                type="button"
+                onClick={() => setShowReplaceWarning(true)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors text-center underline underline-offset-2 hover:no-underline"
+              >
+                Use a different repository
+              </button>
+            )}
+
           </div>
         )}
       </DialogContent>
