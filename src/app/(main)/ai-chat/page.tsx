@@ -74,7 +74,7 @@ const MODELS = [
   //  Highest Priority – GPT Models
   {
     id: "openai/gpt-oss-20b:free",
-    name: "GPT OSS 20B (Free)",
+    name: "GPT OSS 20B",
     provider: "OpenAI",
     description: "Primary GPT model",
     badge: "Primary",
@@ -82,7 +82,7 @@ const MODELS = [
   },
   {
     id: "openai/gpt-oss-120b:free",
-    name: "GPT OSS 120B (Free)",
+    name: "GPT OSS 120B",
     provider: "OpenAI",
     description: "Larger GPT fallback",
     badge: "Large",
