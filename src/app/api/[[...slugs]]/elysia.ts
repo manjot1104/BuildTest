@@ -36,6 +36,7 @@ import {
   deductCreditsHandler,
   toggleUserRoleHandler,
 } from '@/server/api/controllers/admin.controller'
+import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
@@ -930,6 +931,30 @@ console.log("VISIT LOGGING STARTED")
         userId: t.String(),
         deductSubscription: t.Optional(t.Number()),
         deductAdditional: t.Optional(t.Number()),
+      }),
+    },
+  )
+
+  // ============================================
+  // Sandbox Execution Endpoints
+  // ============================================
+
+  // Execute code in sandbox - POST /api/sandbox/execute
+  .post(
+    '/sandbox/execute',
+    async ({ body, set }) => {
+      const result = await executeCodeHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        code: t.String(),
+        language: t.String(),
       }),
     },
   )

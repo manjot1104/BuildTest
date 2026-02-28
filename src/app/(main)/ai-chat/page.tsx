@@ -31,6 +31,11 @@ import {
   AlertTriangle,
   RotateCcw,
   ChevronDown,
+  Play,
+  Square,
+  Terminal,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -96,6 +101,17 @@ const MODELS = [
     badgeVariant: "secondary" as const,
   },
 ] as const;
+
+/** Friendly names for fallback models not in the main list */
+const FALLBACK_MODEL_NAMES: Record<string, string> = {
+  "arcee-ai/trinity-large-preview:free": "Trinity Large 400B",
+  "upstage/solar-pro-3:free": "Solar Pro 3",
+  "nvidia/nemotron-3-nano-30b-a3b:free": "Nemotron 30B",
+  "stepfun/step-3.5-flash:free": "Step 3.5 Flash",
+  "google/gemma-3-4b-it:free": "Gemma 3 4B",
+  "qwen/qwen3-4b:free": "Qwen3 4B",
+  "openrouter/free": "Auto (Free)",
+};
 
 type ModelId = (typeof MODELS)[number]["id"];
 
@@ -232,6 +248,553 @@ function TextSegment({ content }: { content: string }) {
   return <div>{elements}</div>;
 }
 
+// ─── Sandbox Types & Helpers ─────────────────────────────────────────────────
+
+type AppExecution = {
+  isRunning: boolean;
+  htmlPreview: string | null;
+  consoleOutput: string | null;
+  error: string | null;
+  exitCode: number | null;
+  executionTimeMs: number | null;
+  status: "completed" | "failed" | "timeout" | null;
+};
+
+const WEB_LANGUAGES = new Set(["html", "htm", "css", "scss", "less", "svg", "xml"]);
+const SCRIPT_LANGUAGES = new Set([
+  "js", "javascript", "jsx", "ts", "typescript", "tsx",
+  "mjs", "cjs", "node",
+]);
+const JSX_LANGUAGES = new Set(["jsx", "tsx"]);
+const SERVER_ONLY_LANGUAGES = new Set(["py", "python", "sh", "bash", "shell"]);
+
+/** Checks if code blocks can be rendered client-side in a browser */
+function isWebApp(blocks: SegmentCode[]): boolean {
+  const langs = blocks.map((b) => b.lang.toLowerCase());
+  // Has HTML → definitely a web app
+  if (langs.some((l) => ["html", "htm"].includes(l))) return true;
+  // Has JSX/TSX → React code, render client-side with React CDN
+  if (langs.some((l) => JSX_LANGUAGES.has(l))) return true;
+  // Has JS/TS/CSS only (no server-only languages) → can render in browser
+  const hasScript = langs.some((l) => SCRIPT_LANGUAGES.has(l));
+  const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
+  const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
+  if ((hasScript || hasCss) && !hasServerOnly) return true;
+  return false;
+}
+
+/**
+ * Console capture script — intercepts console.log/warn/error and renders output
+ * visually in the page. Also catches uncaught errors and promise rejections.
+ * Only shows the output panel when there's no other visible DOM content.
+ */
+const CONSOLE_CAPTURE_SCRIPT = `<script>
+(function(){
+  var _out = document.createElement('div');
+  _out.id = '__console_output__';
+  _out.style.cssText = 'font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:13px;line-height:1.6;padding:12px 16px;margin:0;white-space:pre-wrap;word-wrap:break-word;color:#e4e4e7;background:#18181b;min-height:100vh;box-sizing:border-box;';
+  document.body.appendChild(_out);
+
+  function _fmt(a){
+    if(a===null) return 'null';
+    if(a===undefined) return 'undefined';
+    if(typeof a==='object'){try{return JSON.stringify(a,null,2)}catch(e){return String(a)}}
+    return String(a);
+  }
+  function _log(type,args){
+    var line=document.createElement('div');
+    line.style.cssText='padding:2px 0;border-bottom:1px solid #27272a;';
+    var prefix='';
+    if(type==='error'){line.style.color='#f87171';prefix='Error: ';}
+    else if(type==='warn'){line.style.color='#fbbf24';prefix='Warning: ';}
+    else if(type==='info'){line.style.color='#60a5fa';}
+    else{line.style.color='#e4e4e7';}
+    line.textContent=prefix+Array.from(args).map(_fmt).join(' ');
+    _out.appendChild(line);
+  }
+  // Messages to suppress from display (e.g. Babel transformer warning)
+  var _suppress=['in-browser Babel transformer','babel.min.js'];
+  function _isSuppressed(args){
+    var s=Array.from(args).join(' ');
+    for(var i=0;i<_suppress.length;i++){if(s.indexOf(_suppress[i])!==-1)return true;}
+    return false;
+  }
+  var _orig={log:console.log,warn:console.warn,error:console.error,info:console.info};
+  console.log=function(){_orig.log.apply(console,arguments);if(!_isSuppressed(arguments))_log('log',arguments);};
+  console.warn=function(){_orig.warn.apply(console,arguments);if(!_isSuppressed(arguments))_log('warn',arguments);};
+  console.error=function(){_orig.error.apply(console,arguments);if(!_isSuppressed(arguments))_log('error',arguments);};
+  console.info=function(){_orig.info.apply(console,arguments);if(!_isSuppressed(arguments))_log('info',arguments);};
+  window.onerror=function(m,s,l,c,e){_log('error',[e?e.stack||e.message:m]);};
+  window.onunhandledrejection=function(e){_log('error',['Unhandled Promise: '+(e.reason&&e.reason.stack||e.reason)]);};
+
+  // After DOM loads, hide console panel if there's visible content in body
+  window.addEventListener('DOMContentLoaded', function(){
+    var children = document.body.children;
+    var hasVisibleContent = false;
+    for(var i=0;i<children.length;i++){
+      if(children[i].id!=='__console_output__' && children[i].tagName!=='SCRIPT'){
+        hasVisibleContent=true; break;
+      }
+    }
+    if(hasVisibleContent && _out.childNodes.length===0){
+      _out.style.display='none';
+    } else if(hasVisibleContent && _out.childNodes.length>0){
+      _out.style.minHeight='auto';
+      _out.style.maxHeight='200px';
+      _out.style.overflowY='auto';
+      _out.style.borderTop='2px solid #3f3f46';
+      _out.style.position='fixed';
+      _out.style.bottom='0';
+      _out.style.left='0';
+      _out.style.right='0';
+    }
+  });
+})();
+</script>`;
+
+/**
+ * Strips import/export statements from code so it can run in a browser <script> tag.
+ * - Removes `import ... from '...'` lines
+ * - Converts `export default function X` → `function X`
+ * - Converts `export default class X` → `class X`
+ * - Converts `export function X` → `function X`
+ * - Converts `export const/let/var X` → `const/let/var X`
+ * - Removes bare `export default` at end
+ */
+function stripModuleSyntax(code: string): string {
+  return code
+    .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
+    .replace(/export\s+default\s+function\s/g, "function ")
+    .replace(/export\s+default\s+class\s/g, "class ")
+    .replace(/export\s+function\s/g, "function ")
+    .replace(/export\s+const\s/g, "const ")
+    .replace(/export\s+let\s/g, "let ")
+    .replace(/export\s+var\s/g, "var ")
+    .replace(/^\s*export\s+default\s+/gm, "var _default = ")
+    .trim();
+}
+
+/**
+ * Exposes React hooks & common APIs as globals so code that had
+ * `import { useState } from 'react'` stripped still works.
+ * Must be placed AFTER React/ReactDOM CDN scripts load.
+ */
+const REACT_GLOBALS_SHIM = `<script>
+(function(){
+  if(typeof React==='undefined') return;
+  // Hooks
+  var hooks=['useState','useEffect','useRef','useCallback','useMemo','useContext',
+    'useReducer','useId','useLayoutEffect','useImperativeHandle','useDebugValue',
+    'useDeferredValue','useTransition','useSyncExternalStore','useInsertionEffect'];
+  hooks.forEach(function(h){if(React[h])window[h]=React[h];});
+  // Common APIs
+  ['createElement','createContext','createRef','forwardRef','lazy','memo',
+   'Fragment','Suspense','StrictMode','Children','cloneElement','isValidElement'
+  ].forEach(function(k){if(React[k])window[k]=React[k];});
+  // ReactDOM
+  if(typeof ReactDOM!=='undefined'){
+    window.createRoot=ReactDOM.createRoot;
+    window.createPortal=ReactDOM.createPortal;
+  }
+})();
+</script>`;
+
+/** Combines all code blocks into a single runnable HTML document */
+function buildHtmlApp(blocks: SegmentCode[]): string {
+  const htmlBlocks: string[] = [];
+  const cssBlocks: string[] = [];
+  const jsBlocks: string[] = [];
+  const jsxBlocks: string[] = [];
+
+  // Detect if code contains JSX syntax (even if tagged as js/ts)
+  const looksLikeJsx = (code: string) =>
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || /React\.createElement/.test(code) || /from\s+['"]react['"]/.test(code);
+
+  for (const block of blocks) {
+    const lang = block.lang.toLowerCase();
+    if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
+    else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
+    else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
+      jsxBlocks.push(stripModuleSyntax(block.code));
+    else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
+  }
+
+  const needsReact = jsxBlocks.length > 0;
+  const mainHtml = htmlBlocks.join("\n");
+  const hasFullDocument = mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
+
+  // If the HTML already looks like a full document, inject CSS/JS/console into it
+  if (hasFullDocument) {
+    let doc = mainHtml;
+    // Inject console capture right after <body>
+    if (doc.includes("<body")) {
+      doc = doc.replace(/<body[^>]*>/, `$&\n${CONSOLE_CAPTURE_SCRIPT}`);
+    } else {
+      doc = CONSOLE_CAPTURE_SCRIPT + doc;
+    }
+    if (cssBlocks.length > 0) {
+      const cssTag = `<style>\n${cssBlocks.join("\n")}\n</style>`;
+      if (doc.includes("</head>")) {
+        doc = doc.replace("</head>", `${cssTag}\n</head>`);
+      } else if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${cssTag}\n</body>`);
+      } else {
+        doc += `\n${cssTag}`;
+      }
+    }
+    if (needsReact && !doc.includes("react")) {
+      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}`;
+      if (doc.includes("</head>")) {
+        doc = doc.replace("</head>", `${reactCdn}\n</head>`);
+      } else if (doc.includes("<body")) {
+        doc = doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
+      }
+    }
+    if (jsBlocks.length > 0) {
+      const jsTag = `<script>\n${jsBlocks.join("\n")}\n<\/script>`;
+      if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${jsTag}\n</body>`);
+      } else {
+        doc += `\n${jsTag}`;
+      }
+    }
+    if (jsxBlocks.length > 0) {
+      const jsxTag = `<script type="text/babel" data-presets="react">\n${jsxBlocks.join("\n")}\n<\/script>`;
+      if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${jsxTag}\n</body>`);
+      } else {
+        doc += `\n${jsxTag}`;
+      }
+    }
+    return doc;
+  }
+
+  // Build a minimal HTML document
+  const reactCdn = needsReact
+    ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+${REACT_GLOBALS_SHIM}`
+    : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+${cssBlocks.length > 0 ? `<style>\n${cssBlocks.join("\n")}\n</style>` : ""}
+${reactCdn}
+</head>
+<body>
+${CONSOLE_CAPTURE_SCRIPT}
+${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
+${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
+${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react">
+${jsxBlocks.join("\n\n")}
+${!mainHtml ? `
+// Auto-mount: render App component to #root
+if (typeof App !== 'undefined') {
+  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+}` : ""}
+<\/script>` : ""}
+</body>
+</html>`;
+}
+
+/** Daytona-supported server-only language map */
+const SERVER_LANG_MAP: Record<string, string> = {
+  py: "python", python: "python",
+};
+
+/** Combines backend-only code blocks for Daytona execution (Python only) */
+function buildBackendCode(blocks: SegmentCode[]): { code: string; language: string } | null {
+  const serverBlocks = blocks.filter((b) => SERVER_LANG_MAP[b.lang.toLowerCase()]);
+  if (serverBlocks.length === 0) return null;
+
+  const primaryLang = serverBlocks[0]!.lang.toLowerCase();
+  const daytonaLang = SERVER_LANG_MAP[primaryLang] ?? primaryLang;
+  const combinedCode = serverBlocks.map((b) => b.code).join("\n\n");
+  return { code: combinedCode, language: daytonaLang };
+}
+
+// ─── App Runner Component ───────────────────────────────────────────────────
+
+function AppRunner({ content }: { content: string }) {
+  const segments = splitCodeBlocks(content);
+  const codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+
+  const [execution, setExecution] = useState<AppExecution>({
+    isRunning: false, htmlPreview: null, consoleOutput: null,
+    error: null, exitCode: null, executionTimeMs: null, status: null,
+  });
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (codeBlocks.length === 0) return null;
+
+  const webApp = isWebApp(codeBlocks);
+
+  const handleRun = async () => {
+    if (execution.isRunning) return;
+
+    if (webApp) {
+      // Build and render client-side — instant, no server call
+      const html = buildHtmlApp(codeBlocks);
+      setExecution({
+        isRunning: false, htmlPreview: html, consoleOutput: null,
+        error: null, exitCode: 0, executionTimeMs: 0, status: "completed",
+      });
+      toast.success("App rendered");
+      return;
+    }
+
+    // Backend code — send to Daytona
+    const backend = buildBackendCode(codeBlocks);
+    if (!backend) {
+      toast.error("No executable code found in this message");
+      return;
+    }
+
+    setExecution({
+      isRunning: true, htmlPreview: null, consoleOutput: null,
+      error: null, exitCode: null, executionTimeMs: null, status: null,
+    });
+
+    try {
+      const res = await fetch("/api/sandbox/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(backend),
+      });
+
+      const data = (await res.json()) as {
+        output?: string;
+        error?: string | null;
+        exitCode?: number;
+        executionTimeMs?: number;
+        status?: "completed" | "failed" | "timeout";
+        message?: string;
+      };
+
+      if (!res.ok) {
+        const errorMsg = data.message ?? data.error ?? `Execution failed (${res.status})`;
+        setExecution({
+          isRunning: false, htmlPreview: null, consoleOutput: null,
+          error: errorMsg, exitCode: -1, executionTimeMs: null, status: "failed",
+        });
+        toast.error("Sandbox execution failed", { description: errorMsg });
+        return;
+      }
+
+      setExecution({
+        isRunning: false,
+        htmlPreview: null,
+        consoleOutput: data.output ?? "",
+        error: data.error ?? null,
+        exitCode: data.exitCode ?? 0,
+        executionTimeMs: data.executionTimeMs ?? null,
+        status: data.status ?? "completed",
+      });
+
+      if (data.status === "completed") toast.success("Code executed successfully");
+      else if (data.status === "timeout") toast.warning("Execution timed out");
+      else toast.error("Execution failed");
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : "Network error";
+      setExecution({
+        isRunning: false, htmlPreview: null, consoleOutput: null,
+        error: errorMsg, exitCode: -1, executionTimeMs: null, status: "failed",
+      });
+      toast.error("Failed to run code", { description: errorMsg });
+    }
+  };
+
+  const handleStop = () => {
+    setExecution({
+      isRunning: false, htmlPreview: null, consoleOutput: null,
+      error: null, exitCode: null, executionTimeMs: null, status: null,
+    });
+  };
+
+  const hasResult = execution.htmlPreview !== null || execution.consoleOutput !== null || execution.error !== null;
+
+  const statusConfig = {
+    completed: { color: "text-green-600 dark:text-green-400", label: "Success" },
+    failed: { color: "text-destructive", label: "Failed" },
+    timeout: { color: "text-yellow-600 dark:text-yellow-400", label: "Timed Out" },
+  };
+
+  return (
+    <div className="mt-2">
+      {/* Run App button */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant={hasResult ? "outline" : "default"}
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={hasResult ? handleStop : handleRun}
+          disabled={execution.isRunning}
+        >
+          {execution.isRunning ? (
+            <><Loader2 className="size-3 animate-spin" />Running...</>
+          ) : hasResult ? (
+            <><Square className="size-3" />Close Preview</>
+          ) : (
+            <><Play className="size-3" />Run App</>
+          )}
+        </Button>
+        {hasResult && !execution.htmlPreview && execution.status && (
+          <span className={cn("text-[11px] font-medium", statusConfig[execution.status]?.color)}>
+            {statusConfig[execution.status]?.label}
+          </span>
+        )}
+        {hasResult && execution.executionTimeMs !== null && execution.executionTimeMs > 0 && !execution.htmlPreview && (
+          <span className="text-[10px] text-muted-foreground">{execution.executionTimeMs}ms</span>
+        )}
+      </div>
+
+      {/* Result panel */}
+      {hasResult && (
+        <div className="mt-2 overflow-hidden rounded-lg border bg-muted/40">
+          {/* HTML preview */}
+          {execution.htmlPreview && (
+            <>
+              <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Terminal className="size-3 text-muted-foreground" />
+                  <span className="text-[11px] font-medium text-muted-foreground">App Preview</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] font-medium text-green-600 dark:text-green-400">Live</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    title={isExpanded ? "Minimize" : "Expand"}
+                  >
+                    {isExpanded ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
+                  </Button>
+                </div>
+              </div>
+              <iframe
+                srcDoc={execution.htmlPreview}
+                sandbox="allow-scripts allow-forms"
+                className={cn(
+                  "w-full bg-white transition-all",
+                  isExpanded ? "h-[500px]" : "h-72",
+                )}
+                title="App Preview"
+              />
+            </>
+          )}
+
+          {/* Console output (backend code) */}
+          {(execution.consoleOutput !== null || execution.error !== null) && !execution.htmlPreview && (
+            <>
+              <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Terminal className="size-3 text-muted-foreground" />
+                  <span className="text-[11px] font-medium text-muted-foreground">Console Output</span>
+                </div>
+              </div>
+              <pre className="max-h-48 overflow-auto p-4 text-xs leading-relaxed">
+                {execution.error ? (
+                  <code className="text-destructive">{execution.error}</code>
+                ) : (
+                  <code>{execution.consoleOutput ?? ""}</code>
+                )}
+              </pre>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Code Block (display only) ──────────────────────────────────────────────
+
+/** Basic syntax highlighting — returns spans with GitHub Dark colors */
+function highlightCode(code: string, lang: string): ReactNode[] {
+  const l = lang.toLowerCase();
+  const isHtml = ["html", "htm", "xml", "svg"].includes(l);
+  const isCss = ["css", "scss", "less"].includes(l);
+  const isPython = ["py", "python"].includes(l);
+
+  // Tokenize line-by-line for performance
+  const lines = code.split("\n");
+  return lines.map((line, li) => {
+    const parts: ReactNode[] = [];
+    let remaining = line;
+    let ki = 0;
+
+    const push = (text: string, color?: string) => {
+      parts.push(color ? <span key={ki++} style={{ color }}>{text}</span> : <span key={ki++}>{text}</span>);
+    };
+
+    // Process the line with regex matching
+    const regex = isHtml
+      ? /(<\/?[\w-]+|>|\/>|[\w-]+(?==)|"[^"]*"|'[^']*'|<!--[\s\S]*?-->|&\w+;)/g
+      : isCss
+        ? /(\/\*[\s\S]*?\*\/|[.#][\w-]+|@[\w-]+|:\s*[^;{]+|"[^"]*"|'[^']*'|\d+(?:px|em|rem|%|vh|vw|s|ms|deg|fr)?)/g
+        : /(\/\/.*$|\/\*[\s\S]*?\*\/|#.*$|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b(?:import|export|from|default|return|const|let|var|function|class|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|delete|throw|try|catch|finally|async|await|yield|of|in|extends|implements|interface|type|enum|namespace|declare|abstract|readonly|public|private|protected|static|get|set|def|self|print|True|False|None|elif|lambda|with|as|raise|pass|and|or|not|is)\b|\b(?:true|false|null|undefined|NaN|Infinity)\b|\b(?:console|document|window|Math|Array|Object|String|Number|Boolean|Promise|Map|Set|Date|JSON|Error|React|useState|useEffect|useRef|useCallback|useMemo|useContext|useReducer|ReactDOM|Component|Fragment|createElement)\b|\b\d+\.?\d*\b|[(){}[\];,]|=>|\.\.\.)/gm;
+
+    let match: RegExpExecArray | null;
+    let lastIndex = 0;
+
+    while ((match = regex.exec(remaining)) !== null) {
+      // Text before match
+      if (match.index > lastIndex) {
+        push(remaining.slice(lastIndex, match.index));
+      }
+      const token = match[0]!;
+
+      if (isHtml) {
+        if (token.startsWith("<!--")) push(token, "#8b949e");
+        else if (token.startsWith("<") || token === ">" || token === "/>") push(token, "#7ee787");
+        else if (token.includes("=")) push(token, "#79c0ff");
+        else if (token.startsWith('"') || token.startsWith("'")) push(token, "#a5d6ff");
+        else if (token.startsWith("&")) push(token, "#d2a8ff");
+        else push(token);
+      } else if (isCss) {
+        if (token.startsWith("/*")) push(token, "#8b949e");
+        else if (token.startsWith(".") || token.startsWith("#")) push(token, "#7ee787");
+        else if (token.startsWith("@")) push(token, "#d2a8ff");
+        else if (token.startsWith(":")) push(token, "#79c0ff");
+        else if (token.startsWith('"') || token.startsWith("'")) push(token, "#a5d6ff");
+        else if (/\d/.test(token)) push(token, "#79c0ff");
+        else push(token);
+      } else {
+        // JS/TS/Python
+        if (token.startsWith("//") || token.startsWith("#") || token.startsWith("/*")) push(token, "#8b949e");
+        else if (token.startsWith('"') || token.startsWith("'") || token.startsWith("`")) push(token, "#a5d6ff");
+        else if (/^(import|export|from|default|return|const|let|var|function|class|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|delete|throw|try|catch|finally|async|await|yield|of|in|extends|implements|interface|type|enum|namespace|declare|abstract|readonly|public|private|protected|static|get|set|def|self|print|True|False|None|elif|lambda|with|as|raise|pass|and|or|not|is)$/.test(token)) push(token, "#ff7b72");
+        else if (/^(true|false|null|undefined|NaN|Infinity)$/.test(token)) push(token, "#79c0ff");
+        else if (/^(console|document|window|Math|Array|Object|String|Number|Boolean|Promise|Map|Set|Date|JSON|Error|React|useState|useEffect|useRef|useCallback|useMemo|useContext|useReducer|ReactDOM|Component|Fragment|createElement)$/.test(token)) push(token, "#d2a8ff");
+        else if (/^\d/.test(token)) push(token, "#79c0ff");
+        else if (token === "=>" || token === "...") push(token, "#ff7b72");
+        else if (/^[(){}[\];,]$/.test(token)) push(token, "#e6edf3");
+        else push(token);
+      }
+
+      lastIndex = match.index + token.length;
+    }
+    // Remaining text after last match
+    if (lastIndex < remaining.length) {
+      push(remaining.slice(lastIndex));
+    }
+
+    return (
+      <span key={li}>
+        {parts}
+        {li < lines.length - 1 ? "\n" : ""}
+      </span>
+    );
+  });
+}
+
 function CodeBlock({ lang, code }: { lang: string; code: string }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = useCallback(async () => {
@@ -241,14 +804,16 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   }, [code]);
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border bg-muted/40">
-      <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
-        <span className="font-mono text-[11px] text-muted-foreground">{lang || "text"}</span>
-        <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[11px]" onClick={handleCopy}>
+    <div className="my-3 overflow-hidden rounded-lg border border-[#30363d]" style={{ background: "#0d1117" }}>
+      <div className="flex items-center justify-between border-b border-[#30363d] px-4 py-1.5" style={{ background: "#161b22" }}>
+        <span className="font-mono text-[11px]" style={{ color: "#8b949e" }}>{lang || "text"}</span>
+        <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[11px] hover:bg-[#30363d]" style={{ color: "#8b949e" }} onClick={handleCopy}>
           {copied ? <><Check className="size-3" />Copied</> : <><Copy className="size-3" />Copy</>}
         </Button>
       </div>
-      <pre className="overflow-x-auto p-4 text-xs leading-relaxed"><code>{code}</code></pre>
+      <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed" style={{ color: "#e6edf3" }}>
+        <code>{highlightCode(code, lang)}</code>
+      </pre>
     </div>
   );
 }
@@ -286,7 +851,9 @@ function CopyMessageButton({ content }: { content: string }) {
 
 function MessageBubble({ message }: { message: ChatMessage }) {
   const modelInfo = MODELS.find((m) => m.id === message.modelId);
-  const modelLabel = modelInfo?.name ?? message.modelId ?? "AI";
+  const modelLabel = modelInfo?.name
+    ?? (message.modelId ? FALLBACK_MODEL_NAMES[message.modelId] : null)
+    ?? "AI";
 
   if (message.role === "user") {
     return (
@@ -332,6 +899,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         )}>
           <MarkdownMessage content={message.content} />
         </div>
+        {!message.isError && <AppRunner content={message.content} />}
         <div className="flex items-center gap-1">
           <CopyMessageButton content={message.content} />
           <span className="text-[11px] text-muted-foreground">
@@ -535,9 +1103,11 @@ export default function OpenRouterChatPage() {
         ]);
 
         if (data.fallback) {
-          const name = MODELS.find((m) => m.id === data.usedModel)?.name ?? data.usedModel ?? "a fallback";
+          const name = MODELS.find((m) => m.id === data.usedModel)?.name
+            ?? (data.usedModel ? FALLBACK_MODEL_NAMES[data.usedModel] : null)
+            ?? "another model";
           toast.info(`Auto-switched to ${name}`, {
-            description: "The original model was rate-limited.",
+            description: "The selected model was busy. Response may vary in quality.",
           });
         }
       } catch (err) {

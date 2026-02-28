@@ -23,6 +23,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.2",
+    "@daytonaio/sdk": "^0.147.0",
     "@elysiajs/eden": "^1.4.6",
     "@elysiajs/node": "^1.4.3",
     "@hookform/resolvers": "^5.2.2",
@@ -90,6 +91,7 @@
     "tailwind-merge": "^3.4.0",
     "v0-sdk": "^0.16.1",
     "vaul": "^1.1.2",
+    "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
