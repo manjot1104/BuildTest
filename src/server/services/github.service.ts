@@ -247,21 +247,19 @@ export async function createGithubBranch(
     branchName: string
   },
 ): Promise<GithubBranchCreated> {
-  // First get the SHA of the default branch HEAD
-  const refData = await githubFetch<{ object: { sha: string } }>(
+  // Get the repo's actual default branch name (e.g. "main" or "master")
+  const repoData = await githubFetch<{ default_branch: string }>(
     token,
-    `/repos/${params.owner}/${params.repo}/git/refs/heads`,
+    `/repos/${params.owner}/${params.repo}`,
   )
 
-  // refData is an array — get the first ref's SHA (default branch)
-  const refs = refData as unknown as Array<{ object: { sha: string }; ref: string }>
-  const defaultRef = refs[0]
+  // Get the SHA of the default branch HEAD
+  const refData = await githubFetch<{ object: { sha: string } }>(
+    token,
+    `/repos/${params.owner}/${params.repo}/git/refs/heads/${repoData.default_branch}`,
+  )
 
-  if (!defaultRef) {
-    throw new Error('No refs found in repository')
-  }
-
-  const sha = defaultRef.object.sha
+  const sha = refData.object.sha
 
   // Create new branch from that SHA
   return githubFetch<GithubBranchCreated>(

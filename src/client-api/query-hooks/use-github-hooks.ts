@@ -60,8 +60,10 @@ export class GithubPushError extends Error {
 
 /**
  * Returns whether the current user has GitHub connected with repo scope.
+ * Only fetches when enabled (dialog is open). Retries disabled since
+ * connection status is user-action-dependent, not transient.
  */
-export function useGithubStatus() {
+export function useGithubStatus(enabled = true) {
   return useQuery({
     queryKey: ['github-status'],
     queryFn: async (): Promise<GithubStatusResponse> => {
@@ -74,7 +76,9 @@ export function useGithubStatus() {
 
       return result
     },
+    enabled,
     staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: false,
   })
 }
 
@@ -82,7 +86,7 @@ export function useGithubStatus() {
  * Returns the active GitHub repo for a chat, or null if none exists.
  * Invalidated after every successful push.
  */
-export function useGithubRepoForChat(chatId: string | undefined) {
+export function useGithubRepoForChat(chatId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: ['github-repo', chatId],
     queryFn: async (): Promise<GithubRepoInfo | null> => {
@@ -98,8 +102,9 @@ export function useGithubRepoForChat(chatId: string | undefined) {
 
       return result as GithubRepoInfo | null
     },
-    enabled: !!chatId,
+    enabled: enabled && !!chatId,
     staleTime: 1000 * 30, // 30 seconds
+    retry: false,
   })
 }
 

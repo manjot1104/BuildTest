@@ -65,6 +65,34 @@ interface GithubRepoInfo {
 }
 
 // ============================================================================
+// Validation
+// ============================================================================
+
+/**
+ * Validates a git branch name.
+ * Rejects names with characters that are invalid in git refs.
+ */
+function isValidBranchName(name: string): boolean {
+  if (!name || name.length > 255) return false
+  // Git ref rules: no space, no ~, ^, :, ?, *, [, \, no double dots, no leading/trailing dot or slash
+  if (/[\s~^:?*[\\\x00-\x1f\x7f]/.test(name)) return false
+  if (name.includes('..')) return false
+  if (name.startsWith('.') || name.startsWith('/') || name.endsWith('.') || name.endsWith('/')) return false
+  if (name.endsWith('.lock')) return false
+  if (name.includes('@{')) return false
+  return true
+}
+
+/**
+ * Validates a GitHub repository name.
+ * Only allows lowercase letters, numbers, hyphens, and dots. Max 100 chars.
+ */
+function isValidRepoName(name: string): boolean {
+  if (!name || name.length > 100) return false
+  return /^[a-z0-9][a-z0-9._-]*$/.test(name)
+}
+
+// ============================================================================
 // Helpers
 // ============================================================================
 
@@ -129,6 +157,11 @@ export async function getGithubRepoForChatHandler({
 
     const userChat = await getUserChat({ v0ChatId: params.chatId })
     if (!userChat) return null
+
+    // Verify chat ownership — prevent data leaks across users
+    if (userChat.user_id !== session.user.id) {
+      return { error: 'Forbidden', status: 403 }
+    }
 
     const repo = await getActiveGithubRepo({ chatId: userChat.id })
     if (!repo) return null
@@ -196,6 +229,13 @@ export async function pushToGithubHandler({
 
     if (!chatId || !branchName) {
       return { error: 'chatId and branchName are required', status: 400 }
+    }
+
+    if (!isValidBranchName(branchName)) {
+      return {
+        error: 'Invalid branch name. Avoid spaces, special characters (~^:?*[\\), and double dots.',
+        status: 400,
+      }
     }
 
     // Auth checks
@@ -299,6 +339,14 @@ export async function pushToGithubHandler({
       if (!body.repoName || !body.visibility) {
         return {
           error: 'repoName and visibility are required when creating a new repository',
+          status: 400,
+        }
+      }
+
+      if (!isValidRepoName(body.repoName)) {
+        return {
+          error: 'Invalid repository name. Use only lowercase letters, numbers, hyphens, and dots. Must start with a letter or number.',
+          code: 'repo_name_taken' as const,
           status: 400,
         }
       }

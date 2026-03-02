@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import {
   WebPreview,
   WebPreviewNavigation,
@@ -21,9 +21,16 @@ import {
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
-import { GithubPushDialog } from '@/components/chat/github-push-dialog'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
+
+// Lazy-load the GitHub dialog — it's heavy (pulls in React Query hooks, auth client, etc.)
+// Only mounted when user actually opens it, never on initial render.
+const GithubPushDialog = lazy(() =>
+  import('@/components/chat/github-push-dialog').then((m) => ({
+    default: m.GithubPushDialog,
+  })),
+)
 
 /* -------------------- TYPES -------------------- */
 
@@ -91,6 +98,9 @@ export function PreviewPanel({
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
 
+  // Track if dialog has ever been opened — once opened, keep mounted for fast re-open
+  const [githubDialogMounted, setGithubDialogMounted] = useState(false)
+
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
   useEffect(() => {
@@ -118,6 +128,11 @@ export function PreviewPanel({
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [isFullscreen, setIsFullscreen])
+
+  const openGithubDialog = () => {
+    setGithubDialogMounted(true)
+    setGithubDialogOpen(true)
+  }
 
   return (
     <>
@@ -154,7 +169,7 @@ export function PreviewPanel({
               <WebPreviewNavigationButton
                 tooltip="Push to GitHub"
                 disabled={!hasFiles}
-                onClick={() => setGithubDialogOpen(true)}
+                onClick={openGithubDialog}
               >
                 <Github className="h-4 w-4" />
               </WebPreviewNavigationButton>
@@ -269,13 +284,15 @@ export function PreviewPanel({
         />
       )}
 
-      {/* GitHub Push Dialog */}
-      {currentChat?.id && (
-        <GithubPushDialog
-          open={githubDialogOpen}
-          onOpenChange={setGithubDialogOpen}
-          chatId={currentChat.id}
-        />
+      {/* GitHub Push Dialog — lazy loaded, only mounted after first open */}
+      {githubDialogMounted && currentChat?.id && (
+        <Suspense fallback={null}>
+          <GithubPushDialog
+            open={githubDialogOpen}
+            onOpenChange={setGithubDialogOpen}
+            chatId={currentChat.id}
+          />
+        </Suspense>
       )}
     </>
   )
