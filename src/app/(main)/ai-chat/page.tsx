@@ -1479,7 +1479,11 @@ useEffect(() => {
                   case "error":
                     throw new Error(event.message);
                   case "done":
-                    break;
+  if ((event as any).files?.length > 0) {
+    setActiveFiles((event as any).files);
+    setSelectedFileIndex(0);
+  }
+  break;
                 }
               } catch (e) {
                 if (e instanceof SyntaxError) continue;
@@ -1697,7 +1701,7 @@ useEffect(() => {
         </div>
       </div>
 
-    
+   
 
   {/* SIDEBAR */}
 {activeFiles.length > 0 && (
