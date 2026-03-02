@@ -1,15 +1,10 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { eq } from "drizzle-orm";
-
 import { auth } from "@/server/better-auth";
 import { db } from "@/server/db";
 import { user } from "@/server/db/schema";
 import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
-import { AdminSidebar } from "./admin-sidebar";
-
 import { AdminSidebar } from "./admin-sidebar";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

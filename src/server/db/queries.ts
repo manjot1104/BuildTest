@@ -3,7 +3,7 @@
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -461,6 +461,133 @@ export async function createAnonymousChatLog({
     })
   } catch (error) {
     console.error('Failed to create anonymous chat log in database:', error)
+    throw error
+  }
+}
+
+// ============================================================================
+// GitHub Repo Functions
+// ============================================================================
+
+export type GithubRepo = typeof github_repos.$inferSelect
+export type GithubRepoInsert = typeof github_repos.$inferInsert
+
+export interface CreateGithubRepoParams {
+  chatId: string
+  userId: string
+  githubRepoId: string
+  repoName: string
+  repoFullName: string
+  repoUrl: string
+  visibility: 'public' | 'private'
+}
+
+/**
+ * Gets the currently active GitHub repo for a chat.
+ * This is what pushes target.
+ */
+export async function getActiveGithubRepo({
+  chatId,
+}: {
+  chatId: string
+}): Promise<GithubRepo | undefined> {
+  try {
+    const [repo] = await db
+      .select()
+      .from(github_repos)
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+      .limit(1)
+    return repo
+  } catch (error) {
+    console.error('Failed to get active github repo from database:', error)
+    throw error
+  }
+}
+
+/**
+ * Deactivates all currently active repos for a chat.
+ * Called before linking a new repo to the same chat.
+ */
+export async function deactivateGithubReposForChat({
+  chatId,
+}: {
+  chatId: string
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ is_active: false, updated_at: new Date() })
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+  } catch (error) {
+    console.error('Failed to deactivate github repos for chat:', error)
+    throw error
+  }
+}
+
+/**
+ * Creates a new GitHub repo record and marks it as active.
+ * Always call deactivateGithubReposForChat first if the chat already has a repo.
+ */
+export async function createGithubRepo({
+  chatId,
+  userId,
+  githubRepoId,
+  repoName,
+  repoFullName,
+  repoUrl,
+  visibility,
+}: CreateGithubRepoParams): Promise<GithubRepo> {
+  try {
+    const [repo] = await db
+      .insert(github_repos)
+      .values({
+        id: randomUUID(),
+        chat_id: chatId,
+        user_id: userId,
+        github_repo_id: githubRepoId,
+        repo_name: repoName,
+        repo_full_name: repoFullName,
+        repo_url: repoUrl,
+        visibility,
+        is_active: true,
+      })
+      .returning()
+
+    return repo!
+  } catch (error) {
+    console.error('Failed to create github repo in database:', error)
+    throw error
+  }
+}
+
+/**
+ * Updates the visibility of a GitHub repo.
+ * For future use: allow changing visibility from the app.
+ */
+export async function updateGithubRepoVisibility({
+  id,
+  visibility,
+}: {
+  id: string
+  visibility: 'public' | 'private'
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ visibility, updated_at: new Date() })
+      .where(eq(github_repos.id, id))
+  } catch (error) {
+    console.error('Failed to update github repo visibility:', error)
     throw error
   }
 }

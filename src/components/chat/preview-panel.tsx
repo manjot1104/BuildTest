@@ -17,9 +17,11 @@ import {
   Tablet,
   Monitor,
   Code,
+  Github,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
+import { GithubPushDialog } from '@/components/chat/github-push-dialog'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 
@@ -87,6 +89,7 @@ export function PreviewPanel({
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false)
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
@@ -146,6 +149,14 @@ export function PreviewPanel({
                 onClick={() => setCodeDialogOpen(true)}
               >
                 <Code className="h-4 w-4" />
+              </WebPreviewNavigationButton>
+
+              <WebPreviewNavigationButton
+                tooltip="Push to GitHub"
+                disabled={!hasFiles}
+                onClick={() => setGithubDialogOpen(true)}
+              >
+                <Github className="h-4 w-4" />
               </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton
@@ -255,6 +266,15 @@ export function PreviewPanel({
           files={currentChat!.files!}
           open={codeDialogOpen}
           onOpenChange={setCodeDialogOpen}
+        />
+      )}
+
+      {/* GitHub Push Dialog */}
+      {currentChat?.id && (
+        <GithubPushDialog
+          open={githubDialogOpen}
+          onOpenChange={setGithubDialogOpen}
+          chatId={currentChat.id}
         />
       )}
     </>

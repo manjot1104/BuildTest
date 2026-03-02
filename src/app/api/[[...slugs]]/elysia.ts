@@ -54,6 +54,11 @@ import {
   toggleStarChat,
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
+import {
+  getGithubStatusHandler,
+  pushToGithubHandler,
+  getGithubRepoForChatHandler,
+} from '@/server/api/controllers/github.controller'
 import { env } from '@/env'
 
 /** Insufficient credits response type */
@@ -956,5 +961,47 @@ console.log("VISIT LOGGING STARTED")
         code: t.String(),
         language: t.String(),
       }),
+    },
+  )
+
+  // ============================================
+  // GitHub Endpoints
+  // ============================================
+
+  .get('/github/status', async ({ set }) => {
+    const result = await getGithubStatusHandler()
+    if ('status' in result && result.status) set.status = result.status
+    return result
+  })
+
+  .post(
+    '/github/push',
+    async ({ body, set }) => {
+      const result = await pushToGithubHandler({ body })
+      if ('status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        branchName: t.String(),
+        commitMessage: t.Optional(t.String()),
+        confirmExistingBranch: t.Optional(t.Boolean()),
+        repoName: t.Optional(t.String()),
+        visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
+        replaceRepo: t.Optional(t.Boolean()), // True when user confirmed they want to replace the active repo with a new one
+      }),
+    },
+  )
+
+  .get(
+    '/github/repo/:chatId',
+    async ({ params, set }) => {
+      const result = await getGithubRepoForChatHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
     },
   )
