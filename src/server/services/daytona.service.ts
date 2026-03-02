@@ -217,8 +217,8 @@ export async function executeCode(
     if (sandbox) {
       try {
         await sandbox.delete();
-      } catch (_cleanupError) {
-        console.error("Failed to delete sandbox:", _cleanupError);
+      } catch {
+        // Cleanup failure is non-critical
       }
     }
     setUserExecuting(userId, false);

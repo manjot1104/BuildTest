@@ -124,7 +124,6 @@ export default function ChatPage() {
                 window.location.href = newUrl.pathname + newUrl.search
             }
         } catch (error) {
-            console.error('Failed to fork chat:', error)
         }
     }
 
@@ -206,7 +205,6 @@ export default function ChatPage() {
             )
             setAttachments((prev) => [...prev, ...newAttachments])
         } catch (error) {
-            console.error('Error processing image files:', error)
         }
     }
 
@@ -266,7 +264,6 @@ export default function ChatPage() {
                     }),
                 })
             } catch (error) {
-                console.error('Failed to create chat ownership:', error)
             }
         }
     }

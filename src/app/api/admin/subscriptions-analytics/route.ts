@@ -3,9 +3,12 @@ import { and, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
 import { subscriptions, user } from "@/server/db/schema";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const sp = request.nextUrl.searchParams;
 
     const page = parseInt(sp.get("page") ?? "1");
@@ -279,7 +282,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Subscriptions analytics error:", error);
     return NextResponse.json(
       { error: "Failed to fetch subscriptions analytics" },
       { status: 500 },

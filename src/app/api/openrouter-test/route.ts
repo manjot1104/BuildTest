@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { getSession } from "@/server/better-auth/server";
 
 const BASE_URL = "https://openrouter.ai/api/v1";
 
@@ -47,10 +48,16 @@ async function tryModel(
 }
 
 export async function POST(req: Request) {
+  // Require authentication to prevent unauthorized API key abuse
+  const session = await getSession();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENROUTER_API_KEY is not set in .env — restart the dev server after adding it." },
+      { error: "AI chat service is currently unavailable" },
       { status: 503 },
     );
   }
@@ -95,7 +102,6 @@ export async function POST(req: Request) {
         const reply = await tryModel(openai, modelId, apiMessages);
         // Skip empty or near-empty replies — try next model
         if (!reply || reply.trim().length < 20) {
-          console.warn(`[OpenRouter] "${modelId}" returned empty/too-short reply, trying next`);
           lastError = "Model returned an empty response";
           continue;
         }
@@ -106,18 +112,18 @@ export async function POST(req: Request) {
           originalModel: requested,
         });
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[OpenRouter] "${modelId}" failed: ${msg}`);
-        lastError = msg;
-        // Continue to next model
+        lastError = err instanceof Error ? err.message : String(err);
       }
     }
 
-    // All models failed
-    return NextResponse.json({ error: lastError }, { status: 503 });
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unexpected error";
-    console.error("[OpenRouter] error:", message);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: "All models are currently unavailable. Please try again later." },
+      { status: 503 },
+    );
+  } catch (_err: unknown) {
+    return NextResponse.json(
+      { error: "An unexpected error occurred" },
+      { status: 500 },
+    );
   }
 }

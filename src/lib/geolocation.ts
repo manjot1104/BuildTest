@@ -96,7 +96,6 @@ export async function detectUserCountry(): Promise<string> {
       return countryCode;
     }
   } catch (error) {
-    console.warn("Geolocation detection failed:", error);
   }
 
   // Fallback: try browser language/timezone hints

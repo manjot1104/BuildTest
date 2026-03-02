@@ -9,9 +9,12 @@ import {
   user,
   user_credits,
 } from "@/server/db/schema";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const sp = request.nextUrl.searchParams;
     const page = parseInt(sp.get("page") ?? "1");
     const limit = parseInt(sp.get("limit") ?? "50");
@@ -315,7 +318,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Credit analytics error:", error);
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
       { status: 500 },

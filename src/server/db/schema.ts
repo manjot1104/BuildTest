@@ -183,15 +183,21 @@ export const user_chats = createTable(
 export const chat_ownerships = user_chats;
 
 // Track anonymous chat creation by IP for rate limiting
-export const anonymous_chat_logs = createTable("anonymous_chat_logs", (d) => ({
-  id: d.text("id").primaryKey(),
-  ip_address: d.varchar("ip_address", { length: 45 }).notNull(), // IPv6 can be up to 45 chars
-  v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
-  created_at: d
-    .timestamp("created_at", { withTimezone: true })
-    .$defaultFn(() => new Date())
-    .notNull(),
-}));
+export const anonymous_chat_logs = createTable(
+  "anonymous_chat_logs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    ip_address: d.varchar("ip_address", { length: 45 }).notNull(), // IPv6 can be up to 45 chars
+    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("anon_chat_logs_ip_created_idx").on(t.ip_address, t.created_at),
+  ],
+);
 
 // User Credits - tracks both subscription and additional credits
 export const user_credits = createTable(

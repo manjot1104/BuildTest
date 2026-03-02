@@ -61,8 +61,7 @@ export async function getGithubToken(userId: string): Promise<string | null> {
     if (!githubAcc?.accessToken) return null
 
     return githubAcc.accessToken
-  } catch (error) {
-    console.error('Failed to get GitHub token:', error)
+  } catch {
     return null
   }
 }
@@ -104,8 +103,7 @@ export async function getGithubConnectionStatus(userId: string): Promise<{
       hasRepoScope,
       login: ghUser.login,
     }
-  } catch (error) {
-    console.error('Failed to check GitHub connection status:', error)
+  } catch {
     return { connected: false, hasRepoScope: false }
   }
 }
@@ -142,7 +140,7 @@ async function githubFetch<T>(
 // Existence Checks
 // ============================================================================
 
-export type RepoStatus = 'ok' | 'not_found' | 'archived'
+export type RepoStatus = 'ok' | 'not_found' | 'archived' | 'error'
 
 /**
  * Checks if a repository exists, is accessible, and is not archived.
@@ -159,7 +157,7 @@ export async function checkRepoStatus(
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (msg.includes('404') || msg.includes('Not Found')) return 'not_found'
-    return 'ok' // unknown error — let the real operation surface it
+    return 'error'
   }
 }
 
@@ -211,8 +209,7 @@ export async function checkRepoNameTaken(
 export async function getGithubUser(token: string): Promise<GithubUser | null> {
   try {
     return await githubFetch<GithubUser>(token, '/user')
-  } catch (error) {
-    console.error('Failed to get GitHub user:', error)
+  } catch {
     return null
   }
 }

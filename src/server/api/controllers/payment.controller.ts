@@ -198,8 +198,7 @@ export async function createSubscriptionOrderHandler({
         displayCurrency,
       }),
     };
-  } catch (error) {
-    console.error("Failed to create subscription order:", error);
+  } catch {
     return { error: "Failed to create order", status: 500 };
   }
 }
@@ -271,8 +270,7 @@ export async function createCreditPackOrderHandler({
         displayCurrency,
       }),
     };
-  } catch (error) {
-    console.error("Failed to create credit pack order:", error);
+  } catch {
     return { error: "Failed to create order", status: 500 };
   }
 }
@@ -367,8 +365,7 @@ export async function verifyPaymentHandler({
     }
 
     return { success: true, message: "Payment verified successfully" };
-  } catch (error) {
-    console.error("Failed to verify payment:", error);
+  } catch {
     return { error: "Failed to process payment", status: 500 };
   }
 }
@@ -440,8 +437,7 @@ export async function cancelSubscriptionHandler(): Promise<
       success: true,
       message: "Subscription cancelled. You can continue using your credits until the end of the billing period.",
     };
-  } catch (error) {
-    console.error("Failed to cancel subscription:", error);
+  } catch {
     return { error: "Failed to cancel subscription", status: 500 };
   }
 }

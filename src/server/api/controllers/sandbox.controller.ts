@@ -75,11 +75,10 @@ export async function executeCodeHandler({
     });
 
     return result;
-  } catch (error) {
-    console.error("Sandbox execution error:", error);
+  } catch {
     return {
       error: "Failed to execute code",
-      message: error instanceof Error ? error.message : "Unknown error",
+      message: "An internal error occurred",
       status: 500,
     };
   }

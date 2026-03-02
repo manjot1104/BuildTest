@@ -30,6 +30,7 @@ interface ErrorResponse {
     | 'branch_already_exists'
     | 'repo_not_found'
     | 'repo_archived'
+    | 'repo_check_failed'
     | 'repo_name_taken'
     | 'github_not_connected'
     | 'token_expired'
@@ -103,11 +104,10 @@ export async function getGithubStatusHandler(): Promise<
     const session = await getSession()
     if (!session?.user?.id) return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
     return await getGithubConnectionStatus(session.user.id)
-  } catch (error) {
-    console.error('Error getting GitHub status:', error)
+  } catch {
     return {
       error: 'Failed to get GitHub status',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
@@ -141,11 +141,10 @@ export async function getGithubRepoForChatHandler({
       visibility: repo.visibility as 'public' | 'private',
       createdAt: repo.created_at.toISOString(),
     }
-  } catch (error) {
-    console.error('Error getting GitHub repo for chat:', error)
+  } catch {
     return {
       error: 'Failed to get GitHub repo',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
@@ -272,6 +271,13 @@ export async function pushToGithubHandler({
           status: 403,
         }
       }
+      if (repoStatus === 'error') {
+        return {
+          error: `Could not verify repository "${repoFullName}" on GitHub. Please try again later.`,
+          code: 'repo_check_failed',
+          status: 502,
+        }
+      }
 
       // Check if the branch already exists
       const branchExists = await checkBranchExists(token, ghUser.login, repoName, branchName)
@@ -365,11 +371,10 @@ export async function pushToGithubHandler({
       branchName,
       isNewRepo,
     }
-  } catch (error) {
-    console.error('Error in pushToGithubHandler:', error)
+  } catch {
     return {
       error: 'Failed to push to GitHub',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }

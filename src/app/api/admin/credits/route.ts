@@ -8,9 +8,12 @@ import {
   credit_usage_logs,
 } from "@/server/db/schema";
 import { eq, sql, and, or, gte, lte, desc, asc, like, ilike, inArray } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
@@ -365,10 +368,9 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Credit analytics error:", error);
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

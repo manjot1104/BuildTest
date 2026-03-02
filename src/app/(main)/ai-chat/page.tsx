@@ -1075,7 +1075,7 @@ export default function OpenRouterChatPage() {
         if (!contentType.includes("application/json")) {
           throw new Error(
             res.status === 503
-              ? "Service unavailable — check that OPENROUTER_API_KEY is set in .env"
+              ? "AI chat service is currently unavailable"
               : `Server error (${res.status}). Check the terminal for details.`,
           );
         }

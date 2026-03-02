@@ -6,9 +6,12 @@ import {
   credit_usage_logs,
 } from "@/server/db/schema";
 import { eq, and, sql } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET() {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     // ==============================
     // REVENUE METRICS
     // ==============================
@@ -115,7 +118,6 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("Analytics error:", error);
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
       { status: 500 },
