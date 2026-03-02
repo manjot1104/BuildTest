@@ -37,6 +37,7 @@ import {
   toggleUserRoleHandler,
 } from '@/server/api/controllers/admin.controller'
 import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
+import { openRouterChatHandler, openRouterStreamHandler } from '@/server/api/controllers/openrouter.controller'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
@@ -201,10 +202,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
                 errorMessage.includes('not_found') ||
                 errorMessage.includes('Chat not found')
               ) {
-                console.warn(
-                  `Chat ${chatId} not found, creating new chat instead`,
-                )
-                // Create new chat with streaming
+                // Chat not found on v0, create new chat instead
                 stream = (await v0.chats.create({
                   message: enhanceFirstPrompt(message),
                   responseMode: 'experimental_stream',
@@ -231,12 +229,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               Connection: 'keep-alive',
             },
           })
-        } catch (error) {
-          console.error('V0 API Streaming Error:', error)
+        } catch {
           set.status = 500
           return {
             error: 'Failed to process streaming request',
-            details: error instanceof Error ? error.message : 'Unknown error',
+            details: 'An internal error occurred',
           } satisfies StreamingErrorResponse
         }
       }
@@ -313,7 +310,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         }
 
         const session = await getSession()
-console.log("VISIT LOGGING STARTED")
         await db.insert(demo_visits).values({
           id: nanoid(),
           demo_id: chatId,
@@ -321,14 +317,13 @@ console.log("VISIT LOGGING STARTED")
           owner_user_id: ownerUserId,
           visitor_user_id: session?.user?.id ?? null,
         })
-        console.log("VISIT LOGGING SUCCESS")
-      } catch (err) {
-        console.error('Visit logging failed:', err)
+      } catch {
+        // Visit logging is non-critical — silently ignore failures
       }
       // 🔹 VISIT LOGGING END
 
       return result
-    } catch (_error) {
+    } catch {
       set.status = 500
       return { error: 'Failed to fetch app' }
     }
@@ -642,13 +637,11 @@ console.log("VISIT LOGGING STARTED")
           transcript: data.text || '',
           language: data.language || null,
         }
-      } catch (error) {
-        console.error('Speech-to-text error:', error)
+      } catch {
         set.status = 500
         return {
           error: 'Failed to process speech-to-text',
-          message:
-            error instanceof Error ? error.message : 'Unknown error occurred',
+          message: 'An internal error occurred',
         }
       }
     },
@@ -960,6 +953,45 @@ console.log("VISIT LOGGING STARTED")
       body: t.Object({
         code: t.String(),
         language: t.String(),
+      }),
+    },
+  )
+
+  // ============================================
+  // OpenRouter AI Chat Endpoint
+  // ============================================
+
+  .post(
+    '/openrouter/chat',
+    async ({ body, set }) => {
+      if (body.streaming) {
+        const result = await openRouterStreamHandler({ body })
+        if (result instanceof Response) return result
+        // Error object — set status and return JSON
+        if (isApiError(result)) {
+          set.status = (result as ApiErrorResponse).status ?? 500
+        }
+        return result
+      }
+
+      const result = await openRouterChatHandler({ body })
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+      return result
+    },
+    {
+      body: t.Object({
+        messages: t.Optional(
+          t.Array(t.Object({ role: t.String(), content: t.String() })),
+        ),
+        message: t.Optional(t.String()),
+        model: t.Optional(t.String()),
+        systemPrompt: t.Optional(t.String()),
+        streaming: t.Optional(t.Boolean()),
+        maxTokens: t.Optional(t.Number()),
+        temperature: t.Optional(t.Number()),
+        topP: t.Optional(t.Number()),
       }),
     },
   )

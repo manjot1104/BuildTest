@@ -115,6 +115,7 @@ function getDaytonaClient(): Daytona {
   }
   return new Daytona({
     apiKey: env.DAYTONA_API_KEY,
+    apiUrl: env.DAYTONA_API_URL,
     target: (env.DAYTONA_TARGET as "us" | "eu") ?? "us",
   });
 }

@@ -20,14 +20,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { Kbd } from "@/components/ui/kbd";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
+import { BuildifyLogo } from "@/components/buildify-logo";
+import {
   BrainCircuit,
-  Send,
   Copy,
   Check,
   Trash2,
   Loader2,
   Bot,
-  User,
   AlertTriangle,
   RotateCcw,
   ChevronDown,
@@ -36,6 +47,14 @@ import {
   Terminal,
   Maximize2,
   Minimize2,
+  ArrowUp,
+  CircleStop,
+  Sparkles,
+  Code2,
+  LayoutTemplate,
+  Blocks,
+  SlidersHorizontal,
+  RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -100,11 +119,18 @@ const MODELS = [
     badge: "Fast",
     badgeVariant: "secondary" as const,
   },
+  {
+    id: "arcee-ai/trinity-large-preview:free",
+    name: "Trinity Large 400B",
+    provider: "Arcee AI",
+    description: "Massive 400B model, strong general-purpose performance",
+    badge: "400B",
+    badgeVariant: "secondary" as const,
+  },
 ] as const;
 
 /** Friendly names for fallback models not in the main list */
 const FALLBACK_MODEL_NAMES: Record<string, string> = {
-  "arcee-ai/trinity-large-preview:free": "Trinity Large 400B",
   "upstage/solar-pro-3:free": "Solar Pro 3",
   "nvidia/nemotron-3-nano-30b-a3b:free": "Nemotron 30B",
   "stepfun/step-3.5-flash:free": "Step 3.5 Flash",
@@ -630,9 +656,12 @@ function AppRunner({ content }: { content: string }) {
       {/* Run App button */}
       <div className="flex items-center gap-2">
         <Button
-          variant={hasResult ? "outline" : "default"}
+          variant={hasResult ? "outline" : "ghost"}
           size="sm"
-          className="h-7 gap-1.5 text-xs"
+          className={cn(
+            "h-7 gap-1.5 text-xs",
+            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary",
+          )}
           onClick={hasResult ? handleStop : handleRun}
           disabled={execution.isRunning}
         >
@@ -656,14 +685,18 @@ function AppRunner({ content }: { content: string }) {
 
       {/* Result panel */}
       {hasResult && (
-        <div className="mt-2 overflow-hidden rounded-lg border bg-muted/40">
+        <div className="mt-2 overflow-hidden rounded-xl border shadow-sm">
           {/* HTML preview */}
           {execution.htmlPreview && (
             <>
               <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
-                <div className="flex items-center gap-1.5">
-                  <Terminal className="size-3 text-muted-foreground" />
-                  <span className="text-[11px] font-medium text-muted-foreground">App Preview</span>
+                <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-2.5 rounded-full bg-red-400" />
+                    <span className="size-2.5 rounded-full bg-yellow-400" />
+                    <span className="size-2.5 rounded-full bg-green-400" />
+                  </div>
+                  <span className="text-[11px] font-medium text-muted-foreground">Live Preview</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="text-[10px] font-medium text-green-600 dark:text-green-400">Live</span>
@@ -682,7 +715,7 @@ function AppRunner({ content }: { content: string }) {
                 srcDoc={execution.htmlPreview}
                 sandbox="allow-scripts allow-forms"
                 className={cn(
-                  "w-full bg-white transition-all",
+                  "w-full bg-white transition-all duration-300",
                   isExpanded ? "h-[500px]" : "h-72",
                 )}
                 title="App Preview"
@@ -721,13 +754,12 @@ function highlightCode(code: string, lang: string): ReactNode[] {
   const l = lang.toLowerCase();
   const isHtml = ["html", "htm", "xml", "svg"].includes(l);
   const isCss = ["css", "scss", "less"].includes(l);
-  const isPython = ["py", "python"].includes(l);
 
   // Tokenize line-by-line for performance
   const lines = code.split("\n");
   return lines.map((line, li) => {
     const parts: ReactNode[] = [];
-    let remaining = line;
+    const remaining = line;
     let ki = 0;
 
     const push = (text: string, color?: string) => {
@@ -804,12 +836,20 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
   }, [code]);
 
   return (
-    <div className="my-3 overflow-hidden rounded-lg border border-[#30363d]" style={{ background: "#0d1117" }}>
+    <div className="my-3 overflow-hidden rounded-xl border border-[#30363d] shadow-sm" style={{ background: "#0d1117" }}>
       <div className="flex items-center justify-between border-b border-[#30363d] px-4 py-1.5" style={{ background: "#161b22" }}>
-        <span className="font-mono text-[11px]" style={{ color: "#8b949e" }}>{lang || "text"}</span>
-        <Button variant="ghost" size="sm" className="h-6 gap-1 px-2 text-[11px] hover:bg-[#30363d]" style={{ color: "#8b949e" }} onClick={handleCopy}>
-          {copied ? <><Check className="size-3" />Copied</> : <><Copy className="size-3" />Copy</>}
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Code2 className="size-3" style={{ color: "#8b949e" }} />
+          <span className="font-mono text-[11px]" style={{ color: "#8b949e" }}>{lang || "text"}</span>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon-xs" className="hover:bg-[#30363d]" style={{ color: "#8b949e" }} onClick={handleCopy}>
+              {copied ? <Check className="size-3 text-green-400" /> : <Copy className="size-3" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{copied ? "Copied!" : "Copy code"}</TooltipContent>
+        </Tooltip>
       </div>
       <pre className="overflow-x-auto p-4 text-[13px] leading-relaxed" style={{ color: "#e6edf3" }}>
         <code>{highlightCode(code, lang)}</code>
@@ -843,9 +883,14 @@ function CopyMessageButton({ content }: { content: string }) {
     setTimeout(() => setCopied(false), 2000);
   }, [content]);
   return (
-    <Button variant="ghost" size="icon" className="size-6 opacity-0 transition-opacity group-hover:opacity-100" onClick={handleCopy} title="Copy">
-      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="ghost" size="icon-xs" className="opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100" onClick={handleCopy}>
+          {copied ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? "Copied!" : "Copy message"}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -859,7 +904,7 @@ function MessageBubble({ message }: { message: ChatMessage }) {
     return (
       <div className="group flex justify-end gap-2">
         <div className="flex flex-col items-end gap-1">
-          <div className="max-w-[75ch] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground">
+          <div className="max-w-[75ch] rounded-2xl rounded-tr-sm bg-primary px-4 py-3 text-primary-foreground shadow-sm">
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
           </div>
           <div className="flex items-center gap-1">
@@ -869,9 +914,6 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             </span>
           </div>
         </div>
-        <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <User className="size-3.5" />
-        </div>
       </div>
     );
   }
@@ -879,23 +921,26 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   return (
     <div className="group flex gap-3">
       <div className={cn(
-        "mt-1 flex size-7 shrink-0 items-center justify-center rounded-full",
-        message.isError ? "bg-destructive/10 text-destructive" : "bg-muted text-foreground",
+        "mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg",
+        message.isError ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary",
       )}>
         {message.isError ? <AlertTriangle className="size-3.5" /> : <Bot className="size-3.5" />}
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">{modelLabel}</span>
+          <span className="text-xs font-semibold text-muted-foreground">{modelLabel}</span>
           {message.isFallback && (
-            <Badge variant="outline" className="h-4 px-1.5 text-[10px]">fallback</Badge>
+            <Badge variant="outline" className="h-4 gap-1 border-amber-500/30 bg-amber-500/10 px-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-2.5" />
+              fallback
+            </Badge>
           )}
         </div>
         <div className={cn(
           "max-w-[75ch] rounded-2xl rounded-tl-sm px-4 py-3",
           message.isError
             ? "border border-destructive/30 bg-destructive/5 text-destructive"
-            : "bg-muted/50",
+            : "border border-border/40 bg-muted/30",
         )}>
           <MarkdownMessage content={message.content} />
         </div>
@@ -916,18 +961,19 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 function TypingIndicator({ modelName }: { modelName: string }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="flex size-7 items-center justify-center rounded-full bg-muted">
-        <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+      <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+        <Loader2 className="size-3.5 animate-spin text-primary" />
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[11px] font-medium text-muted-foreground">{modelName}</span>
-        <div className="flex gap-1 rounded-2xl rounded-tl-sm bg-muted/50 px-4 py-3">
+        <span className="text-xs font-semibold text-muted-foreground">{modelName}</span>
+        <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border/40 bg-muted/30 px-4 py-3">
           <span className="inline-flex gap-1">
             {[0, 1, 2].map((i) => (
-              <span key={i} className="size-1.5 rounded-full bg-muted-foreground/60"
+              <span key={i} className="size-1.5 rounded-full bg-primary/50"
                 style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
             ))}
           </span>
+          <span className="text-xs text-muted-foreground">Generating...</span>
         </div>
       </div>
     </div>
@@ -937,36 +983,226 @@ function TypingIndicator({ modelName }: { modelName: string }) {
 // ─── Empty State ──────────────────────────────────────────────────────────────
 
 const SUGGESTIONS = [
-  "Explain how React Server Components work",
-  "Write a Python function to parse JSON and handle errors",
-  "What are the differences between SQL and NoSQL databases?",
-  "Summarise the SOLID principles with examples",
+  {
+    icon: LayoutTemplate,
+    label: "Landing page",
+    prompt: "Build a modern landing page with a hero section, features grid, and CTA",
+  },
+  {
+    icon: Blocks,
+    label: "Dashboard",
+    prompt: "Create a dashboard layout with sidebar navigation, stats cards, and charts",
+  },
+  {
+    icon: Code2,
+    label: "REST API",
+    prompt: "Write a REST API with CRUD endpoints, validation, and error handling",
+  },
+  {
+    icon: Sparkles,
+    label: "React component",
+    prompt: "Build a reusable React data table component with sorting and pagination",
+  },
 ];
 
-function EmptyState({ onSuggestion }: { onSuggestion: (text: string) => void }) {
+function EmptyState({
+  onSuggestion,
+  selectedModel,
+}: {
+  onSuggestion: (text: string) => void;
+  selectedModel: (typeof MODELS)[number];
+}) {
   return (
-    <div className="flex flex-col items-center gap-6 py-16 text-center">
-      <div className="flex size-14 items-center justify-center rounded-2xl bg-primary/10">
-        <BrainCircuit className="size-7 text-primary" />
+    <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center">
+      {/* Logo with glow */}
+      <div className="relative">
+        <div className="absolute inset-0 scale-150 rounded-full bg-primary/10 blur-2xl" />
+        <div className="relative flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/5">
+          <BuildifyLogo size="lg" />
+        </div>
       </div>
+
       <div>
-        <h2 className="text-xl font-semibold">Buildify AI Chat</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Select a model and start chatting.
+        <h2 className="text-2xl font-semibold tracking-tight">What do you want to build?</h2>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Describe an app, component, or feature and let AI generate it for you.
         </p>
       </div>
+
+      {/* Suggestion cards */}
       <div className="w-full max-w-lg">
-        <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">Try asking</p>
         <div className="grid gap-2 sm:grid-cols-2">
           {SUGGESTIONS.map((s) => (
-            <button key={s} onClick={() => onSuggestion(s)}
-              className="rounded-lg border bg-background px-4 py-3 text-left text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-foreground">
-              {s}
+            <button
+              key={s.label}
+              onClick={() => onSuggestion(s.prompt)}
+              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm"
+            >
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-primary/10">
+                <s.icon className="size-4 text-muted-foreground transition-colors group-hover/card:text-primary" />
+              </div>
+              <div>
+                <span className="text-sm font-medium">{s.label}</span>
+                <p className="line-clamp-1 text-[11px] text-muted-foreground">{s.prompt}</p>
+              </div>
             </button>
           ))}
         </div>
       </div>
+
+      {/* Powered by footer */}
+      <p className="text-[11px] text-muted-foreground/60">
+        Powered by {selectedModel.name} via {selectedModel.provider}
+      </p>
     </div>
+  );
+}
+
+// ─── Generation Parameters ───────────────────────────────────────────────────
+
+type GenerationParams = {
+  maxTokens: number;
+  temperature: number;
+  topP: number;
+};
+
+const DEFAULT_PARAMS: GenerationParams = {
+  maxTokens: 4096,
+  temperature: 0.7,
+  topP: 1,
+};
+
+const TOKEN_PRESETS = [512, 1024, 2048, 4096, 8192, 16384] as const;
+
+function GenerationSettings({
+  params,
+  onChange,
+  disabled,
+}: {
+  params: GenerationParams;
+  onChange: (params: GenerationParams) => void;
+  disabled?: boolean;
+}) {
+  const isDefault =
+    params.maxTokens === DEFAULT_PARAMS.maxTokens &&
+    params.temperature === DEFAULT_PARAMS.temperature &&
+    params.topP === DEFAULT_PARAMS.topP;
+
+  return (
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon-xs"
+              disabled={disabled}
+              className={cn(
+                "rounded-lg border-border/60 hover:border-primary/30",
+                !isDefault && "border-primary/40 bg-primary/5 text-primary",
+              )}
+            >
+              <SlidersHorizontal className="size-3.5" />
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Generation settings</TooltipContent>
+      </Tooltip>
+      <PopoverContent side="top" align="start" className="w-80">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold">Generation Settings</h4>
+          {!isDefault && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+              onClick={() => onChange(DEFAULT_PARAMS)}
+            >
+              <RotateCw className="size-3" />
+              Reset
+            </Button>
+          )}
+        </div>
+
+        <div className="mt-4 space-y-5">
+          {/* Max Tokens */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium">Max Tokens</label>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-medium">
+                {params.maxTokens.toLocaleString()}
+              </span>
+            </div>
+            <Slider
+              value={[params.maxTokens]}
+              onValueChange={([v]) => onChange({ ...params, maxTokens: v! })}
+              min={128}
+              max={32768}
+              step={128}
+            />
+            <div className="flex flex-wrap gap-1">
+              {TOKEN_PRESETS.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => onChange({ ...params, maxTokens: v })}
+                  className={cn(
+                    "rounded-md px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                    params.maxTokens === v
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:bg-muted/80",
+                  )}
+                >
+                  {v >= 1000 ? `${v / 1000}k` : v}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Temperature */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium">Temperature</label>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-medium">
+                {params.temperature.toFixed(1)}
+              </span>
+            </div>
+            <Slider
+              value={[params.temperature]}
+              onValueChange={([v]) => onChange({ ...params, temperature: Math.round(v! * 10) / 10 })}
+              min={0}
+              max={2}
+              step={0.1}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Precise</span>
+              <span>Balanced</span>
+              <span>Creative</span>
+            </div>
+          </div>
+
+          {/* Top P */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium">Top P</label>
+              <span className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] font-medium">
+                {params.topP.toFixed(2)}
+              </span>
+            </div>
+            <Slider
+              value={[params.topP]}
+              onValueChange={([v]) => onChange({ ...params, topP: Math.round(v! * 100) / 100 })}
+              min={0}
+              max={1}
+              step={0.05}
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>Focused</span>
+              <span>Diverse</span>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -987,17 +1223,17 @@ function ModelSelector({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           disabled={disabled}
-          className="h-8 gap-1.5 rounded-lg px-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground"
         >
-          <BrainCircuit className="size-3.5 text-primary" />
+          <Sparkles className="size-3.5 text-primary" />
           <span className="max-w-[130px] truncate">{selected.name}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-72">
+      <DropdownMenuContent side="top" align="start" className="w-80">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Select a model
         </DropdownMenuLabel>
@@ -1006,9 +1242,21 @@ function ModelSelector({
           <DropdownMenuItem
             key={m.id}
             onClick={() => onSelect(m.id)}
-            className="flex cursor-pointer items-start gap-2.5 py-2.5"
+            className={cn(
+              "flex cursor-pointer items-start gap-2.5 py-2.5",
+              m.id === modelId && "bg-primary/5",
+            )}
           >
-            <Check className={cn("mt-0.5 size-3.5 shrink-0", m.id === modelId ? "opacity-100 text-primary" : "opacity-0")} />
+            <div className={cn(
+              "mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+              m.id === modelId
+                ? "border-primary bg-primary"
+                : "border-muted-foreground/30",
+            )}>
+              {m.id === modelId && (
+                <div className="size-1.5 rounded-full bg-primary-foreground" />
+              )}
+            </div>
             <div className="flex min-w-0 flex-col gap-0.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-medium">{m.name}</span>
@@ -1036,14 +1284,37 @@ export default function OpenRouterChatPage() {
   const [input, setInput] = useState("");
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
   const [isLoading, setIsLoading] = useState(false);
+  const [genParams, setGenParams] = useState<GenerationParams>(DEFAULT_PARAMS);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
+
+  // Global Escape key listener to stop generation
+  useEffect(() => {
+    if (!isLoading) return;
+    const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleStopGeneration();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [isLoading]);
+
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    toast.info("Generation stopped");
+  }, []);
 
   const sendMessage = useCallback(
     async (text?: string) => {
@@ -1061,73 +1332,162 @@ export default function OpenRouterChatPage() {
       setInput("");
       setIsLoading(true);
 
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const assistantId = crypto.randomUUID();
+
       try {
-        const res = await fetch("/api/openrouter-test", {
+        const res = await fetch("/api/openrouter/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
             model: modelId,
+            streaming: true,
+            maxTokens: genParams.maxTokens,
+            temperature: genParams.temperature,
+            topP: genParams.topP,
           }),
+          signal: controller.signal,
         });
 
-        const contentType = res.headers.get("content-type") ?? "";
-        if (!contentType.includes("application/json")) {
-          throw new Error(
-            res.status === 503
-              ? "AI chat service is currently unavailable"
-              : `Server error (${res.status}). Check the terminal for details.`,
-          );
+        // Non-OK without a stream body → JSON error
+        if (!res.ok) {
+          let errorMsg = `Request failed (${res.status})`;
+          try {
+            const data = (await res.json()) as { error?: string };
+            errorMsg = data.error ?? errorMsg;
+          } catch { /* ignore parse errors */ }
+          throw new Error(errorMsg);
         }
 
-        const data = (await res.json()) as {
-          reply?: string;
-          usedModel?: string;
-          fallback?: boolean;
-          originalModel?: string;
-          error?: string;
-        };
+        if (!res.body) throw new Error("No response body received");
 
-        if (!res.ok) throw new Error(data.error ?? `Request failed (${res.status})`);
-
+        // Add empty assistant message that we'll stream into
         setMessages((prev) => [
           ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: data.reply ?? "No response received.",
-            modelId: data.usedModel as ModelId | undefined,
-            isFallback: data.fallback,
-            timestamp: new Date(),
-          },
+          { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
         ]);
 
-        if (data.fallback) {
-          const name = MODELS.find((m) => m.id === data.usedModel)?.name
-            ?? (data.usedModel ? FALLBACK_MODEL_NAMES[data.usedModel] : null)
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let fullContent = "";
+        let usedModel: string | undefined;
+        let isFallback = false;
+        let rafId = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split on double newline (SSE event boundary)
+          const parts = buffer.split("\n\n");
+          buffer = parts.pop() ?? "";
+
+          for (const part of parts) {
+            for (const line of part.split("\n")) {
+              if (!line.startsWith("data: ")) continue;
+              const jsonStr = line.slice(6);
+
+              try {
+                const event = JSON.parse(jsonStr) as
+                  | { type: "meta"; model: string; fallback: boolean }
+                  | { type: "delta"; content: string }
+                  | { type: "done" }
+                  | { type: "error"; message: string };
+
+                switch (event.type) {
+                  case "meta":
+                    usedModel = event.model;
+                    isFallback = event.fallback;
+                    break;
+                  case "delta":
+                    fullContent += event.content;
+                    // Batch UI updates to once per animation frame
+                    cancelAnimationFrame(rafId);
+                    rafId = requestAnimationFrame(() => {
+                      setMessages((prev) =>
+                        prev.map((m) =>
+                          m.id === assistantId
+                            ? { ...m, content: fullContent, modelId: usedModel, isFallback }
+                            : m,
+                        ),
+                      );
+                    });
+                    break;
+                  case "error":
+                    throw new Error(event.message);
+                  case "done":
+                    break;
+                }
+              } catch (e) {
+                if (e instanceof SyntaxError) continue;
+                throw e;
+              }
+            }
+          }
+        }
+
+        // Cancel any pending rAF and do a final sync update
+        cancelAnimationFrame(rafId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantId
+              ? { ...m, content: fullContent || "No response received.", modelId: usedModel, isFallback }
+              : m,
+          ),
+        );
+
+        if (isFallback && usedModel) {
+          const name =
+            MODELS.find((m) => m.id === usedModel)?.name
+            ?? (usedModel ? FALLBACK_MODEL_NAMES[usedModel] : null)
             ?? "another model";
           toast.info(`Auto-switched to ${name}`, {
             description: "The selected model was busy. Response may vary in quality.",
           });
         }
       } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: err instanceof Error ? err.message : "Something went wrong. Please try again.",
-            isError: true,
-            timestamp: new Date(),
-          },
-        ]);
+        // Silently ignore AbortError — user cancelled
+        if (err instanceof DOMException && err.name === "AbortError") return;
+
+        setMessages((prev) => {
+          const hasAssistant = prev.some((m) => m.id === assistantId);
+          if (hasAssistant) {
+            // Update the existing assistant message — keep partial content if any
+            return prev.map((m) =>
+              m.id === assistantId
+                ? {
+                    ...m,
+                    content: m.content || (err instanceof Error ? err.message : "Something went wrong."),
+                    isError: !m.content,
+                  }
+                : m,
+            );
+          }
+          // No assistant message yet — add one with the error
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: "assistant" as const,
+              content: err instanceof Error ? err.message : "Something went wrong. Please try again.",
+              isError: true,
+              timestamp: new Date(),
+            },
+          ];
+        });
         toast.error("Failed to get a response");
       } finally {
+        abortControllerRef.current = null;
         setIsLoading(false);
         textareaRef.current?.focus();
       }
     },
-    [input, isLoading, messages, modelId],
+    [input, isLoading, messages, modelId, genParams],
   );
 
   const handleKeyDown = useCallback(
@@ -1158,69 +1518,122 @@ export default function OpenRouterChatPage() {
   return (
     <div className="flex h-[calc(100svh-4rem)] flex-col -m-4">
 
-      {/* ── Minimal header ── */}
-      <div className="flex shrink-0 items-center justify-between border-b bg-background/95 px-5 py-2.5 backdrop-blur">
-        <div className="flex items-center gap-2">
-          <BrainCircuit className="size-4 text-primary" />
-          <span className="text-sm font-semibold">Buildify AI Chat</span>
+      {/* ── Header ── */}
+      <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+            <BrainCircuit className="size-4 text-primary" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold">Buildify AI Chat</span>
+            <span className="text-[11px] text-muted-foreground">
+              {hasMessages
+                ? `${messages.length} message${messages.length !== 1 ? "s" : ""} · ${selectedModel.name}`
+                : `${selectedModel.name} · ${selectedModel.provider}`}
+            </span>
+          </div>
         </div>
         {hasMessages && (
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={retryLast} disabled={isLoading}
-              className="h-7 gap-1.5 text-xs text-muted-foreground" title="Retry last">
-              <RotateCcw className="size-3" /> Retry
-            </Button>
-            <Button variant="ghost" size="sm" onClick={clearChat} disabled={isLoading}
-              className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-destructive" title="Clear chat">
-              <Trash2 className="size-3" /> Clear
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-xs" onClick={retryLast} disabled={isLoading}>
+                  <RotateCcw className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Retry last message</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon-xs" onClick={clearChat} disabled={isLoading} className="hover:text-destructive">
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Clear chat</TooltipContent>
+            </Tooltip>
           </div>
         )}
       </div>
 
       {/* ── Messages ── */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 py-6">
-          {!hasMessages && <EmptyState onSuggestion={(t) => void sendMessage(t)} />}
+      <div className={cn("flex-1 overflow-y-auto", !hasMessages && "flex")}>
+        <div className={cn(
+          "mx-auto w-full max-w-3xl px-4",
+          hasMessages ? "py-6" : "flex flex-1 flex-col",
+        )}>
+          {!hasMessages && (
+            <EmptyState
+              onSuggestion={(t) => void sendMessage(t)}
+              selectedModel={selectedModel}
+            />
+          )}
           <div className="space-y-6">
             {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
-            {isLoading && <TypingIndicator modelName={selectedModel.name} />}
+            {isLoading && !(messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content) && (
+              <TypingIndicator modelName={selectedModel.name} />
+            )}
             <div ref={scrollAnchorRef} />
           </div>
         </div>
       </div>
 
-      {/* ── Input with inline model selector (t3.chat style) ── */}
+      {/* ── Input area ── */}
       <div className="shrink-0 border-t bg-background px-4 py-3">
         <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-background shadow-sm transition-shadow focus-within:shadow-md focus-within:ring-1 focus-within:ring-primary/25">
+          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
             {/* Textarea */}
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything…"
+              placeholder="Describe what you want to build..."
               className="min-h-[52px] max-h-44 resize-none rounded-t-2xl rounded-b-none border-0 px-4 pt-3.5 pb-1 text-sm shadow-none focus-visible:ring-0"
               disabled={isLoading}
               autoFocus
             />
 
-            {/* Toolbar row — model selector left, send right */}
+            {/* Toolbar row — model selector left, hints + send right */}
             <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
-              {/* Model selector button */}
-              <ModelSelector modelId={modelId} onSelect={setModelId} disabled={isLoading} />
+              {/* Model selector + generation settings */}
+              <div className="flex items-center gap-1.5">
+                <ModelSelector modelId={modelId} onSelect={setModelId} disabled={isLoading} />
+                <GenerationSettings params={genParams} onChange={setGenParams} disabled={isLoading} />
+              </div>
 
-              {/* Send button */}
-              <Button
-                size="sm"
-                onClick={() => void sendMessage()}
-                disabled={!input.trim() || isLoading}
-                className="h-8 gap-1.5 rounded-xl px-3 text-xs"
-              >
-                {isLoading ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
-                Send
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* Keyboard hints — visible when input has text, desktop only */}
+                {input.trim() && (
+                  <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground/60 sm:flex">
+                    <Kbd>Enter</Kbd>
+                    <span>send</span>
+                    <Kbd>Shift+Enter</Kbd>
+                    <span>newline</span>
+                  </div>
+                )}
+
+                {/* Send / Stop button */}
+                {isLoading ? (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleStopGeneration}
+                    className="h-8 gap-1.5 rounded-xl px-3 text-xs"
+                  >
+                    <CircleStop className="size-3.5" />
+                    Stop
+                  </Button>
+                ) : (
+                  <Button
+                    size="icon"
+                    onClick={() => void sendMessage()}
+                    disabled={!input.trim()}
+                    className="size-8 rounded-xl"
+                  >
+                    <ArrowUp className="size-4" />
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
