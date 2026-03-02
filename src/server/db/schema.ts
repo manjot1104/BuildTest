@@ -18,6 +18,8 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "pending",
 ]);
 
+
+
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
   "completed",
@@ -327,6 +329,40 @@ export const credit_usage_logs = createTable(
   (t) => [
     index("credit_usage_logs_user_id_idx").on(t.user_id),
     index("credit_usage_logs_created_at_idx").on(t.created_at),
+  ],
+);
+
+export const demoTypeEnum = pgEnum("demo_type", [
+  "featured",
+  "community",
+]);
+
+export const demo_visits = createTable(
+  "demo_visits",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+
+    demo_id: d.varchar("demo_id", { length: 255 }).notNull(),
+
+    demo_type: demoTypeEnum("demo_type").notNull(),
+
+    owner_user_id: d
+      .text("owner_user_id")
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    visitor_user_id: d
+      .text("visitor_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+
+    visited_at: d
+      .timestamp("visited_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("demo_visits_demo_id_idx").on(t.demo_id),
+    index("demo_visits_owner_user_id_idx").on(t.owner_user_id),
+    index("demo_visits_visited_at_idx").on(t.visited_at),
   ],
 );
 

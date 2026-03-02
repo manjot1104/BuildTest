@@ -7,16 +7,10 @@ import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { AdminSidebar } from "./admin-sidebar";
 
-export default async function AdminLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
   const requestHeaders = await headers();
 
-  const session = await auth.api.getSession({
-    headers: requestHeaders,
-  });
+  const session = await auth.api.getSession({ headers: requestHeaders });
 
   if (!session?.user?.email) {
     redirect("/login");

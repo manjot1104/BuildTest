@@ -31,7 +31,11 @@
       "Bash(bun -e \":*)",
       "Bash(bun -e:*)",
       "Bash(git add:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(npm install openai)",
+      "Bash(npm install openai --legacy-peer-deps)",
+      "WebFetch(domain:t3.chat)",
+      "Bash(git mv \"src/app/\\(main\\)/openrouter-chat\" \"src/app/\\(main\\)/ai-chat\")"
     ]
   }
 }

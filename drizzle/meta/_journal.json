@@ -61,15 +61,8 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1772016942962,
-      "tag": "0008_fancy_squirrel_girl",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1772177627328,
-      "tag": "0009_hard_gateway",
+      "when": 1771915341920,
+      "tag": "0008_wakeful_cammi",
       "breakpoints": true
     }
   ]

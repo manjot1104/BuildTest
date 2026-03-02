@@ -269,29 +269,75 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
   // App demo URL endpoint - GET /api/apps/:chatId (public, no auth)
   // Used by the /apps/[chatId] page to get the demo URL for embedding
-  .get(
-    '/apps/:chatId',
-    async ({ params, set }) => {
-      try {
-        const result = await getChatDemoUrl({ v0ChatId: params.chatId })
+  
+ .get(
+  '/apps/:chatId',
+  async ({ params, set, request }) => {
+    try {
+      const result = await getChatDemoUrl({ v0ChatId: params.chatId })
 
-        if (!result) {
-          set.status = 404
-          return { error: 'App not found' }
+      if (!result) {
+        set.status = 404
+        return { error: 'App not found' }
+      }
+
+      // 🔹 VISIT LOGGING START
+      try {
+        const { db } = await import('@/server/db')
+        const { demo_visits, user_chats } = await import('@/server/db/schema')
+        const { eq } = await import('drizzle-orm')
+        const { nanoid } = await import('nanoid')
+        const { getSession } = await import('@/server/better-auth/server')
+        const { getFeaturedBuildsHandler } = await import('@/server/api/controllers/chat.controller')
+
+        const chatId = params.chatId
+
+        const featuredResult = await getFeaturedBuildsHandler()
+        const featuredList = (featuredResult as any)?.data ?? []
+
+        const isFeatured = featuredList.some(
+          (item: any) => item.v0_chat_id === chatId
+        )
+
+        let ownerUserId: string | null = null
+
+        if (!isFeatured) {
+          const owner = await db
+            .select()
+            .from(user_chats)
+            .where(eq(user_chats.v0_chat_id, chatId))
+            .limit(1)
+
+          ownerUserId = owner[0]?.user_id ?? null
         }
 
-        return result
-      } catch (_error) {
-        set.status = 500
-        return { error: 'Failed to fetch app' }
+        const session = await getSession()
+console.log("VISIT LOGGING STARTED")
+        await db.insert(demo_visits).values({
+          id: nanoid(),
+          demo_id: chatId,
+          demo_type: isFeatured ? 'featured' : 'community',
+          owner_user_id: ownerUserId,
+          visitor_user_id: session?.user?.id ?? null,
+        })
+        console.log("VISIT LOGGING SUCCESS")
+      } catch (err) {
+        console.error('Visit logging failed:', err)
       }
-    },
-    {
-      params: t.Object({
-        chatId: t.String(),
-      }),
-    },
-  )
+      // 🔹 VISIT LOGGING END
+
+      return result
+    } catch (_error) {
+      set.status = 500
+      return { error: 'Failed to fetch app' }
+    }
+  },
+  {
+    params: t.Object({
+      chatId: t.String(),
+    }),
+  },
+)
   // Featured builds endpoint - GET /api/chats/featured (must be before :chatId)
   .get(
     '/chats/featured',

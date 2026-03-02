@@ -9,6 +9,7 @@ import {
 } from "@/server/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import type { ApiErrorResponse } from "@/types/api.types";
+import { getDemoVisitsByType, getTotalDemoVisits } from "@/server/db/queries";
 
 // ============================================================================
 // Types
@@ -55,6 +56,9 @@ interface AdminDashboardStats {
   totalChats: number;
   activeSubscriptions: number;
   totalCreditsInCirculation: number;
+  totalDemoVisits: number;
+  featuredVisits: number;
+  communityVisits: number;
 }
 
 // ============================================================================
@@ -92,7 +96,8 @@ export async function getAdminStatsHandler(): Promise<
 > {
   const authError = await requireAdminSession();
   if (authError) return authError;
-
+const totalVisits = await getTotalDemoVisits()
+const visitsByType = await getDemoVisitsByType()
   const [totalUsers, totalChats, activeSubscriptions, totalCreditsResult] =
     await Promise.all([
       db.select({ count: sql<number>`count(*)` }).from(user),
@@ -113,6 +118,9 @@ export async function getAdminStatsHandler(): Promise<
     totalChats: totalChats[0]?.count ?? 0,
     activeSubscriptions: activeSubscriptions[0]?.count ?? 0,
     totalCreditsInCirculation: totalCreditsResult[0]?.total ?? 0,
+    totalDemoVisits: totalVisits,
+  featuredVisits: visitsByType.featured,
+  communityVisits: visitsByType.community,
   };
 }
 
