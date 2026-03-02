@@ -45,7 +45,7 @@ export async function GET(request: Request) {
       communityVisits: community[0]?.count ?? 0,
     });
 
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch user usage" },
       { status: 500 },

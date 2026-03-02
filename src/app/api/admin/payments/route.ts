@@ -222,7 +222,7 @@ const communityVisitsResult = await db
   monthlyDemoVisits,
 }
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch payments data" },
       { status: 500 },

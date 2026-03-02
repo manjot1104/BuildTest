@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
@@ -223,7 +223,7 @@ export async function GET(request: NextRequest) {
       creditsUsedData.map((item) => [item.user_id, Number(item.total)]),
     );
 
-    let combinedUsers = allUsersData.map((u) => {
+    const combinedUsers = allUsersData.map((u) => {
       const subscription = subscriptionMap.get(u.user_id);
       const creditsAssigned = creditsAssignedMap.get(u.user_id) ?? 0;
       const creditsUsed = creditsUsedMap.get(u.user_id) ?? 0;
@@ -317,7 +317,7 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
       { status: 500 },

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
-import { user, user_chats, credit_usage_logs, demo_visits } from "@/server/db/schema";
 import { sql } from "drizzle-orm";
 import { requireAdmin } from "@/server/admin/require-admin";
 
@@ -35,7 +34,7 @@ ORDER BY total_prompts DESC
 
     return NextResponse.json(result);
 
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

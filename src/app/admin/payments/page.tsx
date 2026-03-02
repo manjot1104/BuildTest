@@ -1,20 +1,16 @@
 "use client";
-import { useState } from "react";
-
-import { CartesianGrid } from "recharts";
-
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Coins,
- 
   Search,
+  IndianRupee,
 } from "lucide-react";
 import {
-  
+  CartesianGrid,
   Cell,
   Legend,
   Line,
@@ -28,8 +24,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-
 import {
   Tabs,
   TabsContent,
@@ -37,7 +31,6 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { useAdminCredits } from "@/client-api/query-hooks/use-admin-credits";
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -51,26 +44,58 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-
-import { IndianRupee } from "lucide-react";
 import { useAdminPayments } from "@/client-api/query-hooks/use-admin-payments";
 import { useQuery } from "@tanstack/react-query";
 
+// ============================================================================
+// Types
+// ============================================================================
 
+interface UserUsageRow {
+  id: string;
+  email: string;
+  total_chats: number;
+  total_prompts: number;
+  community_visits: number;
+}
 
+interface SubscriptionRow {
+  subscription_id: string;
+  user_email: string;
+  plan_name: string;
+  credits_per_month: number;
+  current_period_end: string | null;
+  status: string;
+  subscription_credits: number | null;
+  additional_credits: number | null;
+}
+
+interface CreditPlanEntry {
+  plan_name: string;
+  total_credits: number;
+}
+
+interface CreditUserRow {
+  user_id: string;
+  name: string;
+  email: string;
+  plan_name: string | null;
+  credits_assigned: number;
+  credits_used: number;
+  credits_remaining: number;
+  expiry_date: string | null;
+  status: string;
+}
 
 const CREDIT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
-
-
 export default function PaymentsPage() {
-
   //  USERS USAGE QUERY
-  const { data: usersUsage } = useQuery({
+  const { data: usersUsage } = useQuery<UserUsageRow[]>({
     queryKey: ["users-usage"],
     queryFn: async () => {
       const res = await fetch("/api/admin/users-usage");
-      return res.json();
+      return res.json() as Promise<UserUsageRow[]>;
     },
   });
 
@@ -78,7 +103,6 @@ export default function PaymentsPage() {
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [activeMetric, setActiveMetric] =
     useState<"chats" | "prompts" | "demo">("chats");
-  const [selectedUser, setSelectedUser] = useState<string | null>(null);
 
   //  SEARCH PARAMS
   const searchParams = useSearchParams();
@@ -89,35 +113,25 @@ export default function PaymentsPage() {
 
   const [tab, setTab] = useState<string>(initialTab);
 
-
-
   // ------------------------------
   // Payments analytics query
   // ------------------------------
   const [subscriptionSearch, setSubscriptionSearch] = useState("");
   const [userSearch, setUserSearch] = useState("");
-  const { data, isLoading, error } = useAdminPayments();
-  const { data: userStats } = useQuery({
-  queryKey: ["user-usage", selectedUser],
-  queryFn: async () => {
-    const res = await fetch(`/api/admin/user-usage?userId=${selectedUser}`);
-    return res.json();
-  },
-  enabled: !!selectedUser,
-});
-
+  const { data, isLoading } = useAdminPayments();
 
   const monthlyRevenue = data?.monthlyRevenue ?? [];
   const summary = data?.summary;
-  const activeSubscriptions = data?.activeSubscriptions ?? [];
+  const activeSubscriptions = (data?.activeSubscriptions ?? []) as SubscriptionRow[];
   const usage = data?.usageAnalytics;
 
-  const filteredSubscriptions = activeSubscriptions.filter((sub: any) =>
-    sub.user_email?.toLowerCase().includes(subscriptionSearch.toLowerCase()),
+  const filteredSubscriptions = activeSubscriptions.filter(
+    (sub: SubscriptionRow) =>
+      sub.user_email?.toLowerCase().includes(subscriptionSearch.toLowerCase()),
   );
-  const filteredUsers = usersUsage?.filter((u: any) =>
-  u.email?.toLowerCase().includes(userSearch.toLowerCase())
-);
+  const filteredUsers = usersUsage?.filter((u: UserUsageRow) =>
+    u.email?.toLowerCase().includes(userSearch.toLowerCase()),
+  );
 
   // ------------------------------
   // Credit analytics query (4th tab)
@@ -125,7 +139,9 @@ export default function PaymentsPage() {
   const [creditSearch, setCreditSearch] = useState("");
   const [creditPage, setCreditPage] = useState(1);
   const [creditSortBy, setCreditSortBy] = useState("name");
-  const [creditSortOrder, setCreditSortOrder] = useState<"asc" | "desc">("asc");
+  const [creditSortOrder, setCreditSortOrder] = useState<"asc" | "desc">(
+    "asc",
+  );
   const creditLimit = 50;
 
   const {
@@ -154,7 +170,8 @@ export default function PaymentsPage() {
   };
 
   const CreditSortIcon = ({ column }: { column: string }) => {
-    if (creditSortBy !== column) return <ArrowUpDown className="ml-1 h-3 w-3" />;
+    if (creditSortBy !== column)
+      return <ArrowUpDown className="ml-1 h-3 w-3" />;
     return creditSortOrder === "asc" ? (
       <ArrowUp className="ml-1 h-3 w-3" />
     ) : (
@@ -163,35 +180,18 @@ export default function PaymentsPage() {
   };
 
   return (
-  <div className="space-y-8">
+    <div className="space-y-8">
+      {/* ===== HEADER FIRST ===== */}
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          Payments Analytics
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Revenue, subscriptions and usage insights.
+        </p>
+      </div>
 
-    {/* ===== HEADER FIRST ===== */}
-    <div>
-      <h1 className="text-3xl font-bold tracking-tight">
-        Payments Analytics
-      </h1>
-      <p className="text-sm text-muted-foreground">
-        Revenue, subscriptions and usage insights.
-      </p>
-    </div>
-
-    {/* ===== TABS BELOW HEADER ===== */}
-    
-   
-
-      
-    
-
-
-  
-
- 
-
-  
-
- 
-
-
+      {/* ===== TABS BELOW HEADER ===== */}
       <Tabs value={tab} onValueChange={setTab} className="space-y-6">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -204,13 +204,22 @@ export default function PaymentsPage() {
         <TabsContent value="overview" className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { label: "Total Revenue", value: (summary?.totalRevenue ?? 0) / 100 },
+              {
+                label: "Total Revenue",
+                value: (summary?.totalRevenue ?? 0) / 100,
+              },
               {
                 label: "Subscription Revenue",
                 value: (summary?.subscriptionRevenue ?? 0) / 100,
               },
-              { label: "Credit Revenue", value: (summary?.creditRevenue ?? 0) / 100 },
-              { label: "Failed Payments", value: summary?.failedPayments ?? 0 },
+              {
+                label: "Credit Revenue",
+                value: (summary?.creditRevenue ?? 0) / 100,
+              },
+              {
+                label: "Failed Payments",
+                value: summary?.failedPayments ?? 0,
+              },
             ].map((item) => (
               <Card key={item.label}>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -242,7 +251,7 @@ export default function PaymentsPage() {
               {isLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : monthlyRevenue.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="flex h-full items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               ) : (
@@ -269,7 +278,7 @@ export default function PaymentsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {isLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
+                <div className="flex h-[300px] items-center justify-center">
                   <Skeleton className="h-64 w-64 rounded-full" />
                 </div>
               ) : (
@@ -281,7 +290,8 @@ export default function PaymentsPage() {
                           data={[
                             {
                               name: "Subscriptions",
-                              value: (summary?.subscriptionRevenue ?? 0) / 100,
+                              value:
+                                (summary?.subscriptionRevenue ?? 0) / 100,
                             },
                             {
                               name: "Credits",
@@ -297,7 +307,11 @@ export default function PaymentsPage() {
                           <Cell fill="#3b82f6" />
                           <Cell fill="#6b7280" />
                         </Pie>
-                        <Tooltip formatter={(value: number) => `₹ ${value.toLocaleString()}`} />
+                        <Tooltip
+                          formatter={(value: number) =>
+                            `₹ ${value.toLocaleString()}`
+                          }
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -373,7 +387,10 @@ export default function PaymentsPage() {
 
                   {!isLoading && filteredSubscriptions.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={6}
+                        className="py-8 text-center text-muted-foreground"
+                      >
                         {subscriptionSearch
                           ? "No subscriptions match your search."
                           : "No active subscriptions found."}
@@ -382,18 +399,21 @@ export default function PaymentsPage() {
                   )}
 
                   {!isLoading &&
-                    filteredSubscriptions.map((sub: any) => (
+                    filteredSubscriptions.map((sub: SubscriptionRow) => (
                       <TableRow key={sub.subscription_id}>
                         <TableCell>{sub.user_email}</TableCell>
                         <TableCell>{sub.plan_name}</TableCell>
                         <TableCell>{sub.credits_per_month}</TableCell>
                         <TableCell>
                           {sub.current_period_end
-                            ? new Date(sub.current_period_end).toLocaleDateString()
+                            ? new Date(
+                                sub.current_period_end,
+                              ).toLocaleDateString()
                             : "-"}
                         </TableCell>
                         <TableCell>
-                          {(sub.subscription_credits ?? 0) + (sub.additional_credits ?? 0)}
+                          {(sub.subscription_credits ?? 0) +
+                            (sub.additional_credits ?? 0)}
                         </TableCell>
                         <TableCell>
                           <Badge className="capitalize">{sub.status}</Badge>
@@ -407,305 +427,234 @@ export default function PaymentsPage() {
         </TabsContent>
 
         {/* ================= USAGE TAB ================= */}
-        {/* <TabsContent value="usage" className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">
-                  Total Chats
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">{usage?.totalChats ?? 0}</p>
-              </CardContent>
-            </Card>
+        <TabsContent value="usage" className="space-y-10">
+          {/* ===== GLOBAL OVERVIEW ===== */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Global Usage Overview</h2>
+              <p className="text-sm text-muted-foreground">
+                Overall platform usage statistics.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Total Chats
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <p className="text-3xl font-bold">
+                    {usage?.totalChats ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Total Prompts
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <p className="text-3xl font-bold">
+                    {usage?.totalPrompts ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Total Demo Visits
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <p className="text-3xl font-bold">
+                    {usage?.totalDemoVisits ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Active Users
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="py-4">
+                  <p className="text-3xl font-bold">
+                    {usage?.topUsers?.length ?? 0}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* ===== USAGE TRENDS ===== */}
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold">Usage Trends</h2>
+              <p className="text-sm text-muted-foreground">
+                Monthly growth across chats, prompts and demo visits.
+              </p>
+            </div>
 
             <Card>
-              <CardHeader>
-                <CardTitle className="text-sm text-muted-foreground">
-                  Total Credits Used
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>
+                  {activeMetric === "chats" && "Monthly Chats"}
+                  {activeMetric === "prompts" && "Monthly Prompts"}
+                  {activeMetric === "demo" && "Monthly Demo Visits"}
                 </CardTitle>
+
+                <div className="flex gap-2">
+                  {(["chats", "prompts", "demo"] as const).map((metric) => (
+                    <button
+                      key={metric}
+                      onClick={() => setActiveMetric(metric)}
+                      className={`rounded-md px-3 py-1 text-sm transition ${
+                        activeMetric === metric
+                          ? "bg-primary text-white"
+                          : "bg-muted hover:bg-muted/70"
+                      }`}
+                    >
+                      {metric === "chats"
+                        ? "Chats"
+                        : metric === "prompts"
+                          ? "Prompts"
+                          : "Demo Visits"}
+                    </button>
+                  ))}
+                </div>
               </CardHeader>
-              <CardContent>
-                <p className="text-2xl font-semibold">
-                  {usage?.totalCreditsUsed ?? 0}
-                </p>
+
+              <CardContent className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={
+                      activeMetric === "chats"
+                        ? (usage?.monthlyChats ?? [])
+                        : activeMetric === "prompts"
+                          ? (usage?.monthlyPrompts ?? [])
+                          : (usage?.monthlyDemoVisits ?? [])
+                    }
+                  >
+                    <CartesianGrid stroke="#1F2937" vertical={false} />
+
+                    <XAxis
+                      dataKey="month"
+                      stroke="#9CA3AF"
+                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                    />
+
+                    <YAxis
+                      allowDecimals={false}
+                      stroke="#9CA3AF"
+                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                    />
+
+                    <Tooltip />
+
+                    <Bar
+                      dataKey="count"
+                      fill="#3b82f6"
+                      radius={[8, 8, 0, 0]}
+                      barSize={40}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </div>
 
+          {/* ===== USER ANALYTICS ===== */}
           <Card>
-            <CardHeader>
-              <CardTitle>Monthly Chats</CardTitle>
-            </CardHeader>
-            <CardContent className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={usage?.monthlyChats ?? []}>
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="count"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={3}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+            <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <CardTitle>User Analytics</CardTitle>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Top Active Users</CardTitle>
+              <div className="relative w-full sm:w-72">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search your email..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </CardHeader>
+
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Chats</TableHead>
+                    <TableHead>Prompts</TableHead>
+                    <TableHead>Community Visits</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
-                  {usage?.topUsers?.map((u: any) => (
-                    <TableRow key={u.user_email}>
-                      <TableCell>{u.user_email}</TableCell>
-                      <TableCell>{u.chat_count}</TableCell>
+                  {filteredUsers?.map((u: UserUsageRow) => (
+                    <TableRow
+                      key={u.id}
+                      className="cursor-pointer transition hover:bg-muted/40"
+                      onClick={() =>
+                        setExpandedUser(expandedUser === u.id ? null : u.id)
+                      }
+                    >
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.total_chats}</TableCell>
+                      <TableCell>{u.total_prompts}</TableCell>
+                      <TableCell>{u.community_visits}</TableCell>
                     </TableRow>
                   ))}
+                  {filteredUsers?.map(
+                    (u: UserUsageRow) =>
+                      expandedUser === u.id && (
+                        <TableRow key={`${u.id}-detail`}>
+                          <TableCell colSpan={4}>
+                            <div className="rounded-lg border bg-muted/30 p-4">
+                              <div className="grid grid-cols-3 gap-6">
+                                <div>
+                                  <p className="text-sm text-muted-foreground">
+                                    Detailed Chats
+                                  </p>
+                                  <p className="text-2xl font-bold">
+                                    {u.total_chats}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-sm text-muted-foreground">
+                                    Detailed Prompts
+                                  </p>
+                                  <p className="text-2xl font-bold">
+                                    {u.total_prompts}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-sm text-muted-foreground">
+                                    Community Visits
+                                  </p>
+                                  <p className="text-2xl font-bold">
+                                    {u.community_visits}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ),
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
-
-   */}
-  
- {/* ================= USAGE TAB ================= */}
-<TabsContent value="usage" className="space-y-10">
-
-  {/* ===== GLOBAL OVERVIEW ===== */}
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-xl font-semibold">Global Usage Overview</h2>
-      <p className="text-sm text-muted-foreground">
-        Overall platform usage statistics.
-      </p>
-    </div>
-
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">
-            Total Chats
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-4">
-          <p className="text-3xl font-bold">{usage?.totalChats ?? 0}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">
-            Total Prompts
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-4">
-          <p className="text-3xl font-bold">{usage?.totalPrompts ?? 0}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">
-            Total Demo Visits
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-4">
-          <p className="text-3xl font-bold">{usage?.totalDemoVisits ?? 0}</p>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm text-muted-foreground">
-            Active Users
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="py-4">
-          <p className="text-3xl font-bold">
-            {usage?.topUsers?.length ?? 0}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  </div>
-
-  {/* ===== USAGE TRENDS ===== */}
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-xl font-semibold">Usage Trends</h2>
-      <p className="text-sm text-muted-foreground">
-        Monthly growth across chats, prompts and demo visits.
-      </p>
-    </div>
-
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>
-          {activeMetric === "chats" && "Monthly Chats"}
-          {activeMetric === "prompts" && "Monthly Prompts"}
-          {activeMetric === "demo" && "Monthly Demo Visits"}
-        </CardTitle>
-
-        <div className="flex gap-2">
-          {["chats", "prompts", "demo"].map((metric) => (
-            <button
-              key={metric}
-              onClick={() => setActiveMetric(metric as any)}
-              className={`px-3 py-1 text-sm rounded-md transition ${
-                activeMetric === metric
-                  ? "bg-primary text-white"
-                  : "bg-muted hover:bg-muted/70"
-              }`}
-            >
-              {metric === "chats"
-                ? "Chats"
-                : metric === "prompts"
-                ? "Prompts"
-                : "Demo Visits"}
-            </button>
-          ))}
-        </div>
-      </CardHeader>
-
-      <CardContent className="h-72">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={
-              activeMetric === "chats"
-                ? usage?.monthlyChats ?? []
-                : activeMetric === "prompts"
-                ? usage?.monthlyPrompts ?? []
-                : usage?.monthlyDemoVisits ?? []
-            }
-          >
-            <CartesianGrid stroke="#1F2937" vertical={false} />
-
-            <XAxis
-              dataKey="month"
-              stroke="#9CA3AF"
-              tick={{ fill: "#9CA3AF", fontSize: 12 }}
-            />
-
-            <YAxis
-              allowDecimals={false}
-              stroke="#9CA3AF"
-              tick={{ fill: "#9CA3AF", fontSize: 12 }}
-            />
-
-            <Tooltip />
-
-            <Bar
-              dataKey="count"
-              fill="#3b82f6"
-              radius={[8, 8, 0, 0]}
-              barSize={40}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  </div>
-</TabsContent>
-  {/* ===== USER ANALYTICS ===== */}
-<Card>
-  <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-    <CardTitle>User Analytics</CardTitle>
-
-    <div className="relative w-full sm:w-72">
-      <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-      <Input
-        placeholder="Search your email..."
-        value={userSearch}
-        onChange={(e) => setUserSearch(e.target.value)}
-        className="pl-9"
-      />
-    </div>
-  </CardHeader>
-
-  <CardContent>
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Chats</TableHead>
-          <TableHead>Prompts</TableHead>
-          <TableHead>Community Visits</TableHead>
-        </TableRow>
-      </TableHeader>
-
-      <TableBody>
-       {filteredUsers?.map((u: any) => (
-          <>
-            <TableRow
-              key={u.id}
-              className="cursor-pointer hover:bg-muted/40 transition"
-              onClick={() =>
-                setExpandedUser(expandedUser === u.id ? null : u.id)
-              }
-            >
-              <TableCell>{u.email}</TableCell>
-              <TableCell>{u.total_chats}</TableCell>
-              <TableCell>{u.total_prompts}</TableCell>
-              <TableCell>{u.community_visits}</TableCell>
-            </TableRow>
-
-            {expandedUser === u.id && (
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <div className="p-4 rounded-lg bg-muted/30 border">
-                    <div className="grid grid-cols-3 gap-6">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Detailed Chats
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {u.total_chats}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Detailed Prompts
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {u.total_prompts}
-                        </p>
-                      </div>
-
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Community Visits
-                        </p>
-                        <p className="text-2xl font-bold">
-                          {u.community_visits}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </TableCell>
-              </TableRow>
-            )}
-          </>
-        ))}
-      </TableBody>
-    </Table>
-  </CardContent>
-</Card>
-
 
         {/* ================= CREDIT ANALYTICS TAB ================= */}
         <TabsContent value="credits" className="space-y-6">
@@ -766,7 +715,7 @@ export default function PaymentsPage() {
               {creditLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : !creditGraphs?.creditsIssuedVsUsed?.length ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="flex h-full items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               ) : (
@@ -804,7 +753,7 @@ export default function PaymentsPage() {
               {creditLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : !creditGraphs?.monthlyUsageTrend?.length ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
+                <div className="flex h-full items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               ) : (
@@ -831,11 +780,11 @@ export default function PaymentsPage() {
             </CardHeader>
             <CardContent>
               {creditLoading ? (
-                <div className="h-[300px] flex items-center justify-center">
+                <div className="flex h-[300px] items-center justify-center">
                   <Skeleton className="h-64 w-64 rounded-full" />
                 </div>
               ) : !creditGraphs?.creditsByPlan?.length ? (
-                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                <div className="flex h-[300px] items-center justify-center text-muted-foreground">
                   No data available
                 </div>
               ) : (
@@ -853,34 +802,44 @@ export default function PaymentsPage() {
                           innerRadius={50}
                           paddingAngle={4}
                         >
-                          {creditGraphs.creditsByPlan.map((_: any, index: number) => (
-                            <Cell
-                              key={`cell-${index}`}
-                              fill={CREDIT_COLORS[index % CREDIT_COLORS.length]}
-                            />
-                          ))}
+                          {creditGraphs.creditsByPlan.map(
+                            (_entry: CreditPlanEntry, index: number) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={
+                                  CREDIT_COLORS[index % CREDIT_COLORS.length]
+                                }
+                              />
+                            ),
+                          )}
                         </Pie>
-                        <Tooltip formatter={(value: number) => value.toLocaleString()} />
+                        <Tooltip
+                          formatter={(value: number) =>
+                            value.toLocaleString()
+                          }
+                        />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
 
                   <div className="mt-4 flex flex-wrap justify-center gap-4 text-sm text-muted-foreground">
-                    {creditGraphs.creditsByPlan.map((plan: any, index: number) => (
-                      <div
-                        key={plan.plan_name || `plan-${index}`}
-                        className="flex items-center gap-2"
-                      >
+                    {creditGraphs.creditsByPlan.map(
+                      (plan: CreditPlanEntry, index: number) => (
                         <div
-                          className="h-3 w-3 rounded-full"
-                          style={{
-                            backgroundColor:
-                              CREDIT_COLORS[index % CREDIT_COLORS.length],
-                          }}
-                        />
-                        {plan.plan_name || "No Plan"}
-                      </div>
-                    ))}
+                          key={plan.plan_name || `plan-${index}`}
+                          className="flex items-center gap-2"
+                        >
+                          <div
+                            className="h-3 w-3 rounded-full"
+                            style={{
+                              backgroundColor:
+                                CREDIT_COLORS[index % CREDIT_COLORS.length],
+                            }}
+                          />
+                          {plan.plan_name || "No Plan"}
+                        </div>
+                      ),
+                    )}
                   </div>
                 </>
               )}
@@ -942,7 +901,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("name")}
                       >
                         Name
@@ -953,7 +912,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("email")}
                       >
                         Email
@@ -965,7 +924,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("credits_assigned")}
                       >
                         Credits Assigned
@@ -976,7 +935,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("credits_used")}
                       >
                         Credits Used
@@ -987,7 +946,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("credits_remaining")}
                       >
                         Credits Remaining
@@ -999,7 +958,7 @@ export default function PaymentsPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 -ml-3"
+                        className="-ml-3 h-8"
                         onClick={() => handleCreditSort("status")}
                       >
                         Status
@@ -1040,7 +999,8 @@ export default function PaymentsPage() {
                     ))}
 
                   {!creditLoading &&
-                    (!creditUsers?.data || creditUsers.data.length === 0) && (
+                    (!creditUsers?.data ||
+                      creditUsers.data.length === 0) && (
                       <TableRow>
                         <TableCell
                           colSpan={8}
@@ -1054,7 +1014,7 @@ export default function PaymentsPage() {
                     )}
 
                   {!creditLoading &&
-                    creditUsers?.data?.map((u: any) => (
+                    creditUsers?.data?.map((u: CreditUserRow) => (
                       <TableRow key={u.user_id}>
                         <TableCell>{u.name}</TableCell>
                         <TableCell>{u.email}</TableCell>
@@ -1062,7 +1022,9 @@ export default function PaymentsPage() {
                         <TableCell>
                           {(u.credits_assigned ?? 0).toLocaleString()}
                         </TableCell>
-                        <TableCell>{(u.credits_used ?? 0).toLocaleString()}</TableCell>
+                        <TableCell>
+                          {(u.credits_used ?? 0).toLocaleString()}
+                        </TableCell>
                         <TableCell>
                           {(u.credits_remaining ?? 0).toLocaleString()}
                         </TableCell>
@@ -1087,37 +1049,48 @@ export default function PaymentsPage() {
                 </TableBody>
               </Table>
 
-              {creditUsers?.pagination && creditUsers.pagination.totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {(creditPage - 1) * creditLimit + 1} to{" "}
-                    {Math.min(creditPage * creditLimit, creditUsers.pagination.total)}{" "}
-                    of {creditUsers.pagination.total} users
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setCreditPage((p) => Math.max(1, p - 1))}
-                      disabled={creditPage === 1}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setCreditPage((p) =>
-                          Math.min(creditUsers.pagination.totalPages, p + 1),
-                        )
-                      }
-                      disabled={creditPage >= creditUsers.pagination.totalPages}
-                    >
-                      Next
-                    </Button>
+              {creditUsers?.pagination &&
+                creditUsers.pagination.totalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Showing {(creditPage - 1) * creditLimit + 1} to{" "}
+                      {Math.min(
+                        creditPage * creditLimit,
+                        creditUsers.pagination.total,
+                      )}{" "}
+                      of {creditUsers.pagination.total} users
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCreditPage((p) => Math.max(1, p - 1))
+                        }
+                        disabled={creditPage === 1}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCreditPage((p) =>
+                            Math.min(
+                              creditUsers.pagination.totalPages,
+                              p + 1,
+                            ),
+                          )
+                        }
+                        disabled={
+                          creditPage >= creditUsers.pagination.totalPages
+                        }
+                      >
+                        Next
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1125,5 +1098,3 @@ export default function PaymentsPage() {
     </div>
   );
 }
-
-

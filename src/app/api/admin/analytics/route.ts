@@ -117,7 +117,7 @@ export async function GET() {
         used: totalCreditsUsed,
       },
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch analytics" },
       { status: 500 },

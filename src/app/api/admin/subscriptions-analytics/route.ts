@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { and, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
@@ -281,7 +281,7 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch subscriptions analytics" },
       { status: 500 },

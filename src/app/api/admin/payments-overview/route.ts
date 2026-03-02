@@ -127,7 +127,7 @@ export async function GET() {
         })),
       },
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch payments overview" },
       { status: 500 },
