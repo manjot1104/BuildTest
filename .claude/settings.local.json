@@ -35,7 +35,11 @@
       "Bash(npm install openai)",
       "Bash(npm install openai --legacy-peer-deps)",
       "WebFetch(domain:t3.chat)",
-      "Bash(git mv \"src/app/\\(main\\)/openrouter-chat\" \"src/app/\\(main\\)/ai-chat\")"
+      "Bash(git mv \"src/app/\\(main\\)/openrouter-chat\" \"src/app/\\(main\\)/ai-chat\")",
+      "WebFetch(domain:www.daytona.io)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:encore.dev)",
+      "Bash(npm install --legacy-peer-deps ws)"
     ]
   }
 }

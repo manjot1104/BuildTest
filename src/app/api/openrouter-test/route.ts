@@ -3,24 +3,29 @@ import { NextResponse } from "next/server";
 
 const BASE_URL = "https://openrouter.ai/api/v1";
 
-// Ordered fallback chain — all IDs verified against the OpenRouter /api/v1/models endpoint.
-// Smaller models are placed later; they rarely get rate-limited and act as a reliable last resort.
+// Ordered fallback chain — larger, more capable models first.
+// "openrouter/free" is a meta-router that picks the best available free model automatically.
 const FALLBACK_CHAIN = [
-  "mistralai/mistral-small-3.1-24b-instruct:free",
-  "google/gemma-3-12b-it:free",
   "meta-llama/llama-3.3-70b-instruct:free",
-  "google/gemma-3-4b-it:free",
-  "meta-llama/llama-3.2-3b-instruct:free",
-  "qwen/qwen3-4b:free",
-  "arcee-ai/trinity-mini:free",
-  "liquid/lfm-2.5-1.2b-instruct:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
+  "arcee-ai/trinity-large-preview:free",
+  "upstage/solar-pro-3:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
   "stepfun/step-3.5-flash:free",
+  "google/gemma-3-12b-it:free",
+  "qwen/qwen3-4b:free",
+  "openrouter/free",
 ];
 
-const DEFAULT_SYSTEM_PROMPT =
-  "You are a concise, helpful AI assistant. Keep answers brief and direct. " +
-  "Use markdown: fenced code blocks (with language tag) for code, " +
-  "bold for key terms, bullet points for lists.";
+const DEFAULT_SYSTEM_PROMPT = `You are Buildify AI, an expert full-stack developer assistant.
+When the user asks you to build an app or write code:
+- Generate COMPLETE, WORKING code — never use placeholders or "// TODO" comments.
+- Use fenced code blocks with the correct language tag (html, css, javascript, tsx, python, etc.).
+- For web apps: always provide the full HTML file with embedded CSS and JS so it runs standalone.
+- For React components: provide complete JSX/TSX code with all imports and a default App component.
+- Keep explanations brief; let the code speak for itself.
+- Use modern best practices (semantic HTML, CSS flexbox/grid, ES6+, React hooks).
+When answering general questions: be concise, use markdown formatting.`;
 
 type ChatMessage = {
   role: "user" | "assistant" | "system";
@@ -35,7 +40,7 @@ async function tryModel(
   const completion = await openai.chat.completions.create({
     model: modelId,
     messages,
-    max_tokens: 2048,
+    max_tokens: 4096,
     temperature: 0.7,
   });
   return completion.choices[0]?.message?.content ?? "";
@@ -88,6 +93,12 @@ export async function POST(req: Request) {
     for (const modelId of chain) {
       try {
         const reply = await tryModel(openai, modelId, apiMessages);
+        // Skip empty or near-empty replies — try next model
+        if (!reply || reply.trim().length < 20) {
+          console.warn(`[OpenRouter] "${modelId}" returned empty/too-short reply, trying next`);
+          lastError = "Model returned an empty response";
+          continue;
+        }
         return NextResponse.json({
           reply,
           usedModel: modelId,

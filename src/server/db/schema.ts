@@ -388,3 +388,45 @@ export const paymentTransactionsRelations = relations(payment_transactions, ({ o
 export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) => ({
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
 }));
+
+// Sandbox execution status enum
+export const sandboxExecutionStatusEnum = pgEnum("sandbox_execution_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "timeout",
+]);
+
+// Sandbox Executions - logs every sandbox code execution for monitoring/auditing
+export const sandbox_executions = createTable(
+  "sandbox_executions",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    language: d.varchar("language", { length: 50 }).notNull(),
+    code: d.text("code").notNull(),
+    status: sandboxExecutionStatusEnum("status").notNull().default("pending"),
+    output: d.text("output"),
+    error: d.text("error"),
+    exit_code: d.integer("exit_code"),
+    execution_time_ms: d.integer("execution_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("sandbox_executions_user_id_idx").on(t.user_id),
+    index("sandbox_executions_status_idx").on(t.status),
+    index("sandbox_executions_created_at_idx").on(t.created_at),
+  ],
+);
+
+export const sandboxExecutionsRelations = relations(sandbox_executions, ({ one }) => ({
+  user: one(user, { fields: [sandbox_executions.user_id], references: [user.id] }),
+}));
