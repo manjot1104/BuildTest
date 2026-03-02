@@ -3,8 +3,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/better-auth";
 import { db } from "@/server/db";
 import { user } from "@/server/db/schema";
+import { headers } from "next/dist/server/request/headers";
 
 
+import { eq } from "drizzle-orm";
+import { AdminSidebar } from "./admin-sidebar";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const requestHeaders = await headers();
