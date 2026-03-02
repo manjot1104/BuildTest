@@ -36,12 +36,15 @@ export const auth = betterAuth({
       });
     },
   },
-
   socialProviders: {
-    github: {
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    }
+    ...(process.env.GITHUB_CLIENT_ID &&
+      process.env.GITHUB_CLIENT_SECRET && {
+        github: {
+          clientId: process.env.GITHUB_CLIENT_ID,
+          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          scope: ["read:user", "user:email", "repo"],
+        },
+      }),
   },
   plugins: [
     emailOTP({
@@ -71,8 +74,8 @@ export const auth = betterAuth({
                   to: user.email,
                   userName: user.name ?? user.email.split("@")[0] ?? "there",
                 });
-              } catch (error) {
-                console.error("Failed to send welcome email:", error);
+              } catch {
+                // Welcome email failed - non-critical, user is already verified
               }
             }
           }

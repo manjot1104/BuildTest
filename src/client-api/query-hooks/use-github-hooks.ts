@@ -1,0 +1,153 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface GithubStatusResponse {
+  connected: boolean
+  hasRepoScope: boolean
+  login?: string
+}
+
+export interface GithubRepoInfo {
+  id: string
+  repoName: string
+  repoFullName: string
+  repoUrl: string
+  visibility: 'public' | 'private'
+  createdAt: string
+}
+
+export interface PushToGithubRequest {
+  chatId: string
+  branchName: string
+  commitMessage?: string
+  confirmExistingBranch?: boolean // User explicitly confirmed pushing to an existing branch
+  repoName?: string // Required on first push or when replaceRepo is true
+  visibility?: 'public' | 'private'
+  replaceRepo?: boolean // User explicitly confirmed replacing the active repo with a new one
+}
+
+export interface PushToGithubResponse {
+  success: boolean
+  repoUrl: string
+  commitSha: string
+  commitUrl: string
+  branchName: string
+  isNewRepo: boolean
+}
+
+interface ApiErrorResponse {
+  error: string
+  code?: string
+  details?: string
+}
+
+// Error class that carries the structured code from the API
+export class GithubPushError extends Error {
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = 'GithubPushError'
+    this.code = code
+  }
+}
+
+// ============================================================================
+// Query Hooks
+// ============================================================================
+
+/**
+ * Returns whether the current user has GitHub connected with repo scope.
+ * Only fetches when enabled (dialog is open). Retries disabled since
+ * connection status is user-action-dependent, not transient.
+ */
+export function useGithubStatus(enabled = true) {
+  return useQuery({
+    queryKey: ['github-status'],
+    queryFn: async (): Promise<GithubStatusResponse> => {
+      const response = await fetch('/api/github/status')
+      const result = (await response.json()) as GithubStatusResponse | ApiErrorResponse
+
+      if (!response.ok || 'error' in result) {
+        throw new Error('error' in result ? result.error : 'Failed to get GitHub status')
+      }
+
+      return result
+    },
+    enabled,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: false,
+  })
+}
+
+/**
+ * Returns the active GitHub repo for a chat, or null if none exists.
+ * Invalidated after every successful push.
+ */
+export function useGithubRepoForChat(chatId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['github-repo', chatId],
+    queryFn: async (): Promise<GithubRepoInfo | null> => {
+      const response = await fetch(`/api/github/repo/${chatId}`)
+
+      if (response.status === 404) return null
+
+      const result = (await response.json()) as GithubRepoInfo | ApiErrorResponse | null
+
+      if (!response.ok || (result && 'error' in result)) {
+        throw new Error(result && 'error' in result ? result.error : 'Failed to get repo info')
+      }
+
+      return result as GithubRepoInfo | null
+    },
+    enabled: enabled && !!chatId,
+    staleTime: 1000 * 30, // 30 seconds
+    retry: false,
+  })
+}
+
+// ============================================================================
+// Mutation Hooks
+// ============================================================================
+
+/**
+ * Mutation hook for pushing code to GitHub.
+ *
+ * Handles three cases (all via the same endpoint):
+ *   - First push: pass repoName + visibility
+ *   - Follow-up push to active repo: just chatId + branchName
+ *   - Replace active repo: pass repoName + visibility + replaceRepo: true
+ *
+ * Throws GithubPushError with a `code` field so the UI can react to specific cases.
+ */
+export function usePushToGithub(chatId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: PushToGithubRequest): Promise<PushToGithubResponse> => {
+      const response = await fetch('/api/github/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      const result = (await response.json()) as PushToGithubResponse | ApiErrorResponse
+
+      if (!response.ok || 'error' in result) {
+        const err = result as ApiErrorResponse
+        throw new GithubPushError(
+          err.error ?? 'Failed to push to GitHub',
+          err.code,
+        )
+      }
+
+      return result as PushToGithubResponse
+    },
+    onSuccess: async () => {
+      // Refresh the repo info for this chat
+      await queryClient.invalidateQueries({ queryKey: ['github-repo', chatId] })
+    },
+  })
+}

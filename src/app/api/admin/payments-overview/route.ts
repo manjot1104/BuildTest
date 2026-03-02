@@ -10,9 +10,12 @@ import {
   user_chats,
   user_credits,
 } from "@/server/db/schema";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET() {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     // ==============================
     // SUMMARY
     // ==============================
@@ -124,8 +127,7 @@ export async function GET() {
         })),
       },
     });
-  } catch (error) {
-    console.error("Payments overview error:", error);
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch payments overview" },
       { status: 500 },

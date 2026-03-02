@@ -5,7 +5,7 @@ import {
   payment_transactions,
   credit_usage_logs,
 } from "@/server/db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 import { calculateCreditCost } from "@/config/credits.config";
 
 /**
@@ -56,20 +56,21 @@ export async function getUserCreditsBreakdown(userId: string) {
 }
 
 /**
- * Add subscription credits to user
+ * Add subscription credits to user (atomic SQL increment)
  */
 export async function addSubscriptionCredits(userId: string, amount: number) {
-  const credits = await getOrCreateUserCredits(userId);
+  await getOrCreateUserCredits(userId);
 
-  await db
+  const [updated] = await db
     .update(user_credits)
     .set({
-      subscription_credits: credits.subscription_credits + amount,
+      subscription_credits: sql`${user_credits.subscription_credits} + ${amount}`,
       updated_at: new Date(),
     })
-    .where(eq(user_credits.user_id, userId));
+    .where(eq(user_credits.user_id, userId))
+    .returning({ subscription_credits: user_credits.subscription_credits });
 
-  return credits.subscription_credits + amount;
+  return updated?.subscription_credits ?? amount;
 }
 
 /**
@@ -86,25 +87,27 @@ export async function resetSubscriptionCredits(userId: string) {
 }
 
 /**
- * Add additional credits to user (from credit pack purchase)
+ * Add additional credits to user (from credit pack purchase, atomic SQL increment)
  */
 export async function addAdditionalCredits(userId: string, amount: number) {
-  const credits = await getOrCreateUserCredits(userId);
+  await getOrCreateUserCredits(userId);
 
-  await db
+  const [updated] = await db
     .update(user_credits)
     .set({
-      additional_credits: credits.additional_credits + amount,
+      additional_credits: sql`${user_credits.additional_credits} + ${amount}`,
       updated_at: new Date(),
     })
-    .where(eq(user_credits.user_id, userId));
+    .where(eq(user_credits.user_id, userId))
+    .returning({ additional_credits: user_credits.additional_credits });
 
-  return credits.additional_credits + amount;
+  return updated?.additional_credits ?? amount;
 }
 
 /**
- * Deduct credits from user
- * Priority: Use subscription credits first, then additional credits
+ * Deduct credits from user atomically using a database transaction.
+ * Priority: Use subscription credits first, then additional credits.
+ * Uses SELECT ... FOR UPDATE to prevent race conditions.
  */
 export async function deductCredits(
   userId: string,
@@ -112,52 +115,67 @@ export async function deductCredits(
   action: string,
   chatId?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  const credits = await getOrCreateUserCredits(userId);
-  const totalCredits = credits.subscription_credits + credits.additional_credits;
+  return await db.transaction(async (tx) => {
+    // Lock the row to prevent concurrent deductions
+    const [credits] = await tx
+      .select()
+      .from(user_credits)
+      .where(eq(user_credits.user_id, userId))
+      .for("update");
 
-  if (totalCredits < amount) {
-    return {
-      success: false,
-      error: `Insufficient credits. Required: ${amount}, Available: ${totalCredits}`,
-    };
-  }
+    if (!credits) {
+      return {
+        success: false,
+        error: "No credits record found for user",
+      };
+    }
 
-  let subscriptionDeduction = 0;
-  let additionalDeduction = 0;
+    const totalCredits =
+      credits.subscription_credits + credits.additional_credits;
 
-  // Deduct from subscription credits first
-  if (credits.subscription_credits >= amount) {
-    subscriptionDeduction = amount;
-  } else {
-    subscriptionDeduction = credits.subscription_credits;
-    additionalDeduction = amount - credits.subscription_credits;
-  }
+    if (totalCredits < amount) {
+      return {
+        success: false,
+        error: `Insufficient credits. Required: ${amount}, Available: ${totalCredits}`,
+      };
+    }
 
-  const newSubscriptionCredits = credits.subscription_credits - subscriptionDeduction;
-  const newAdditionalCredits = credits.additional_credits - additionalDeduction;
+    let subscriptionDeduction = 0;
+    let additionalDeduction = 0;
 
-  // Update credits
-  await db
-    .update(user_credits)
-    .set({
-      subscription_credits: newSubscriptionCredits,
-      additional_credits: newAdditionalCredits,
-      updated_at: new Date(),
-    })
-    .where(eq(user_credits.user_id, userId));
+    if (credits.subscription_credits >= amount) {
+      subscriptionDeduction = amount;
+    } else {
+      subscriptionDeduction = credits.subscription_credits;
+      additionalDeduction = amount - credits.subscription_credits;
+    }
 
-  // Log the usage
-  await db.insert(credit_usage_logs).values({
-    id: crypto.randomUUID(),
-    user_id: userId,
-    credits_used: amount,
-    action,
-    chat_id: chatId,
-    subscription_credits_remaining: newSubscriptionCredits,
-    additional_credits_remaining: newAdditionalCredits,
+    const newSubscriptionCredits =
+      credits.subscription_credits - subscriptionDeduction;
+    const newAdditionalCredits =
+      credits.additional_credits - additionalDeduction;
+
+    await tx
+      .update(user_credits)
+      .set({
+        subscription_credits: newSubscriptionCredits,
+        additional_credits: newAdditionalCredits,
+        updated_at: new Date(),
+      })
+      .where(eq(user_credits.user_id, userId));
+
+    await tx.insert(credit_usage_logs).values({
+      id: crypto.randomUUID(),
+      user_id: userId,
+      credits_used: amount,
+      action,
+      chat_id: chatId,
+      subscription_credits_remaining: newSubscriptionCredits,
+      additional_credits_remaining: newAdditionalCredits,
+    });
+
+    return { success: true };
   });
-
-  return { success: true };
 }
 
 /**

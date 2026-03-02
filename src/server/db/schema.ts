@@ -78,9 +78,7 @@ export const user = pgTable("user", {
   updatedAt: timestamp("updated_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),
-roles: userRoleEnum("roles").array().default(["user"]).notNull(),
-
-
+  roles: userRoleEnum("roles").array().default(["user"]).notNull(),
 });
 
 export const session = pgTable("session", {
@@ -134,6 +132,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   subscriptions: many(subscriptions),
   paymentTransactions: many(payment_transactions),
   creditUsageLogs: many(credit_usage_logs),
+  githubRepos: many(github_repos),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -184,15 +183,21 @@ export const user_chats = createTable(
 export const chat_ownerships = user_chats;
 
 // Track anonymous chat creation by IP for rate limiting
-export const anonymous_chat_logs = createTable("anonymous_chat_logs", (d) => ({
-  id: d.text("id").primaryKey(),
-  ip_address: d.varchar("ip_address", { length: 45 }).notNull(), // IPv6 can be up to 45 chars
-  v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
-  created_at: d
-    .timestamp("created_at", { withTimezone: true })
-    .$defaultFn(() => new Date())
-    .notNull(),
-}));
+export const anonymous_chat_logs = createTable(
+  "anonymous_chat_logs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    ip_address: d.varchar("ip_address", { length: 45 }).notNull(), // IPv6 can be up to 45 chars
+    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("anon_chat_logs_ip_created_idx").on(t.ip_address, t.created_at),
+  ],
+);
 
 // User Credits - tracks both subscription and additional credits
 export const user_credits = createTable(
@@ -387,4 +392,100 @@ export const paymentTransactionsRelations = relations(payment_transactions, ({ o
 
 export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) => ({
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
+}));
+
+// Sandbox execution status enum
+export const sandboxExecutionStatusEnum = pgEnum("sandbox_execution_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+  "timeout",
+]);
+
+// Sandbox Executions - logs every sandbox code execution for monitoring/auditing
+export const sandbox_executions = createTable(
+  "sandbox_executions",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    language: d.varchar("language", { length: 50 }).notNull(),
+    code: d.text("code").notNull(),
+    status: sandboxExecutionStatusEnum("status").notNull().default("pending"),
+    output: d.text("output"),
+    error: d.text("error"),
+    exit_code: d.integer("exit_code"),
+    execution_time_ms: d.integer("execution_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("sandbox_executions_user_id_idx").on(t.user_id),
+    index("sandbox_executions_status_idx").on(t.status),
+    index("sandbox_executions_created_at_idx").on(t.created_at),
+  ],
+);
+
+export const sandboxExecutionsRelations = relations(sandbox_executions, ({ one }) => ({
+  user: one(user, { fields: [sandbox_executions.user_id], references: [user.id] }),
+}));
+
+// GitHub Repos
+// - One row per GitHub repo (github_repo_id is globally unique)
+// - A chat can have multiple repo rows over time, but only one has is_active = true
+// - When user links a new repo to a chat, old row is set to is_active = false
+// - All pushes target the active repo for the chat
+export const github_repos = createTable(
+  "github_repos",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    chat_id: d
+      .text("chat_id")
+      .notNull()
+      .references(() => user_chats.id, { onDelete: "cascade" }),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // GitHub's own repo ID — enforces one chat per repo globally
+    github_repo_id: d.text("github_repo_id").notNull(),
+    repo_name: d.text("repo_name").notNull(),
+    repo_full_name: d.text("repo_full_name").notNull(),
+    repo_url: d.text("repo_url").notNull(),
+    // Kept for future: allow changing visibility from the app
+    visibility: d
+      .text("visibility", { enum: ["public", "private"] })
+      .notNull()
+      .default("public"),
+    // Only one repo per chat can be active at a time.
+    // Deactivated repos are kept for history but never pushed to.
+    is_active: d.boolean("is_active").notNull().default(true),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    // A GitHub repo can only ever belong to one chat
+    unique("github_repos_github_repo_id_unique").on(t.github_repo_id),
+    index("github_repos_user_id_idx").on(t.user_id),
+    index("github_repos_chat_id_idx").on(t.chat_id),
+    // Composite index for the most common query: active repo for a given chat
+    index("github_repos_chat_id_is_active_idx").on(t.chat_id, t.is_active),
+  ],
+);
+
+export const githubReposRelations = relations(github_repos, ({ one }) => ({
+  user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
+  chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
 }));

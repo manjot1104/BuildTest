@@ -3,7 +3,7 @@
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -100,8 +100,7 @@ export async function createUserChat({
         preview_url: previewUrl ?? null,
       })
       .onConflictDoNothing({ target: user_chats.v0_chat_id })
-  } catch (error) {
-    console.error('Failed to create user chat in database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -129,8 +128,7 @@ export async function updateUserChat({
       .update(user_chats)
       .set(updates)
       .where(eq(user_chats.v0_chat_id, v0ChatId))
-  } catch (error) {
-    console.error('Failed to update user chat in database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -150,8 +148,7 @@ export async function getUserChat({
       .where(eq(user_chats.v0_chat_id, v0ChatId))
       .limit(1)
     return chat
-  } catch (error) {
-    console.error('Failed to get user chat from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -177,8 +174,7 @@ export async function getChatDemoUrl({
 
     if (!chat?.demo_url) return undefined
     return { demoUrl: chat.demo_url, title: chat.title }
-  } catch (error) {
-    console.error('Failed to get chat demo URL from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -203,8 +199,7 @@ export async function getUserChatsByUserId({
       .limit(limit)
 
     return chats
-  } catch (error) {
-    console.error('Failed to get user chats from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -225,24 +220,28 @@ export async function getChatIdsByUserId({
       .orderBy(desc(user_chats.created_at))
 
     return chats.map((c) => c.v0ChatId)
-  } catch (error) {
-    console.error('Failed to get chat IDs by user from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
 
 /**
- * Deletes a user chat
+ * Deletes a user chat (requires userId for ownership verification)
  */
 export async function deleteUserChat({
   v0ChatId,
+  userId,
 }: {
   v0ChatId: string
+  userId: string
 }): Promise<void> {
   try {
-    await db.delete(user_chats).where(eq(user_chats.v0_chat_id, v0ChatId))
-  } catch (error) {
-    console.error('Failed to delete user chat from database:', error)
+    await db
+      .delete(user_chats)
+      .where(
+        and(eq(user_chats.v0_chat_id, v0ChatId), eq(user_chats.user_id, userId)),
+      )
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -293,8 +292,7 @@ export async function getCommunityChats({
       .offset(offset)
 
     return chats
-  } catch (error) {
-    console.error('Failed to get community chats from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -340,8 +338,7 @@ export async function getFeaturedChats(
       .where(inArray(user_chats.v0_chat_id, chatIds))
 
     return chats
-  } catch (error) {
-    console.error('Failed to get featured chats from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -357,8 +354,7 @@ export async function getCommunityChatsCount(): Promise<number> {
       .where(isNotNull(user_chats.demo_url))
 
     return result?.count ?? 0
-  } catch (error) {
-    console.error('Failed to get community chats count from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -405,8 +401,7 @@ export async function getChatCountByUserId({
       )
 
     return stats?.count ?? 0
-  } catch (error) {
-    console.error('Failed to get chat count by user from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -436,8 +431,7 @@ export async function getChatCountByIP({
       )
 
     return stats?.count ?? 0
-  } catch (error) {
-    console.error('Failed to get chat count by IP from database:', error)
+  } catch (error: unknown) {
     throw error
   }
 }
@@ -459,8 +453,130 @@ export async function createAnonymousChatLog({
       ip_address: ipAddress,
       v0_chat_id: v0ChatId,
     })
-  } catch (error) {
-    console.error('Failed to create anonymous chat log in database:', error)
+  } catch (error: unknown) {
+    throw error
+  }
+}
+
+// ============================================================================
+// GitHub Repo Functions
+// ============================================================================
+
+export type GithubRepo = typeof github_repos.$inferSelect
+export type GithubRepoInsert = typeof github_repos.$inferInsert
+
+export interface CreateGithubRepoParams {
+  chatId: string
+  userId: string
+  githubRepoId: string
+  repoName: string
+  repoFullName: string
+  repoUrl: string
+  visibility: 'public' | 'private'
+}
+
+/**
+ * Gets the currently active GitHub repo for a chat.
+ * This is what pushes target.
+ */
+export async function getActiveGithubRepo({
+  chatId,
+}: {
+  chatId: string
+}): Promise<GithubRepo | undefined> {
+  try {
+    const [repo] = await db
+      .select()
+      .from(github_repos)
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+      .limit(1)
+    return repo
+  } catch (error: unknown) {
+    throw error
+  }
+}
+
+/**
+ * Deactivates all currently active repos for a chat.
+ * Called before linking a new repo to the same chat.
+ */
+export async function deactivateGithubReposForChat({
+  chatId,
+}: {
+  chatId: string
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ is_active: false, updated_at: new Date() })
+      .where(
+        and(
+          eq(github_repos.chat_id, chatId),
+          eq(github_repos.is_active, true),
+        ),
+      )
+  } catch (error: unknown) {
+    throw error
+  }
+}
+
+/**
+ * Creates a new GitHub repo record and marks it as active.
+ * Always call deactivateGithubReposForChat first if the chat already has a repo.
+ */
+export async function createGithubRepo({
+  chatId,
+  userId,
+  githubRepoId,
+  repoName,
+  repoFullName,
+  repoUrl,
+  visibility,
+}: CreateGithubRepoParams): Promise<GithubRepo> {
+  try {
+    const [repo] = await db
+      .insert(github_repos)
+      .values({
+        id: randomUUID(),
+        chat_id: chatId,
+        user_id: userId,
+        github_repo_id: githubRepoId,
+        repo_name: repoName,
+        repo_full_name: repoFullName,
+        repo_url: repoUrl,
+        visibility,
+        is_active: true,
+      })
+      .returning()
+
+    return repo!
+  } catch (error: unknown) {
+    throw error
+  }
+}
+
+/**
+ * Updates the visibility of a GitHub repo.
+ * For future use: allow changing visibility from the app.
+ */
+export async function updateGithubRepoVisibility({
+  id,
+  visibility,
+}: {
+  id: string
+  visibility: 'public' | 'private'
+}): Promise<void> {
+  try {
+    await db
+      .update(github_repos)
+      .set({ visibility, updated_at: new Date() })
+      .where(eq(github_repos.id, id))
+  } catch (error: unknown) {
     throw error
   }
 }

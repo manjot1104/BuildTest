@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/server/db";
 import {
   payment_transactions,
@@ -7,10 +7,13 @@ import {
   user_credits,
   credit_usage_logs,
 } from "@/server/db/schema";
-import { eq, sql, and, or, gte, lte, desc, asc, like, ilike, inArray } from "drizzle-orm";
+import { eq, sql, and, or, ilike, inArray } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "50");
@@ -262,7 +265,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Combine data and calculate derived fields
-    let combinedUsers = allUsersData.map((u) => {
+    const combinedUsers = allUsersData.map((u) => {
       const subscription = subscriptionMap.get(u.user_id);
       const creditsAssigned = creditsAssignedMap.get(u.user_id) ?? 0;
       const creditsUsed = creditsUsedMap.get(u.user_id) ?? 0;
@@ -289,7 +292,7 @@ export async function GET(request: NextRequest) {
 
     // Apply sorting
     combinedUsers.sort((a, b) => {
-      let aVal: any, bVal: any;
+      let aVal: string | number, bVal: string | number;
       switch (sortBy) {
         case "name":
           aVal = a.name?.toLowerCase() ?? "";
@@ -364,11 +367,10 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-  } catch (error) {
-    console.error("Credit analytics error:", error);
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

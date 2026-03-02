@@ -12,6 +12,18 @@ export const EMAIL_CONFIG = {
 } as const;
 
 /**
+ * Escape HTML special characters to prevent XSS in email templates
+ */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
  * Base HTML email layout wrapper with inline CSS for email client compatibility
  */
 function emailLayout(content: string): string {
@@ -62,18 +74,20 @@ export function getVerificationEmailTemplate({
   userName: string;
   verificationUrl: string;
 }): { subject: string; html: string } {
+  const safeName = escapeHtml(userName);
+  const safeUrl = escapeHtml(verificationUrl);
   const content = `
-    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${userName},</p>
+    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${safeName},</p>
     <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6;">Thanks for signing up for ${EMAIL_CONFIG.companyName}! Please verify your email address by clicking the button below.</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
         <td align="center" style="padding:0 0 24px;">
-          <a href="${verificationUrl}" style="display:inline-block;background-color:#18181b;color:#fafafa;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Verify Email Address</a>
+          <a href="${safeUrl}" style="display:inline-block;background-color:#18181b;color:#fafafa;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Verify Email Address</a>
         </td>
       </tr>
     </table>
     <p style="margin:0 0 8px;color:#71717a;font-size:13px;line-height:1.5;">If the button doesn't work, copy and paste this link into your browser:</p>
-    <p style="margin:0 0 16px;color:#3b82f6;font-size:13px;line-height:1.5;word-break:break-all;">${verificationUrl}</p>
+    <p style="margin:0 0 16px;color:#3b82f6;font-size:13px;line-height:1.5;word-break:break-all;">${safeUrl}</p>
     <p style="margin:0;color:#a1a1aa;font-size:12px;">If you didn't create an account, you can safely ignore this email.</p>`;
 
   return {
@@ -92,18 +106,20 @@ export function getPasswordResetEmailTemplate({
   userName: string;
   resetUrl: string;
 }): { subject: string; html: string } {
+  const safeName = escapeHtml(userName);
+  const safeUrl = escapeHtml(resetUrl);
   const content = `
-    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${userName},</p>
+    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${safeName},</p>
     <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6;">We received a request to reset your password. Click the button below to choose a new password.</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
         <td align="center" style="padding:0 0 24px;">
-          <a href="${resetUrl}" style="display:inline-block;background-color:#18181b;color:#fafafa;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Reset Password</a>
+          <a href="${safeUrl}" style="display:inline-block;background-color:#18181b;color:#fafafa;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Reset Password</a>
         </td>
       </tr>
     </table>
     <p style="margin:0 0 8px;color:#71717a;font-size:13px;line-height:1.5;">If the button doesn't work, copy and paste this link into your browser:</p>
-    <p style="margin:0 0 16px;color:#3b82f6;font-size:13px;line-height:1.5;word-break:break-all;">${resetUrl}</p>
+    <p style="margin:0 0 16px;color:#3b82f6;font-size:13px;line-height:1.5;word-break:break-all;">${safeUrl}</p>
     <p style="margin:0;color:#a1a1aa;font-size:12px;">If you didn't request a password reset, you can safely ignore this email. This link will expire in 1 hour.</p>`;
 
   return {
@@ -122,13 +138,15 @@ export function getOTPEmailTemplate({
   email: string;
   otp: string;
 }): { subject: string; html: string } {
+  const safeEmail = escapeHtml(email);
+  const safeOtp = escapeHtml(otp);
   const content = `
     <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi,</p>
-    <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6;">Use the following one-time password to sign in to your ${EMAIL_CONFIG.companyName} account (${email}).</p>
+    <p style="margin:0 0 24px;color:#52525b;font-size:14px;line-height:1.6;">Use the following one-time password to sign in to your ${EMAIL_CONFIG.companyName} account (${safeEmail}).</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
         <td align="center" style="padding:0 0 24px;">
-          <div style="display:inline-block;background-color:#f4f4f5;border:1px solid #e4e4e7;border-radius:8px;padding:16px 32px;letter-spacing:8px;font-size:32px;font-weight:700;color:#18181b;font-family:monospace;">${otp}</div>
+          <div style="display:inline-block;background-color:#f4f4f5;border:1px solid #e4e4e7;border-radius:8px;padding:16px 32px;letter-spacing:8px;font-size:32px;font-weight:700;color:#18181b;font-family:monospace;">${safeOtp}</div>
         </td>
       </tr>
     </table>
@@ -149,8 +167,9 @@ export function getWelcomeEmailTemplate({
 }: {
   userName: string;
 }): { subject: string; html: string } {
+  const safeName = escapeHtml(userName);
   const content = `
-    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${userName},</p>
+    <p style="margin:0 0 16px;color:#18181b;font-size:15px;line-height:1.6;">Hi ${safeName},</p>
     <p style="margin:0 0 16px;color:#52525b;font-size:14px;line-height:1.6;">Welcome to ${EMAIL_CONFIG.companyName}! Your email has been verified and your account is ready to go.</p>
     <p style="margin:0 0 16px;color:#52525b;font-size:14px;line-height:1.6;">${EMAIL_CONFIG.companyName} is an AI-powered app builder. Describe what you want to build in chat, and we'll generate working code for you — from landing pages to full dashboards.</p>
     <div style="background-color:#f4f4f5;border-radius:8px;padding:16px;margin:0 0 24px;">
