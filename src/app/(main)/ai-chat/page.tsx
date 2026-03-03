@@ -1331,6 +1331,8 @@ export default function OpenRouterChatPage() {
 const [selectedFileIndex, setSelectedFileIndex] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+const [conversationList, setConversationList] = useState<any[]>([]);
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
   const [isLoading, setIsLoading] = useState(false);
   const [genParams, setGenParams] = useState<GenerationParams>(DEFAULT_PARAMS);
@@ -1352,7 +1354,12 @@ useEffect(() => {
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-
+useEffect(() => {
+  fetch("/api/openrouter/conversations")
+    .then(res => res.json())
+    .then(data => setConversationList(data))
+    .catch(() => {});
+}, []);
   // Global Escape key listener to stop generation
   useEffect(() => {
     if (!isLoading) return;
@@ -1399,13 +1406,14 @@ useEffect(() => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-            model: modelId,
-            streaming: true,
-            maxTokens: genParams.maxTokens,
-            temperature: genParams.temperature,
-            topP: genParams.topP,
-          }),
+  messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+  model: modelId,
+  streaming: true,
+  maxTokens: genParams.maxTokens,
+  temperature: genParams.temperature,
+  topP: genParams.topP,
+  conversationId: activeConversationId,   
+}),
           signal: controller.signal,
         });
 
@@ -1454,7 +1462,7 @@ useEffect(() => {
                 const event = JSON.parse(jsonStr) as
                   | { type: "meta"; model: string; fallback: boolean }
                   | { type: "delta"; content: string }
-                  | { type: "done" }
+                  |  { type: "done"; cleanedText?: string; files?: any[]; usedModel?: string }
                   | { type: "error"; message: string };
 
                 switch (event.type) {
@@ -1478,7 +1486,11 @@ useEffect(() => {
                     break;
                   case "error":
                     throw new Error(event.message);
-                  case "done":
+                 case "done":
+  if (!activeConversationId && (event as any).conversationId) {
+    setActiveConversationId((event as any).conversationId);
+  }
+
   if ((event as any).files?.length > 0) {
     setActiveFiles((event as any).files);
     setSelectedFileIndex(0);
@@ -1578,10 +1590,62 @@ useEffect(() => {
   const hasMessages = messages.length > 0;
 
  return (
-  <div className="flex h-[calc(100svh-4rem)] -m-4">
+ <div className="flex h-[calc(100svh-4rem)] -m-4">
 
-      {/* ── Header ── */}
-      <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
+  {/* LEFT SIDEBAR */}
+ <div className="w-[280px] border-r bg-background/80 backdrop-blur-md p-4 overflow-y-auto">
+  <h2 className="text-sm font-semibold mb-3">Chats</h2>
+
+  <button
+    onClick={() => {
+      setMessages([]);
+      setActiveConversationId(null);
+    }}
+    className="mb-4 w-full rounded-xl border border-primary/30 bg-primary/10 text-primary py-2 text-sm font-medium hover:bg-primary/20 transition"
+  >
+    + New Chat
+  </button>
+
+  {conversationList.map((conv) => (
+    <button
+      key={conv.id}
+      onClick={async () => {
+        const res = await fetch(`/api/openrouter/conversations/${conv.id}`);
+        const msgs = await res.json();
+
+        setMessages(
+          msgs.map((m: any) => ({
+            id: crypto.randomUUID(),
+            role: m.role.toLowerCase(),
+            content: m.content,
+            timestamp: new Date(m.created_at),
+          }))
+        );
+
+        setActiveConversationId(conv.id);
+      }}
+      className={cn(
+        "w-full text-left p-3 rounded-xl transition-all border mb-2",
+        activeConversationId === conv.id
+          ? "bg-primary/10 border-primary/40"
+          : "bg-card hover:bg-muted border-transparent"
+      )}
+    >
+      <div className="flex flex-col">
+        <span className="text-sm font-medium truncate">
+          {conv.title || "Untitled Chat"}
+        </span>
+        <span className="text-[11px] text-muted-foreground">
+          {new Date(conv.created_at).toLocaleDateString()}
+        </span>
+      </div>
+    </button>
+  ))}
+</div>
+
+  {/* RIGHT SIDE — YOUR EXISTING CHAT UI */}
+  <div className="flex-1 flex flex-col">
+   <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
             <BrainCircuit className="size-4 text-primary" />
@@ -1701,6 +1765,14 @@ useEffect(() => {
         </div>
       </div>
 
+  </div>
+
+
+
+  {/* EXISTING CHAT UI BELOW */}
+
+      {/* ── Header ── */}
+      
    
 
   {/* SIDEBAR */}

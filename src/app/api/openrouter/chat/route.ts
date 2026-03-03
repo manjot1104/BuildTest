@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
-
+import { getSession } from "@/server/better-auth/server";
+import { db } from "@/server/db";
+import { conversations, conversation_messages } from "@/server/db/schema";
+import { nanoid } from "nanoid";
+import { eq} from "drizzle-orm";
 const BASE_URL = "https://openrouter.ai/api/v1";
 
 const FALLBACK_CHAIN = [
@@ -164,8 +168,13 @@ export async function POST(req: Request) {
   }
 
   try {
+    const session = await getSession();
+if (!session?.user?.id) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+}
+const userId = session.user.id;
     const body = await req.json();
-    const { messages, model } = body;
+   const { messages, model, conversationId } = body;
     const latestUserMessage =
   messages[messages.length - 1]?.content ?? "";
 
@@ -221,7 +230,41 @@ const apiMessages: ChatMessage[] = [
         { status: 503 }
       );
     }
+    console.log(" Creating conversation for user:", userId);
+let activeConversationId = conversationId;
 
+if (!activeConversationId) {
+  activeConversationId = nanoid();
+
+  await db.insert(conversations).values({
+    id: activeConversationId,
+    user_id: userId,
+    model_name: selectedModel,
+     title: latestUserMessage.slice(0, 40),
+  });
+}
+
+console.log(" Conversation inserted:", activeConversationId);
+
+// Save USER message immediately
+
+
+await db.insert(conversation_messages).values({
+  id: nanoid(),
+  conversation_id: activeConversationId,
+  role: "USER",
+  content: latestUserMessage,
+});
+
+// If conversation was newly created, update title using first user message
+if (!conversationId) {
+  await db
+    .update(conversations)
+    .set({
+      model_name: selectedModel, // keep model
+    })
+    .where(eq(conversations.id, activeConversationId));
+}
     // ---------------------------
     //  PHASE 2: Real Streaming
     // ---------------------------
@@ -247,12 +290,12 @@ const apiMessages: ChatMessage[] = [
 
   fullText += token;
 
-  controller.enqueue(
-    JSON.stringify({
-      type: "token",
-      content: token,
-    }) + "\n"
-  );
+ controller.enqueue(
+  `data: ${JSON.stringify({
+    type: "delta",
+    content: token,
+  })}\n\n`
+);
 }
 
           // -----------------------
@@ -261,14 +304,23 @@ const apiMessages: ChatMessage[] = [
 
           const { cleanedText, files } = parseAIResponse(fullText);
 
+console.log(" Saving assistant message...");
+
+await db.insert(conversation_messages).values({
+  id: nanoid(),
+ conversation_id: activeConversationId,
+  role: "ASSISTANT",
+  content: fullText,
+});
           controller.enqueue(
-            JSON.stringify({
-              type: "done",
-              cleanedText,
-              files,
-              usedModel: selectedModel,
-            }) + "\n"
-          );
+  `data: ${JSON.stringify({
+    type: "done",
+    cleanedText,
+    files,
+    usedModel: selectedModel,
+    conversationId: activeConversationId,
+  })}\n\n`
+);
 
           controller.close();
         } catch (err) {
@@ -277,11 +329,13 @@ const apiMessages: ChatMessage[] = [
       },
     });
 
-    return new Response(readable, {
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+  return new Response(readable, {
+  headers: {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  },
+});
 
   } catch (err: any) {
     return NextResponse.json(
