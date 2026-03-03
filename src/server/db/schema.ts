@@ -236,7 +236,7 @@ export const user_chats = createTable(
 
 model_name: d.text("model_name"),
 
-prompt_metadata: d.text("prompt_metadata"), // store JSON string
+prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
 
 conversation_id: d
   .text("conversation_id")
