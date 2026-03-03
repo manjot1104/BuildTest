@@ -199,6 +199,34 @@ export async function checkRepoNameTaken(
   }
 }
 
+/**
+ * Polls until a newly created branch is readable on GitHub's API.
+ * GitHub can take a moment to propagate a new ref after creation — attempting
+ * to push immediately after createGithubBranch can result in a 404 on Step 1
+ * of pushFilesToBranch (GET /git/refs/heads/:branch) even though the branch
+ * was successfully created. Retrying with a short delay resolves this.
+ *
+ * Only called right after createGithubBranch — never for pre-existing branches
+ * so there is zero added delay on follow-up pushes.
+ */
+export async function waitForBranch(
+  token: string,
+  owner: string,
+  repo: string,
+  branch: string,
+  maxAttempts = 5,
+  delayMs = 1000,
+): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const exists = await checkBranchExists(token, owner, repo, branch)
+    if (exists) return
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+  throw new Error(
+    `Branch "${branch}" was not available after ${maxAttempts} attempts. Please try again.`,
+  )
+}
+
 // ============================================================================
 // GitHub API Operations
 // ============================================================================
