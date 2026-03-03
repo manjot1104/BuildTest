@@ -350,6 +350,16 @@ export async function pushFilesToBranch(
         message: commitMessage,
         tree: newTree.sha,
         parents: [latestCommitSha],
+        author: {
+          name: 'Buildify',
+          email: 'notifications@technotribes.org',
+          date: new Date().toISOString(),
+        },
+        committer: {
+          name: 'Buildify',
+          email: 'notifications@technotribes.org',
+          date: new Date().toISOString(),
+        },
       }),
     },
   )
