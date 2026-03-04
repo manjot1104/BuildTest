@@ -476,7 +476,7 @@ if (!chatMode) {
     }
 
     return (
-        <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden min-h-0">
+       <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -498,7 +498,7 @@ if (!chatMode) {
       singlePanelMode={!shouldShowPreview}
       activePanel={activePanel === "chat" ? "left" : "right"}
       leftPanel={
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex flex-col h-full ">
 
          <div className="flex-1 overflow-y-auto min-h-0">
             <ChatMessages
@@ -642,12 +642,13 @@ if (!chatMode) {
                     </p>
                            </div>
 )}
-            {/* Community Builds */}
-            <div className="px-4 sm:px-6 lg:px-8 pb-12">
-                <div className="max-w-5xl w-full mx-auto">
-                    <CommunityBuildsGrid />
-                </div>
-            </div>
+          {!showChatInterface && (
+  <div className="px-4 sm:px-6 lg:px-8 pb-12">
+      <div className="max-w-5xl w-full mx-auto">
+          <CommunityBuildsGrid />
+      </div>
+  </div>
+)}
         </div>
     )
 
