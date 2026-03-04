@@ -293,148 +293,147 @@ useEffect(() => {
 }, [shouldShowPreview])
 
 
-//     if (chatMode === "AI_CHAT") {
-//         return (
-//             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
-//                 <SubscriptionModal
-//                     open={showSubscriptionModal}
-//                     onOpenChange={setShowSubscriptionModal}
-//                     hasActiveSubscription={hasActiveSubscription}
-//                     currentCredits={credits?.totalCredits ?? 0}
-//                 />
-//                 <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
-//                     {/* Handle search params with Suspense boundary */}
-//                     <Suspense fallback={null}>
-//                         <SearchParamsHandler
-//                             onReset={handleReset}
-//                             onChatIdChange={handleChatIdChange}
-//                         />
-//                     </Suspense>
+    if (chatMode === "AI_CHAT") {
+        return (
+            <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                <SubscriptionModal
+                    open={showSubscriptionModal}
+                    onOpenChange={setShowSubscriptionModal}
+                    hasActiveSubscription={hasActiveSubscription}
+                    currentCredits={credits?.totalCredits ?? 0}
+                />
+                <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+                    {/* Handle search params with Suspense boundary */}
+                    <Suspense fallback={null}>
+                        <SearchParamsHandler
+                            onReset={handleReset}
+                            onChatIdChange={handleChatIdChange}
+                        />
+                    </Suspense>
 
-//                     <div className="flex flex-col flex-1 min-h-0">
-//                         <ResizableLayout
-//                             className="flex-1 min-h-0"
-//                             singlePanelMode={!shouldShowPreview}
-//                             activePanel={activePanel === 'chat' ? 'left' : 'right'}
-//                             leftPanel={
-//                                 <div className="flex flex-col h-full">
-//                                     {chatError && chatHistory.length === 0 ? (
-//                                         <div className="flex-1 flex items-center justify-center px-4">
-//                                             <div className="text-center max-w-sm">
-//                                                 <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
-//                                                 <h3 className="text-base font-medium text-foreground mb-1">
-//                                                     Failed to load chat
-//                                                 </h3>
-//                                                 <p className="text-sm text-muted-foreground mb-4">
-//                                                     {chatError instanceof Error
-//                                                         ? chatError.message
-//                                                         : 'Something went wrong while loading this chat.'}
-//                                                 </p>
-//                                                 <div className="flex items-center justify-center gap-2">
-//                                                     <button
-//                                                         onClick={() => window.location.reload()}
-//                                                         className={cn(
-//                                                             "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
-//                                                             "bg-primary text-primary-foreground hover:bg-primary/90",
-//                                                             "transition-colors"
-//                                                         )}
-//                                                     >
-//                                                         <RotateCw className="w-3.5 h-3.5" />
-//                                                         Retry
-//                                                     </button>
-//                                                     <button
-//                                                         onClick={handleReset}
-//                                                         className={cn(
-//                                                             "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
-//                                                             "bg-muted text-muted-foreground hover:bg-muted/80",
-//                                                             "transition-colors"
-//                                                         )}
-//                                                     >
-//                                                         New chat
-//                                                     </button>
-//                                                 </div>
-//                                             </div>
-//                                         </div>
-//                                     ) : isLoadingChat && chatHistory.length === 0 ? (
-//                                         <div className="flex-1 flex items-center justify-center">
-//                                             <div className="text-center">
-//                                                 <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-//                                                 <p className="text-sm text-muted-foreground">Loading chat...</p>
-//                                             </div>
-//                                         </div>
-//                                     ) : (
-//                                         <>
-//                                             <div className="flex-1 overflow-y-auto">
-//                                                 <ChatMessages
-//                                                     chatHistory={chatHistory}
-//                                                     isLoading={isLoading}
-//                                                     isStreaming={isStreaming}
-//                                                     currentChat={hookCurrentChat}
-//                                                     onStreamingComplete={handleStreamingComplete}
-//                                                     onChatData={handleChatData}
-//                                                     onStreamingStarted={() => setIsLoading(false)}
-//                                                 />
-//                                             </div>
+                    <div className="flex flex-col flex-1 min-h-0">
+                        <ResizableLayout
+                            className="flex-1 min-h-0"
+                            singlePanelMode={!shouldShowPreview}
+                            activePanel={activePanel === 'chat' ? 'left' : 'right'}
+                            leftPanel={
+                                <div className="flex flex-col h-full">
+                                    {chatError && chatHistory.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center px-4">
+                                            <div className="text-center max-w-sm">
+                                                <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
+                                                <h3 className="text-base font-medium text-foreground mb-1">
+                                                    Failed to load chat
+                                                </h3>
+                                                <p className="text-sm text-muted-foreground mb-4">
+                                                    {chatError instanceof Error
+                                                        ? chatError.message
+                                                        : 'Something went wrong while loading this chat.'}
+                                                </p>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => window.location.reload()}
+                                                        className={cn(
+                                                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
+                                                            "bg-primary text-primary-foreground hover:bg-primary/90",
+                                                            "transition-colors"
+                                                        )}
+                                                    >
+                                                        <RotateCw className="w-3.5 h-3.5" />
+                                                        Retry
+                                                    </button>
+                                                    <button
+                                                        onClick={handleReset}
+                                                        className={cn(
+                                                            "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium",
+                                                            "bg-muted text-muted-foreground hover:bg-muted/80",
+                                                            "transition-colors"
+                                                        )}
+                                                    >
+                                                        New chat
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : isLoadingChat && chatHistory.length === 0 ? (
+                                        <div className="flex-1 flex items-center justify-center">
+                                            <div className="text-center">
+                                                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                                                <p className="text-sm text-muted-foreground">Loading chat...</p>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex-1 overflow-y-auto">
+                                                <ChatMessages
+                                                    chatHistory={chatHistory}
+                                                    isLoading={isLoading}
+                                                    isStreaming={isStreaming}
+                                                    currentChat={hookCurrentChat}
+                                                    onStreamingComplete={handleStreamingComplete}
+                                                    onChatData={handleChatData}
+                                                    onStreamingStarted={() => setIsLoading(false)}
+                                                />
+                                            </div>
 
-//                                             {isViewingOthersChat ? (
-//                                                 <ForkBanner
-//                                                     isAuthenticated={!!session?.user}
-//                                                     isForking={forkChat.isPending}
-//                                                     onFork={handleFork}
-//                                                     onSignIn={() => window.location.href = "/login"}
-//                                                 />
-//                                             ) : (
-//                                                 <ChatInput
-//                                                     message={message}
-//                                                     setMessage={setMessage}
-//                                                     onSubmit={handleSendMessage}
-//                                                     isLoading={isLoading}
-//                                                     showSuggestions={false}
-//                                                     attachments={attachments}
-//                                                     onAttachmentsChange={setAttachments}
-//                                                     textareaRef={textareaRef}
-//                                                 />
-//                                             )}
-//                                         </>
-//                                     )}
-//                                 </div>
-//                             }
-//                           rightPanel={
-//     shouldShowPreview ? (
-//         <PreviewPanel
-//             currentChat={hookCurrentChat}
-//             isFullscreen={isFullscreen}
-//             setIsFullscreen={setIsFullscreen}
-//             //refreshKey={refreshKey}
-//            // setRefreshKey={setRefreshKey}
-//             isBuilding={false}
-//         />
-//     ) : null
-// }
+                                            {isViewingOthersChat ? (
+                                                <ForkBanner
+                                                    isAuthenticated={!!session?.user}
+                                                    isForking={forkChat.isPending}
+                                                    onFork={handleFork}
+                                                    onSignIn={() => window.location.href = "/login"}
+                                                />
+                                            ) : (
+                                                <ChatInput
+                                                    message={message}
+                                                    setMessage={setMessage}
+                                                    onSubmit={handleSendMessage}
+                                                    isLoading={isLoading}
+                                                    showSuggestions={false}
+                                                    attachments={attachments}
+                                                    onAttachmentsChange={setAttachments}
+                                                    textareaRef={textareaRef}
+                                                />
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            }
+                          rightPanel={
+    shouldShowPreview ? (
+        <PreviewPanel
+            currentChat={hookCurrentChat}
+            isFullscreen={isFullscreen}
+            setIsFullscreen={setIsFullscreen}
+            //refreshKey={refreshKey}
+           // setRefreshKey={setRefreshKey}
+            isBuilding={false}
+        />
+    ) : null
+}
 
-//                         />
+                        />
 
-//                         <div className="md:hidden">
-//                             <BottomToolbar
-//                                 activePanel={activePanel}
-//                                 onPanelChange={setActivePanel}
-//                                 hasPreview={!!hookCurrentChat?.demo}
-//                             />
-//                         </div>
-//                     </div>
-//                 </div>
-//             </ChatActionsProvider>
-//         )
-//     }
+                        <div className="md:hidden">
+                            <BottomToolbar
+                                activePanel={activePanel}
+                                onPanelChange={setActivePanel}
+                                hasPreview={!!hookCurrentChat?.demo}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </ChatActionsProvider>
+        )
+    }
 if (!chatMode) {
   return (
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
      <ModeSelection
   onSelect={(mode) => {
-    if (mode === "AI_CHAT") {
-      router.push("/ai-chat")
-      return
-    }
+   if (mode === "AI_CHAT") {
+  setChatMode("AI_CHAT")
+}
 
     if (mode === "BUILDER") {
       setChatMode("BUILDER")
@@ -477,7 +476,7 @@ if (!chatMode) {
     }
 
     return (
-        <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+        <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden min-h-0">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -492,16 +491,16 @@ if (!chatMode) {
             </Suspense>
 
         {showChatInterface ? (
-  <div className="flex flex-col flex-1 min-h-0">
+  <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
 
     <ResizableLayout
       className="flex-1 min-h-0"
       singlePanelMode={!shouldShowPreview}
       activePanel={activePanel === "chat" ? "left" : "right"}
       leftPanel={
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
 
-          <div className="flex-1 overflow-y-auto">
+         <div className="flex-1 overflow-y-auto min-h-0">
             <ChatMessages
               chatHistory={chatHistory}
               isLoading={isLoading}
