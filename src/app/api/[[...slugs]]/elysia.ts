@@ -520,10 +520,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Chat history endpoint - GET /api/chats
-  .get('/chats', async ({ set }) => {
-    const result = await getChatHistoryHandler()
+ .get(
+  '/chats',
+  async ({ query, set }) => {
+    const result = await getChatHistoryHandler({ query })
 
-    // Handle error responses with status codes
     if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
         set.status = (result as ApiErrorResponse).status ?? 500
@@ -531,7 +532,19 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     }
 
     return result
-  })
+  },
+  {
+    query: t.Object({
+      type: t.Optional(
+        t.Union([
+          t.Literal("all"),
+          t.Literal("builder"),
+          t.Literal("openrouter"),
+        ])
+      ),
+    }),
+  },
+)
 
   // Speech-to-text endpoint - POST /api/speech-to-text
   .post(

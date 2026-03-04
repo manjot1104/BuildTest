@@ -132,21 +132,21 @@ export function useChat(chatId?: string) {
       }
 
       if (!response.body) {
-        throw new Error('No response body for streaming')
-      }
+  throw new Error('No response body for streaming')
+}
 
-      setIsStreaming(true)
+setIsLoading(false)
+setIsStreaming(true)
 
-      // Add placeholder for streaming response with the stream attached
-      setChatHistory((prev) => [
-        ...prev,
-        {
-          type: 'assistant',
-          content: [],
-          isStreaming: true,
-          stream: response.body,
-        },
-      ])
+setChatHistory((prev) => [
+  ...prev,
+  {
+    type: 'assistant',
+    content: [],
+    isStreaming: true,
+    stream: response.body,
+  },
+])
     } catch (error) {
       const errorMessage =
         error instanceof Error

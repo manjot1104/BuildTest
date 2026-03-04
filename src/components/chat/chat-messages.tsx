@@ -29,7 +29,7 @@ interface ChatMessagesProps {
   isLoading: boolean
   isStreaming?: boolean
   currentChat: Chat | null
-  onStreamingComplete: (finalContent: MessageBinaryFormat) => void
+  onStreamingComplete: (finalContent: string | MessageBinaryFormat) => void
   onChatData: (chatData: { id?: string; webUrl?: string; url?: string }) => void
   onStreamingStarted?: () => void
 }
@@ -205,13 +205,13 @@ export function ChatMessages({
     <Conversation>
       <ConversationContent>
         {chatHistory.map((msg, index) => (
-          <MessageWrapper key={index} role={msg.type}>
+          <MessageWrapper key={`msg-${index}-${msg.type}`} role={msg.type}>
             {msg.isStreaming && msg.stream ? (
               <StreamingMessage
                 stream={msg.stream}
                 messageId={`msg-${index}`}
                 role={msg.type}
-                onComplete={onStreamingComplete}
+                onComplete={(data) => onStreamingComplete(data as MessageBinaryFormat)}
                 onChatData={onChatData}
                 onChunk={() => {
                   // Hide external loader once we start receiving content (only once)

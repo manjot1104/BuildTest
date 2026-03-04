@@ -1,5 +1,5 @@
 "use client";
-
+import { useSearchParams } from "next/navigation";
 import {
   useState,
   useRef,
@@ -43,6 +43,7 @@ import {
   RotateCcw,
   ChevronDown,
   Play,
+  Star,
   Square,
   Terminal,
   Maximize2,
@@ -188,6 +189,7 @@ type ChatMessage = {
   isFallback?: boolean;
   isError?: boolean;
   timestamp: Date;
+  starred?: boolean
 
   
   files?: {
@@ -939,6 +941,22 @@ function CopyMessageButton({ content }: { content: string }) {
 }
 
 function MessageBubble({ message }: { message: ChatMessage }) {
+ const toggleStar = async () => {
+  try {
+    await fetch("/api/chats/star", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messageId: message.id,
+        starred: !message.starred,
+      }),
+    });
+
+    message.starred = !message.starred; // instant UI update
+  } catch {
+    console.error("Failed to star message");
+  }
+};
   const modelInfo = MODELS.find((m) => m.id === message.modelId);
   const modelLabel = modelInfo?.name
     ?? (message.modelId ? FALLBACK_MODEL_NAMES[message.modelId] : null)
@@ -952,15 +970,36 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
           </div>
           <div className="flex items-center gap-1">
-            <CopyMessageButton content={message.content} />
-            <span className="text-[11px] text-muted-foreground">
-              {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
+  <CopyMessageButton content={message.content} />
+
+  <Button
+    variant="ghost"
+    size="icon-xs"
+    onClick={toggleStar}
+    className={cn(
+      "opacity-0 transition-opacity group-hover:opacity-100",
+      message.starred && "text-yellow-500 opacity-100"
+    )}
+  >
+    <Star
+      className="size-3"
+      fill={message.starred ? "currentColor" : "none"}
+    />
+  </Button>
+
+  <span className="text-[11px] text-muted-foreground">
+    {message.timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}
+  </span>
+</div>
+          
           </div>
         </div>
-      </div>
-    );
-  }
+      
+);
+}
 
   return (
     <div className="group flex gap-3">
@@ -989,9 +1028,25 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <MarkdownMessage content={message.content} />
         </div>
         {!message.isError && <AppRunner content={message.content} />}
-        <div className="flex items-center gap-1">
-          <CopyMessageButton content={message.content} />
-          <span className="text-[11px] text-muted-foreground">
+       <div className="flex items-center gap-1">
+  <CopyMessageButton content={message.content} />
+
+  <Button
+    variant="ghost"
+    size="icon-xs"
+    onClick={toggleStar}
+    className={cn(
+      "opacity-0 transition-opacity group-hover:opacity-100",
+      message.starred && "text-yellow-500 opacity-100"
+    )}
+  >
+    <Star
+      className="size-3"
+      fill={message.starred ? "currentColor" : "none"}
+    />
+  </Button>
+
+  <span className="text-[11px] text-muted-foreground">
             {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
@@ -1329,10 +1384,11 @@ export default function OpenRouterChatPage() {
 >([]);
 
 const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-const [conversationList, setConversationList] = useState<any[]>([]);
+// const [conversationList, setConversationList] = useState<any[]>([]);
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
   const [isLoading, setIsLoading] = useState(false);
   const [genParams, setGenParams] = useState<GenerationParams>(DEFAULT_PARAMS);
@@ -1341,6 +1397,33 @@ const [conversationList, setConversationList] = useState<any[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
+  useEffect(() => {
+  const chatId = searchParams.get("chatId");
+
+  if (!chatId) return;
+
+  setActiveConversationId(chatId);
+
+  fetch(`/api/openrouter/messages?conversationId=${chatId}`)
+    .then(res => res.json())
+    .then(data => {
+      const loaded = data.map((m: any) => ({
+  id: m.id,
+  role: m.role.toLowerCase(),
+  content: m.content,
+  timestamp: new Date(m.created_at),
+  modelId: m.model,
+  starred: m.starred || false,
+}));
+       
+
+      setMessages(loaded);
+    })
+    .catch(() => {
+      console.error("Failed to load conversation");
+    });
+
+}, [searchParams]);
 useEffect(() => {
   const lastAssistant = [...messages]
     .reverse()
@@ -1354,12 +1437,12 @@ useEffect(() => {
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-useEffect(() => {
-  fetch("/api/openrouter/conversations")
-    .then(res => res.json())
-    .then(data => setConversationList(data))
-    .catch(() => {});
-}, []);
+// useEffect(() => {
+//   fetch("/api/openrouter/conversations")
+//     .then(res => res.json())
+//     .then(data => setConversationList(data))
+//     .catch(() => {});
+// }, []);
   // Global Escape key listener to stop generation
   useEffect(() => {
     if (!isLoading) return;
@@ -1462,7 +1545,13 @@ useEffect(() => {
                 const event = JSON.parse(jsonStr) as
                   | { type: "meta"; model: string; fallback: boolean }
                   | { type: "delta"; content: string }
-                  |  { type: "done"; cleanedText?: string; files?: any[]; usedModel?: string }
+              | { 
+    type: "done"; 
+    cleanedText?: string; 
+    files?: { filename: string; language: string; code: string }[]; 
+    usedModel?: string;
+    conversationId?: string;
+  }
                   | { type: "error"; message: string };
 
                 switch (event.type) {
@@ -1486,13 +1575,13 @@ useEffect(() => {
                     break;
                   case "error":
                     throw new Error(event.message);
-                 case "done":
-  if (!activeConversationId && (event as any).conversationId) {
-    setActiveConversationId((event as any).conversationId);
+             case "done":
+  if (!activeConversationId && event.conversationId) {
+    setActiveConversationId(event.conversationId);
   }
 
-  if ((event as any).files?.length > 0) {
-    setActiveFiles((event as any).files);
+  if (event.files?.length) {
+    setActiveFiles(event.files);
     setSelectedFileIndex(0);
   }
   break;
@@ -1561,7 +1650,7 @@ useEffect(() => {
         textareaRef.current?.focus();
       }
     },
-    [input, isLoading, messages, modelId, genParams],
+   [ input, isLoading, messages, modelId, genParams, activeConversationId ]
   );
 
   const handleKeyDown = useCallback(
@@ -1593,55 +1682,7 @@ useEffect(() => {
  <div className="flex h-[calc(100svh-4rem)] -m-4">
 
   {/* LEFT SIDEBAR */}
- <div className="w-[280px] border-r bg-background/80 backdrop-blur-md p-4 overflow-y-auto">
-  <h2 className="text-sm font-semibold mb-3">Chats</h2>
-
-  <button
-    onClick={() => {
-      setMessages([]);
-      setActiveConversationId(null);
-    }}
-    className="mb-4 w-full rounded-xl border border-primary/30 bg-primary/10 text-primary py-2 text-sm font-medium hover:bg-primary/20 transition"
-  >
-    + New Chat
-  </button>
-
-  {conversationList.map((conv) => (
-    <button
-      key={conv.id}
-      onClick={async () => {
-        const res = await fetch(`/api/openrouter/conversations/${conv.id}`);
-        const msgs = await res.json();
-
-        setMessages(
-          msgs.map((m: any) => ({
-            id: crypto.randomUUID(),
-            role: m.role.toLowerCase(),
-            content: m.content,
-            timestamp: new Date(m.created_at),
-          }))
-        );
-
-        setActiveConversationId(conv.id);
-      }}
-      className={cn(
-        "w-full text-left p-3 rounded-xl transition-all border mb-2",
-        activeConversationId === conv.id
-          ? "bg-primary/10 border-primary/40"
-          : "bg-card hover:bg-muted border-transparent"
-      )}
-    >
-      <div className="flex flex-col">
-        <span className="text-sm font-medium truncate">
-          {conv.title || "Untitled Chat"}
-        </span>
-        <span className="text-[11px] text-muted-foreground">
-          {new Date(conv.created_at).toLocaleDateString()}
-        </span>
-      </div>
-    </button>
-  ))}
-</div>
+ 
 
   {/* RIGHT SIDE — YOUR EXISTING CHAT UI */}
   <div className="flex-1 flex flex-col">

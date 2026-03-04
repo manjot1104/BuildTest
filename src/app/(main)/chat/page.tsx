@@ -89,12 +89,18 @@ export default function ChatPage() {
     const [refreshKey, setRefreshKey] = useState(0)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
     const [micError, setMicError] = useState<string | null>(null)
-    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-        if (typeof window !== 'undefined') {
-            return new URLSearchParams(window.location.search).get('chatId')
-        }
-        return null
-    })
+   const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+  if (typeof window !== 'undefined') {
+    return new URLSearchParams(window.location.search).get('chatId')
+  }
+  return null
+})
+
+useEffect(() => {
+  if (urlChatId) {
+    setShowChatInterface(true)
+  }
+}, [urlChatId])
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     const {
@@ -471,7 +477,7 @@ if (!chatMode) {
     }
 
     return (
-        <div className="bg-background min-h-[calc(100vh-48px)] flex flex-col overflow-y-auto">
+        <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -485,8 +491,56 @@ if (!chatMode) {
                 />
             </Suspense>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pb-4 pt-[15vh]">
+        {showChatInterface ? (
+  <div className="flex flex-col flex-1 min-h-0">
+
+    <ResizableLayout
+      className="flex-1 min-h-0"
+      singlePanelMode={!shouldShowPreview}
+      activePanel={activePanel === "chat" ? "left" : "right"}
+      leftPanel={
+        <div className="flex flex-col h-full">
+
+          <div className="flex-1 overflow-y-auto">
+            <ChatMessages
+              chatHistory={chatHistory}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              currentChat={hookCurrentChat}
+              onStreamingComplete={handleStreamingComplete}
+              onChatData={handleChatData}
+              onStreamingStarted={() => setIsLoading(false)}
+            />
+          </div>
+
+          <ChatInput
+            message={message}
+            setMessage={setMessage}
+            onSubmit={handleSendMessage}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            showSuggestions={false}
+            attachments={attachments}
+            onAttachmentsChange={setAttachments}
+            textareaRef={textareaRef}
+          />
+
+        </div>
+      }
+      rightPanel={
+        shouldShowPreview ? (
+          <PreviewPanel
+            currentChat={hookCurrentChat}
+            isFullscreen={isFullscreen}
+            setIsFullscreen={setIsFullscreen}
+            isBuilding={false}
+          />
+        ) : null
+      }
+    />
+
+  </div>
+) : (
                 <div className="max-w-2xl w-full mx-auto">
                     {/* Logo + Title */}
                     <div className="flex items-center justify-center gap-3 mb-3">
@@ -587,9 +641,8 @@ if (!chatMode) {
                     <p className="text-[11px] text-muted-foreground/40 text-center mt-5">
                         Press <kbd className="px-1 py-0.5 rounded bg-muted/50 border border-border/30 text-[10px] font-mono">Enter</kbd> to send
                     </p>
-                </div>
-            </div>
-
+                           </div>
+)}
             {/* Community Builds */}
             <div className="px-4 sm:px-6 lg:px-8 pb-12">
                 <div className="max-w-5xl w-full mx-auto">
@@ -598,4 +651,5 @@ if (!chatMode) {
             </div>
         </div>
     )
+
 }
