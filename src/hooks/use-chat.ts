@@ -178,6 +178,25 @@ setChatHistory((prev) => [
 
 
   const handleStreamingComplete = async (finalContent: string | MessageBinaryFormat) => {
+    
+
+// detect generated files and update sidebar
+if (Array.isArray(finalContent)) {
+  const fileBlocks = finalContent.filter(
+    (item: any) => item?.type === "file"
+  )
+
+  if (fileBlocks.length > 0) {
+    setCurrentChat((prev) => ({
+      ...prev!,
+      files: fileBlocks.map((f: any) => ({
+        name: f.name,
+        content: f.content,
+      })),
+    }))
+  }
+}
+
     setIsStreaming(false)
     setIsLoading(false)
 

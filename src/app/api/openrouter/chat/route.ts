@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { user_chats } from "@/server/db/schema";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { conversations, conversation_messages } from "@/server/db/schema";
@@ -231,18 +232,33 @@ const apiMessages: ChatMessage[] = [
       );
     }
     console.log(" Creating conversation for user:", userId);
-let activeConversationId = conversationId;
 
-if (!activeConversationId) {
-  activeConversationId = nanoid();
+let activeConversationId = conversationId ?? nanoid();
 
+// create conversation if new
+if (!conversationId) {
   await db.insert(conversations).values({
     id: activeConversationId,
     user_id: userId,
     model_name: selectedModel,
-     title: latestUserMessage.slice(0, 40),
+    title: latestUserMessage.slice(0, 40),
   });
 }
+
+// ⭐ ensure user_chats entry exists
+if (activeConversationId) {
+  await db.insert(user_chats).values({
+  id: nanoid(),
+  user_id: userId,
+  conversation_id: activeConversationId,
+  title: latestUserMessage.slice(0, 50).replace(/\n/g, " "),
+  chat_type: "OPENROUTER",
+  is_starred: false,
+  created_at: new Date(),
+  updated_at: new Date(),
+}).onConflictDoNothing();
+}
+
 
 console.log(" Conversation inserted:", activeConversationId);
 

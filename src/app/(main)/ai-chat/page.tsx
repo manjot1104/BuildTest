@@ -1,5 +1,6 @@
 "use client";
 import { useSearchParams } from "next/navigation";
+
 import {
   useState,
   useRef,
@@ -189,7 +190,8 @@ type ChatMessage = {
   isFallback?: boolean;
   isError?: boolean;
   timestamp: Date;
-  starred?: boolean
+  starred?: boolean;
+  conversationId?: string   
 
   
   files?: {
@@ -940,23 +942,34 @@ function CopyMessageButton({ content }: { content: string }) {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
- const toggleStar = async () => {
+function MessageBubble({
+  message,
+  setMessages,
+}: {
+  message: ChatMessage
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
+}) {
+const toggleStar = async () => {
   try {
-    await fetch("/api/chats/star", {
+    await fetch("/api/openrouter/star", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        messageId: message.id,
-        starred: !message.starred,
+        conversationId: message.conversationId,
+        starred: !message.starred
       }),
     });
 
-    message.starred = !message.starred; // instant UI update
-  } catch {
-    console.error("Failed to star message");
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === message.id ? { ...m, starred: !m.starred } : m
+      )
+    );
+  } catch (error) {
+    console.error("Failed to star message", error);
   }
-};
+}
+
   const modelInfo = MODELS.find((m) => m.id === message.modelId);
   const modelLabel = modelInfo?.name
     ?? (message.modelId ? FALLBACK_MODEL_NAMES[message.modelId] : null)
@@ -1379,6 +1392,7 @@ function ModelSelector({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OpenRouterChatPage() {
+ 
   const [activeFiles, setActiveFiles] = useState<
   { filename: string; language: string; code: string }[]
 >([]);
@@ -1407,13 +1421,14 @@ const searchParams = useSearchParams();
   fetch(`/api/openrouter/messages?conversationId=${chatId}`)
     .then(res => res.json())
     .then(data => {
-      const loaded = data.map((m: any) => ({
+     const loaded = data.map((m: any) => ({
   id: m.id,
   role: m.role.toLowerCase(),
   content: m.content,
   timestamp: new Date(m.created_at),
   modelId: m.model,
   starred: m.starred || false,
+  conversationId: m.conversation_id  
 }));
        
 
@@ -1735,7 +1750,13 @@ useEffect(() => {
             />
           )}
           <div className="space-y-6">
-            {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+           {messages.map((msg) => (
+  <MessageBubble
+    key={msg.id}
+    message={msg}
+    setMessages={setMessages}
+  />
+))}
             {isLoading && !(messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content) && (
               <TypingIndicator modelName={selectedModel.name} />
             )}
