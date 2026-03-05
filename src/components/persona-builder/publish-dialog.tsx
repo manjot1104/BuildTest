@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { api } from '@/client-api/eden'
 import { type CanvasElement, type CanvasBackground } from './types'
 
 interface PublishDialogProps {
@@ -40,21 +41,15 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
     setErrorMsg('')
 
     try {
-      const res = await fetch('/api/persona/publish', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slug: cleanSlug,
-          title: title.trim() || 'My Persona',
-          layout: JSON.stringify(elements),
-          background,
-        }),
+      const { data, error } = await api.persona.publish.post({
+        slug: cleanSlug,
+        title: title.trim() || 'My Persona',
+        layout: JSON.stringify(elements),
+        background,
       })
 
-      if (!res.ok) {
-        const data = (await res.json()) as { error?: string }
-        throw new Error(data.error ?? 'Failed to publish')
-      }
+      if (error) throw new Error('Failed to publish')
+      if (!data?.success) throw new Error('Publish returned unexpected response')
 
       const url = `${window.location.origin}/persona/${cleanSlug}`
       setPublishedUrl(url)

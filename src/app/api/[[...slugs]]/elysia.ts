@@ -60,6 +60,10 @@ import {
   pushToGithubHandler,
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
+import {
+  publishPersonaHandler,
+  getPersonaHandler,
+} from '@/server/api/controllers/persona.controller'
 import { env } from '@/env'
 
 /** Insufficient credits response type */
@@ -1035,5 +1039,37 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // ============================================
+  // Persona Builder Endpoints
+  // ============================================
+
+  .post(
+    '/persona/publish',
+    ({ body }) => publishPersonaHandler({ body }),
+    {
+      body: t.Object({
+        slug: t.String(),
+        title: t.Optional(t.String()),
+        layout: t.String(),
+        background: t.Optional(t.Any()),
+      }),
+    },
+  )
+
+  .get(
+    '/persona/:slug',
+    ({ params, set }) => {
+      const persona = getPersonaHandler({ params })
+      if (!persona) {
+        set.status = 404
+        return { error: 'Persona not found' }
+      }
+      return persona
+    },
+    {
+      params: t.Object({ slug: t.String() }),
     },
   )
