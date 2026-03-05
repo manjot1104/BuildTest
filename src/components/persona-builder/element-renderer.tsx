@@ -144,7 +144,9 @@ function HeadingRenderer({ element, isSelected, isPreview, onContentChange }: {
   }
   return (
     <Tag
-      contentEditable={!isPreview && isSelected}
+  data-pb-heading
+  contentEditable={!isPreview && isSelected}
+     
       suppressContentEditableWarning
       onBlur={(e) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
       onMouseDown={isSelected && !isPreview ? (e) => e.stopPropagation() : undefined}
@@ -452,25 +454,41 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
   const items = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
 
-const handleNavClick = (index: number) => {
-  const sections = document.querySelectorAll('[data-pb-section]')
-  const target = sections[index] as HTMLElement | undefined
+const NAV_ALIASES: Record<string, string[]> = {
+  services: ['services'],
+  skills: ['skills', 'tech stack'],
+  work: ['work', 'what we do', 'projects', 'portfolio', 'featured projects'],
+  blog: ['blog', 'posts', 'latest posts'],
+  contact: ['contact', 'get in touch', 'lets talk'],
+  about: ['about', 'about me'],
+}
 
-  if (!target) return
+const handleNavClick = (label: string) => {
+  const key = label.toLowerCase().trim()
+  const aliases = NAV_ALIASES[key] ?? [key]
 
-  const canvas = target.closest('[data-builder-canvas]') as HTMLElement | null
+  //  Try sectionKey first (best)
+  const section = document.querySelector(
+    `[data-pb-section="${key}"]`
+  ) as HTMLElement | null
 
-  if (!canvas) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  if (section) {
+    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
     return
   }
 
-  canvas.scrollTo({
-    top: target.offsetTop,
-    behavior: 'smooth',
-  })
-}
+  //  fallback → headings
+  const headings = document.querySelectorAll('[data-pb-heading]')
 
+  const target = Array.from(headings).find((h) => {
+    const text = h.textContent?.toLowerCase() ?? ''
+    return aliases.some(a => text.includes(a))
+  }) as HTMLElement | undefined
+
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
   return (
     <nav
       style={{
@@ -504,7 +522,7 @@ const handleNavClick = (index: number) => {
         {(items.length > 1 ? items.slice(1) : ['Home', 'About', 'Contact']).map((item, i) => (
           <span
             key={i}
-            onClick={() => isPreview && handleNavClick(i)}
+            onClick={() => isPreview && handleNavClick(item)}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -855,10 +873,11 @@ export function ElementRenderer({
   ) : content
 
  return (
-  <div
-    ref={elementRef}
-    id={element.type === 'section' ? element.id : undefined}
-    data-pb-section={element.type === 'section' ? true : undefined}
+<div
+  ref={elementRef}
+  id={element.sectionKey ?? (element.type === 'section' ? element.id : undefined)}
+ data-pb-section={element.sectionKey}
+  data-pb-heading={element.type === 'heading' ? element.content.toLowerCase() : undefined}
     className={[enterClass, hoverClass].filter(Boolean).join(' ')}
     style={containerStyle}
       onMouseDown={startDrag}
