@@ -34,6 +34,8 @@ export const env = createEnv({
     DAYTONA_API_KEY: z.string().min(1).optional(),
     DAYTONA_API_URL: z.string().url().optional(),
     DAYTONA_TARGET: z.string().optional(),
+    // TINYFISH
+    TINYFISH_API_KEY: z.string().min(1).optional(),
     // OpenRouter (AI chat)
     OPENROUTER_API_KEY: z.string().min(1).optional(),
   },
@@ -71,6 +73,7 @@ export const env = createEnv({
     DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
     DAYTONA_API_URL: process.env.DAYTONA_API_URL,
     DAYTONA_TARGET: process.env.DAYTONA_TARGET,
+    TINYFISH_API_KEY: process.env.TINYFISH_API_KEY,
     OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   },
   /**
