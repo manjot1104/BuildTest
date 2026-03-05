@@ -561,4 +561,37 @@ export const github_repos = createTable(
 export const githubReposRelations = relations(github_repos, ({ one }) => ({
   user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
   chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
+}))
+
+// Persona Layouts — stores published persona pages built in the Persona Builder
+export const persona_layouts = createTable(
+  "persona_layouts",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    slug: d.text("slug").notNull().unique(),
+    title: d.text("title").notNull().default("My Persona"),
+    layout: d.text("layout").notNull(), // JSON string of CanvasElement[]
+    is_published: d.boolean("is_published").notNull().default(false),
+    published_at: d.timestamp("published_at", { withTimezone: true }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("persona_layouts_user_id_idx").on(t.user_id),
+    index("persona_layouts_slug_idx").on(t.slug),
+  ],
+)
+
+export const personaLayoutsRelations = relations(persona_layouts, ({ one }) => ({
+  user: one(user, { fields: [persona_layouts.user_id], references: [user.id] }),
 }));
