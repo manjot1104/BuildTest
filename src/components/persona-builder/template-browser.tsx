@@ -60,9 +60,9 @@ function getBgStyle(bg: CanvasBackground): React.CSSProperties {
   return { backgroundColor: bg.color }
 }
 
-// Canvas is 1440×960. Thumbnail fits in sidebar width (~196px).
-// Scale = 196/1440 ≈ 0.1361, height = 960 × 0.1361 ≈ 130px
-const THUMB_W = 196
+// Canvas is 1440×960. Thumbnail uses full sidebar width minus 2×8px padding = ~208px
+// but clamped for safety. Scale ≈ 208/1440, height = 960 × scale
+const THUMB_W = 208
 const SCALE = THUMB_W / 1440
 const THUMB_H = Math.round(960 * SCALE)
 
@@ -70,12 +70,11 @@ function TemplateThumbnail({ template }: { template: PersonaTemplate }) {
   return (
     <div
       style={{
-        width: THUMB_W,
+        width: '100%',
         height: THUMB_H,
         overflow: 'hidden',
         position: 'relative',
-        borderRadius: 6,
-        flexShrink: 0,
+        borderRadius: 8,
         ...getBgStyle(template.background),
       }}
     >
@@ -101,7 +100,7 @@ function TemplateThumbnail({ template }: { template: PersonaTemplate }) {
               height: el.height,
               backgroundColor: getThumbColor(el),
               borderRadius: Math.min(el.styles.borderRadius ?? (el.type === 'button' ? 6 : el.type === 'divider' ? 2 : 4), 32),
-              opacity: el.type === 'spacer' ? 0 : 0.88,
+              opacity: el.type === 'spacer' ? 0 : 0.9,
             }}
           />
         ))}
@@ -116,7 +115,6 @@ function applyTemplate(template: PersonaTemplate): { elements: CanvasElement[]; 
   const elements = template.elements.map((el) => ({
     ...el,
     id: crypto.randomUUID(),
-    // Regenerate nested IDs for form fields
     formFields: el.formFields?.map((f) => ({ ...f, id: crypto.randomUUID() })),
   }))
   return { elements, background: template.background }
@@ -126,12 +124,13 @@ function applyTemplate(template: PersonaTemplate): { elements: CanvasElement[]; 
 
 export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps) {
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'all'>('all')
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
 
   const filtered =
     activeCategory === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.category === activeCategory)
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       {/* Category filter */}
       <div className="flex flex-wrap gap-1">
         {CATEGORIES.map((cat) => (
@@ -139,10 +138,10 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
             key={cat.id}
             type="button"
             onClick={() => setActiveCategory(cat.id)}
-            className={`rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
+            className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-all ${
               activeCategory === cat.id
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:text-foreground'
+                ? 'bg-primary text-primary-foreground shadow-sm'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
             }`}
           >
             {cat.label}
@@ -150,14 +149,14 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
         ))}
       </div>
 
-      {/* Blank canvas card */}
+      {/* Blank canvas */}
       <button
         type="button"
         onClick={onStartBlank}
-        className="group flex items-center gap-2.5 rounded-lg border-2 border-dashed border-border p-3 text-left transition-colors hover:border-primary hover:bg-primary/5"
+        className="group flex items-center gap-3 rounded-xl border-2 border-dashed border-border p-3 text-left transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm"
       >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
-          <LayoutTemplate className="size-4" />
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted transition-all group-hover:bg-primary/10 group-hover:text-primary">
+          <LayoutTemplate className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />
         </div>
         <div>
           <p className="text-xs font-semibold">Blank Canvas</p>
@@ -169,18 +168,27 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
       {filtered.map((template) => (
         <div
           key={template.id}
-          className="overflow-hidden rounded-lg border border-border transition-all hover:border-primary hover:shadow-sm"
+          className="group overflow-hidden rounded-xl border border-border transition-all duration-200 hover:border-primary/50 hover:shadow-md"
+          onMouseEnter={() => setHoveredId(template.id)}
+          onMouseLeave={() => setHoveredId(null)}
         >
           {/* Thumbnail */}
-          <div className="pointer-events-none px-1.5 pt-1.5">
-            <TemplateThumbnail template={template} />
+          <div className="pointer-events-none overflow-hidden">
+            <div
+              className="transition-transform duration-300 ease-out"
+              style={{ transform: hoveredId === template.id ? 'scale(1.03)' : 'scale(1)' }}
+            >
+              <TemplateThumbnail template={template} />
+            </div>
           </div>
 
           {/* Info row */}
-          <div className="flex items-center gap-2 px-2.5 py-2">
+          <div className="flex items-center gap-2 border-t border-border/50 bg-background px-3 py-2.5">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold leading-tight">{template.name}</p>
-              <p className="truncate text-[10px] leading-tight text-muted-foreground">{template.description}</p>
+              <p className="truncate text-[12px] font-semibold leading-tight">{template.name}</p>
+              <p className="truncate text-[10px] leading-tight text-muted-foreground capitalize">
+                {template.category}
+              </p>
             </div>
             <button
               type="button"
@@ -188,10 +196,10 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
                 const { elements, background } = applyTemplate(template)
                 onApply(elements, background)
               }}
-              className="flex shrink-0 items-center gap-0.5 rounded bg-primary px-2 py-1 text-[10px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              className="flex shrink-0 items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-semibold text-primary-foreground transition-all hover:opacity-90 hover:shadow-sm active:scale-95"
             >
               Use
-              <ArrowRight className="size-2.5" />
+              <ArrowRight className="size-3" />
             </button>
           </div>
         </div>

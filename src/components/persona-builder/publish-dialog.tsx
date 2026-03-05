@@ -13,19 +13,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { api } from '@/client-api/eden'
-import { type CanvasElement, type CanvasBackground } from './types'
 
 interface PublishDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  elements: CanvasElement[]
-  background?: CanvasBackground
+  personaId?: string
 }
 
 type PublishState = 'idle' | 'publishing' | 'done' | 'error'
 
-export function PublishDialog({ open, onOpenChange, elements, background }: PublishDialogProps) {
+export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogProps) {
   const [slug, setSlug] = useState('')
   const [title, setTitle] = useState('My Persona')
   const [state, setState] = useState<PublishState>('idle')
@@ -34,6 +31,11 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
   const [errorMsg, setErrorMsg] = useState('')
 
   const handlePublish = async () => {
+    if (!personaId) {
+      setErrorMsg('Save your draft before publishing.')
+      setState('error')
+      return
+    }
     const cleanSlug = slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
     if (!cleanSlug) return
 
@@ -41,15 +43,16 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
     setErrorMsg('')
 
     try {
-      const { data, error } = await api.persona.publish.post({
-        slug: cleanSlug,
-        title: title.trim() || 'My Persona',
-        layout: JSON.stringify(elements),
-        background,
+      const res = await fetch(`/api/persona/${personaId}/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: cleanSlug, title: title.trim() || 'My Persona' }),
       })
 
-      if (error) throw new Error('Failed to publish')
-      if (!data?.success) throw new Error('Publish returned unexpected response')
+      if (res.status === 409) {
+        throw new Error('That slug is already taken. Try another.')
+      }
+      if (!res.ok) throw new Error('Failed to publish')
 
       const url = `${window.location.origin}/persona/${cleanSlug}`
       setPublishedUrl(url)
@@ -72,6 +75,7 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
       setState('idle')
       setSlug('')
       setPublishedUrl('')
+      setErrorMsg('')
     }
   }
 
@@ -118,12 +122,18 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
           </div>
         ) : (
           <div className="flex flex-col gap-4">
+            {!personaId && (
+              <p className="rounded-md bg-yellow-500/10 px-3 py-2 text-sm text-yellow-700 dark:text-yellow-400">
+                Save your draft first (Ctrl+S) before publishing.
+              </p>
+            )}
+
             <div>
-              <Label htmlFor="title" className="mb-1.5 block text-sm">
+              <Label htmlFor="pb-title" className="mb-1.5 block text-sm">
                 Page Title
               </Label>
               <Input
-                id="title"
+                id="pb-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="My Persona"
@@ -131,7 +141,7 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
             </div>
 
             <div>
-              <Label htmlFor="slug" className="mb-1.5 block text-sm">
+              <Label htmlFor="pb-slug" className="mb-1.5 block text-sm">
                 URL Slug
               </Label>
               <div className="flex items-center gap-0 overflow-hidden rounded-md border border-input">
@@ -139,7 +149,7 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
                   /persona/
                 </span>
                 <input
-                  id="slug"
+                  id="pb-slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
                   placeholder="your-name"
@@ -161,7 +171,7 @@ export function PublishDialog({ open, onOpenChange, elements, background }: Publ
               </Button>
               <Button
                 onClick={handlePublish}
-                disabled={!slug.trim() || state === 'publishing'}
+                disabled={!slug.trim() || state === 'publishing' || !personaId}
               >
                 {state === 'publishing' ? (
                   <>

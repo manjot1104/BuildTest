@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useCallback, useMemo, useEffect } from 'react'
-import { ZoomIn, ZoomOut, Maximize, Monitor, Tablet, Smartphone } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import { ElementRenderer } from './element-renderer'
 
@@ -259,7 +259,7 @@ export function Canvas({ editor }: CanvasProps) {
   const canvasBgStyle = getCanvasBg(state.canvasBackground)
 
   return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-[#1a1a2e]">
+    <div className="relative flex flex-1 flex-col overflow-hidden bg-[#141416]">
       {/* Canvas viewport */}
       <div
         ref={viewportRef}
@@ -271,7 +271,7 @@ export function Canvas({ editor }: CanvasProps) {
         <div
           className="pointer-events-none absolute inset-0"
           style={{
-            backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px)`,
+            backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.07) 1px, transparent 1px)`,
             backgroundSize: `${20 * state.zoom}px ${20 * state.zoom}px`,
             backgroundPosition: `${state.panX}px ${state.panY}px`,
           }}
@@ -287,7 +287,7 @@ export function Canvas({ editor }: CanvasProps) {
             transform: `translate(${state.panX}px, ${state.panY}px) scale(${state.zoom})`,
             transformOrigin: '0 0',
             ...canvasBgStyle,
-            boxShadow: '0 8px 60px rgba(0,0,0,0.4)',
+            boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 20px 80px rgba(0,0,0,0.5)',
             overflow: 'hidden',
           }}
         >
@@ -325,9 +325,24 @@ export function Canvas({ editor }: CanvasProps) {
           {/* Empty canvas hint */}
           {!state.isPreview && sortedElements.length === 0 && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-gray-400">
-                <p className="text-lg font-medium">Your canvas is empty</p>
-                <p className="mt-1 text-sm">Add elements from the left panel to get started</p>
+              <div className="flex flex-col items-center gap-4 text-center">
+                <div
+                  className="flex size-16 items-center justify-center rounded-2xl border-2 border-dashed"
+                  style={{ borderColor: 'rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)' }}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    Start designing
+                  </p>
+                  <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    Pick a template or add elements from the left panel
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -351,65 +366,39 @@ export function Canvas({ editor }: CanvasProps) {
       </div>
 
       {/* Zoom controls */}
-      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-lg border border-white/10 bg-black/70 px-2 py-1 backdrop-blur-sm">
+      <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-xl border border-white/10 bg-black/75 px-1.5 py-1 backdrop-blur-sm">
         <button
           type="button"
           onClick={() => setZoom(state.zoom / 1.2)}
-          className="rounded p-1 text-white/70 hover:bg-white/10 hover:text-white"
+          className="rounded-lg p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           title="Zoom out"
         >
-          <ZoomOut className="size-4" />
+          <ZoomOut className="size-3.5" />
         </button>
         <button
           type="button"
           onClick={() => setZoom(1)}
-          className="min-w-[52px] rounded px-2 py-0.5 font-mono text-xs text-white/80 hover:bg-white/10"
-          title="Reset zoom"
+          className="min-w-[48px] rounded-lg px-2 py-1 font-mono text-xs text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+          title="Reset to 100%"
         >
           {Math.round(state.zoom * 100)}%
         </button>
         <button
           type="button"
           onClick={() => setZoom(state.zoom * 1.2)}
-          className="rounded p-1 text-white/70 hover:bg-white/10 hover:text-white"
+          className="rounded-lg p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           title="Zoom in"
         >
-          <ZoomIn className="size-4" />
+          <ZoomIn className="size-3.5" />
         </button>
-        <div className="mx-1 h-4 w-px bg-white/20" />
+        <div className="mx-0.5 h-4 w-px bg-white/15" />
         <button
           type="button"
           onClick={fitToView}
-          className="rounded p-1 text-white/70 hover:bg-white/10 hover:text-white"
-          title="Fit to view"
+          className="rounded-lg p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          title="Fit to view (F)"
         >
-          <Maximize className="size-4" />
-        </button>
-        <div className="mx-1 h-4 w-px bg-white/20" />
-        {/* Device quick-switch */}
-        <button
-          type="button"
-          onClick={() => editor.setDevice({ preset: 'desktop', width: 1440, height: 960 })}
-          className={`rounded p-1 ${state.device.preset === 'desktop' ? 'text-white' : 'text-white/50 hover:text-white/80'}`}
-          title="Desktop (1440×960)"
-        >
-          <Monitor className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.setDevice({ preset: 'tablet', width: 768, height: 1024 })}
-          className={`rounded p-1 ${state.device.preset === 'tablet' ? 'text-white' : 'text-white/50 hover:text-white/80'}`}
-          title="Tablet (768×1024)"
-        >
-          <Tablet className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => editor.setDevice({ preset: 'mobile', width: 390, height: 844 })}
-          className={`rounded p-1 ${state.device.preset === 'mobile' ? 'text-white' : 'text-white/50 hover:text-white/80'}`}
-          title="Mobile (390×844)"
-        >
-          <Smartphone className="size-4" />
+          <Maximize className="size-3.5" />
         </button>
       </div>
 

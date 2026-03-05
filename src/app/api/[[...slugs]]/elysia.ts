@@ -61,8 +61,14 @@ import {
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
 import {
-  publishPersonaHandler,
-  getPersonaHandler,
+  createPersonaHandler,
+  listPersonasHandler,
+  getPersonaByIdHandler,
+  updatePersonaHandler,
+  publishPersonaByIdHandler,
+  unpublishPersonaByIdHandler,
+  deletePersonaByIdHandler,
+  getPublicPersonaHandler,
 } from '@/server/api/controllers/persona.controller'
 import { env } from '@/env'
 
@@ -1046,30 +1052,103 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // Persona Builder Endpoints
   // ============================================
 
+  // List user's personas
+  .get('/personas', async ({ set }) => {
+    const result = await listPersonasHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  // Create a new draft (POST /api/persona)
   .post(
-    '/persona/publish',
-    ({ body }) => publishPersonaHandler({ body }),
+    '/persona',
+    async ({ body, set }) => {
+      const result = await createPersonaHandler({ body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
     {
       body: t.Object({
-        slug: t.String(),
         title: t.Optional(t.String()),
-        layout: t.String(),
-        background: t.Optional(t.Any()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.String()),
       }),
     },
   )
 
+  // IMPORTANT: static paths must come before parameterized ones
+  // Get public persona by slug (no auth)
   .get(
-    '/persona/:slug',
-    ({ params, set }) => {
-      const persona = getPersonaHandler({ params })
-      if (!persona) {
-        set.status = 404
-        return { error: 'Persona not found' }
-      }
-      return persona
+    '/persona/public/:slug',
+    async ({ params, set }) => {
+      const result = await getPublicPersonaHandler({ params })
+      if (!result) { set.status = 404; return { error: 'Persona not found' } }
+      return result
+    },
+    { params: t.Object({ slug: t.String() }) },
+  )
+
+  // Get one persona by id (auth required)
+  .get(
+    '/persona/:id',
+    async ({ params, set }) => {
+      const result = await getPersonaByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Update/save draft
+  .put(
+    '/persona/:id',
+    async ({ params, body, set }) => {
+      const result = await updatePersonaHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
     },
     {
-      params: t.Object({ slug: t.String() }),
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.Nullable(t.String())),
+      }),
     },
+  )
+
+  // Publish
+  .post(
+    '/persona/:id/publish',
+    async ({ params, body, set }) => {
+      const result = await publishPersonaByIdHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ slug: t.String(), title: t.Optional(t.String()) }),
+    },
+  )
+
+  // Unpublish
+  .post(
+    '/persona/:id/unpublish',
+    async ({ params, set }) => {
+      const result = await unpublishPersonaByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Delete
+  .delete(
+    '/persona/:id',
+    async ({ params, set }) => {
+      const result = await deletePersonaByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
   )

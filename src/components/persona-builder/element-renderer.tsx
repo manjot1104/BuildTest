@@ -448,8 +448,15 @@ function IconRenderer({ element }: { element: CanvasElement }) {
 
 function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
   const { styles, content } = element
-  const items = content.split('|').filter(Boolean)
+  const rawItems = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
+  // Parse "Label::href" format — backward compatible with plain "Label"
+  const navItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
+    .map((item) => {
+      const sepIdx = item.indexOf('::')
+      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2) }
+      return { label: item, href: '#' }
+    })
   return (
     <nav
       style={{
@@ -476,13 +483,19 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
           flexShrink: 0,
         }}
       >
-        {items[0] ?? 'Brand'}
+        {rawItems[0] ?? 'Brand'}
       </span>
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        {(items.length > 1 ? items.slice(1) : ['Home', 'About', 'Contact']).map((item, i) => (
+        {navItems.map((item, i) => (
           <a
             key={i}
-            href={isPreview ? '#' : undefined}
+            href={isPreview ? item.href : undefined}
+            onClick={isPreview ? (e) => {
+              if (item.href.startsWith('#')) {
+                e.preventDefault()
+                document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: 'smooth' })
+              }
+            } : undefined}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -494,7 +507,7 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
               whiteSpace: 'nowrap',
             }}
           >
-            {item}
+            {item.label}
           </a>
         ))}
       </div>
@@ -835,6 +848,7 @@ export function ElementRenderer({
   return (
     <div
       ref={elementRef}
+      id={element.anchorId || undefined}
       className={[enterClass, hoverClass].filter(Boolean).join(' ')}
       style={containerStyle}
       onMouseDown={startDrag}

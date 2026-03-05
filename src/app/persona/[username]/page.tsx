@@ -22,7 +22,7 @@ async function getPersona(slug: string): Promise<PersonaData | null> {
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-    const res = await fetch(`${baseUrl}/api/persona/${slug}`, { next: { revalidate: 60 } })
+    const res = await fetch(`${baseUrl}/api/persona/public/${slug}`, { next: { revalidate: 60 } })
     if (!res.ok) return null
     return (await res.json()) as PersonaData
   } catch {
@@ -185,13 +185,17 @@ function StaticElement({ el }: { el: CanvasElement }) {
         )
       }
       case 'navbar': {
-        const items = el.content.split('|').filter(Boolean)
+        const rawItems = el.content.split('|').filter(Boolean)
+        const navLinks = rawItems.slice(1).map((item) => {
+          const sep = item.indexOf('::')
+          return sep > -1 ? { label: item.slice(0, sep), href: item.slice(sep + 2) } : { label: item, href: '#' }
+        })
         return (
           <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${styles.padding ?? 24}px`, borderRadius: styles.borderRadius }}>
-            <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{items[0] ?? 'Brand'}</span>
+            <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{rawItems[0] ?? 'Brand'}</span>
             <div style={{ display: 'flex', gap: 24 }}>
-              {(items.length > 1 ? items.slice(1) : ['Home', 'About']).map((item, i) => (
-                <a key={i} href="#" style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>{item}</a>
+              {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
+                <a key={i} href={item.href} style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>{item.label}</a>
               ))}
             </div>
           </nav>
@@ -236,7 +240,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
     </a>
   ) : inner
 
-  return <div className={animClass} style={wrapStyle}>{content}</div>
+  return <div id={el.anchorId || undefined} className={animClass} style={wrapStyle}>{content}</div>
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -272,6 +276,7 @@ export default async function PersonaPage({ params }: { params: Promise<{ userna
         .pb-anim-zoomin{animation:pb-zoomin 0.5s ease forwards}
         .pb-anim-bounce{animation:pb-bounce 1s ease infinite}
         *{box-sizing:border-box;margin:0;padding:0}
+        html{scroll-behavior:smooth}
         body{font-family:system-ui,-apple-system,sans-serif}
         main{position:relative;width:1440px;height:960px;margin:0 auto;${bgCss}overflow:hidden}
         @media(max-width:1460px){main{transform-origin:top left;transform:scale(calc(100vw / 1440));height:calc(960px * (100vw / 1440))}}

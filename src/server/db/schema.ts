@@ -499,9 +499,10 @@ export const persona_layouts = createTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    slug: d.text("slug").notNull().unique(),
+    slug: d.text("slug").unique(), // null for drafts, set at publish time
     title: d.text("title").notNull().default("My Persona"),
-    layout: d.text("layout").notNull(), // JSON string of CanvasElement[]
+    layout: d.text("layout").notNull().default("[]"), // JSON string of CanvasElement[]
+    background: d.text("background"), // nullable JSON string of CanvasBackground
     is_published: d.boolean("is_published").notNull().default(false),
     published_at: d.timestamp("published_at", { withTimezone: true }),
     created_at: d

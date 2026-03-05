@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import { Upload, Plus, Trash2, ExternalLink } from 'lucide-react'
+import { Upload, Plus, Trash2, ExternalLink, ChevronRight } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import {
   type CanvasElement,
@@ -19,13 +19,27 @@ import { Button } from '@/components/ui/button'
 
 // ─── Tiny helpers ────────────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, defaultOpen = true }: {
+  title: string
+  children: React.ReactNode
+  defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="flex flex-col gap-2">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-        {title}
-      </p>
-      {children}
+    <div className="flex flex-col">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-accent"
+      >
+        <ChevronRight
+          className={`size-3 shrink-0 text-muted-foreground transition-transform duration-200 ${open ? 'rotate-90' : ''}`}
+        />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          {title}
+        </span>
+      </button>
+      {open && <div className="mt-1 flex flex-col gap-2 pb-1 pl-1">{children}</div>}
     </div>
   )
 }
@@ -182,15 +196,15 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
   return (
     <div className="flex h-full flex-col">
       {/* Tab bar */}
-      <div className="mb-3 flex flex-wrap gap-0.5 border-b border-border pb-2">
+      <div className="mb-3 flex flex-wrap gap-0.5 rounded-lg bg-muted/50 p-0.5">
         {tabs.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`rounded px-2 py-1 text-[10px] font-medium transition-colors ${
+            className={`rounded-md px-2.5 py-1 text-[10px] font-medium transition-all ${
               activeTab === id
-                ? 'bg-primary/10 text-primary'
+                ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -231,6 +245,17 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                 <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => upd({ headingLevel: Number(v) as 1 })}>
                   {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
                 </Sel>
+              </Field>
+            )}
+            {(element.type === 'section' || element.type === 'container') && (
+              <Field label="Anchor ID" full>
+                <input
+                  type="text"
+                  value={element.anchorId ?? ''}
+                  onChange={(e) => upd({ anchorId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') || undefined })}
+                  placeholder="e.g. about (links as #about)"
+                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none"
+                />
               </Field>
             )}
           </Section>
