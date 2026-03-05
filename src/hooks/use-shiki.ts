@@ -29,6 +29,8 @@ function getHighlighter() {
           'sql',
           'graphql',
           'dockerfile',
+          'latex',
+          'tex',
         ],
       }),
     )

@@ -388,3 +388,64 @@ export const paymentTransactionsRelations = relations(payment_transactions, ({ o
 export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) => ({
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
 }));
+
+// Resume Builder Tables
+export const resume_templates = createTable(
+  "resume_templates",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    name: d.varchar("name", { length: 255 }).notNull(),
+    description: d.text("description"),
+    latex_template: d.text("latex_template").notNull(),
+    is_default: d.boolean("is_default").default(false).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+);
+
+export const user_resumes = createTable(
+  "user_resumes",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    template_id: d
+      .text("template_id")
+      .references(() => resume_templates.id),
+    resume_data: d.text("resume_data").notNull(), // JSON string
+    latex_content: d.text("latex_content"),
+    pdf_url: d.text("pdf_url"),
+    title: d.varchar("title", { length: 255 }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("user_resumes_user_id_idx").on(t.user_id),
+    index("user_resumes_created_at_idx").on(t.created_at),
+  ],
+);
+export const userResumesRelations = relations(user_resumes, ({ one }) => ({
+  user: one(user, { fields: [user_resumes.user_id], references: [user.id] }),
+  template: one(resume_templates, {
+    fields: [user_resumes.template_id],
+    references: [resume_templates.id],
+  }),
+}));
+
+export const resumeTemplatesRelations = relations(resume_templates, ({ many }) => ({
+  resumes: many(user_resumes),
+}));

@@ -933,3 +933,146 @@ console.log("VISIT LOGGING STARTED")
       }),
     },
   )
+    // ============================================
+  // Resume Builder Endpoints
+  // ============================================
+
+  // Generate LaTeX resume - POST /api/resume/generate
+  .post(
+    '/resume/generate',
+    async ({ body, set }) => {
+      const { generateResumeLatexHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumeLatexHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        resumeData: t.Object({
+          personalInfo: t.Object({
+            name: t.String(),
+            email: t.String(),
+            phone: t.String(),
+            address: t.Optional(t.String()),
+            linkedin: t.Optional(t.String()),
+            github: t.Optional(t.String()),
+            website: t.Optional(t.String()),
+          }),
+          summary: t.Optional(t.String()),
+          experience: t.Array(
+            t.Object({
+              company: t.String(),
+              position: t.String(),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              description: t.Array(t.String()),
+              achievements: t.Optional(t.Array(t.String())),
+            })
+          ),
+          education: t.Array(
+            t.Object({
+              institution: t.String(),
+              degree: t.String(),
+              field: t.Optional(t.String()),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              gpa: t.Optional(t.String()),
+              honors: t.Optional(t.Array(t.String())),
+            })
+          ),
+          skills: t.Array(
+            t.Object({
+              category: t.String(),
+              items: t.Array(t.String()),
+            })
+          ),
+          projects: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                description: t.String(),
+                technologies: t.Array(t.String()),
+                link: t.Optional(t.String()),
+              })
+            )
+          ),
+          certifications: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                issuer: t.String(),
+                date: t.String(),
+                credentialId: t.Optional(t.String()),
+              })
+            )
+          ),
+          languages: t.Optional(
+            t.Array(
+              t.Object({
+                language: t.String(),
+                proficiency: t.String(),
+              })
+            )
+          ),
+        }),
+        templateId: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Generate PDF from LaTeX - POST /api/resume/pdf
+  .post(
+    '/resume/pdf',
+    async ({ body, set }) => {
+      const { generateResumePDFHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumePDFHandler({ body })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      body: t.Object({
+        resumeId: t.String(),
+        latex: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Get user's resumes - GET /api/resume/list
+  .get('/resume/list', async ({ set }) => {
+    const { getUserResumesHandler } = await import('@/server/api/controllers/resume.controller')
+    const result = await getUserResumesHandler()
+
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
+    return result
+  })
+
+  // Get resume by ID - GET /api/resume/:id
+  .get(
+    '/resume/:id',
+    async ({ params, set }) => {
+      const { getResumeByIdHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await getResumeByIdHandler({ params })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
+      return result
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    },
+  )
