@@ -280,6 +280,7 @@ export function Canvas({ editor }: CanvasProps) {
         {/* Artboard */}
         <div
           ref={canvasRef}
+          data-builder-canvas
           style={{
             position: 'absolute',
             width: canvasWidth,

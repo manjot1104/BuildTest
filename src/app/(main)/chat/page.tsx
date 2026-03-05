@@ -83,6 +83,13 @@ export default function ChatPage() {
     const [message, setMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
+
+   useEffect(() => {
+  if (chatMode === "AI_CHAT") {
+    setShowChatInterface(true)
+    setUrlChatId(null)
+  }
+}, [chatMode])
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
     const [isDragOver, setIsDragOver] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -431,12 +438,12 @@ if (!chatMode) {
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
      <ModeSelection
   onSelect={(mode) => {
-   if (mode === "AI_CHAT") {
-  setChatMode("AI_CHAT")
-}
+    if (mode === "AI_CHAT") {
+      router.push("/ai-chat")
+    }
 
     if (mode === "BUILDER") {
-      setChatMode("BUILDER")
+      router.push("/chat")
     }
   }}
 />

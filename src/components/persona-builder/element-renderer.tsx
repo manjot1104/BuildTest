@@ -249,6 +249,7 @@ function ButtonRenderer({ element, isPreview }: { element: CanvasElement; isPrev
 function SectionRenderer({ element }: { element: CanvasElement }) {
   const { styles } = element
   const bgStyle = getBackgroundStyle(styles)
+
   return (
     <div
       style={{
@@ -450,6 +451,26 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
   const { styles, content } = element
   const items = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
+
+const handleNavClick = (index: number) => {
+  const sections = document.querySelectorAll('[data-pb-section]')
+  const target = sections[index] as HTMLElement | undefined
+
+  if (!target) return
+
+  const canvas = target.closest('[data-builder-canvas]') as HTMLElement | null
+
+  if (!canvas) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+
+  canvas.scrollTo({
+    top: target.offsetTop,
+    behavior: 'smooth',
+  })
+}
+
   return (
     <nav
       style={{
@@ -478,11 +499,12 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
       >
         {items[0] ?? 'Brand'}
       </span>
+
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
         {(items.length > 1 ? items.slice(1) : ['Home', 'About', 'Contact']).map((item, i) => (
-          <a
+          <span
             key={i}
-            href={isPreview ? '#' : undefined}
+            onClick={() => isPreview && handleNavClick(i)}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -495,7 +517,7 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
             }}
           >
             {item}
-          </a>
+          </span>
         ))}
       </div>
     </nav>
@@ -832,11 +854,13 @@ export function ElementRenderer({
     </a>
   ) : content
 
-  return (
-    <div
-      ref={elementRef}
-      className={[enterClass, hoverClass].filter(Boolean).join(' ')}
-      style={containerStyle}
+ return (
+  <div
+    ref={elementRef}
+    id={element.type === 'section' ? element.id : undefined}
+    data-pb-section={element.type === 'section' ? true : undefined}
+    className={[enterClass, hoverClass].filter(Boolean).join(' ')}
+    style={containerStyle}
       onMouseDown={startDrag}
       onClick={(e) => {
         e.stopPropagation()
