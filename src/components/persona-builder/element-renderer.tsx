@@ -875,17 +875,15 @@ export function ElementRenderer({
  return (
 <div
   ref={elementRef}
-  id={element.sectionKey ?? (element.type === 'section' ? element.id : undefined)}
- data-pb-section={element.sectionKey}
-  data-pb-heading={element.type === 'heading' ? element.content.toLowerCase() : undefined}
-    className={[enterClass, hoverClass].filter(Boolean).join(' ')}
-    style={containerStyle}
-      onMouseDown={startDrag}
-      onClick={(e) => {
-        e.stopPropagation()
-        if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)
-      }}
-    >
+  data-pb-section={element.sectionKey}
+  className={[enterClass, hoverClass].filter(Boolean).join(' ')}
+  style={containerStyle}
+  onMouseDown={startDrag}
+  onClick={(e) => {
+    e.stopPropagation()
+    if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)
+  }}
+>
       {inner}
 
       {showHandles && RESIZE_HANDLES.map(({ dir, style }) => (
