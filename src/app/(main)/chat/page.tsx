@@ -436,17 +436,18 @@ useEffect(() => {
 if (!chatMode) {
   return (
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-     <ModeSelection
+   <ModeSelection
   onSelect={(mode) => {
     if (mode === "AI_CHAT") {
       router.push("/ai-chat")
     }
 
-    if (mode === "BUILDER") {
-      router.push("/chat")
-    }
+   if (mode === "BUILDER") {
+  setChatMode("BUILDER")
+}
   }}
 />
+
     </div>
   )
 }
