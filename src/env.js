@@ -9,7 +9,7 @@ export const env = createEnv({
       .default("development"),
     DATABASE_URL: z.string().url("DATABASE_URL must be a valid PostgreSQL URL"),
     BETTER_AUTH_SECRET: z.string().min(1, "BETTER_AUTH_SECRET is required"),
-    BETTER_AUTH_URL: z.string().url("BETTER_AUTH_URL must be a valid URL").optional(),
+    BETTER_AUTH_URL: z.string().url().optional(),
 
     // V0 SDK
     V0_API_KEY: z.string().min(1, "V0_API_KEY is required"),
