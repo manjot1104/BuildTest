@@ -7,7 +7,7 @@ import {
     Settings2,
     SquareTerminal,
     BrainCircuit,
-    UserCircle2,
+    FileText,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -43,9 +43,9 @@ const buildNavItems = (
         icon: BrainCircuit,
     },
     {
-        title: "Persona Builder",
-        url: "/persona-builder",
-        icon: UserCircle2,
+        title: "AI Resume Builder",
+        url: "/dashboard/ai-resume",
+        icon: FileText,
     },
     {
         title: "Chat",

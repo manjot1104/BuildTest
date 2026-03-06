@@ -467,132 +467,63 @@ export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) =
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
 }));
 
-// Sandbox execution status enum
-export const sandboxExecutionStatusEnum = pgEnum("sandbox_execution_status", [
-  "pending",
-  "running",
-  "completed",
-  "failed",
-  "timeout",
-]);
+// Resume Builder Tables
+export const resume_templates = createTable(
+  "resume_templates",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    name: d.varchar("name", { length: 255 }).notNull(),
+    description: d.text("description"),
+    latex_template: d.text("latex_template").notNull(),
+    is_default: d.boolean("is_default").default(false).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+);
 
-// Sandbox Executions - logs every sandbox code execution for monitoring/auditing
-export const sandbox_executions = createTable(
-  "sandbox_executions",
+export const user_resumes = createTable(
+  "user_resumes",
   (d) => ({
     id: d.text("id").primaryKey(),
     user_id: d
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    language: d.varchar("language", { length: 50 }).notNull(),
-    code: d.text("code").notNull(),
-    status: sandboxExecutionStatusEnum("status").notNull().default("pending"),
-    output: d.text("output"),
-    error: d.text("error"),
-    exit_code: d.integer("exit_code"),
-    execution_time_ms: d.integer("execution_time_ms"),
+    template_id: d
+      .text("template_id")
+      .references(() => resume_templates.id),
+    resume_data: d.text("resume_data").notNull(), // JSON string
+    latex_content: d.text("latex_content"),
+    pdf_url: d.text("pdf_url"),
+    title: d.varchar("title", { length: 255 }),
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
   }),
   (t) => [
-    index("sandbox_executions_user_id_idx").on(t.user_id),
-    index("sandbox_executions_status_idx").on(t.status),
-    index("sandbox_executions_created_at_idx").on(t.created_at),
+    index("user_resumes_user_id_idx").on(t.user_id),
+    index("user_resumes_created_at_idx").on(t.created_at),
   ],
 );
-
-export const sandboxExecutionsRelations = relations(sandbox_executions, ({ one }) => ({
-  user: one(user, { fields: [sandbox_executions.user_id], references: [user.id] }),
+export const userResumesRelations = relations(user_resumes, ({ one }) => ({
+  user: one(user, { fields: [user_resumes.user_id], references: [user.id] }),
+  template: one(resume_templates, {
+    fields: [user_resumes.template_id],
+    references: [resume_templates.id],
+  }),
 }));
 
-// GitHub Repos
-// - One row per GitHub repo (github_repo_id is globally unique)
-// - A chat can have multiple repo rows over time, but only one has is_active = true
-// - When user links a new repo to a chat, old row is set to is_active = false
-// - All pushes target the active repo for the chat
-export const github_repos = createTable(
-  "github_repos",
-  (d) => ({
-    id: d.text("id").primaryKey(),
-    chat_id: d
-      .text("chat_id")
-      .notNull()
-      .references(() => user_chats.id, { onDelete: "cascade" }),
-    user_id: d
-      .text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    // GitHub's own repo ID — enforces one chat per repo globally
-    github_repo_id: d.text("github_repo_id").notNull(),
-    repo_name: d.text("repo_name").notNull(),
-    repo_full_name: d.text("repo_full_name").notNull(),
-    repo_url: d.text("repo_url").notNull(),
-    // Kept for future: allow changing visibility from the app
-    visibility: d
-      .text("visibility", { enum: ["public", "private"] })
-      .notNull()
-      .default("public"),
-    // Only one repo per chat can be active at a time.
-    // Deactivated repos are kept for history but never pushed to.
-    is_active: d.boolean("is_active").notNull().default(true),
-    created_at: d
-      .timestamp("created_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-    updated_at: d
-      .timestamp("updated_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-  }),
-  (t) => [
-    // A GitHub repo can only ever belong to one chat
-    unique("github_repos_github_repo_id_unique").on(t.github_repo_id),
-    index("github_repos_user_id_idx").on(t.user_id),
-    index("github_repos_chat_id_idx").on(t.chat_id),
-    // Composite index for the most common query: active repo for a given chat
-    index("github_repos_chat_id_is_active_idx").on(t.chat_id, t.is_active),
-  ],
-);
-
-export const githubReposRelations = relations(github_repos, ({ one }) => ({
-  user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
-  chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
-}))
-
-// Persona Layouts — stores published persona pages built in the Persona Builder
-export const persona_layouts = createTable(
-  "persona_layouts",
-  (d) => ({
-    id: d.text("id").primaryKey(),
-    user_id: d
-      .text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    slug: d.text("slug").unique(), // null for drafts, set at publish time
-    title: d.text("title").notNull().default("My Persona"),
-    layout: d.text("layout").notNull().default("[]"), // JSON string of CanvasElement[]
-    background: d.text("background"), // nullable JSON string of CanvasBackground
-    is_published: d.boolean("is_published").notNull().default(false),
-    published_at: d.timestamp("published_at", { withTimezone: true }),
-    created_at: d
-      .timestamp("created_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-    updated_at: d
-      .timestamp("updated_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-  }),
-  (t) => [
-    index("persona_layouts_user_id_idx").on(t.user_id),
-    index("persona_layouts_slug_idx").on(t.slug),
-  ],
-)
-
-export const personaLayoutsRelations = relations(persona_layouts, ({ one }) => ({
-  user: one(user, { fields: [persona_layouts.user_id], references: [user.id] }),
+export const resumeTemplatesRelations = relations(resume_templates, ({ many }) => ({
+  resumes: many(user_resumes),
 }));

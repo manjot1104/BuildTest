@@ -339,6 +339,8 @@ export interface ApiErrorResponse {
   message?: string
   details?: string
   status?: number
+  required?: number
+  available?: number
 }
 
 /** Rate limit error response */
