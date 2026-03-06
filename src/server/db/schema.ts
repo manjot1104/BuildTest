@@ -142,6 +142,68 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
+export const chatTypeEnum = pgEnum("chat_type", [
+  "BUILDER",
+  "OPENROUTER",
+]);
+
+export const messageRoleEnum = pgEnum("message_role", [
+  "USER",
+  "ASSISTANT",
+  "SYSTEM",
+]);
+
+export const conversations = createTable(
+  "conversations",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    model_name: d.text("model_name"),
+
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    title: text("title"),
+  }),
+  (t) => [
+    index("conversations_user_id_idx").on(t.user_id),
+  ],
+);
+
+export const conversation_messages = createTable(
+  "conversation_messages",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+
+    conversation_id: d
+      .text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+
+    role: messageRoleEnum("role").notNull(),
+
+    content: d.text("content").notNull(),
+
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("conversation_messages_conversation_id_idx").on(t.conversation_id),
+  ],
+);
 
 // User chats - stores chat data locally for efficient history retrieval
 // Maps V0 chat IDs to user IDs and stores chat metadata
@@ -149,7 +211,7 @@ export const user_chats = createTable(
   "user_chats",
   (d) => ({
     id: d.text("id").primaryKey(),
-    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }),
     user_id: d
       .text("user_id")
       .notNull()
@@ -169,13 +231,24 @@ export const user_chats = createTable(
       .timestamp("updated_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    is_starred: d.boolean("is_starred").default(false).notNull()
+    is_starred: d.boolean("is_starred").default(false).notNull(),
+    chat_type: chatTypeEnum("chat_type").notNull().default("BUILDER"),
+
+model_name: d.text("model_name"),
+
+prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
+
+conversation_id: d
+  .text("conversation_id")
+  .references(() => conversations.id, { onDelete: "set null" }),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
     index("user_chats_user_id_idx").on(t.user_id),
     index("user_chats_v0_chat_id_idx").on(t.v0_chat_id),
     index("user_chats_created_at_idx").on(t.created_at),
+    index("user_chats_chat_type_idx").on(t.chat_type),
+index("user_chats_conversation_id_idx").on(t.conversation_id),
   ],
 );
 
@@ -394,49 +467,68 @@ export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) =
   user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
 }));
 
-// Sandbox execution status enum
-export const sandboxExecutionStatusEnum = pgEnum("sandbox_execution_status", [
-  "pending",
-  "running",
-  "completed",
-  "failed",
-  "timeout",
-]);
+// Resume Builder Tables
+export const resume_templates = createTable(
+  "resume_templates",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    name: d.varchar("name", { length: 255 }).notNull(),
+    description: d.text("description"),
+    latex_template: d.text("latex_template").notNull(),
+    is_default: d.boolean("is_default").default(false).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+);
 
-// Sandbox Executions - logs every sandbox code execution for monitoring/auditing
-export const sandbox_executions = createTable(
-  "sandbox_executions",
+export const user_resumes = createTable(
+  "user_resumes",
   (d) => ({
     id: d.text("id").primaryKey(),
     user_id: d
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    language: d.varchar("language", { length: 50 }).notNull(),
-    code: d.text("code").notNull(),
-    status: sandboxExecutionStatusEnum("status").notNull().default("pending"),
-    output: d.text("output"),
-    error: d.text("error"),
-    exit_code: d.integer("exit_code"),
-    execution_time_ms: d.integer("execution_time_ms"),
+    template_id: d
+      .text("template_id")
+      .references(() => resume_templates.id),
+    resume_data: d.text("resume_data").notNull(), // JSON string
+    latex_content: d.text("latex_content"),
+    pdf_url: d.text("pdf_url"),
+    title: d.varchar("title", { length: 255 }),
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
   }),
   (t) => [
-    index("sandbox_executions_user_id_idx").on(t.user_id),
-    index("sandbox_executions_status_idx").on(t.status),
-    index("sandbox_executions_created_at_idx").on(t.created_at),
+    index("user_resumes_user_id_idx").on(t.user_id),
+    index("user_resumes_created_at_idx").on(t.created_at),
   ],
 );
-
-export const sandboxExecutionsRelations = relations(sandbox_executions, ({ one }) => ({
-  user: one(user, { fields: [sandbox_executions.user_id], references: [user.id] }),
+export const userResumesRelations = relations(user_resumes, ({ one }) => ({
+  user: one(user, { fields: [user_resumes.user_id], references: [user.id] }),
+  template: one(resume_templates, {
+    fields: [user_resumes.template_id],
+    references: [resume_templates.id],
+  }),
 }));
 
-// GitHub Repos
+export const resumeTemplatesRelations = relations(resume_templates, ({ many }) => ({
+  resumes: many(user_resumes),
+}));
+
+// GitHub Repos — one row per GitHub repo linked to a chat
 // - One row per GitHub repo (github_repo_id is globally unique)
 // - A chat can have multiple repo rows over time, but only one has is_active = true
 // - When user links a new repo to a chat, old row is set to is_active = false
@@ -488,7 +580,7 @@ export const github_repos = createTable(
 export const githubReposRelations = relations(github_repos, ({ one }) => ({
   user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
   chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
-}))
+}));
 
 // Studio Layouts — stores published pages built in Buildify Studio
 export const studio_layouts = createTable(
@@ -518,7 +610,7 @@ export const studio_layouts = createTable(
     index("persona_layouts_user_id_idx").on(t.user_id),
     index("persona_layouts_slug_idx").on(t.slug),
   ],
-)
+);
 
 export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
   user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),

@@ -36,8 +36,8 @@ export function useChatDetails(chatId: string | undefined) {
         throw new Error('Chat ID is required')
       }
 
-      try {
-        const response = await api.chats({ chatId }).get()
+   try {
+  const response = await api.chats({ chatId }).get()
 
         // Eden returns { data, error, status } structure
         if (response.error) {
@@ -74,12 +74,14 @@ export function useChatDetails(chatId: string | undefined) {
  * Query hook for fetching chat history
  * Uses Eden client for type-safe API calls
  */
-export function useChatHistory() {
+export function useChatHistory(type: "all" | "builder" | "openrouter" = "all") {
   return useQuery({
-    queryKey: ['chat-history'],
+    queryKey: ['chat-history', type],
     queryFn: async (): Promise<ChatHistoryItem[]> => {
       try {
-        const response = await api.chats.get()
+        const response = await api.chats.get({
+          query: { type },
+        })
 
         if (response.error) {
           const edenError = response.error as EdenError

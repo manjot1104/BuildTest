@@ -530,10 +530,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Chat history endpoint - GET /api/chats
-  .get('/chats', async ({ set }) => {
-    const result = await getChatHistoryHandler()
+ .get(
+  '/chats',
+  async ({ query, set }) => {
+    const result = await getChatHistoryHandler({ query })
 
-    // Handle error responses with status codes
     if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
         set.status = (result as ApiErrorResponse).status ?? 500
@@ -541,7 +542,19 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     }
 
     return result
-  })
+  },
+  {
+    query: t.Object({
+      type: t.Optional(
+        t.Union([
+          t.Literal("all"),
+          t.Literal("builder"),
+          t.Literal("openrouter"),
+        ])
+      ),
+    }),
+  },
+)
 
   // Speech-to-text endpoint - POST /api/speech-to-text
   .post(
@@ -942,16 +955,16 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
-
+    // ============================================
+  // Resume Builder Endpoints
   // ============================================
-  // Sandbox Execution Endpoints
-  // ============================================
 
-  // Execute code in sandbox - POST /api/sandbox/execute
+  // Generate LaTeX resume - POST /api/resume/generate
   .post(
-    '/sandbox/execute',
+    '/resume/generate',
     async ({ body, set }) => {
-      const result = await executeCodeHandler({ body })
+      const { generateResumeLatexHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumeLatexHandler({ body })
 
       if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500
@@ -961,77 +974,127 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       body: t.Object({
-        code: t.String(),
-        language: t.String(),
+        resumeData: t.Object({
+          personalInfo: t.Object({
+            name: t.String(),
+            email: t.String(),
+            phone: t.String(),
+            address: t.Optional(t.String()),
+            linkedin: t.Optional(t.String()),
+            github: t.Optional(t.String()),
+            website: t.Optional(t.String()),
+          }),
+          summary: t.Optional(t.String()),
+          experience: t.Array(
+            t.Object({
+              company: t.String(),
+              position: t.String(),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              description: t.Array(t.String()),
+              achievements: t.Optional(t.Array(t.String())),
+            })
+          ),
+          education: t.Array(
+            t.Object({
+              institution: t.String(),
+              degree: t.String(),
+              field: t.Optional(t.String()),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              gpa: t.Optional(t.String()),
+              honors: t.Optional(t.Array(t.String())),
+            })
+          ),
+          skills: t.Array(
+            t.Object({
+              category: t.String(),
+              items: t.Array(t.String()),
+            })
+          ),
+          projects: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                description: t.String(),
+                technologies: t.Array(t.String()),
+                link: t.Optional(t.String()),
+              })
+            )
+          ),
+          certifications: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                issuer: t.String(),
+                date: t.String(),
+                credentialId: t.Optional(t.String()),
+              })
+            )
+          ),
+          languages: t.Optional(
+            t.Array(
+              t.Object({
+                language: t.String(),
+                proficiency: t.String(),
+              })
+            )
+          ),
+        }),
+        templateId: t.Optional(t.String()),
       }),
     },
   )
 
-  // ============================================
-  // OpenRouter AI Chat Endpoint
-  // ============================================
-
+  // Generate PDF from LaTeX - POST /api/resume/pdf
   .post(
-    '/openrouter/chat',
+    '/resume/pdf',
     async ({ body, set }) => {
-      if (body.streaming) {
-        const result = await openRouterStreamHandler({ body })
-        if (result instanceof Response) return result
-        // Error object — set status and return JSON
-        if (isApiError(result)) {
-          set.status = (result as ApiErrorResponse).status ?? 500
-        }
-        return result
-      }
+      const { generateResumePDFHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumePDFHandler({ body })
 
-      const result = await openRouterChatHandler({ body })
       if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500
       }
+
       return result
     },
     {
       body: t.Object({
-        messages: t.Optional(
-          t.Array(t.Object({ role: t.String(), content: t.String() })),
-        ),
-        message: t.Optional(t.String()),
-        model: t.Optional(t.String()),
-        systemPrompt: t.Optional(t.String()),
-        streaming: t.Optional(t.Boolean()),
-        maxTokens: t.Optional(t.Number()),
-        temperature: t.Optional(t.Number()),
-        topP: t.Optional(t.Number()),
+        resumeId: t.String(),
+        latex: t.Optional(t.String()),
       }),
     },
   )
 
-  // ============================================
-  // GitHub Endpoints
-  // ============================================
+  // Get user's resumes - GET /api/resume/list
+  .get('/resume/list', async ({ set }) => {
+    const { getUserResumesHandler } = await import('@/server/api/controllers/resume.controller')
+    const result = await getUserResumesHandler()
 
-  .get('/github/status', async ({ set }) => {
-    const result = await getGithubStatusHandler()
-    if ('status' in result && result.status) set.status = result.status
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
     return result
   })
 
-  .post(
-    '/github/push',
-    async ({ body, set }) => {
-      const result = await pushToGithubHandler({ body })
-      if ('status' in result && result.status) set.status = result.status
+  // Get resume by ID - GET /api/resume/:id
+  .get(
+    '/resume/:id',
+    async ({ params, set }) => {
+      const { getResumeByIdHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await getResumeByIdHandler({ params })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
       return result
     },
     {
-      body: t.Object({
-        chatId: t.String(),
-        branchName: t.String(),
-        commitMessage: t.Optional(t.String()),
-        confirmExistingBranch: t.Optional(t.Boolean()),
-        repoName: t.Optional(t.String()),
-        visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
-        replaceRepo: t.Optional(t.Boolean()), // True when user confirmed they want to replace the active repo with a new one
+      params: t.Object({
+        id: t.String(),
       }),
     },
   )

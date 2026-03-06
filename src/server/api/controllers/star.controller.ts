@@ -1,7 +1,9 @@
+
+
+
 import { db } from '@/server/db'
 import { user_chats } from '@/server/db/schema'
-import { and, eq, desc } from 'drizzle-orm'
-
+import { and, eq, desc, or } from 'drizzle-orm'
 
 export async function toggleStarChat({
   userId,
@@ -9,7 +11,7 @@ export async function toggleStarChat({
   isStarred,
 }: {
   userId: string
-  chatId: string   
+  chatId: string
   isStarred: boolean
 }) {
   await db
@@ -21,10 +23,12 @@ export async function toggleStarChat({
     .where(
       and(
         eq(user_chats.user_id, userId),
-        eq(user_chats.v0_chat_id, chatId),
-      ),
+        or(
+          eq(user_chats.v0_chat_id, chatId),
+          eq(user_chats.conversation_id, chatId),
+        )
+      )
     )
-   
 }
 
 //  get all starred chats

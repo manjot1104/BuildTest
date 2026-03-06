@@ -242,7 +242,26 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
             </Row>
             {element.type === 'heading' && (
               <Field label="Heading Level" full>
-                <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => upd({ headingLevel: Number(v) as 1 })}>
+                <Sel value={String(element.headingLevel ?? 1)}  onChange={(v) => {
+  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
+
+  const headingSizes = {
+    1: 64,
+    2: 48,
+    3: 36,
+    4: 28,
+    5: 22,
+    6: 18,
+  }
+
+  upd({
+    headingLevel: level,
+    styles: {
+      ...element.styles,
+      fontSize: headingSizes[level],
+    },
+  })
+}}>
                   {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
                 </Sel>
               </Field>
