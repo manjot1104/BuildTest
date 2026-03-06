@@ -19,18 +19,18 @@ export interface OpenRouterResult {
   isFallback: boolean
 }
 
-const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+const DEFAULT_MODEL = 'google/gemma-3-12b-it:free'
 
 /** Fallback chain — tried in order when the requested model fails */
 const FALLBACK_CHAIN = [
+  'google/gemma-3-12b-it:free',
+  'arcee-ai/trinity-large-preview:free',
+  'google/gemma-3-27b-it:free',
   'meta-llama/llama-3.3-70b-instruct:free',
   'qwen/qwen3-coder:free',
-  'nousresearch/hermes-3-llama-3.1-405b:free',
-  'google/gemma-3-27b-it:free',
   'mistralai/mistral-small-3.1-24b-instruct:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
   'openai/gpt-oss-120b:free',
-  'arcee-ai/trinity-large-preview:free',
-  'google/gemma-3-12b-it:free',
   'openai/gpt-oss-20b:free',
 ]
 
