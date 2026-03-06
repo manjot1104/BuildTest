@@ -97,50 +97,22 @@ import { toast } from "sonner";
 
 
 const MODELS = [
-  //  Highest Priority – GPT Models
   {
-    id: "openai/gpt-oss-20b:free",
-    name: "GPT OSS 20B",
-    provider: "OpenAI",
-    description: "Primary GPT model",
+    id: "arcee-ai/trinity-large-preview:free",
+    name: "Trinity Large 400B",
+    provider: "Arcee AI",
+    description: "Massive 400B model, strong general-purpose performance",
     badge: "Primary",
     badgeVariant: "default" as const,
   },
   {
-    id: "openai/gpt-oss-120b:free",
-    name: "GPT OSS 120B",
-    provider: "OpenAI",
-    description: "Larger GPT fallback",
-    badge: "Large",
-    badgeVariant: "secondary" as const,
+    id: "meta-llama/llama-3.3-70b-instruct:free",
+    name: "LLaMA 3.3 70B",
+    provider: "Meta",
+    description: "Best for complex reasoning and long context",
+    badge: "70B",
+    badgeVariant: "default" as const,
   },
-
-  //  Fallback Free Models
-  {
-    id: "mistralai/mistral-small-3.1-24b-instruct:free",
-    name: "Mistral Small 24B",
-    provider: "Mistral AI",
-    description: "Reliable fallback",
-    badge: "Fallback",
-    badgeVariant: "secondary" as const,
-  },
-  {
-    id: "google/gemma-3-12b-it:free",
-    name: "Gemma 3 12B",
-    provider: "Google",
-    description: "Lightweight fallback",
-    badge: "Fallback",
-    badgeVariant: "secondary" as const,
-  },
-  {
-    id: "google/gemma-3-27b-it:free",
-    name: "Gemma 3 27B",
-    provider: "Google",
-    description: "Google's capable model with multilingual support",
-    badge: null,
-    badgeVariant: "secondary" as const,
-  },
-
   {
     id: "qwen/qwen3-coder:free",
     name: "Qwen3 Coder",
@@ -149,7 +121,15 @@ const MODELS = [
     badge: "Code",
     badgeVariant: "secondary" as const,
   },
-   {
+  {
+    id: "mistralai/mistral-small-3.1-24b-instruct:free",
+    name: "Mistral Small 24B",
+    provider: "Mistral AI",
+    description: "Fast and reliable for everyday tasks",
+    badge: null,
+    badgeVariant: "secondary" as const,
+  },
+  {
     id: "nousresearch/hermes-3-llama-3.1-405b:free",
     name: "Hermes 3 405B",
     provider: "Nous Research",
@@ -158,11 +138,35 @@ const MODELS = [
     badgeVariant: "secondary" as const,
   },
   {
-    id: "arcee-ai/trinity-large-preview:free",
-    name: "Trinity Large 400B",
-    provider: "Arcee AI",
-    description: "Massive 400B model, strong general-purpose performance",
-    badge: "400B",
+    id: "google/gemma-3-27b-it:free",
+    name: "Gemma 3 27B",
+    provider: "Google",
+    description: "Google's capable model with multilingual support",
+    badge: "27B",
+    badgeVariant: "secondary" as const,
+  },
+  {
+    id: "google/gemma-3-12b-it:free",
+    name: "Gemma 3 12B",
+    provider: "Google",
+    description: "Lightweight and quick",
+    badge: null,
+    badgeVariant: "secondary" as const,
+  },
+  {
+    id: "openai/gpt-oss-120b:free",
+    name: "GPT OSS 120B",
+    provider: "OpenAI",
+    description: "OpenAI's powerful 120B model",
+    badge: "120B",
+    badgeVariant: "secondary" as const,
+  },
+  {
+    id: "openai/gpt-oss-20b:free",
+    name: "GPT OSS 20B",
+    provider: "OpenAI",
+    description: "OpenAI's lightweight model",
+    badge: null,
     badgeVariant: "secondary" as const,
   },
 ] as const;

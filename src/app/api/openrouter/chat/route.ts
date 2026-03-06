@@ -12,16 +12,22 @@ import { logger } from "@/lib/logger";
 const BASE_URL = "https://openrouter.ai/api/v1";
 
 const FALLBACK_CHAIN = [
-  "google/gemma-3-12b-it:free",
   "arcee-ai/trinity-large-preview:free",
-  "google/gemma-3-27b-it:free",
   "meta-llama/llama-3.3-70b-instruct:free",
   "qwen/qwen3-coder:free",
   "mistralai/mistral-small-3.1-24b-instruct:free",
   "nousresearch/hermes-3-llama-3.1-405b:free",
+  "google/gemma-3-27b-it:free",
+  "google/gemma-3-12b-it:free",
   "openai/gpt-oss-120b:free",
   "openai/gpt-oss-20b:free",
 ];
+
+/** Models that don't support system role messages */
+const NO_SYSTEM_PROMPT_MODELS = new Set([
+  "google/gemma-3-12b-it:free",
+  "google/gemma-3-27b-it:free",
+]);
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a concise, helpful AI assistant. Keep answers brief and direct. " +
@@ -206,63 +212,15 @@ export async function POST(req: Request) {
     const chain = [requested, ...FALLBACK_CHAIN.filter((m) => m !== requested)];
     logger.info("Model chain:", chain);
 
-    let selectedModel: string | null = null;
-
-    // ---------------------------
-    //  PHASE 1: Select Working Model (lightweight probe)
-    // ---------------------------
-    for (const modelId of chain) {
-      logger.info(`Probing model: ${modelId}`);
-      try {
-        const probeResult = await openai.chat.completions.create({
-          model: modelId,
-          messages: [{ role: "user", content: "hi" }],
-          max_tokens: 1,
-          temperature: 0,
-        });
-        logger.info(`Probe SUCCESS for ${modelId}`, {
-          id: probeResult.id,
-          model: probeResult.model,
-          choices: probeResult.choices?.length,
-        });
-
-        selectedModel = modelId;
-        break;
-      } catch (err: any) {
-        const status = err?.status ?? err?.statusCode;
-        const msg = err?.message ?? "";
-        const errBody = err?.error ?? err?.response?.data ?? null;
-        logger.warn(`Probe FAILED for ${modelId}`, {
-          status,
-          message: msg.slice(0, 200),
-          errorBody: errBody,
-          errorType: err?.type,
-          errorCode: err?.code,
-          constructor: err?.constructor?.name,
-        });
-        continue;
-      }
-    }
-
-    if (!selectedModel) {
-      logger.error("All models in fallback chain failed");
-      return NextResponse.json(
-        { error: "All models are currently unavailable. Please try again later." },
-        { status: 503 },
-      );
-    }
-
-    logger.info(`Selected model: ${selectedModel}`);
-
+    // Save conversation & user message before streaming
     let activeConversationId = conversationId ?? nanoid();
 
-    // create conversation if new
     if (!conversationId) {
       logger.info("Creating new conversation:", activeConversationId);
       await db.insert(conversations).values({
         id: activeConversationId,
         user_id: userId,
-        model_name: selectedModel,
+        model_name: requested,
         title: latestUserMessage.slice(0, 40),
       });
     }
@@ -273,6 +231,7 @@ export async function POST(req: Request) {
         .insert(user_chats)
         .values({
           id: nanoid(),
+          v0_chat_id: `or_${activeConversationId}`,
           user_id: userId,
           conversation_id: activeConversationId,
           title: latestUserMessage.slice(0, 50).replace(/\n/g, " "),
@@ -294,7 +253,61 @@ export async function POST(req: Request) {
       content: latestUserMessage,
     });
 
-    // If conversation was newly created, update model name
+    // ---------------------------
+    //  Try each model in chain until one streams successfully
+    // ---------------------------
+    let selectedModel: string | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let stream: any = null;
+
+    for (const modelId of chain) {
+      logger.info(`Trying model: ${modelId}`);
+      try {
+        // For models that don't support system prompts, merge into first user message
+        let messagesForModel = apiMessages;
+        if (NO_SYSTEM_PROMPT_MODELS.has(modelId)) {
+          const systemMsg = apiMessages.find((m) => m.role === "system");
+          messagesForModel = apiMessages
+            .filter((m) => m.role !== "system")
+            .map((m, i) =>
+              i === 0 && systemMsg
+                ? { ...m, content: `${systemMsg.content}\n\n${m.content}` }
+                : m,
+            );
+        }
+
+        stream = await openai.chat.completions.create({
+          model: modelId,
+          messages: messagesForModel,
+          max_tokens: 2048,
+          temperature: 0.7,
+          stream: true,
+        });
+        selectedModel = modelId;
+        logger.info(`Stream started with model: ${modelId}`);
+        break;
+      } catch (err: any) {
+        const status = err?.status ?? err?.statusCode;
+        const msg = err?.message ?? "";
+        logger.warn(`Model ${modelId} failed`, {
+          status,
+          message: msg.slice(0, 200),
+          errorBody: err?.error,
+          errorCode: err?.code,
+        });
+        continue;
+      }
+    }
+
+    if (!selectedModel || !stream) {
+      logger.error("All models in fallback chain failed");
+      return NextResponse.json(
+        { error: "All models are currently unavailable. Please try again later." },
+        { status: 503 },
+      );
+    }
+
+    // Update conversation with the model that actually worked
     if (!conversationId) {
       await db
         .update(conversations)
@@ -302,24 +315,21 @@ export async function POST(req: Request) {
         .where(eq(conversations.id, activeConversationId));
     }
 
-    // ---------------------------
-    //  PHASE 2: Real Streaming
-    // ---------------------------
-    logger.info(`Starting stream with model: ${selectedModel}`);
-
-    const stream = await openai.chat.completions.create({
-      model: selectedModel,
-      messages: apiMessages,
-      max_tokens: 2048,
-      temperature: 0.7,
-      stream: true,
-    });
-
     let fullText = "";
 
+    const isFallback = selectedModel !== requested;
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          // Send meta event so UI knows which model is responding
+          controller.enqueue(
+            `data: ${JSON.stringify({
+              type: "meta",
+              model: selectedModel,
+              fallback: isFallback,
+            })}\n\n`,
+          );
+
           for await (const chunk of stream) {
             const token = chunk.choices?.[0]?.delta?.content;
             if (!token) continue;
@@ -340,6 +350,7 @@ export async function POST(req: Request) {
           // -----------------------
           const { cleanedText, files } = parseAIResponse(fullText);
           logger.info("Stream complete", {
+            model: selectedModel,
             fullTextLength: fullText.length,
             filesCount: files.length,
           });

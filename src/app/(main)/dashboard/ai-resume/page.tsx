@@ -32,6 +32,24 @@ import { cn } from '@/lib/utils'
 
 const RESUME_MODELS = [
   {
+    id: 'google/gemma-3-12b-it:free',
+    name: 'Gemma 3 12B',
+    provider: 'Google',
+    description: 'Fast and reliable',
+  },
+  {
+    id: 'arcee-ai/trinity-large-preview:free',
+    name: 'Trinity Large 400B',
+    provider: 'Arcee AI',
+    description: 'Massive 400B, strong general-purpose',
+  },
+  {
+    id: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 27B',
+    provider: 'Google',
+    description: 'Strong quality with multilingual support',
+  },
+  {
     id: 'meta-llama/llama-3.3-70b-instruct:free',
     name: 'LLaMA 3.3 70B',
     provider: 'Meta',
@@ -44,22 +62,16 @@ const RESUME_MODELS = [
     description: 'Specialised for code & LaTeX generation',
   },
   {
-    id: 'nousresearch/hermes-3-llama-3.1-405b:free',
-    name: 'Hermes 3 405B',
-    provider: 'Nous Research',
-    description: 'Massive 405B, excellent instruction-following',
-  },
-  {
-    id: 'google/gemma-3-27b-it:free',
-    name: 'Gemma 3 27B',
-    provider: 'Google',
-    description: 'Strong quality with multilingual support',
-  },
-  {
     id: 'mistralai/mistral-small-3.1-24b-instruct:free',
     name: 'Mistral Small 24B',
     provider: 'Mistral AI',
     description: 'Fast and reliable',
+  },
+  {
+    id: 'nousresearch/hermes-3-llama-3.1-405b:free',
+    name: 'Hermes 3 405B',
+    provider: 'Nous Research',
+    description: 'Massive 405B, excellent instruction-following',
   },
   {
     id: 'openai/gpt-oss-120b:free',
@@ -72,18 +84,6 @@ const RESUME_MODELS = [
     name: 'GPT OSS 20B',
     provider: 'OpenAI',
     description: 'Lightweight and fast',
-  },
-  {
-    id: 'google/gemma-3-12b-it:free',
-    name: 'Gemma 3 12B',
-    provider: 'Google',
-    description: 'Lightweight and quick',
-  },
-  {
-    id: 'arcee-ai/trinity-large-preview:free',
-    name: 'Trinity Large 400B',
-    provider: 'Arcee AI',
-    description: 'Massive 400B, strong general-purpose',
   },
 ] as const
 
