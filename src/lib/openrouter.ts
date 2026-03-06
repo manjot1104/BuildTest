@@ -12,7 +12,7 @@ export interface ResumeData {
   model?: string
 }
 
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4'
+const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
 
 /**
  * Calls OpenRouter chat completions API
