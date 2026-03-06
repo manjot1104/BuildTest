@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import type { HighlighterCore } from 'shiki'
 
-let highlighterPromise: Promise<HighlighterCore> | null = null
+let highlighterPromise: Promise<HighlighterCore | null> | null = null
 
 function getHighlighter() {
   if (!highlighterPromise) {
