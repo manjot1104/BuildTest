@@ -1,10 +1,4 @@
 // src/server/api/controllers/testing.controller.ts
-//
-// Follows the same pattern as payment.controller.ts
-// - Auth via getSession()
-// - Business logic + DB writes inline
-// - Calls tinyfish.service.ts and openrouter.service.ts for external API work
-// - No separate pipeline service
 
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
@@ -24,9 +18,9 @@ import {
   generateAISummary,
   type SiteContext,
   type TestRunSummaryInput,
+  type TestCase,
 } from "@/server/services/openRouter.service";
 import type { ApiErrorResponse } from "@/types/api.types";
-import { tr } from "date-fns/locale";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,7 +58,25 @@ async function updateRunStatus(
 }
 
 // ---------------------------------------------------------------------------
-// Background pipeline (fired from startTestRunHandler, not awaited)
+// Build the goal string passed to executeTest.
+//
+// IMPORTANT: executeTest() in tinyfish.service.ts wraps whatever string you
+// pass as `goal` inside a structured prompt that includes JSON response
+// instructions. So this function must return ONLY the human-readable steps
+// and expected result — nothing else. Do NOT append JSON schemas or
+// "Return ONLY..." instructions here; the service handles that.
+// ---------------------------------------------------------------------------
+
+function buildTestGoal(tc: TestCase): string {
+  const numberedSteps = tc.steps
+    .map((step, i) => `Step ${i + 1}: ${step}`)
+    .join("\n");
+
+  return `${numberedSteps}\n\nExpected result: ${tc.expected_result}`;
+}
+
+// ---------------------------------------------------------------------------
+// Background pipeline
 // ---------------------------------------------------------------------------
 
 async function runPipeline(testRunId: string, targetUrl: string): Promise<void> {
@@ -127,7 +139,7 @@ async function runPipeline(testRunId: string, targetUrl: string): Promise<void> 
   // STEP 3: EXECUTE
   await updateRunStatus(testRunId, "executing");
 
-  const pairs = generatedCases.map((tc, i) => ({
+  const pairs: { tc: TestCase; dbId: string }[] = generatedCases.map((tc, i) => ({
     tc,
     dbId: testCaseRecords[i]!.id,
   }));
@@ -142,15 +154,22 @@ async function runPipeline(testRunId: string, targetUrl: string): Promise<void> 
 
     const batchResults = await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
-        const goal = `${tc.steps.join("\n")}\n\nExpected: ${tc.expected_result}`;
-        let result = await executeTest(tc.target_url, goal);
+        const testUrl = tc.target_url ?? targetUrl;
+
+        // FIX: Build a clean, human-readable goal string.
+        // executeTest() in tinyfish.service.ts wraps this in the full
+        // structured prompt with JSON response instructions — do NOT
+        // add those here or they get duplicated / appear mid-prompt.
+        const goal = buildTestGoal(tc);
+
+        let result = await executeTest(testUrl, goal);
 
         let retryCount = 0;
         let isFlaky = false;
 
         if (!result.passed) {
           for (let retry = 1; retry <= 2; retry++) {
-            const retryResult = await executeTest(tc.target_url, goal);
+            const retryResult = await executeTest(testUrl, goal);
             retryCount = retry;
             if (retryResult.passed) {
               isFlaky = true;
@@ -193,7 +212,7 @@ async function runPipeline(testRunId: string, targetUrl: string): Promise<void> 
             reproduction_steps: tc.steps,
             screenshot_url: result.screenshotUrl,
             ai_fix_suggestion: null,
-            page_url: tc.target_url,
+            page_url: testUrl,
             status: "open",
           });
         }
@@ -211,7 +230,6 @@ async function runPipeline(testRunId: string, targetUrl: string): Promise<void> 
       }
     }
 
-    // Update live counters after every batch
     await db
       .update(test_runs)
       .set({ passed: totalPassed, failed: totalFailed, skipped: totalSkipped })
@@ -276,61 +294,53 @@ async function runPipeline(testRunId: string, targetUrl: string): Promise<void> 
 }
 
 // ---------------------------------------------------------------------------
-// Handlers (called from elysia.ts routes)
+// Handlers
 // ---------------------------------------------------------------------------
 
-/**
- * Start a new test run
- * POST /api/test/run
- */
 export async function startTestRunHandler({
   body,
 }: {
   body: { url: string; projectId?: string };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
-  const session = await getSession();
-  if (!session?.user?.id) {
-    return { error: "Unauthorized", status: 401 };
-  }
+    const session = await getSession();
 
-  const { url, projectId } = body;
-  if (!url) {
-    return { error: "URL is required", status: 400 };
-  }
+    if (!session?.user?.id) {
+      return { error: "Unauthorized", status: 401 };
+    }
 
-  const targetUrl = normaliseUrl(url);
-  const testRunId = nanoid();
+    const { url, projectId } = body;
+    if (!url) {
+      return { error: "URL is required", status: 400 };
+    }
 
-  await db.insert(test_runs).values({
-    id: testRunId,
-    user_id: session.user.id,
-    target_url: targetUrl,
-    project_id: projectId ?? null,
-    status: "crawling",
-    total_tests: 0,
-    passed: 0,
-    failed: 0,
-    skipped: 0,
-  });
+    const targetUrl = normaliseUrl(url);
+    const testRunId = nanoid();
 
-  // Fire and forget — client polls for status
-  void runPipeline(testRunId, targetUrl).catch(async (err) => {
-    console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
-    await updateRunStatus(testRunId, "failed");
-  });
+    await db.insert(test_runs).values({
+      id: testRunId,
+      user_id: session.user.id,
+      target_url: targetUrl,
+      project_id: projectId ?? null,
+      status: "crawling",
+      total_tests: 0,
+      passed: 0,
+      failed: 0,
+      skipped: 0,
+    });
 
-  return { testRunId };
+    void runPipeline(testRunId, targetUrl).catch(async (err) => {
+      console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
+      await updateRunStatus(testRunId, "failed");
+    });
+
+    return { testRunId };
   } catch (err) {
     console.error("Error in startTestRunHandler:", err);
     return { error: "Internal server error", status: 500 };
   }
 }
 
-/**
- * Get test run status + results
- * GET /api/test/run/:id
- */
 export async function getTestRunHandler({
   params,
 }: {
@@ -381,13 +391,7 @@ export async function getTestRunHandler({
   };
 }
 
-/**
- * Get test history for the current user
- * GET /api/test/history
- */
-export async function getTestHistoryHandler(): Promise<
-  object | ApiErrorResponse
-> {
+export async function getTestHistoryHandler(): Promise<object | ApiErrorResponse> {
   const session = await getSession();
   if (!session?.user?.id) {
     return { error: "Unauthorized", status: 401 };
@@ -419,10 +423,6 @@ export async function getTestHistoryHandler(): Promise<
   };
 }
 
-/**
- * Get full report with all test results and bugs
- * GET /api/test/run/:id/report
- */
 export async function getTestReportHandler({
   params,
 }: {
@@ -448,7 +448,6 @@ export async function getTestReportHandler({
   if (!run) return { error: "Test run not found", status: 404 };
   if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
 
-  // Group bugs by category for the dashboard ring charts
   const bugsByCategory = run.bugReports.reduce(
     (acc, bug) => {
       const cat = bug.category ?? "other";
@@ -458,7 +457,6 @@ export async function getTestReportHandler({
     {} as Record<string, number>,
   );
 
-  // Group test results by category
   const resultsByCategory = run.testCases.reduce(
     (acc, tc) => {
       const cat = tc.category ?? "other";
