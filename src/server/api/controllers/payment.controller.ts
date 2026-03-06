@@ -147,18 +147,33 @@ export async function createSubscriptionOrderHandler({
     return { error: "Invalid plan ID", status: 400 };
   }
 
-  // Security: Prevent admin plans from being purchased through normal flow
+  // Security: Prevent admin and free plans from being purchased through normal flow
   if ("adminOnly" in plan && plan.adminOnly) {
+    return { error: "This plan cannot be purchased", status: 403 };
+  }
+  if ("freeTier" in plan && plan.freeTier) {
     return { error: "This plan cannot be purchased", status: 403 };
   }
 
   // Check if user already has an active subscription
   const existingSubscription = await getUserActiveSubscription(session.user.id);
   if (existingSubscription) {
-    return {
-      error: "You already have an active subscription. Please cancel it first or buy additional credits.",
-      status: 400,
-    };
+    // Allow upgrading from free tier — cancel the free subscription automatically
+    if (existingSubscription.plan_id === "free") {
+      await db
+        .update(subscriptions)
+        .set({
+          status: "cancelled",
+          cancelled_at: new Date(),
+          updated_at: new Date(),
+        })
+        .where(eq(subscriptions.id, existingSubscription.id));
+    } else {
+      return {
+        error: "You already have an active subscription. Please cancel it first or buy additional credits.",
+        status: 400,
+      };
+    }
   }
 
   try {

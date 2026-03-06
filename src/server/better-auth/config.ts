@@ -10,6 +10,7 @@ import {
   sendOTPEmail,
   sendWelcomeEmail,
 } from "@/server/services/email.service";
+import { provisionFreeTier } from "@/server/services/credits.service";
 
 export const auth = betterAuth({
   baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL,
@@ -61,6 +62,18 @@ export const auth = betterAuth({
   ],
   databaseHooks: {
     user: {
+      create: {
+        after: async (user) => {
+          // Provision free tier for OAuth users (email already verified on creation)
+          if (user.emailVerified) {
+            try {
+              await provisionFreeTier(user.id);
+            } catch {
+              // Non-critical — can be provisioned later
+            }
+          }
+        },
+      },
       update: {
         after: async (user) => {
           // Send welcome email when email gets verified for the first time
@@ -72,6 +85,13 @@ export const auth = betterAuth({
             // Only send if verification happened within the last 2 minutes
             // This prevents re-sending on subsequent profile updates
             if (diffMs < 2 * 60 * 1000) {
+              // Provision free tier (subscription + 200 credits)
+              try {
+                await provisionFreeTier(user.id);
+              } catch {
+                // Free tier provisioning failed - non-critical, can be retried
+              }
+
               try {
                 await sendWelcomeEmail({
                   to: user.email,
