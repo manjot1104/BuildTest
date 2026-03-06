@@ -12,7 +12,8 @@ import {
 } from "@/server/services/email.service";
 
 export const auth = betterAuth({
-  baseURL: env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL,
+  trustedOrigins: ["https://buildify.sh", "https://www.buildify.sh"],
   database: drizzleAdapter(db, {
     provider: "pg",
   }),

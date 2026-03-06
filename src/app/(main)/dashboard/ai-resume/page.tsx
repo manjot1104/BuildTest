@@ -16,10 +16,92 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit } from 'lucide-react'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
+
+// ─── OpenRouter Models ───────────────────────────────────────────────────────
+
+const RESUME_MODELS = [
+  {
+    id: 'anthropic/claude-sonnet-4',
+    name: 'Claude Sonnet 4',
+    provider: 'Anthropic',
+    description: 'Best for professional writing',
+  },
+  {
+    id: 'anthropic/claude-3.5-sonnet',
+    name: 'Claude 3.5 Sonnet',
+    provider: 'Anthropic',
+    description: 'Great balance of quality and speed',
+  },
+  {
+    id: 'openai/gpt-4o-mini',
+    name: 'GPT-4o Mini',
+    provider: 'OpenAI',
+    description: 'Fast and cost-effective',
+  },
+  {
+    id: 'openai/gpt-4o',
+    name: 'GPT-4o',
+    provider: 'OpenAI',
+    description: 'High quality output',
+  },
+  {
+    id: 'google/gemini-2.5-flash-preview',
+    name: 'Gemini 2.5 Flash',
+    provider: 'Google',
+    description: 'Fast with strong reasoning',
+  },
+  {
+    id: 'google/gemini-2.5-pro-preview',
+    name: 'Gemini 2.5 Pro',
+    provider: 'Google',
+    description: 'Top-tier quality',
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct',
+    name: 'LLaMA 3.3 70B',
+    provider: 'Meta',
+    description: 'Strong open-source model',
+  },
+  {
+    id: 'mistralai/mistral-small-3.1-24b-instruct',
+    name: 'Mistral Small 3.1',
+    provider: 'Mistral AI',
+    description: 'Fast and reliable',
+  },
+  {
+    id: 'qwen/qwen3-coder:free',
+    name: 'Qwen3 Coder (Free)',
+    provider: 'Alibaba',
+    description: 'Free, good for LaTeX code',
+  },
+  {
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    name: 'LLaMA 3.3 70B (Free)',
+    provider: 'Meta',
+    description: 'Free tier available',
+  },
+  {
+    id: 'google/gemma-3-27b-it:free',
+    name: 'Gemma 3 27B (Free)',
+    provider: 'Google',
+    description: 'Free, solid quality',
+  },
+] as const
+
+const DEFAULT_MODEL = RESUME_MODELS[0].id
+
+// ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
   fullName: z.string().min(1, 'Full name is required').max(100),
@@ -38,6 +120,7 @@ type Step = 'form' | 'latex-preview' | 'compiling'
 
 export default function AIResumeBuilderPage() {
   const [currentStep, setCurrentStep] = useState<Step>('form')
+  const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
   const [latexCode, setLatexCode] = useState('')
@@ -62,6 +145,8 @@ export default function AIResumeBuilderPage() {
     },
   })
 
+  const currentModelInfo = RESUME_MODELS.find((m) => m.id === selectedModel)
+
   // Generate LaTeX code
   const onGenerateLaTeX = async (data: ResumeFormData) => {
     setIsGenerating(true)
@@ -70,10 +155,8 @@ export default function AIResumeBuilderPage() {
     try {
       const response = await fetch('/api/resume/generate-latex', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...data, model: selectedModel }),
       })
 
       if (!response.ok) {
@@ -113,9 +196,7 @@ export default function AIResumeBuilderPage() {
     try {
       const response = await fetch('/api/resume/compile-pdf', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           latex: editedLatex,
           fileName: form.getValues('fullName') || 'Resume',
@@ -127,10 +208,7 @@ export default function AIResumeBuilderPage() {
         throw new Error(error.error || 'Failed to compile PDF')
       }
 
-      // Get the PDF blob
       const blob = await response.blob()
-
-      // Create download link
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -152,9 +230,7 @@ export default function AIResumeBuilderPage() {
     }
   }
 
-  const handleEdit = () => {
-    setIsEditing(true)
-  }
+  const handleEdit = () => setIsEditing(true)
 
   const handleSaveEdit = () => {
     setLatexCode(editedLatex)
@@ -180,12 +256,11 @@ export default function AIResumeBuilderPage() {
     try {
       const response = await fetch('/api/resume/follow-up', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currentLatex: editedLatex || latexCode,
           prompt: followUpPrompt,
+          model: selectedModel,
         }),
       })
 
@@ -236,10 +311,17 @@ export default function AIResumeBuilderPage() {
         <div className="mb-6">
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold tracking-tight">LaTeX Code Preview</h1>
-            <Button variant="outline" onClick={handleReset} size="sm">
-              <X className="mr-2 h-4 w-4" />
-              Start Over
-            </Button>
+            <div className="flex items-center gap-3">
+              {currentModelInfo && (
+                <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">
+                  {currentModelInfo.provider} / {currentModelInfo.name}
+                </span>
+              )}
+              <Button variant="outline" onClick={handleReset} size="sm">
+                <X className="mr-2 h-4 w-4" />
+                Start Over
+              </Button>
+            </div>
           </div>
           <p className="text-muted-foreground">
             Review and edit the generated LaTeX code before compiling to PDF.
@@ -345,7 +427,7 @@ export default function AIResumeBuilderPage() {
                 <span className="text-sm font-medium">AI Follow-up</span>
               </div>
               <p className="text-xs text-muted-foreground">
-                Ask AI to make changes to the LaTeX code. For example: "Make the header more prominent", "Add a color scheme", "Change the font size", etc.
+                Ask AI to make changes to the LaTeX code. For example: &quot;Make the header more prominent&quot;, &quot;Add a color scheme&quot;, &quot;Change the font size&quot;, etc.
               </p>
             </div>
             <div className="flex gap-2">
@@ -418,12 +500,42 @@ export default function AIResumeBuilderPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight mb-2">AI Resume Builder</h1>
         <p className="text-muted-foreground">
-          Fill in your details below and we'll generate a professional LaTeX resume for you. You can review and edit the LaTeX code before compiling to PDF.
+          Fill in your details below and we&apos;ll generate a professional LaTeX resume for you. You can review and edit the LaTeX code before compiling to PDF.
         </p>
       </div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onGenerateLaTeX)} className="space-y-6">
+          {/* Model Selection */}
+          <div className="border rounded-lg p-4 bg-muted/20">
+            <div className="flex items-center gap-2 mb-3">
+              <BrainCircuit className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">AI Model</span>
+            </div>
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a model" />
+              </SelectTrigger>
+              <SelectContent>
+                {RESUME_MODELS.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{model.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {model.provider} — {model.description}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {currentModelInfo && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {currentModelInfo.description} • Powered by {currentModelInfo.provider} via OpenRouter
+              </p>
+            )}
+          </div>
+
           <div className="grid gap-6 md:grid-cols-2">
             <FormField
               control={form.control}
@@ -566,7 +678,7 @@ export default function AIResumeBuilderPage() {
                   />
                 </FormControl>
                 <FormDescription>
-                  Add any specific instructions for the resume style, layout, colors, or formatting. These will be included in the AI prompt.
+                  Add any specific instructions for the resume style, layout, colors, or formatting.
                 </FormDescription>
                 <FormMessage />
               </FormItem>

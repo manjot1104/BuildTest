@@ -12,6 +12,7 @@ const resumeRequestSchema = z.object({
   education: z.string().min(1),
   projects: z.string().min(1),
   additionalInstructions: z.string().optional(),
+  model: z.string().optional(),
 })
 
 /**
@@ -20,31 +21,25 @@ const resumeRequestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
     const body = await request.json()
     const validatedData = resumeRequestSchema.parse(body)
 
-    // Check if API key is available
-    const apiKey = env.OPENAI_API_KEY || env.OPENROUTER_API_KEY || env.V0_API_KEY
-    if (!apiKey || apiKey.trim().length === 0) {
-      console.error('API key is missing')
+    if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
-        { error: 'API key is not configured. Please set OPENAI_API_KEY in your .env file.' },
+        { error: 'OPENROUTER_API_KEY is not configured.' },
         { status: 500 }
       )
     }
 
-    // Generate LaTeX resume using AI
     const result = await generateLaTeXResume(validatedData)
 
-    if (!result || !result.cleaned || result.cleaned.trim().length === 0) {
+    if (!result?.cleaned?.trim()) {
       return NextResponse.json(
         { error: 'Failed to generate LaTeX code from AI' },
         { status: 500 }
       )
     }
 
-    // Return both raw AI response and cleaned LaTeX code
     return NextResponse.json({
       latex: result.cleaned,
       rawResponse: result.raw,

@@ -1,6 +1,6 @@
 import { env } from '@/env'
 
-interface ResumeData {
+export interface ResumeData {
   fullName: string
   email: string
   phone: string
@@ -9,14 +9,73 @@ interface ResumeData {
   education: string
   projects: string
   additionalInstructions?: string
+  model?: string
+}
+
+const DEFAULT_MODEL = 'anthropic/claude-sonnet-4'
+
+/**
+ * Calls OpenRouter chat completions API
+ */
+async function callOpenRouter(
+  messages: { role: string; content: string }[],
+  model: string,
+): Promise<string> {
+  const apiKey = env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is not configured.')
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+    'HTTP-Referer': env.NEXT_PUBLIC_APP_URL,
+    'X-Title': 'Buildify AI Resume Builder',
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0.3,
+      max_tokens: 4000,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    const errorMessage = errorData.error?.message || errorData.message || response.statusText
+    throw new Error(`OpenRouter API error: ${response.status} - ${errorMessage}`)
+  }
+
+  const result = await response.json()
+  const content = result.choices?.[0]?.message?.content
+
+  if (!content) {
+    throw new Error('No response returned from OpenRouter API')
+  }
+
+  return content
 }
 
 /**
- * Generates professional LaTeX resume code using OpenAI API
- * @param data - User's resume information
- * @returns Object with raw AI response and cleaned LaTeX code
+ * Cleans AI response by removing markdown code blocks
+ */
+function cleanLatexResponse(raw: string): string {
+  let cleaned = raw.trim()
+  cleaned = cleaned.replace(/^```(?:latex)?\s*\n?/gm, '')
+  cleaned = cleaned.replace(/\n?```\s*$/gm, '')
+  return cleaned.trim()
+}
+
+/**
+ * Generates professional LaTeX resume code using OpenRouter API
  */
 export async function generateLaTeXResume(data: ResumeData): Promise<{ raw: string; cleaned: string }> {
+  const model = data.model || DEFAULT_MODEL
+
   const prompt = `You are an expert LaTeX resume writer. Generate a professional, clean LaTeX resume based on the following information.
 
 IMPORTANT REQUIREMENTS:
@@ -42,115 +101,68 @@ ${data.additionalInstructions ? `\nAdditional Instructions:\n${data.additionalIn
 
 Generate the complete LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
 
-  try {
-    // Use OPENAI_API_KEY if available, otherwise fall back to OPENROUTER_API_KEY or V0_API_KEY
-    const apiKey = (env.OPENAI_API_KEY || env.OPENROUTER_API_KEY || env.V0_API_KEY)?.trim()
-    const model = env.OPENAI_MODEL || 'gpt-4o-mini'
-    
-    if (!apiKey || apiKey.length === 0) {
-      throw new Error('OpenAI API key is not configured. Please set OPENAI_API_KEY in your .env file.')
-    }
-    
-    // Determine which API to use
-    const useOpenAI = !!env.OPENAI_API_KEY
-    
-    if (useOpenAI) {
-      console.log('Using OpenAI API with model:', model)
-    } else {
-      console.warn('Using fallback API key. Consider setting OPENAI_API_KEY for better results.')
-    }
-    
-    // Debug logging
-    console.log('API Key Info:', {
-      hasOpenAIKey: !!env.OPENAI_API_KEY,
-      hasOpenRouterKey: !!env.OPENROUTER_API_KEY,
-      hasV0Key: !!env.V0_API_KEY,
-      keyLength: apiKey.length,
-      keyPrefix: apiKey.substring(0, 15) + '...',
-      model: model,
-    })
-    
-    // Prepare headers
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    }
-    
-    // API endpoint and request body
-    const apiUrl = useOpenAI 
-      ? 'https://api.openai.com/v1/chat/completions'
-      : 'https://openrouter.ai/api/v1/chat/completions'
-    
-    const requestBody: any = {
-      model: useOpenAI ? model : 'anthropic/claude-3.5-sonnet',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert LaTeX resume writer. Always return ONLY raw LaTeX code without any markdown formatting, explanations, or code blocks.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      temperature: 0.3,
-      max_tokens: 4000,
-    }
-    
-    // Add OpenRouter specific headers if using OpenRouter
-    if (!useOpenAI) {
-      if (env.NEXT_PUBLIC_APP_URL) {
-        headers['HTTP-Referer'] = env.NEXT_PUBLIC_APP_URL
-      }
-      headers['X-Title'] = 'Buildify AI Resume Builder'
-    }
-    
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(requestBody),
-    })
+  const rawResponse = await callOpenRouter(
+    [
+      {
+        role: 'system',
+        content: 'You are an expert LaTeX resume writer. Always return ONLY raw LaTeX code without any markdown formatting, explanations, or code blocks.',
+      },
+      { role: 'user', content: prompt },
+    ],
+    model,
+  )
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}))
-      const errorMessage = errorData.error?.message || errorData.message || response.statusText
-      console.error('API Error Details:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorData,
-        apiUsed: useOpenAI ? 'OpenAI' : 'OpenRouter',
-      })
-      throw new Error(
-        `${useOpenAI ? 'OpenAI' : 'OpenRouter'} API error: ${response.status} - ${errorMessage}`
-      )
-    }
-
-    const result = await response.json()
-    const rawResponse = result.choices?.[0]?.message?.content
-
-    if (!rawResponse) {
-      throw new Error(`No response returned from ${useOpenAI ? 'OpenAI' : 'OpenRouter'} API`)
-    }
-
-    // Return both raw response and cleaned code
-    // Clean up the response - remove markdown code blocks if present
-    let cleanedCode = rawResponse.trim()
-
-    // Remove markdown code blocks (```latex or ```)
-    cleanedCode = cleanedCode.replace(/^```(?:latex)?\s*\n?/gm, '')
-    cleanedCode = cleanedCode.replace(/\n?```\s*$/gm, '')
-
-    // Remove any leading/trailing whitespace
-    cleanedCode = cleanedCode.trim()
-
-    return {
-      raw: rawResponse,
-      cleaned: cleanedCode,
-    }
-  } catch (error) {
-    console.error('Error calling API:', error)
-    throw error instanceof Error
-      ? error
-      : new Error('Failed to generate LaTeX resume from AI API')
+  return {
+    raw: rawResponse,
+    cleaned: cleanLatexResponse(rawResponse),
   }
+}
+
+/**
+ * Processes a follow-up prompt to modify existing LaTeX code
+ */
+export async function followUpLaTeX(
+  currentLatex: string,
+  prompt: string,
+  model?: string,
+): Promise<{ raw: string; cleaned: string }> {
+  const selectedModel = model || DEFAULT_MODEL
+
+  const followUpPrompt = `You are an expert LaTeX resume writer. I have an existing LaTeX resume code, and I want you to modify it based on the following instruction.
+
+EXISTING LATEX CODE:
+\`\`\`latex
+${currentLatex}
+\`\`\`
+
+USER'S REQUEST:
+${prompt}
+
+IMPORTANT REQUIREMENTS:
+1. Return ONLY the complete modified LaTeX code - no markdown, no explanations, no code blocks
+2. Keep the same structure and content, but apply the requested changes
+3. Ensure the LaTeX code remains valid and compilable
+4. Use MINIMAL LaTeX packages: \\documentclass{article}, \\usepackage[margin=0.75in]{geometry}, \\usepackage{enumitem}
+5. DO NOT use complex packages like tikz, fancyhdr, or graphics that require external files
+6. Keep the LaTeX code SIMPLE and FAST to compile
+
+Return the complete modified LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
+
+  const rawResponse = await callOpenRouter(
+    [
+      {
+        role: 'system',
+        content: 'You are an expert LaTeX resume writer. Always return ONLY raw LaTeX code without any markdown formatting, explanations, or code blocks.',
+      },
+      { role: 'user', content: followUpPrompt },
+    ],
+    selectedModel,
+  )
+
+  const cleaned = cleanLatexResponse(rawResponse)
+  if (!cleaned) {
+    throw new Error('Failed to extract LaTeX code from AI response')
+  }
+
+  return { raw: rawResponse, cleaned }
 }
