@@ -156,9 +156,22 @@ function StaticElement({ el }: { el: CanvasElement }) {
         )
         return el.link.enabled ? <a href={el.link.href} target={el.link.target} rel="noopener noreferrer" style={{ display: 'block', width: '100%', height: '100%', textDecoration: 'none' }}>{btn}</a> : btn
       }
-      case 'section':
-      case 'container':
-        return <div style={{ width: '100%', height: '100%', background: getBg(), border: styles.border, borderRadius: styles.borderRadius ?? (el.type === 'section' ? 12 : 8), padding: styles.padding, boxShadow: styles.boxShadow }} />
+     case 'section':
+case 'container':
+  return (
+    <div
+      id={el.type === 'section' ? `section-${el.id}` : undefined}
+      style={{
+        width: '100%',
+        height: '100%',
+        background: getBg(),
+        border: styles.border,
+        borderRadius: styles.borderRadius ?? (el.type === 'section' ? 12 : 8),
+        padding: styles.padding,
+        boxShadow: styles.boxShadow,
+      }}
+    />
+  )
       case 'divider':
         return <div style={{ width: '100%', height: '100%', backgroundColor: styles.backgroundColor ?? '#e2e8f0', borderRadius: styles.borderRadius ?? 2 }} />
       case 'spacer':
@@ -185,18 +198,57 @@ function StaticElement({ el }: { el: CanvasElement }) {
         )
       }
       case 'navbar': {
-        const items = el.content.split('|').filter(Boolean)
-        return (
-          <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${styles.padding ?? 24}px`, borderRadius: styles.borderRadius }}>
-            <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{items[0] ?? 'Brand'}</span>
-            <div style={{ display: 'flex', gap: 24 }}>
-              {(items.length > 1 ? items.slice(1) : ['Home', 'About']).map((item, i) => (
-                <a key={i} href="#" style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>{item}</a>
-              ))}
-            </div>
-          </nav>
-        )
-      }
+  const items = el.content.split('|').filter(Boolean)
+
+  return (
+    <nav
+      style={{
+        width: '100%',
+        height: '100%',
+        background: getBg() ?? '#1a1a2e',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: `0 ${styles.padding ?? 24}px`,
+        borderRadius: styles.borderRadius,
+      }}
+    >
+      <span
+        style={{
+          fontWeight: '700',
+          fontSize: (styles.fontSize ?? 14) + 2,
+          color: styles.color ?? '#ffffff',
+          fontFamily: styles.fontFamily,
+        }}
+      >
+        {items[0] ?? 'Brand'}
+      </span>
+
+      <div style={{ display: 'flex', gap: 24 }}>
+        {(items.length > 1 ? items.slice(1) : ['Home', 'About']).map((item, i) => {
+          const sectionId = `section-${item.toLowerCase().replace(/\s+/g, '-')}`
+
+          return (
+            <a
+  key={i}
+  href={`#${item.toLowerCase().replace(/\s+/g,'-')}`}
+  data-nav-item={item.toLowerCase()}
+  style={{
+    fontSize: styles.fontSize ?? 14,
+    fontWeight: styles.fontWeight ?? '500',
+    color: styles.color ?? '#ffffff',
+    textDecoration: 'none',
+    opacity: 0.85,
+  }}
+>
+  {item}
+</a>
+          )
+        })}
+      </div>
+    </nav>
+  )
+}
       case 'form': {
         const formFields = el.formFields ?? []
         return (
@@ -272,13 +324,69 @@ export default async function PersonaPage({ params }: { params: Promise<{ userna
         .pb-anim-zoomin{animation:pb-zoomin 0.5s ease forwards}
         .pb-anim-bounce{animation:pb-bounce 1s ease infinite}
         *{box-sizing:border-box;margin:0;padding:0}
-        body{font-family:system-ui,-apple-system,sans-serif}
+       body{font-family:system-ui,-apple-system,sans-serif;scroll-behavior:smooth}
         main{position:relative;width:1440px;height:960px;margin:0 auto;${bgCss}overflow:hidden}
         @media(max-width:1460px){main{transform-origin:top left;transform:scale(calc(100vw / 1440));height:calc(960px * (100vw / 1440))}}
       `}</style>
       <main>
         {sorted.map((el) => <StaticElement key={el.id} el={el} />)}
       </main>
+<script
+  dangerouslySetInnerHTML={{
+    __html: `
+document.addEventListener("DOMContentLoaded", function () {
+
+const NAV_ALIASES = {
+  services: ['services'],
+  skills: ['skills','tech stack'],
+  work: ['work','projects','portfolio','featured projects'],
+  blog: ['blog','posts','latest posts'],
+  contact: ['contact','get in touch'],
+  about: ['about','about me']
+}
+
+const slug = (t)=>t.toLowerCase().trim().replace(/\\s+/g,'-')
+
+document.querySelectorAll('[data-nav-item]').forEach(link => {
+
+link.addEventListener('click', function(e){
+e.preventDefault()
+
+const label = this.getAttribute('data-nav-item')
+const aliases = NAV_ALIASES[label] || [label]
+
+const sections = document.querySelectorAll('[data-pb-section]')
+
+let target = null
+
+sections.forEach(sec=>{
+const val = sec.getAttribute('data-pb-section') || ''
+if(aliases.some(a => val.includes(slug(a)))) target = sec
+})
+
+if(!target){
+
+document.querySelectorAll('h1,h2,h3').forEach(h=>{
+const text = (h.textContent || '').toLowerCase()
+if(aliases.some(a => text.includes(a))) target = h
+})
+
+}
+
+if(target){
+target.scrollIntoView({behavior:'smooth',block:'start'})
+}
+
+})
+
+})
+
+})
+`,
+  }}
+/>
+
+
     </>
   )
 }
