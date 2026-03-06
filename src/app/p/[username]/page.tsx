@@ -5,11 +5,11 @@ import {
   type CanvasElement,
   type CanvasBackground,
   type EnterAnimation,
-} from '@/components/persona-builder/types'
+} from '@/components/buildify-studio/types'
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
-interface PersonaData {
+interface DesignData {
   slug: string
   title: string
   layout: string
@@ -17,14 +17,14 @@ interface PersonaData {
   publishedAt: string
 }
 
-async function getPersona(slug: string): Promise<PersonaData | null> {
+async function getDesign(slug: string): Promise<DesignData | null> {
   try {
     const baseUrl =
       process.env.NEXT_PUBLIC_APP_URL ??
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
-    const res = await fetch(`${baseUrl}/api/persona/public/${slug}`, { next: { revalidate: 60 } })
+    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { next: { revalidate: 60 } })
     if (!res.ok) return null
-    return (await res.json()) as PersonaData
+    return (await res.json()) as DesignData
   } catch {
     return null
   }
@@ -38,9 +38,9 @@ export async function generateMetadata({
   params: Promise<{ username: string }>
 }): Promise<Metadata> {
   const { username } = await params
-  const persona = await getPersona(username)
-  if (!persona) return { title: 'Persona not found' }
-  return { title: `${persona.title} — Persona`, description: `View ${persona.title}'s persona page.` }
+  const design = await getDesign(username)
+  if (!design) return { title: 'Page not found' }
+  return { title: `${design.title} — Buildify`, description: `View ${design.title}` }
 }
 
 // ─── Background helper ────────────────────────────────────────────────────────
@@ -245,15 +245,15 @@ function StaticElement({ el }: { el: CanvasElement }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function PersonaPage({ params }: { params: Promise<{ username: string }> }) {
+export default async function PublishedPage({ params }: { params: Promise<{ username: string }> }) {
   const { username } = await params
-  const persona = await getPersona(username)
-  if (!persona) notFound()
+  const design = await getDesign(username)
+  if (!design) notFound()
 
   let elements: CanvasElement[] = []
   let bg: CanvasBackground | null = null
-  try { elements = JSON.parse(persona.layout) as CanvasElement[] } catch { elements = [] }
-  try { if (persona.background) bg = JSON.parse(persona.background) as CanvasBackground } catch { bg = null }
+  try { elements = JSON.parse(design.layout) as CanvasElement[] } catch { elements = [] }
+  try { if (design.background) bg = JSON.parse(design.background) as CanvasBackground } catch { bg = null }
 
   const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
   const bgCss = getBgCss(bg)

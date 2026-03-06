@@ -61,15 +61,15 @@ import {
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
 import {
-  createPersonaHandler,
-  listPersonasHandler,
-  getPersonaByIdHandler,
-  updatePersonaHandler,
-  publishPersonaByIdHandler,
-  unpublishPersonaByIdHandler,
-  deletePersonaByIdHandler,
-  getPublicPersonaHandler,
-} from '@/server/api/controllers/persona.controller'
+  createDesignHandler,
+  listDesignsHandler,
+  getDesignByIdHandler,
+  updateDesignHandler,
+  publishDesignByIdHandler,
+  unpublishDesignByIdHandler,
+  deleteDesignByIdHandler,
+  getPublicDesignHandler,
+} from '@/server/api/controllers/studio.controller'
 import { env } from '@/env'
 
 /** Insufficient credits response type */
@@ -1097,4 +1097,121 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         id: t.String(),
       }),
     },
+  )
+
+  .get(
+    '/github/repo/:chatId',
+    async ({ params, set }) => {
+      const result = await getGithubRepoForChatHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // ============================================
+  // Buildify Studio Endpoints
+  // ============================================
+
+  // List user's designs
+  .get('/designs', async ({ set }) => {
+    const result = await listDesignsHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  // Create a new draft
+  .post(
+    '/design',
+    async ({ body, set }) => {
+      const result = await createDesignHandler({ body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // IMPORTANT: static paths must come before parameterized ones
+  // Get public design by slug (no auth)
+  .get(
+    '/design/public/:slug',
+    async ({ params, set }) => {
+      const result = await getPublicDesignHandler({ params })
+      if (!result) { set.status = 404; return { error: 'Not found' } }
+      return result
+    },
+    { params: t.Object({ slug: t.String() }) },
+  )
+
+  // Get one design by id (auth required)
+  .get(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await getDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Update/save draft
+  .put(
+    '/design/:id',
+    async ({ params, body, set }) => {
+      const result = await updateDesignHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.Nullable(t.String())),
+      }),
+    },
+  )
+
+  // Publish
+  .post(
+    '/design/:id/publish',
+    async ({ params, body, set }) => {
+      const result = await publishDesignByIdHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ slug: t.String(), title: t.Optional(t.String()) }),
+    },
+  )
+
+  // Unpublish
+  .post(
+    '/design/:id/unpublish',
+    async ({ params, set }) => {
+      const result = await unpublishDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Delete
+  .delete(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await deleteDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
   )

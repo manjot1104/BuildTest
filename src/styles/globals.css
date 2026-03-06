@@ -207,7 +207,7 @@ body {
   background: hsl(var(--primary));
 }
 
-/* ─── Persona Builder animations ──────────────────────────────────────────── */
+/* ─── Buildify Studio animations ─────────────────────────────────────────── */
 @keyframes pb-fadein    { from { opacity: 0 }                                     to { opacity: 1 } }
 @keyframes pb-slideup   { from { opacity: 0; transform: translateY(28px) }        to { opacity: 1; transform: translateY(0) } }
 @keyframes pb-slidedown { from { opacity: 0; transform: translateY(-28px) }       to { opacity: 1; transform: translateY(0) } }

@@ -41,7 +41,7 @@ function animClass(anim: EnterAnimation | undefined): string {
   return map[anim] ?? ''
 }
 
-// ─── Static element renderer (client-side, mirrors public persona page) ───────
+// ─── Static element renderer (client-side, mirrors public page) ──────────────
 
 function StaticEl({ el }: { el: CanvasElement }) {
   const { styles } = el
@@ -349,14 +349,14 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
         >
           <span className="size-1.5 shrink-0 rounded-full" style={{ background: publishedSlug ? '#28c840' : 'rgba(255,255,255,0.2)' }} />
           <span className="truncate font-mono text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            {publishedSlug ? `yoursite.com/persona/${publishedSlug}` : 'Preview — not yet published'}
+            {publishedSlug ? `yoursite.com/p/${publishedSlug}` : 'Preview — not yet published'}
           </span>
         </div>
 
         <div className="flex flex-1 items-center justify-end gap-2">
           {publishedSlug && (
             <a
-              href={`/persona/${publishedSlug}`}
+              href={`/p/${publishedSlug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors"

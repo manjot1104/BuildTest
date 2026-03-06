@@ -2,14 +2,14 @@
 
 import { getSession } from '@/server/better-auth/server'
 import {
-  createPersonaLayout,
-  getPersonaLayoutsByUserId,
-  getPersonaLayoutById,
-  getPersonaLayoutBySlug,
-  updatePersonaLayout,
-  publishPersonaLayout,
-  unpublishPersonaLayout,
-  deletePersonaLayout,
+  createStudioLayout,
+  getStudioLayoutsByUserId,
+  getStudioLayoutById,
+  getStudioLayoutBySlug,
+  updateStudioLayout,
+  publishStudioLayout,
+  unpublishStudioLayout,
+  deleteStudioLayout,
 } from '@/server/db/queries'
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -22,8 +22,8 @@ async function requireSession() {
 
 // ─── handlers ─────────────────────────────────────────────────────────────────
 
-/** POST /api/persona — create a new draft */
-export async function createPersonaHandler({
+/** POST /api/design — create a new design draft */
+export async function createDesignHandler({
   body,
 }: {
   body: { title?: string; layout?: string; background?: string }
@@ -31,7 +31,7 @@ export async function createPersonaHandler({
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
 
-  const row = await createPersonaLayout({
+  const row = await createStudioLayout({
     userId: user.id,
     title: body.title,
     layout: body.layout,
@@ -41,26 +41,26 @@ export async function createPersonaHandler({
   return { success: true as const, id: row.id }
 }
 
-/** GET /api/personas — list the authenticated user's personas */
-export async function listPersonasHandler() {
+/** GET /api/designs — list the authenticated user's designs */
+export async function listDesignsHandler() {
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
-  return getPersonaLayoutsByUserId(user.id)
+  return getStudioLayoutsByUserId(user.id)
 }
 
-/** GET /api/persona/:id — get one persona (owned) */
-export async function getPersonaByIdHandler({ params }: { params: { id: string } }) {
+/** GET /api/design/:id — get one design (owned) */
+export async function getDesignByIdHandler({ params }: { params: { id: string } }) {
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
 
-  const row = await getPersonaLayoutById(params.id)
+  const row = await getStudioLayoutById(params.id)
   if (!row || row.user_id !== user.id) return { error: 'Not found', status: 404 as const }
 
   return row
 }
 
-/** PUT /api/persona/:id — save/update a draft */
-export async function updatePersonaHandler({
+/** PUT /api/design/:id — save/update a draft */
+export async function updateDesignHandler({
   params,
   body,
 }: {
@@ -70,7 +70,7 @@ export async function updatePersonaHandler({
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
 
-  await updatePersonaLayout(params.id, user.id, {
+  await updateStudioLayout(params.id, user.id, {
     title: body.title,
     layout: body.layout,
     background: body.background,
@@ -79,8 +79,8 @@ export async function updatePersonaHandler({
   return { success: true as const }
 }
 
-/** POST /api/persona/:id/publish — publish and set slug */
-export async function publishPersonaByIdHandler({
+/** POST /api/design/:id/publish — publish and set slug */
+export async function publishDesignByIdHandler({
   params,
   body,
 }: {
@@ -93,36 +93,36 @@ export async function publishPersonaByIdHandler({
   const cleanSlug = body.slug.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
   if (!cleanSlug) return { error: 'Invalid slug', status: 400 as const }
 
-  // Check slug is not taken by another persona
-  const existing = await getPersonaLayoutBySlug(cleanSlug)
+  // Check slug is not taken by another design
+  const existing = await getStudioLayoutBySlug(cleanSlug)
   if (existing && existing.id !== params.id) {
     return { error: 'This URL is already taken', status: 409 as const }
   }
 
-  await publishPersonaLayout(params.id, user.id, cleanSlug, body.title)
+  await publishStudioLayout(params.id, user.id, cleanSlug, body.title)
 
   return { success: true as const, slug: cleanSlug }
 }
 
-/** POST /api/persona/:id/unpublish */
-export async function unpublishPersonaByIdHandler({ params }: { params: { id: string } }) {
+/** POST /api/design/:id/unpublish */
+export async function unpublishDesignByIdHandler({ params }: { params: { id: string } }) {
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
 
-  await unpublishPersonaLayout(params.id, user.id)
+  await unpublishStudioLayout(params.id, user.id)
   return { success: true as const }
 }
 
-/** DELETE /api/persona/:id */
-export async function deletePersonaByIdHandler({ params }: { params: { id: string } }) {
+/** DELETE /api/design/:id */
+export async function deleteDesignByIdHandler({ params }: { params: { id: string } }) {
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
 
-  await deletePersonaLayout(params.id, user.id)
+  await deleteStudioLayout(params.id, user.id)
   return { success: true as const }
 }
 
-/** GET /api/persona/public/:slug — public, no auth required */
-export async function getPublicPersonaHandler({ params }: { params: { slug: string } }) {
-  return getPersonaLayoutBySlug(params.slug)
+/** GET /api/design/public/:slug — public page, no auth required */
+export async function getPublicDesignHandler({ params }: { params: { slug: string } }) {
+  return getStudioLayoutBySlug(params.slug)
 }

@@ -3,7 +3,7 @@
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user, github_repos, persona_layouts } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -597,12 +597,12 @@ export async function updateGithubRepoVisibility({
 }
 
 // ============================================================================
-// Persona Layout Queries
+// Studio Layout Queries
 // ============================================================================
 
-export type PersonaLayout = typeof persona_layouts.$inferSelect
+export type StudioLayout = typeof studio_layouts.$inferSelect
 
-export async function createPersonaLayout({
+export async function createStudioLayout({
   userId,
   title,
   layout,
@@ -612,14 +612,14 @@ export async function createPersonaLayout({
   title?: string
   layout?: string
   background?: string | null
-}): Promise<PersonaLayout> {
+}): Promise<StudioLayout> {
   const id = randomUUID()
   const [row] = await db
-    .insert(persona_layouts)
+    .insert(studio_layouts)
     .values({
       id,
       user_id: userId,
-      title: title ?? 'My Persona',
+      title: title ?? 'Untitled',
       layout: layout ?? '[]',
       background: background ?? null,
     })
@@ -627,49 +627,49 @@ export async function createPersonaLayout({
   return row!
 }
 
-export async function getPersonaLayoutsByUserId(userId: string): Promise<PersonaLayout[]> {
+export async function getStudioLayoutsByUserId(userId: string): Promise<StudioLayout[]> {
   return db
     .select()
-    .from(persona_layouts)
-    .where(eq(persona_layouts.user_id, userId))
-    .orderBy(desc(persona_layouts.updated_at))
+    .from(studio_layouts)
+    .where(eq(studio_layouts.user_id, userId))
+    .orderBy(desc(studio_layouts.updated_at))
 }
 
-export async function getPersonaLayoutById(id: string): Promise<PersonaLayout | null> {
+export async function getStudioLayoutById(id: string): Promise<StudioLayout | null> {
   const [row] = await db
     .select()
-    .from(persona_layouts)
-    .where(eq(persona_layouts.id, id))
+    .from(studio_layouts)
+    .where(eq(studio_layouts.id, id))
   return row ?? null
 }
 
-export async function getPersonaLayoutBySlug(slug: string): Promise<PersonaLayout | null> {
+export async function getStudioLayoutBySlug(slug: string): Promise<StudioLayout | null> {
   const [row] = await db
     .select()
-    .from(persona_layouts)
-    .where(and(eq(persona_layouts.slug, slug), eq(persona_layouts.is_published, true)))
+    .from(studio_layouts)
+    .where(and(eq(studio_layouts.slug, slug), eq(studio_layouts.is_published, true)))
   return row ?? null
 }
 
-export async function updatePersonaLayout(
+export async function updateStudioLayout(
   id: string,
   userId: string,
   data: { title?: string; layout?: string; background?: string | null },
 ): Promise<void> {
   await db
-    .update(persona_layouts)
+    .update(studio_layouts)
     .set({ ...data, updated_at: new Date() })
-    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
 }
 
-export async function publishPersonaLayout(
+export async function publishStudioLayout(
   id: string,
   userId: string,
   slug: string,
   title?: string,
 ): Promise<void> {
   await db
-    .update(persona_layouts)
+    .update(studio_layouts)
     .set({
       slug,
       is_published: true,
@@ -677,18 +677,18 @@ export async function publishPersonaLayout(
       updated_at: new Date(),
       ...(title ? { title } : {}),
     })
-    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
 }
 
-export async function unpublishPersonaLayout(id: string, userId: string): Promise<void> {
+export async function unpublishStudioLayout(id: string, userId: string): Promise<void> {
   await db
-    .update(persona_layouts)
+    .update(studio_layouts)
     .set({ is_published: false, updated_at: new Date() })
-    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
 }
 
-export async function deletePersonaLayout(id: string, userId: string): Promise<void> {
+export async function deleteStudioLayout(id: string, userId: string): Promise<void> {
   await db
-    .delete(persona_layouts)
-    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+    .delete(studio_layouts)
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
 }
