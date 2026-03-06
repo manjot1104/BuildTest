@@ -1,28 +1,24 @@
 // src/server/services/tinyfish.service.ts
-//
-// TinyFish Web Agent API wrapper
-// Docs: https://docs.tinyfish.ai
-// Endpoint: POST https://agent.tinyfish.ai/v1/automation/run-sse
-//
-// Two main functions:
-//   crawlPage(url)         → structured site map for one page
-//   executeTest(url, goal) → pass/fail result for one test case
 
 const TINYFISH_API_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
 const TINYFISH_API_KEY = process.env.TINYFISH_API_KEY;
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+const LIMITS = {
+  MAX_PAGES_FREE: 1,
+  MAX_PAGES_PRO: 5,
+  CRAWL_PAGE_TIMEOUT_MS: 150_000,
+  EXECUTE_TEST_TIMEOUT_MS: 150_000,
+} as const;
+
+export interface CrawlOptions {
+  maxPages?: number;
+  allowedDomain?: string;
+}
 
 export interface TinyFishRequest {
   url: string;
   goal: string;
-  browser_profile?: "default" | "stealth";
-  proxy_config?: {
-    enabled: boolean;
-    country_code?: string;
-  };
+  browser_profile?: "lite" | "stealth";
 }
 
 export interface TinyFishResult {
@@ -33,28 +29,16 @@ export interface TinyFishResult {
   jobId: string | null;
 }
 
-// What one crawled page looks like
 export interface CrawledPage {
   url: string;
   title: string;
-  elements: {
-    type: string;      // button, input, link, form, etc.
-    text: string;
-    href?: string;
-    selector?: string;
-    isVisible: boolean;
-  }[];
+  elements: { type: string; text: string; href?: string; selector?: string; isVisible: boolean }[];
   internalLinks: string[];
   externalLinks: string[];
-  forms: {
-    action?: string;
-    method?: string;
-    fields: { name: string; type: string; required: boolean }[];
-  }[];
-  screenshot?: string; // base64 or URL
+  forms: { action?: string; method?: string; fields: { name: string; type: string; required: boolean }[] }[];
+  screenshot?: string;
 }
 
-// What one test execution result looks like
 export interface TestExecutionResult {
   passed: boolean;
   actualResult: string;
@@ -64,69 +48,67 @@ export interface TestExecutionResult {
   consoleLogs: string[];
 }
 
-// ---------------------------------------------------------------------------
-// Core SSE runner
-// ---------------------------------------------------------------------------
+function extractHostname(url: string): string {
+  try { return new URL(url).hostname; } catch { return ""; }
+}
+
+function resolveUrl(raw: string, base: string): string | null {
+  try {
+    if (!raw || raw.startsWith("mailto:") || raw.startsWith("tel:") || raw.startsWith("javascript:") || raw === "#") return null;
+    const r = new URL(raw, base);
+    r.hash = "";
+    return r.href;
+  } catch { return null; }
+}
+
+function isAllowedUrl(candidate: string, allowedHostname: string): boolean {
+  try {
+    const p = new URL(candidate);
+    if (p.hostname !== allowedHostname) return false;
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|tar|gz|mp4|mp3|wav|ico|woff|woff2|ttf|eot|css|js|map)$/i.test(p.pathname)) return false;
+    if (/[?&](page|offset|cursor|after|before|from|start|p)=\d/i.test(p.search)) return false;
+    if (/\/page\/\d+/i.test(p.pathname)) return false;
+    if (/\/(logout|signout|delete|remove|destroy)/i.test(p.pathname)) return false;
+    return true;
+  } catch { return false; }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label = "op"): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<T>((resolve) => {
+    timer = setTimeout(() => { console.warn(`[TinyFish] Timeout ${ms}ms: ${label}`); resolve(fallback); }, ms);
+  });
+  return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
+}
 
 async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
-  if (!TINYFISH_API_KEY) {
-    throw new Error("TINYFISH_API_KEY is not set in environment variables");
-  }
-
-  const startTime = Date.now();
-  let resultJson: Record<string, unknown> | null = null;
-  let rawText = "";
-  let jobId: string | null = null;
-
+  if (!TINYFISH_API_KEY) throw new Error("TINYFISH_API_KEY is not set");
+  console.log(`[TinyFish] → ${request.url}`);
+  let rawText = "", jobId: string | null = null;
   try {
     const response = await fetch(TINYFISH_API_URL, {
       method: "POST",
-      headers: {
-        "X-API-Key": TINYFISH_API_KEY,
-        "Content-Type": "application/json",
-      },
+      headers: { "X-API-Key": TINYFISH_API_KEY, "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
-
+    console.log(`[TinyFish] ← HTTP ${response.status} ${request.url}`);
     if (!response.ok) {
-      const errorText = await response.text();
-      return {
-        success: false,
-        resultJson: null,
-        rawText: null,
-        error: `TinyFish API error ${response.status}: ${errorText}`,
-        jobId: null,
-      };
+      const err = await response.text();
+      return { success: false, resultJson: null, rawText: null, error: `HTTP ${response.status}: ${err}`, jobId: null };
     }
+    if (!response.body) return { success: false, resultJson: null, rawText: null, error: "No body", jobId: null };
 
-    if (!response.body) {
-      return {
-        success: false,
-        resultJson: null,
-        rawText: null,
-        error: "No response body from TinyFish",
-        jobId: null,
-      };
-    }
-
-    // Read SSE stream line by line
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-
+    let eventCount = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
-      const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
-
-      for (const line of lines) {
-        // SSE lines are prefixed with "data: "
+      for (const line of decoder.decode(value, { stream: true }).split("\n")) {
         if (!line.startsWith("data: ")) continue;
-
         const jsonStr = line.slice(6).trim();
         if (!jsonStr) continue;
-
+        eventCount++;
         try {
           const event = JSON.parse(jsonStr) as {
             type?: string;
@@ -136,165 +118,239 @@ async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
             jobId?: string;
             error?: string;
           };
-
-          // Grab job ID from any event that has it
-          if (event.jobId) jobId = event.jobId;
-
-          // Accumulate any intermediate text
+          if (event.jobId && !jobId) { jobId = event.jobId; console.log(`[TinyFish] Job: ${jobId}`); }
           if (event.text) rawText += event.text;
-
-          // COMPLETE event has the final result
           if (event.type === "COMPLETE") {
-            if (event.status === "COMPLETED") {
-              resultJson = event.resultJson ?? null;
-              return {
-                success: true,
-                resultJson,
-                rawText: rawText || null,
-                error: null,
-                jobId,
-              };
-            } else {
-              // COMPLETE but status is not COMPLETED (e.g. FAILED)
-              return {
-                success: false,
-                resultJson: null,
-                rawText: rawText || null,
-                error: event.error ?? `Run ended with status: ${event.status}`,
-                jobId,
-              };
-            }
+            console.log(`[TinyFish] ✓ ${jobId} → ${event.status} (${eventCount} events)`);
+            if (event.status === "COMPLETED") return { success: true, resultJson: event.resultJson ?? null, rawText: rawText || null, error: null, jobId };
+            return { success: false, resultJson: null, rawText: rawText || null, error: event.error ?? `Status: ${event.status}`, jobId };
           }
-        } catch {
-          // Malformed SSE line — skip and continue
-        }
+        } catch { /* skip malformed */ }
       }
     }
-
-    // Stream ended without a COMPLETE event
-    return {
-      success: false,
-      resultJson: null,
-      rawText: rawText || null,
-      error: "SSE stream ended without a COMPLETE event",
-      jobId,
-    };
-  } catch (err) {
-    return {
-      success: false,
-      resultJson: null,
-      rawText: null,
-      error: err instanceof Error ? err.message : "Unknown TinyFish error",
-      jobId,
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Public: Crawl a single page
-// ---------------------------------------------------------------------------
-//
-// Fires one TinyFish call per page. For a 20-page site, call this 20 times
-// in parallel with Promise.all() — each call is independent.
-//
-// Usage:
-//   const pages = await Promise.all(urls.map(url => crawlPage(url)));
-
-export async function crawlPage(url: string): Promise<CrawledPage> {
-  const goal = `
-    Crawl this page and return a JSON object with this exact structure:
-    {
-      "url": "<the page URL>",
-      "title": "<page title>",
-      "elements": [
-        { "type": "button|input|link|select|textarea", "text": "<visible text>", "href": "<if link>", "isVisible": true }
-      ],
-      "internalLinks": ["<list of all internal links found on page>"],
-      "externalLinks": ["<list of all external links found on page>"],
-      "forms": [
-        {
-          "action": "<form action url if present>",
-          "method": "get|post",
-          "fields": [{ "name": "<field name>", "type": "<input type>", "required": true }]
+    // If stream ends but we have rawText that looks like JSON, try to recover
+    if (rawText) {
+      try {
+        const cleaned = rawText.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+        const start = cleaned.indexOf("{");
+        const end = cleaned.lastIndexOf("}");
+        if (start !== -1 && end > start) {
+          const parsed = JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+          console.log(`[TinyFish] Recovered JSON from rawText for ${request.url}`);
+          return { success: true, resultJson: parsed, rawText, error: null, jobId };
         }
-      ]
+      } catch { /* could not recover */ }
     }
-    Return ONLY valid JSON. No extra text.
-  `.trim();
-
-  const result = await runTinyFish({
-    url,
-    goal,
-    browser_profile: "stealth",
-  });
-
-  if (!result.success || !result.resultJson) {
-    // Return a minimal safe result so the pipeline doesn't die on one bad page
-    console.error(`[TinyFish] crawlPage failed for ${url}: ${result.error}`);
-    return {
-      url,
-      title: "",
-      elements: [],
-      internalLinks: [],
-      externalLinks: [],
-      forms: [],
-    };
+    return { success: false, resultJson: null, rawText: rawText || null, error: "Stream ended without COMPLETE", jobId };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[TinyFish] Fetch error: ${msg}`);
+    return { success: false, resultJson: null, rawText: null, error: msg, jobId };
   }
-
-  return result.resultJson as unknown as CrawledPage;
 }
 
 // ---------------------------------------------------------------------------
-// Public: Execute a single test case
+// Crawl goal — SPA-hardened
+//
+// Strategy:
+//   1. Hard-wait for JS hydration (React, Vue, Angular, Next.js, etc.)
+//   2. Use JS to extract ALL anchors + router links from the live DOM
+//   3. Explicitly enumerate nav/sidebar/menu/footer patterns used by SPAs
+//   4. Return a minimal, well-typed JSON — no markdown, no prose
 // ---------------------------------------------------------------------------
-//
-// Each test case becomes one TinyFish API call.
-// Fire all test cases in parallel (batches of 50).
-//
-// Usage:
-//   const result = await executeTest(url, "Click the signup button and verify the form appears");
 
-export async function executeTest(
-  url: string,
-  goal: string,
-  stealth = false,
-): Promise<TestExecutionResult> {
+function buildCrawlGoal(url: string, allowedHostname: string): string {
+  return `You are a web crawler. Navigate to this URL: ${url}
+
+== WAIT INSTRUCTIONS ==
+1. Wait for the page to fully load (network idle, no spinners).
+2. If the page uses React, Next.js, Nuxt, Vue, Angular, or any JavaScript framework, wait an extra 3 seconds AFTER the initial load for client-side rendering to complete.
+3. If you see a loading spinner or skeleton screen, wait until it disappears.
+
+== EXTRACTION INSTRUCTIONS ==
+After the page is fully rendered, extract the following using JavaScript by evaluating it in the browser console:
+
+A) PAGE TITLE: document.title
+
+B) ALL LINKS — run this mentally:
+   - Select ALL <a> elements in the entire document (including inside shadow DOM if accessible, nav, header, footer, sidebar, hamburger menus, modals).
+   - For each <a>, collect: href attribute (raw value), innerText (trimmed), and whether it is visible (offsetParent !== null or getBoundingClientRect().height > 0).
+   - Also collect hrefs from elements with data-href, data-url, or [role="link"] attributes.
+   - Include relative paths like /about, /dashboard, /settings.
+   - Include absolute URLs like https://${allowedHostname}/contact.
+   - DO NOT filter anything out — include all hrefs even if they look like query strings.
+
+C) INTERACTIVE ELEMENTS — collect all <button>, <input>, <select>, <textarea>:
+   - type (button/input/select/etc), text content or placeholder or label, isVisible
+
+D) FORMS — collect all <form> elements:
+   - action attribute, method attribute
+   - All child inputs: name, type, required attribute
+
+== INTERNAL LINKS RULE ==
+For the "internalLinks" array: include every href from step B that:
+- belongs to the domain "${allowedHostname}" (either relative path OR absolute URL with that hostname)
+- Do NOT deduplicate — include all occurrences
+
+== OUTPUT FORMAT ==
+Return ONLY a single valid JSON object. No markdown fences. No explanation. No text before or after. Start your response with { and end with }.
+
+{
+  "title": "<document.title value>",
+  "elements": [
+    {"type": "link", "text": "<anchor text>", "href": "<href>", "isVisible": true},
+    {"type": "button", "text": "<button label>", "isVisible": true},
+    {"type": "input", "text": "<placeholder or label>", "isVisible": true}
+  ],
+  "internalLinks": ["/about", "/dashboard", "https://${allowedHostname}/contact"],
+  "forms": [
+    {"action": "/submit", "method": "post", "fields": [{"name": "email", "type": "email", "required": true}]}
+  ]
+}`;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: try to parse JSON from rawText when resultJson is null
+// ---------------------------------------------------------------------------
+
+function tryParseRawText(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    // Try full parse
+    try { return JSON.parse(cleaned) as Record<string, unknown>; } catch { /* continue */ }
+    // Extract first {...}
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+    }
+  } catch { /* could not recover */ }
+  return null;
+}
+
+export async function crawlPage(url: string, allowedHostname: string): Promise<CrawledPage> {
+  const emptyPage: CrawledPage = { url, title: "", elements: [], internalLinks: [], externalLinks: [], forms: [] };
+
+  const result = await withTimeout(
+    runTinyFish({ url, goal: buildCrawlGoal(url, allowedHostname), browser_profile: "stealth" }),
+    LIMITS.CRAWL_PAGE_TIMEOUT_MS,
+    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    `crawlPage(${url})`,
+  );
+
+  // Try resultJson first, fall back to rawText parsing
+  const rawData = result.resultJson ?? tryParseRawText(result.rawText);
+
+  if (!rawData) {
+    console.error(`[TinyFish] crawlPage failed for ${url}: ${result.error}`);
+    return emptyPage;
+  }
+
+  const data = rawData as {
+    title?: string;
+    elements?: CrawledPage["elements"];
+    internalLinks?: (string | null | undefined)[];
+    forms?: CrawledPage["forms"];
+  };
+
+  // Resolve relative → absolute, filter noise, deduplicate
+  const seen = new Set<string>();
+  const internalLinks: string[] = [];
+  for (const raw of (data.internalLinks ?? [])) {
+    if (!raw) continue;
+    const resolved = resolveUrl(raw, url);
+    if (!resolved) continue;
+    if (!isAllowedUrl(resolved, allowedHostname)) continue;
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    internalLinks.push(resolved);
+  }
+
+  // Also scrape any hrefs from elements array that we might have missed
+  for (const el of (data.elements ?? [])) {
+    if (el.type === "link" && el.href) {
+      const resolved = resolveUrl(el.href, url);
+      if (resolved && isAllowedUrl(resolved, allowedHostname) && !seen.has(resolved)) {
+        seen.add(resolved);
+        internalLinks.push(resolved);
+      }
+    }
+  }
+
+  console.log(`[TinyFish] crawlPage "${data.title}" | ${internalLinks.length} internal links | ${(data.elements ?? []).length} elements | ${(data.forms ?? []).length} forms`);
+  if (internalLinks.length > 0) console.log(`[TinyFish] Links found:`, internalLinks);
+
+  return {
+    url,
+    title: data.title ?? "",
+    elements: data.elements ?? [],
+    internalLinks,
+    externalLinks: [],
+    forms: data.forms ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// executeTest — structured, explicit, foolproof
+//
+// Problems with the old approach:
+//   - "Expected: X" at the end was ambiguous
+//   - No explicit PASS/FAIL criteria
+//   - No instruction to verify the result before returning
+//
+// New approach:
+//   - Each step is a concrete action
+//   - Verification step is explicit
+//   - The agent is told what "passed" and "failed" mean
+//   - JSON schema is strict and minimal
+// ---------------------------------------------------------------------------
+
+export async function executeTest(url: string, goal: string, stealth = false): Promise<TestExecutionResult> {
   const startTime = Date.now();
 
-  const wrappedGoal = `
-    ${goal}
+  const fullGoal = `You are a QA test automation agent. Execute the following test steps in order on a real browser.
 
-    After completing the task, return a JSON object:
-    {
-      "passed": true,
-      "actualResult": "<what actually happened>",
-      "errorDetails": null,
-      "consoleLogs": []
-    }
+== TEST URL ==
+${url}
 
-    If the test FAILS (element not found, unexpected behavior, error shown), return:
-    {
-      "passed": false,
-      "actualResult": "<what actually happened>",
-      "errorDetails": "<specific error or unexpected behavior>",
-      "consoleLogs": ["<any console errors if visible>"]
-    }
+== TEST STEPS ==
+${goal}
 
-    Return ONLY valid JSON. No extra text.
-  `.trim();
+== EXECUTION RULES ==
+1. Navigate to the URL first if not already there.
+2. Wait for the page to fully load before interacting.
+3. Execute each step in order.
+4. After all steps, verify whether the expected result was achieved.
+5. "passed" = true ONLY if the expected result was confirmed in the browser.
+6. "passed" = false if any step failed, an error appeared, or the expected result was NOT confirmed.
+7. Be conservative: if you are unsure, set passed = false.
 
-  const result = await runTinyFish({
-    url,
-    goal: wrappedGoal,
-    browser_profile: stealth ? "stealth" : "default",
-  });
+== RESPONSE FORMAT ==
+Return ONLY this JSON. No markdown. No explanation. Start with { and end with }.
+
+If test PASSED:
+{"passed":true,"actualResult":"<one sentence: what you observed>","errorDetails":null,"consoleLogs":[]}
+
+If test FAILED:
+{"passed":false,"actualResult":"<one sentence: what you observed>","errorDetails":"<specific error or mismatch>","consoleLogs":[]}`;
+
+  const result = await withTimeout(
+    runTinyFish({ url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" }),
+    LIMITS.EXECUTE_TEST_TIMEOUT_MS,
+    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    `executeTest(${url})`,
+  );
 
   const durationMs = Date.now() - startTime;
 
-  if (!result.success || !result.resultJson) {
+  // Try resultJson first, then rawText fallback
+  const rawData = result.resultJson ?? tryParseRawText(result.rawText);
+
+  if (!rawData) {
     return {
       passed: false,
-      actualResult: "TinyFish execution failed",
+      actualResult: "TinyFish execution failed or timed out",
       errorDetails: result.error,
       screenshotUrl: null,
       durationMs,
@@ -302,69 +358,48 @@ export async function executeTest(
     };
   }
 
-  const r = result.resultJson as {
-    passed?: boolean;
-    actualResult?: string;
-    errorDetails?: string | null;
-    consoleLogs?: string[];
-  };
-
+  const r = rawData as { passed?: boolean; actualResult?: string; errorDetails?: string | null; consoleLogs?: string[] };
   return {
-    passed: r.passed ?? false,
-    actualResult: r.actualResult ?? "",
+    passed: r.passed === true, // strict — must be exactly true
+    actualResult: r.actualResult ?? "No result returned",
     errorDetails: r.errorDetails ?? null,
-    screenshotUrl: null, // Screenshots via R2 added in Phase 2
+    screenshotUrl: null,
     durationMs,
     consoleLogs: r.consoleLogs ?? [],
   };
 }
 
-// ---------------------------------------------------------------------------
-// Public: Crawl entire site (parallel across all pages)
-// ---------------------------------------------------------------------------
-//
-// Step 1 of the pipeline. Discovers all pages from a sitemap/homepage,
-// then crawls each page in parallel.
-//
-// Usage:
-//   const siteMap = await crawlSite("https://example.com");
-
-export async function crawlSite(rootUrl: string): Promise<{
-  pages: CrawledPage[];
-  allLinks: string[];
-  crawlTimeMs: number;
-}> {
+export async function crawlSite(
+  rootUrl: string,
+  options: CrawlOptions = {},
+): Promise<{ pages: CrawledPage[]; allLinks: string[]; crawlTimeMs: number }> {
   const startTime = Date.now();
+  const maxPages = Math.min(options.maxPages ?? LIMITS.MAX_PAGES_PRO, LIMITS.MAX_PAGES_PRO);
+  const allowedHostname = options.allowedDomain ?? extractHostname(rootUrl);
 
-  // First: discover all internal URLs from the root page
-  const discoveryGoal = `
-    Navigate to this page and return a JSON object:
-    {
-      "internalLinks": ["<all unique internal page URLs found — full absolute URLs>"]
-    }
-    Include the homepage itself. Max 50 pages. Return ONLY valid JSON.
-  `.trim();
+  console.log(`[TinyFish] ═══ Crawl start: ${rootUrl} | domain: ${allowedHostname} | maxPages: ${maxPages}`);
 
-  const discovery = await runTinyFish({
-    url: rootUrl,
-    goal: discoveryGoal,
-    browser_profile: "stealth",
-  });
+  // Step 1: Crawl root page
+  console.log(`[TinyFish] Step 1: Crawling root page...`);
+  const rootPage = await crawlPage(rootUrl, allowedHostname);
+  console.log(`[TinyFish] Root: "${rootPage.title}" | ${rootPage.internalLinks.length} internal links found`);
 
-  let urlsToCrawl: string[] = [rootUrl];
+  // Step 2: Deduplicate, exclude root, cap at maxPages-1
+  const remaining = [...new Set(rootPage.internalLinks)]
+    .filter((u) => u !== rootUrl && u !== rootUrl + "/")
+    .slice(0, maxPages - 1);
 
-  if (discovery.success && discovery.resultJson) {
-    const discovered = discovery.resultJson as { internalLinks?: string[] };
-    const links = discovered.internalLinks ?? [];
-    // Deduplicate and cap at 50 pages for MVP
-    urlsToCrawl = [...new Set([rootUrl, ...links])].slice(0, 50);
-  }
+  console.log(`[TinyFish] Step 2: Crawling ${remaining.length} additional pages in parallel:`, remaining);
 
-  // Then: crawl all discovered pages in parallel
-  const pages = await Promise.all(urlsToCrawl.map((url) => crawlPage(url)));
+  // Step 3: Parallel crawl of all remaining pages
+  const additionalPages = remaining.length > 0
+    ? await Promise.all(remaining.map((url) => crawlPage(url, allowedHostname)))
+    : [];
 
+  const pages = [rootPage, ...additionalPages];
   const allLinks = [...new Set(pages.flatMap((p) => p.internalLinks))];
   const crawlTimeMs = Date.now() - startTime;
 
+  console.log(`[TinyFish] ═══ Done: ${pages.length} pages | ${allLinks.length} links | ${(crawlTimeMs / 1000).toFixed(1)}s`);
   return { pages, allLinks, crawlTimeMs };
 }
