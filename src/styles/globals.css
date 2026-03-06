@@ -194,3 +194,32 @@ body {
 .web-preview-device-switcher {
   display: none !important;
 }
+
+/* ─── Persona Builder animations ──────────────────────────────────────────── */
+@keyframes pb-fadein    { from { opacity: 0 }                                     to { opacity: 1 } }
+@keyframes pb-slideup   { from { opacity: 0; transform: translateY(28px) }        to { opacity: 1; transform: translateY(0) } }
+@keyframes pb-slidedown { from { opacity: 0; transform: translateY(-28px) }       to { opacity: 1; transform: translateY(0) } }
+@keyframes pb-slideleft { from { opacity: 0; transform: translateX(28px) }        to { opacity: 1; transform: translateX(0) } }
+@keyframes pb-slideright{ from { opacity: 0; transform: translateX(-28px) }       to { opacity: 1; transform: translateX(0) } }
+@keyframes pb-zoomin    { from { opacity: 0; transform: scale(0.8) }              to { opacity: 1; transform: scale(1) } }
+@keyframes pb-bounce    { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-12px) } }
+
+.pb-anim-fadein   { animation: pb-fadein    0.6s ease forwards; }
+.pb-anim-slideup  { animation: pb-slideup   0.6s ease forwards; }
+.pb-anim-slidedown{ animation: pb-slidedown 0.6s ease forwards; }
+.pb-anim-slideleft{ animation: pb-slideleft 0.6s ease forwards; }
+.pb-anim-slideright{ animation: pb-slideright 0.6s ease forwards; }
+.pb-anim-zoomin   { animation: pb-zoomin    0.5s ease forwards; }
+.pb-anim-bounce   { animation: pb-bounce    1s ease infinite; }
+
+/* Hover effects */
+.pb-hover-scale { transition: transform 0.2s ease; }
+.pb-hover-scale:hover { transform: scale(1.05); }
+.pb-hover-lift  { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.pb-hover-lift:hover  { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+.pb-hover-glow  { transition: filter 0.2s ease; }
+.pb-hover-glow:hover  { filter: brightness(1.1) drop-shadow(0 0 8px currentColor); }
+
+/* Legacy aliases */
+.pb-anim-hoverscale { transition: transform 0.2s ease; }
+.pb-anim-hoverscale:hover { transform: scale(1.05); }
