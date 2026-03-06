@@ -113,7 +113,7 @@ export interface CanvasElement {
   socialLinks?: SocialLinkItem[]
   formFields?: FormField[]
   iconName?: string
-  sectionKey?: string
+  anchorId?: string // for in-page anchor navigation (sections/containers)
 }
 
 export type DevicePreset = 'desktop' | 'tablet' | 'mobile' | 'custom'

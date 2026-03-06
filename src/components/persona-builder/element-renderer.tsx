@@ -144,9 +144,7 @@ function HeadingRenderer({ element, isSelected, isPreview, onContentChange }: {
   }
   return (
     <Tag
-  data-pb-heading
-  contentEditable={!isPreview && isSelected}
-     
+      contentEditable={!isPreview && isSelected}
       suppressContentEditableWarning
       onBlur={(e) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
       onMouseDown={isSelected && !isPreview ? (e) => e.stopPropagation() : undefined}
@@ -251,7 +249,6 @@ function ButtonRenderer({ element, isPreview }: { element: CanvasElement; isPrev
 function SectionRenderer({ element }: { element: CanvasElement }) {
   const { styles } = element
   const bgStyle = getBackgroundStyle(styles)
-
   return (
     <div
       style={{
@@ -451,44 +448,15 @@ function IconRenderer({ element }: { element: CanvasElement }) {
 
 function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
   const { styles, content } = element
-  const items = content.split('|').filter(Boolean)
+  const rawItems = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
-
-const NAV_ALIASES: Record<string, string[]> = {
-  services: ['services'],
-  skills: ['skills', 'tech stack'],
-  work: ['work', 'what we do', 'projects', 'portfolio', 'featured projects'],
-  blog: ['blog', 'posts', 'latest posts'],
-  contact: ['contact', 'get in touch', 'lets talk'],
-  about: ['about', 'about me'],
-}
-
-const handleNavClick = (label: string) => {
-  const key = label.toLowerCase().trim()
-  const aliases = NAV_ALIASES[key] ?? [key]
-
-  //  Try sectionKey first (best)
-  const section = document.querySelector(
-    `[data-pb-section="${key}"]`
-  ) as HTMLElement | null
-
-  if (section) {
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    return
-  }
-
-  //  fallback → headings
-  const headings = document.querySelectorAll('[data-pb-heading]')
-
-  const target = Array.from(headings).find((h) => {
-    const text = h.textContent?.toLowerCase() ?? ''
-    return aliases.some(a => text.includes(a))
-  }) as HTMLElement | undefined
-
-  if (target) {
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
-}
+  // Parse "Label::href" format — backward compatible with plain "Label"
+  const navItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
+    .map((item) => {
+      const sepIdx = item.indexOf('::')
+      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2) }
+      return { label: item, href: '#' }
+    })
   return (
     <nav
       style={{
@@ -515,14 +483,19 @@ const handleNavClick = (label: string) => {
           flexShrink: 0,
         }}
       >
-        {items[0] ?? 'Brand'}
+        {rawItems[0] ?? 'Brand'}
       </span>
-
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        {(items.length > 1 ? items.slice(1) : ['Home', 'About', 'Contact']).map((item, i) => (
-          <span
+        {navItems.map((item, i) => (
+          <a
             key={i}
-            onClick={() => isPreview && handleNavClick(item)}
+            href={isPreview ? item.href : undefined}
+            onClick={isPreview ? (e) => {
+              if (item.href.startsWith('#')) {
+                e.preventDefault()
+                document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: 'smooth' })
+              }
+            } : undefined}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -534,8 +507,8 @@ const handleNavClick = (label: string) => {
               whiteSpace: 'nowrap',
             }}
           >
-            {item}
-          </span>
+            {item.label}
+          </a>
         ))}
       </div>
     </nav>
@@ -872,18 +845,18 @@ export function ElementRenderer({
     </a>
   ) : content
 
- return (
-<div
-  ref={elementRef}
-  data-pb-section={element.sectionKey}
-  className={[enterClass, hoverClass].filter(Boolean).join(' ')}
-  style={containerStyle}
-  onMouseDown={startDrag}
-  onClick={(e) => {
-    e.stopPropagation()
-    if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)
-  }}
->
+  return (
+    <div
+      ref={elementRef}
+      id={element.anchorId || undefined}
+      className={[enterClass, hoverClass].filter(Boolean).join(' ')}
+      style={containerStyle}
+      onMouseDown={startDrag}
+      onClick={(e) => {
+        e.stopPropagation()
+        if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)
+      }}
+    >
       {inner}
 
       {showHandles && RESIZE_HANDLES.map(({ dir, style }) => (

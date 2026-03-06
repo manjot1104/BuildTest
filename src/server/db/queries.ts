@@ -3,7 +3,7 @@
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user, github_repos } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos, persona_layouts } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -594,4 +594,101 @@ export async function updateGithubRepoVisibility({
   } catch (error: unknown) {
     throw error
   }
+}
+
+// ============================================================================
+// Persona Layout Queries
+// ============================================================================
+
+export type PersonaLayout = typeof persona_layouts.$inferSelect
+
+export async function createPersonaLayout({
+  userId,
+  title,
+  layout,
+  background,
+}: {
+  userId: string
+  title?: string
+  layout?: string
+  background?: string | null
+}): Promise<PersonaLayout> {
+  const id = randomUUID()
+  const [row] = await db
+    .insert(persona_layouts)
+    .values({
+      id,
+      user_id: userId,
+      title: title ?? 'My Persona',
+      layout: layout ?? '[]',
+      background: background ?? null,
+    })
+    .returning()
+  return row!
+}
+
+export async function getPersonaLayoutsByUserId(userId: string): Promise<PersonaLayout[]> {
+  return db
+    .select()
+    .from(persona_layouts)
+    .where(eq(persona_layouts.user_id, userId))
+    .orderBy(desc(persona_layouts.updated_at))
+}
+
+export async function getPersonaLayoutById(id: string): Promise<PersonaLayout | null> {
+  const [row] = await db
+    .select()
+    .from(persona_layouts)
+    .where(eq(persona_layouts.id, id))
+  return row ?? null
+}
+
+export async function getPersonaLayoutBySlug(slug: string): Promise<PersonaLayout | null> {
+  const [row] = await db
+    .select()
+    .from(persona_layouts)
+    .where(and(eq(persona_layouts.slug, slug), eq(persona_layouts.is_published, true)))
+  return row ?? null
+}
+
+export async function updatePersonaLayout(
+  id: string,
+  userId: string,
+  data: { title?: string; layout?: string; background?: string | null },
+): Promise<void> {
+  await db
+    .update(persona_layouts)
+    .set({ ...data, updated_at: new Date() })
+    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+}
+
+export async function publishPersonaLayout(
+  id: string,
+  userId: string,
+  slug: string,
+  title?: string,
+): Promise<void> {
+  await db
+    .update(persona_layouts)
+    .set({
+      slug,
+      is_published: true,
+      published_at: new Date(),
+      updated_at: new Date(),
+      ...(title ? { title } : {}),
+    })
+    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+}
+
+export async function unpublishPersonaLayout(id: string, userId: string): Promise<void> {
+  await db
+    .update(persona_layouts)
+    .set({ is_published: false, updated_at: new Date() })
+    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
+}
+
+export async function deletePersonaLayout(id: string, userId: string): Promise<void> {
+  await db
+    .delete(persona_layouts)
+    .where(and(eq(persona_layouts.id, id), eq(persona_layouts.user_id, userId)))
 }
