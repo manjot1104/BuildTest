@@ -6,11 +6,6 @@ import { user_resumes, resume_templates } from '@/server/db/schema'
 import { eq, desc } from 'drizzle-orm'
 import { generatePDFFromLatexPuppeteer } from '@/server/services/pdf.service'
 import { getV0Client } from '@/lib/v0-client'
-import {
-  hasEnoughCredits,
-  deductCreditsForPrompt,
-  hasActiveSubscription,
-} from '@/server/services/credits.service'
 import type { ApiErrorResponse } from '@/types/api.types'
 import crypto from 'crypto'
 

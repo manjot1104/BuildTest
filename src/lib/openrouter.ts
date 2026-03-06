@@ -8,6 +8,7 @@ interface ResumeData {
   experience: string
   education: string
   projects: string
+  additionalInstructions?: string
 }
 
 /**
@@ -37,6 +38,7 @@ User Information:
 - Experience: ${data.experience}
 - Education: ${data.education}
 - Projects: ${data.projects}
+${data.additionalInstructions ? `\nAdditional Instructions:\n${data.additionalInstructions}` : ''}
 
 Generate the complete LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
 

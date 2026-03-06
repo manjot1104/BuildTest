@@ -12,6 +12,7 @@ const resumeRequestSchema = z.object({
   experience: z.string().min(1),
   education: z.string().min(1),
   projects: z.string().min(1),
+  additionalInstructions: z.string().optional(),
 })
 
 export async function POST(request: NextRequest) {

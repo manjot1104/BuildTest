@@ -16,7 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
-import { Loader2, FileDown, Edit, Check, X } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
@@ -29,6 +29,7 @@ const resumeSchema = z.object({
   experience: z.string().min(1, 'Experience is required'),
   education: z.string().min(1, 'Education is required'),
   projects: z.string().min(1, 'Projects are required'),
+  additionalInstructions: z.string().optional(),
 })
 
 type ResumeFormData = z.infer<typeof resumeSchema>
@@ -44,6 +45,8 @@ export default function AIResumeBuilderPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [rawAIResponse, setRawAIResponse] = useState('')
   const [showRawResponse, setShowRawResponse] = useState(false)
+  const [followUpPrompt, setFollowUpPrompt] = useState('')
+  const [isProcessingFollowUp, setIsProcessingFollowUp] = useState(false)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -55,6 +58,7 @@ export default function AIResumeBuilderPage() {
       experience: '',
       education: '',
       projects: '',
+      additionalInstructions: '',
     },
   })
 
@@ -163,11 +167,63 @@ export default function AIResumeBuilderPage() {
     setIsEditing(false)
   }
 
+  // Handle follow-up prompt to modify LaTeX
+  const handleFollowUpPrompt = async () => {
+    if (!followUpPrompt.trim()) {
+      toast.error('Please enter a prompt')
+      return
+    }
+
+    setIsProcessingFollowUp(true)
+    toast.loading('Processing your request...', { id: 'follow-up' })
+
+    try {
+      const response = await fetch('/api/resume/follow-up', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentLatex: editedLatex || latexCode,
+          prompt: followUpPrompt,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to process follow-up' }))
+        throw new Error(error.error || 'Failed to process follow-up prompt')
+      }
+
+      const result = await response.json()
+      const updatedLatex = result.latex
+      const rawResponse = result.rawResponse || ''
+
+      if (!updatedLatex) {
+        throw new Error('No LaTeX code returned from AI')
+      }
+
+      setLatexCode(updatedLatex)
+      setEditedLatex(updatedLatex)
+      setRawAIResponse(rawResponse)
+      setFollowUpPrompt('')
+      toast.success('LaTeX updated successfully!', { id: 'follow-up' })
+    } catch (error) {
+      console.error('Error processing follow-up:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to process follow-up. Please try again.',
+        { id: 'follow-up' }
+      )
+    } finally {
+      setIsProcessingFollowUp(false)
+    }
+  }
+
   const handleReset = () => {
     setCurrentStep('form')
     setLatexCode('')
     setEditedLatex('')
     setRawAIResponse('')
+    setFollowUpPrompt('')
     setIsEditing(false)
     setShowRawResponse(false)
     form.reset()
@@ -279,6 +335,54 @@ export default function AIResumeBuilderPage() {
             ) : (
               <LaTeXPreview code={latexCode} />
             )}
+          </div>
+
+          {/* Follow-up Prompt Section */}
+          <div className="border rounded-lg p-4 bg-muted/20">
+            <div className="mb-3">
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">AI Follow-up</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Ask AI to make changes to the LaTeX code. For example: "Make the header more prominent", "Add a color scheme", "Change the font size", etc.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                value={followUpPrompt}
+                onChange={(e) => setFollowUpPrompt(e.target.value)}
+                placeholder="e.g., Make the header more prominent, add colors, change layout..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault()
+                    handleFollowUpPrompt()
+                  }
+                }}
+                disabled={isProcessingFollowUp}
+              />
+              <Button
+                onClick={handleFollowUpPrompt}
+                disabled={isProcessingFollowUp || !followUpPrompt.trim()}
+                size="default"
+              >
+                {isProcessingFollowUp ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-2 h-4 w-4" />
+                    Apply Changes
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Press Ctrl+Enter (or Cmd+Enter on Mac) to submit
+            </p>
           </div>
 
           {/* Action Buttons */}
@@ -442,6 +546,27 @@ export default function AIResumeBuilderPage() {
                 </FormControl>
                 <FormDescription>
                   Describe your notable projects, including technologies used and key features.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="additionalInstructions"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Additional Instructions (Optional)</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="e.g., Use a modern color scheme, make it more creative, add icons, use a two-column layout..."
+                    className="min-h-[100px]"
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  Add any specific instructions for the resume style, layout, colors, or formatting. These will be included in the AI prompt.
                 </FormDescription>
                 <FormMessage />
               </FormItem>
