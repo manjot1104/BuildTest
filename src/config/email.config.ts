@@ -41,10 +41,10 @@ function emailLayout(content: string): string {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="padding:32px 32px 0;text-align:center;">
-              <div style="display:inline-block;background-color:#3B7EFF;border-radius:8px;padding:8px 10px;margin-bottom:16px;">
-                <span style="color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:-0.5px;">B</span>
-              </div>
-              <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
+              <a href="${env.NEXT_PUBLIC_APP_URL}" style="text-decoration:none;">
+                <img src="${env.NEXT_PUBLIC_APP_URL}/favicon.svg" alt="${EMAIL_CONFIG.companyName}" width="40" height="40" style="display:inline-block;margin-bottom:12px;" />
+                <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
+              </a>
             </td>
           </tr>
           <tr>
@@ -54,7 +54,7 @@ function emailLayout(content: string): string {
           </tr>
           <tr>
             <td style="padding:16px 32px;border-top:1px solid #e4e4e7;text-align:center;">
-              <p style="margin:0;color:#a1a1aa;font-size:12px;">&copy; ${new Date().getFullYear()} ${EMAIL_CONFIG.companyName}. All rights reserved.</p>
+              <p style="margin:0;color:#a1a1aa;font-size:12px;">&copy; ${new Date().getFullYear()} <a href="${env.NEXT_PUBLIC_APP_URL}" style="color:#a1a1aa;text-decoration:none;">${EMAIL_CONFIG.companyName}</a>. All rights reserved.</p>
             </td>
           </tr>
         </table>
