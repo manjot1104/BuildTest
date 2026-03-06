@@ -99,21 +99,6 @@ type ChatMessage = {
   content: string;
 };
 
-async function tryModel(
-  openai: OpenAI,
-  modelId: string,
-  messages: ChatMessage[],
-) {
-  const stream = await openai.chat.completions.create({
-    model: modelId,
-    messages,
-    max_tokens: 1,
-    temperature: 0,
-    stream: true,
-  });
-
-  return stream;
-}
 type ParsedFile = {
   filename: string;
   language: string;
@@ -208,27 +193,36 @@ const apiMessages: ChatMessage[] = [
     let selectedModel: string | null = null;
 
     // ---------------------------
-    //  PHASE 1: Select Working Model
+    //  PHASE 1: Select Working Model (lightweight probe)
     // ---------------------------
     for (const modelId of chain) {
       try {
-       await openai.chat.completions.create({
-  model: modelId,
-  messages: apiMessages,
-  max_tokens: 1,
-  temperature: 0,
-});
+        await openai.chat.completions.create({
+          model: modelId,
+          messages: [{ role: "user", content: "hi" }],
+          max_tokens: 1,
+          temperature: 0,
+        });
 
         selectedModel = modelId;
         break;
       } catch (err: any) {
-        if (err?.message?.includes("429")) continue;
+        const status = err?.status ?? err?.statusCode;
+        const msg = err?.message ?? "";
+        // Continue to next model on rate limit, service unavailable, or model-specific errors
+        if (status === 429 || status === 503 || status === 502 || msg.includes("429") || msg.includes("rate") || msg.includes("limit") || msg.includes("unavailable") || msg.includes("overloaded")) {
+          console.warn(`Model ${modelId} unavailable (${status}): ${msg.slice(0, 100)}`);
+          continue;
+        }
+        // For other errors (auth, bad request, etc.) also try next model
+        console.warn(`Model ${modelId} failed (${status}): ${msg.slice(0, 100)}`);
+        continue;
       }
     }
 
     if (!selectedModel) {
       return NextResponse.json(
-        { error: "All models rate limited" },
+        { error: "All models are currently unavailable. Please try again later." },
         { status: 503 }
       );
     }
