@@ -119,29 +119,37 @@ function HeadingRenderer({ element, isSelected, isPreview, onContentChange }: {
   onContentChange: (id: string, content: string) => void
 }) {
   const { styles, headingLevel = 1, content } = element
-  const Tag: React.ElementType = `h${headingLevel}`
-  const style: React.CSSProperties = {
-    width: '100%',
-    height: '100%',
-    color: styles.color ?? '#1a1a1a',
-    fontSize: styles.fontSize ?? 48,
-    fontWeight: styles.fontWeight ?? '700',
-    fontFamily: styles.fontFamily ?? 'inherit',
-    textAlign: styles.textAlign ?? 'left',
-    letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-    lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
-    padding: styles.padding ?? 4,
-    background: styles.backgroundColor,
-    borderRadius: styles.borderRadius ?? 0,
-    textDecoration: styles.textDecoration,
-    wordBreak: 'break-word',
-    whiteSpace: 'pre-wrap',
-    margin: 0,
-    cursor: isSelected && !isPreview ? 'text' : 'inherit',
-    outline: isSelected ? '1px dashed #93c5fd' : 'none',
-    display: 'flex',
-    alignItems: 'center',
-  }
+const Tag: React.ElementType = `h${headingLevel}`
+
+const headingSizes = {
+  1: 64,
+  2: 48,
+  3: 36,
+  4: 28,
+  5: 22,
+  6: 18,
+}
+
+const style: React.CSSProperties = {
+  width: '100%',
+  minHeight: '100%',
+  color: styles.color ?? '#1a1a1a',
+overflow: 'hidden',
+ fontSize: styles.fontSize ?? 48,
+
+  fontWeight: styles.fontWeight ?? '700',
+  fontFamily: styles.fontFamily ?? 'inherit',
+  textAlign: styles.textAlign ?? 'left',
+  letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+  lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
+  padding: styles.padding ?? 4,
+  background: styles.backgroundColor,
+  borderRadius: styles.borderRadius ?? 0,
+  textDecoration: styles.textDecoration,
+  wordBreak: 'break-word',
+  whiteSpace: 'pre-wrap',
+  margin: 0,
+}
   return (
     <Tag
       contentEditable={!isPreview && isSelected}
