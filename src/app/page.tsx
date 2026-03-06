@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2 } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, Gift, Check } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -587,75 +587,157 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* ── Features Section ── */}
+            {/* ── Free Tier Banner ── */}
+            <section className="relative py-20 md:py-24 px-6 bg-gradient-to-b from-primary/[0.03] to-transparent">
+                <motion.div
+                    variants={scaleIn}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={{ once: true, margin: '-60px' }}
+                    className="max-w-4xl mx-auto"
+                >
+                    <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-background p-8 md:p-12">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+                        <div className="relative flex flex-col md:flex-row items-center gap-8 md:gap-12">
+                            <div className="flex size-16 md:size-20 items-center justify-center rounded-2xl bg-primary/10 shrink-0">
+                                <Gift className="size-8 md:size-10 text-primary" />
+                            </div>
+                            <div className="flex-1 text-center md:text-left">
+                                <h3 className="text-2xl md:text-3xl font-bold tracking-tight">
+                                    Start free with 200 credits
+                                </h3>
+                                <p className="mt-2 text-sm text-muted-foreground leading-relaxed max-w-lg">
+                                    Every new account gets 200 free credits instantly. No credit card required.
+                                    Use them to build apps, chat with AI, create resumes, and design — all included.
+                                </p>
+                                <div className="flex flex-wrap justify-center md:justify-start gap-3 mt-4">
+                                    {['200 free credits', 'No credit card', 'All tools included', 'Upgrade anytime'].map((item) => (
+                                        <span key={item} className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                                            <Check className="size-3.5 text-emerald-500" />
+                                            {item}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                            <Button
+                                size="lg"
+                                onClick={handleGetStarted}
+                                className="rounded-full h-11 px-6 text-sm font-medium gap-2 shrink-0"
+                            >
+                                Get Started Free
+                                <ArrowRight className="size-4" />
+                            </Button>
+                        </div>
+                    </div>
+                </motion.div>
+            </section>
+
+            {/* ── Tools / Features Section ── */}
             <section id="features" className="relative py-32 md:py-40 px-6">
                 <div className="max-w-6xl mx-auto">
                     {/* Section header */}
                     <div className="max-w-xl mb-20">
-                        <SectionLabel>Capabilities</SectionLabel>
+                        <SectionLabel>Tools</SectionLabel>
                         <RevealText delay={0.1} className="mt-4">
                             <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
-                                Everything you need,
+                                One platform,
                             </h2>
                         </RevealText>
                         <RevealText delay={0.2}>
                             <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1] text-muted-foreground/40">
-                                nothing you don&apos;t.
+                                four powerful tools.
                             </h2>
                         </RevealText>
+                        <motion.p
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.3}
+                            className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md"
+                        >
+                            Everything you need to go from idea to production — builder, AI assistant, resume creator, and design studio.
+                        </motion.p>
                     </div>
 
-                    {/* Bento grid */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border/50 rounded-2xl overflow-hidden border border-border/50">
+                    {/* Product cards — 2x2 grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {[
                             {
-                                icon: Zap,
-                                title: 'Lightning Fast',
-                                description: 'Generate production-ready code in seconds. Our AI understands context and delivers precise, clean results.',
+                                icon: Wrench,
+                                color: 'text-blue-500',
+                                bg: 'bg-blue-500/10',
+                                ring: 'ring-blue-500/20',
+                                title: 'Builder',
+                                badge: 'Uses Credits',
+                                description: 'Generate full-stack applications, dashboards, landing pages, and complex UIs from a single prompt. Powered by AI — iterate through conversation until it matches your vision.',
+                                features: ['Full-stack app generation', 'Live preview & deploy', 'Iterative refinement', 'Export & push to GitHub'],
                             },
                             {
-                                icon: Shield,
-                                title: 'Secure by Default',
-                                description: 'Built-in security best practices. Your code follows industry standards from the first line.',
+                                icon: MessageSquareText,
+                                color: 'text-violet-500',
+                                bg: 'bg-violet-500/10',
+                                ring: 'ring-violet-500/20',
+                                title: 'AI Chat',
+                                badge: 'Free',
+                                description: 'Chat with multiple AI models for brainstorming, debugging, code explanations, and quick prototyping. Switch between models to find the best answer.',
+                                features: ['Multiple AI models', 'Code highlighting', 'Markdown support', 'Conversation history'],
                             },
                             {
-                                icon: Code2,
-                                title: 'Multi-Language',
-                                description: 'Support for 20+ programming languages and frameworks. React, Python, Go, and beyond.',
+                                icon: FileUser,
+                                color: 'text-emerald-500',
+                                bg: 'bg-emerald-500/10',
+                                ring: 'ring-emerald-500/20',
+                                title: 'Resume Builder',
+                                badge: 'Free',
+                                description: 'Create professional, ATS-friendly resumes with AI assistance. Choose from LaTeX templates and export as high-quality PDF — ready to send to recruiters.',
+                                features: ['LaTeX templates', 'AI-assisted writing', 'PDF export', 'ATS-optimized'],
                             },
                             {
-                                icon: Layers,
-                                title: 'Full Stack',
-                                description: 'Complete applications with frontend, backend, and database — generated from a single conversation.',
+                                icon: Palette,
+                                color: 'text-amber-500',
+                                bg: 'bg-amber-500/10',
+                                ring: 'ring-amber-500/20',
+                                title: 'Buildify Studio',
+                                badge: 'Free',
+                                description: 'Design and publish interactive web pages visually. Drag, drop, and customize layouts with a live editor — then share with a public link or custom slug.',
+                                features: ['Visual drag & drop', 'Live preview', 'Publish with custom URL', 'Responsive layouts'],
                             },
-                            {
-                                icon: Globe,
-                                title: 'Deploy Anywhere',
-                                description: 'Export and deploy to any platform. Vercel, AWS, or your own infrastructure.',
-                            },
-                            {
-                                icon: Sparkles,
-                                title: 'Iterative AI',
-                                description: 'Refine through conversation. Each iteration improves on the last, understanding your preferences.',
-                            },
-                        ].map((feature, index) => (
+                        ].map((tool, index) => (
                             <motion.div
                                 key={index}
                                 variants={scaleIn}
                                 initial="hidden"
                                 whileInView="visible"
                                 viewport={{ once: true, margin: '-60px' }}
-                                custom={index * 0.05}
-                                className="group relative bg-background p-8 md:p-10 transition-colors duration-300 hover:bg-muted/30"
+                                custom={index * 0.08}
+                                className="group relative rounded-2xl border border-border/50 bg-background p-7 md:p-9 transition-all duration-300 hover:border-border hover:shadow-sm"
                             >
-                                <div className="flex items-start gap-4">
-                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-primary/10">
-                                        <feature.icon className="size-5 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
+                                <div className="flex items-start justify-between mb-5">
+                                    <div className={`flex size-12 items-center justify-center rounded-xl ${tool.bg} ring-1 ${tool.ring}`}>
+                                        <tool.icon className={`size-6 ${tool.color}`} />
                                     </div>
-                                    <div>
-                                        <h3 className="text-base font-semibold mb-1.5">{feature.title}</h3>
-                                        <p className="text-sm text-muted-foreground leading-relaxed">{feature.description}</p>
-                                    </div>
+                                    <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wider ${
+                                        tool.badge === 'Free'
+                                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                                    }`}>
+                                        {tool.badge}
+                                    </span>
+                                </div>
+                                <h3 className="text-xl font-bold mb-2">{tool.title}</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+                                    {tool.description}
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {tool.features.map((feature) => (
+                                        <span key={feature} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                            <span className={`flex size-4 items-center justify-center rounded-full ${tool.bg}`}>
+                                                <Check className={`size-2.5 ${tool.color}`} />
+                                            </span>
+                                            {feature}
+                                        </span>
+                                    ))}
                                 </div>
                             </motion.div>
                         ))}
@@ -823,7 +905,7 @@ export default function LandingPage() {
                         custom={0.3}
                         className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
-                        Join thousands of developers shipping faster with AI-powered code generation.
+                        Sign up and get 200 free credits instantly. No credit card needed — start building right away.
                     </motion.p>
                     <motion.div
                         variants={fadeIn}
