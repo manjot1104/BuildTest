@@ -42,9 +42,9 @@ function emailLayout(content: string): string {
           <tr>
             <td style="padding:32px 32px 0;text-align:center;">
               <a href="${env.NEXT_PUBLIC_APP_URL}" style="text-decoration:none;">
-                <img src="${env.NEXT_PUBLIC_APP_URL}/favicon.svg" alt="${EMAIL_CONFIG.companyName}" width="40" height="40" style="display:inline-block;margin-bottom:12px;" />
-                <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
+                <img src="${env.NEXT_PUBLIC_APP_URL}/favicon.png" alt="${EMAIL_CONFIG.companyName}" width="40" height="40" style="display:block;margin:0 auto 12px;border:0;outline:none;" />
               </a>
+              <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
             </td>
           </tr>
           <tr>
