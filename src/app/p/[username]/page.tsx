@@ -1,6 +1,7 @@
 import React from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import { env } from '@/env'
 import {
   type CanvasElement,
   type CanvasBackground,
@@ -20,8 +21,8 @@ interface DesignData {
 async function getDesign(slug: string): Promise<DesignData | null> {
   try {
     const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+      env.NEXT_PUBLIC_APP_URL ??
+      (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : 'http://localhost:3000')
     const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { next: { revalidate: 60 } })
     if (!res.ok) return null
     return (await res.json()) as DesignData

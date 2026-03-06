@@ -44,8 +44,8 @@ export async function POST(request: NextRequest) {
 
     // Add OpenRouter specific headers if using OpenRouter
     if (!useOpenAI) {
-      if (process.env.NEXT_PUBLIC_APP_URL) {
-        headers['HTTP-Referer'] = process.env.NEXT_PUBLIC_APP_URL
+      if (env.NEXT_PUBLIC_APP_URL) {
+        headers['HTTP-Referer'] = env.NEXT_PUBLIC_APP_URL
       }
       headers['X-Title'] = 'Buildify AI Resume Builder'
     }

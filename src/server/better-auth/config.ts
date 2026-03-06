@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
 
 import { db } from "@/server/db";
+import { env } from "@/env";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
@@ -11,7 +12,7 @@ import {
 } from "@/server/services/email.service";
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  baseURL: env.BETTER_AUTH_URL ?? "http://localhost:3000",
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
@@ -38,11 +39,11 @@ export const auth = betterAuth({
     },
   },
   socialProviders: {
-    ...(process.env.GITHUB_CLIENT_ID &&
-      process.env.GITHUB_CLIENT_SECRET && {
+    ...(env.GITHUB_CLIENT_ID &&
+      env.GITHUB_CLIENT_SECRET && {
         github: {
-          clientId: process.env.GITHUB_CLIENT_ID,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          clientId: env.GITHUB_CLIENT_ID,
+          clientSecret: env.GITHUB_CLIENT_SECRET,
           scope: ["read:user", "user:email", "repo"],
         },
       }),

@@ -37,6 +37,8 @@ export const env = createEnv({
     DAYTONA_API_KEY: z.string().min(1).optional(),
     DAYTONA_API_URL: z.string().url().optional(),
     DAYTONA_TARGET: z.string().optional(),
+    BETTER_AUTH_URL: z.string().url().optional(),
+    VERCEL_URL: z.string().optional(),
   },
   /**
    * Specify your client-side environment variables schema here. This way you can ensure the app
@@ -45,6 +47,7 @@ export const env = createEnv({
    */
   client: {
     NEXT_PUBLIC_RAZORPAY_KEY_ID: z.string().min(1),
+    NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   },
 
   /**
@@ -75,6 +78,9 @@ export const env = createEnv({
     DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
     DAYTONA_API_URL: process.env.DAYTONA_API_URL,
     DAYTONA_TARGET: process.env.DAYTONA_TARGET,
+    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL,
+    VERCEL_URL: process.env.VERCEL_URL,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

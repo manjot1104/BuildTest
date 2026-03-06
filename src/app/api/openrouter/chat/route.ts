@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { user_chats } from "@/server/db/schema";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
+import { env } from "@/env";
 import { conversations, conversation_messages } from "@/server/db/schema";
 import { nanoid } from "nanoid";
 import { eq} from "drizzle-orm";
@@ -160,7 +161,7 @@ const code = extracted ? extracted.trim() : innerContent;
   };
 }
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
       { error: "OPENROUTER_API_KEY missing" },

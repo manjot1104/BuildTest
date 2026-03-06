@@ -2,6 +2,7 @@
  * Email Configuration
  * Centralized configuration for all email-related values and templates
  */
+import { env } from "@/env";
 
 export const EMAIL_CONFIG = {
   fromEmail: "Buildify <noreply@buildify.app>",
@@ -181,11 +182,11 @@ export function getWelcomeEmailTemplate({
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
         <td align="center" style="padding:0 0 24px;">
-          <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/chat" style="display:inline-block;background-color:#3B7EFF;color:#ffffff;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Start Building</a>
+          <a href="${env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/chat" style="display:inline-block;background-color:#3B7EFF;color:#ffffff;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Start Building</a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;color:#a1a1aa;font-size:12px;">Need help? Check out our <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/docs" style="color:#3b82f6;text-decoration:none;">documentation</a>.</p>`;
+    <p style="margin:0;color:#a1a1aa;font-size:12px;">Need help? Check out our <a href="${env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/docs" style="color:#3b82f6;text-decoration:none;">documentation</a>.</p>`;
 
   return {
     subject: `Welcome to ${EMAIL_CONFIG.companyName}!`,
