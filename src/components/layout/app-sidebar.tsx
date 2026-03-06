@@ -7,6 +7,7 @@ import {
     Settings2,
     SquareTerminal,
     BrainCircuit,
+    Bug,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -73,6 +74,11 @@ const buildNavItems = (
             { title: "Limits", onClick: () => onSettingsClick("limits") },
         ],
     },
+    {
+        title: "Testing",
+        url: "/testing",
+        icon: Bug
+    }
 ]
 
 const platforms = [
