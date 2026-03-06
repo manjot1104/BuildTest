@@ -10,14 +10,16 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2 } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
-import { savePromptToStorage } from '@/components/ai-elements/prompt-input'
+import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
+import { useSpeechRecord } from '@/hooks/use-speech-record'
+import Image from 'next/image'
 
 // --- Animation Variants ---
 
@@ -91,6 +93,124 @@ function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; dela
     )
 }
 
+// --- Attachment Preview ---
+
+function getFileTypeInfo(file: File) {
+    const type = file.type
+    const name = file.name.toLowerCase()
+    if (type.startsWith('video/') || name.endsWith('.mp4') || name.endsWith('.mov') || name.endsWith('.webm'))
+        return { label: 'Video', color: '#a855f7', bg: 'rgba(168,85,247,0.12)' }
+    if (type === 'application/pdf' || name.endsWith('.pdf'))
+        return { label: 'PDF', color: '#ef4444', bg: 'rgba(239,68,68,0.12)' }
+    if (type.includes('word') || name.endsWith('.doc') || name.endsWith('.docx'))
+        return { label: 'Document', color: '#3B7EFF', bg: 'rgba(59,126,255,0.12)' }
+    if (type.includes('spreadsheet') || name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv'))
+        return { label: 'Spreadsheet', color: '#16a34a', bg: 'rgba(22,163,74,0.12)' }
+    if (type.includes('presentation') || name.endsWith('.ppt') || name.endsWith('.pptx'))
+        return { label: 'Presentation', color: '#f97316', bg: 'rgba(249,115,22,0.12)' }
+    return { label: 'File', color: '#6b7280', bg: 'rgba(107,114,128,0.12)' }
+}
+
+function AttachmentCard({ attachment, onRemove }: { attachment: ImageAttachment; onRemove: () => void }) {
+    const isImage = attachment.file.type.startsWith('image/')
+    const { label, color, bg } = getFileTypeInfo(attachment.file)
+    const shortName = attachment.file.name.length > 22
+        ? attachment.file.name.slice(0, 19) + '…'
+        : attachment.file.name
+
+    if (isImage && attachment.preview) {
+        return (
+            <div className="relative group rounded-xl overflow-hidden border border-border/30 shrink-0 w-14 h-14">
+                <Image
+                    src={attachment.preview}
+                    alt={attachment.file.name}
+                    width={56}
+                    height={56}
+                    className="w-14 h-14 object-cover block"
+                    unoptimized
+                />
+                <button
+                    type="button"
+                    onClick={onRemove}
+                    className="absolute top-0.5 right-0.5 size-4 rounded-full bg-black/55 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                    <X className="size-2.5" />
+                </button>
+            </div>
+        )
+    }
+
+    return (
+        <div className="relative group flex items-center gap-2.5 rounded-xl bg-muted/50 border border-border/40 pl-2.5 pr-7 py-2 max-w-[200px] shrink-0">
+            <div
+                className="size-9 rounded-lg flex items-center justify-center shrink-0"
+                style={{ backgroundColor: bg }}
+            >
+                <FileText className="size-4" style={{ color }} />
+            </div>
+            <div className="min-w-0">
+                <p className="text-xs font-medium leading-tight truncate">{shortName}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+            </div>
+            <button
+                type="button"
+                onClick={onRemove}
+                className="absolute top-1 right-1 size-4 rounded-full bg-foreground/15 hover:bg-foreground/30 text-foreground flex items-center justify-center transition-colors"
+            >
+                <X className="size-2.5" />
+            </button>
+        </div>
+    )
+}
+
+// --- Hero Prompt Input ---
+
+const ROTATING_WORDS = [
+    'portfolio website',
+    'landing page',
+    'startup website',
+    'personal blog',
+    'AI-powered tool',
+    'SaaS dashboard',
+    'mobile app UI',
+    'e-commerce store',
+]
+
+function DynamicPlaceholder({ paused }: { paused: boolean }) {
+    const [index, setIndex] = useState(0)
+    const [out, setOut] = useState(false)
+
+    useEffect(() => {
+        if (paused) return
+        const id = setInterval(() => {
+            setOut(true)
+            setTimeout(() => {
+                setIndex((i) => (i + 1) % ROTATING_WORDS.length)
+                setOut(false)
+            }, 280)
+        }, 2600)
+        return () => clearInterval(id)
+    }, [paused])
+
+    return (
+        <span className="select-none text-sm leading-relaxed">
+            <span className="text-muted-foreground/65">Build a </span>
+            <span
+                style={{
+                    display: 'inline-block',
+                    opacity: out ? 0 : 1,
+                    transform: out ? 'translateY(-6px)' : 'translateY(0)',
+                    transition: 'opacity 0.26s ease, transform 0.26s ease',
+                    color: '#3B7EFF',
+                    fontWeight: 500,
+                }}
+            >
+                {ROTATING_WORDS[index]}
+            </span>
+        </span>
+    )
+}
+
 // --- Main Page ---
 
 export default function LandingPage() {
@@ -98,8 +218,20 @@ export default function LandingPage() {
     const router = useRouter()
     const { theme, setTheme } = useTheme()
     const heroRef = useRef<HTMLDivElement>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     const [navScrolled, setNavScrolled] = useState(false)
     const [prompt, setPrompt] = useState('')
+    const [inputFocused, setInputFocused] = useState(false)
+    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const { state: micState, error: micError, clearError: clearMicError, toggle: toggleMic } = useSpeechRecord(
+        (text) => setPrompt((prev) => (prev ? `${prev} ${text}` : text)),
+    )
+
+    useEffect(() => {
+        if (!micError) return
+        const t = setTimeout(clearMicError, 5000)
+        return () => clearTimeout(t)
+    }, [micError, clearMicError])
 
     const { scrollYProgress } = useScroll({
         target: heroRef,
@@ -123,13 +255,31 @@ export default function LandingPage() {
 
     const handlePromptSubmit = (value: string) => {
         const trimmed = value.trim()
-        if (!trimmed) return
-        savePromptToStorage(trimmed, [])
+        if (!trimmed && attachments.length === 0) return
+        savePromptToStorage(trimmed, attachments)
         if (session?.user) {
             router.push('/chat')
         } else {
             router.push('/login')
         }
+    }
+
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files ?? [])
+        if (!files.length) return
+        const newAttachments = await Promise.all(
+            files.map((file) => {
+                if (file.type.startsWith('image/')) return createImageAttachment(file)
+                return Promise.resolve<ImageAttachment>({
+                    id: Math.random().toString(36).slice(2, 9),
+                    file,
+                    dataUrl: '',
+                    preview: '',
+                })
+            })
+        )
+        setAttachments((prev) => [...prev, ...newAttachments])
+        e.target.value = ''
     }
 
     return (
@@ -250,35 +400,130 @@ export default function LandingPage() {
                         custom={0.9}
                         className="w-full max-w-2xl mx-auto"
                     >
-                        <div className="relative rounded-2xl border border-border/60 bg-background shadow-lg overflow-hidden focus-within:border-border focus-within:shadow-xl transition-all duration-200">
-                            <textarea
-                                value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                        e.preventDefault()
-                                        handlePromptSubmit(prompt)
-                                    }
-                                }}
-                                placeholder="Describe the app you want to build..."
-                                rows={3}
-                                className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none"
-                            />
-                            <div className="flex items-center justify-between px-4 pb-3 pt-1">
-                                <p className="text-xs text-muted-foreground/40">Press Enter to submit &middot; Shift+Enter for new line</p>
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt"
+                            multiple
+                            className="hidden"
+                            onChange={handleFileChange}
+                        />
+
+                        {/* Main input card — no border, only neon shadow */}
+                        <div
+                            className="relative rounded-2xl bg-background overflow-hidden transition-all duration-300"
+                            style={{
+                                boxShadow: inputFocused
+                                    ? '0 0 0 2px rgba(59,126,255,0.5), 0 0 0 5px rgba(59,126,255,0.10), 0 4px 32px rgba(59,126,255,0.22), 0 10px 40px rgba(0,0,0,0.10)'
+                                    : '0 0 0 1.5px rgba(59,126,255,0.28), 0 4px 24px rgba(59,126,255,0.15), 0 8px 36px rgba(0,0,0,0.08)',
+                            }}
+                        >
+                            {/* Attachment preview strip */}
+                            {attachments.length > 0 && (
+                                <div className="flex flex-wrap gap-2 px-4 pt-4">
+                                    {attachments.map((att) => (
+                                        <AttachmentCard
+                                            key={att.id}
+                                            attachment={att}
+                                            onRemove={() => setAttachments((a) => a.filter((x) => x.id !== att.id))}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Textarea with animated placeholder overlay */}
+                            <div className="relative">
+                                {!prompt && (
+                                    <div className="absolute top-5 left-5 pointer-events-none">
+                                        <DynamicPlaceholder paused={inputFocused} />
+                                    </div>
+                                )}
+                                <textarea
+                                    value={prompt}
+                                    onChange={(e) => setPrompt(e.target.value)}
+                                    onFocus={() => setInputFocused(true)}
+                                    onBlur={() => setInputFocused(false)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                            e.preventDefault()
+                                            handlePromptSubmit(prompt)
+                                        }
+                                    }}
+                                    placeholder=""
+                                    className="w-full resize-none bg-transparent px-5 pt-5 pb-3 text-sm min-h-[96px] leading-relaxed focus:outline-none"
+                                />
+                            </div>
+
+                            {/* Toolbar */}
+                            <div className="flex items-center justify-between px-3 pb-3 pt-0.5">
+                                {/* Left: upload + mic */}
+                                <div className="flex items-center gap-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="size-8 rounded-xl flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-all duration-150"
+                                        title="Attach media"
+                                    >
+                                        <Plus className="size-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={toggleMic}
+                                        disabled={micState === 'processing'}
+                                        title={
+                                            micState === 'recording'
+                                                ? 'Stop recording'
+                                                : micState === 'processing'
+                                                ? 'Processing…'
+                                                : 'Voice input'
+                                        }
+                                        className={[
+                                            'size-8 rounded-xl flex items-center justify-center transition-all duration-200',
+                                            micState === 'recording'
+                                                ? 'bg-[#3B7EFF] text-white shadow-[0_2px_12px_rgba(59,126,255,0.55)]'
+                                                : micState === 'processing'
+                                                ? 'text-muted-foreground/50 cursor-wait'
+                                                : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
+                                        ].join(' ')}
+                                    >
+                                        {micState === 'processing' ? (
+                                            <Loader2 className="size-4 animate-spin" />
+                                        ) : (
+                                            <Mic className={['size-4', micState === 'recording' ? 'animate-pulse' : ''].join(' ')} />
+                                        )}
+                                    </button>
+                                </div>
+
+                                {/* Right: Build button */}
                                 <Button
                                     size="sm"
                                     onClick={() => handlePromptSubmit(prompt)}
-                                    disabled={!prompt.trim()}
-                                    className="rounded-xl h-8 px-3 gap-1.5 text-xs font-medium"
+                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200"
+                                    style={{ boxShadow: '0 2px 14px rgba(59,126,255,0.45)' }}
                                 >
                                     Build
-                                    <SendHorizonal className="size-3" />
+                                    <SendHorizonal className="size-3.5" />
                                 </Button>
                             </div>
+
                         </div>
 
-                        {/* Example prompts */}
+                        {/* Mic error toast */}
+                        {micError && (
+                            <div className="flex items-center gap-2 mt-3 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/60 dark:border-red-800/40">
+                                <p className="text-xs text-red-600 dark:text-red-400 leading-tight flex-1">{micError}</p>
+                                <button
+                                    type="button"
+                                    onClick={clearMicError}
+                                    className="text-red-400 hover:text-red-600 dark:hover:text-red-300 shrink-0 transition-colors"
+                                >
+                                    <X className="size-3.5" />
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Suggestion chips */}
                         <div className="flex flex-wrap gap-2 mt-4 justify-center">
                             {[
                                 'A todo app with drag & drop',
@@ -288,7 +533,7 @@ export default function LandingPage() {
                                 <button
                                     key={example}
                                     onClick={() => handlePromptSubmit(example)}
-                                    className="text-xs text-muted-foreground/60 border border-border/40 rounded-full px-3 py-1 hover:border-border hover:text-foreground transition-colors duration-150"
+                                    className="text-xs text-muted-foreground/55 border border-border/40 rounded-full px-3.5 py-1 hover:border-[rgba(59,126,255,0.35)] hover:text-[#3B7EFF] hover:bg-[rgba(59,126,255,0.05)] transition-all duration-150"
                                 >
                                     {example}
                                 </button>
@@ -298,7 +543,7 @@ export default function LandingPage() {
                         <p className="text-center mt-5">
                             <button
                                 onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
-                                className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors duration-150"
+                                className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors duration-150"
                             >
                                 or browse community examples
                             </button>
