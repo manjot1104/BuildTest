@@ -251,11 +251,17 @@ export async function createCreditPackOrderHandler({
     return { error: "Invalid pack ID", status: 400 };
   }
 
-  // User must have an active subscription to buy additional credits
-  const hasSubscription = await hasActiveSubscription(session.user.id);
-  if (!hasSubscription) {
+  // User must have an active paid subscription to buy additional credits
+  const activeSubscription = await getUserActiveSubscription(session.user.id);
+  if (!activeSubscription) {
     return {
       error: "You need an active subscription to purchase additional credits",
+      status: 400,
+    };
+  }
+  if (activeSubscription.plan_id === "free") {
+    return {
+      error: "Upgrade to a paid plan to purchase additional credits",
       status: 400,
     };
   }

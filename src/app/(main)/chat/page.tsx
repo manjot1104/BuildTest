@@ -123,7 +123,7 @@ useEffect(() => {
         setShowSubscriptionModal,
     } = useChat(urlChatId ?? undefined)
 
-    const { credits, hasActiveSubscription } = useUserCredits()
+    const { credits, subscription, hasActiveSubscription } = useUserCredits()
     const { session } = useStateMachine()
     const forkChat = useForkChat()
 
@@ -308,6 +308,7 @@ useEffect(() => {
                     onOpenChange={setShowSubscriptionModal}
                     hasActiveSubscription={hasActiveSubscription}
                     currentCredits={credits?.totalCredits ?? 0}
+                    currentPlanId={subscription?.plan_id ?? null}
                 />
                 <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
                     {/* Handle search params with Suspense boundary */}

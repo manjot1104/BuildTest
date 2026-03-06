@@ -48,7 +48,7 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
     const { isMobile } = useSidebar()
     const { data: session } = authClient.useSession()
     const router = useRouter()
-    const { credits, hasActiveSubscription, isLoading } = useUserCredits()
+    const { credits, subscription, hasActiveSubscription, isLoading } = useUserCredits()
     const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false)
     const [notificationsOpen, setNotificationsOpen] = useState(false)
 
@@ -185,6 +185,7 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                 onOpenChange={setSubscriptionModalOpen}
                 hasActiveSubscription={hasActiveSubscription}
                 currentCredits={credits?.totalCredits ?? 0}
+                currentPlanId={subscription?.plan_id ?? null}
             />
             <NotificationsDialog
                 open={notificationsOpen}

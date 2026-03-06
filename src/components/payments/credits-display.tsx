@@ -22,7 +22,7 @@ export function CreditsDisplay({
     showModal = true,
 }: CreditsDisplayProps) {
     const [modalOpen, setModalOpen] = useState(false);
-    const { credits, hasActiveSubscription, isLoading } = useUserCredits();
+    const { credits, subscription, hasActiveSubscription, isLoading } = useUserCredits();
 
     const totalCredits = credits?.totalCredits ?? 0;
 
@@ -32,6 +32,7 @@ export function CreditsDisplay({
             onOpenChange={setModalOpen}
             hasActiveSubscription={hasActiveSubscription}
             currentCredits={totalCredits}
+            currentPlanId={subscription?.plan_id ?? null}
         />
     ) : null;
 

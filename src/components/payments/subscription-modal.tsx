@@ -31,6 +31,7 @@ import {
   type LocalizedPlan,
   type LocalizedCreditPack,
   CREDIT_COSTS,
+  getSubscriptionPlanById,
 } from "@/config/credits.config";
 import { useLocalizedPricing } from "@/hooks/use-localized-pricing";
 import { type SupportedCurrency } from "@/config/currency.config";
@@ -48,6 +49,7 @@ interface SubscriptionModalProps {
   onOpenChange?: (open: boolean) => void;
   hasActiveSubscription?: boolean;
   currentCredits?: number;
+  currentPlanId?: string | null;
 }
 
 export function SubscriptionModal({
@@ -56,6 +58,7 @@ export function SubscriptionModal({
   onOpenChange,
   hasActiveSubscription = false,
   currentCredits = 0,
+  currentPlanId = null,
 }: SubscriptionModalProps) {
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
@@ -265,7 +268,7 @@ export function SubscriptionModal({
         </div>
 
         <Tabs
-          defaultValue={hasActiveSubscription ? "credits" : "subscription"}
+          defaultValue={hasActiveSubscription && currentPlanId !== "free" ? "credits" : "subscription"}
           className="w-full mt-4"
         >
           <div className="border-b border-border/40 px-6">
@@ -278,7 +281,7 @@ export function SubscriptionModal({
               </TabsTrigger>
               <TabsTrigger
                 value="credits"
-                disabled={!hasActiveSubscription}
+                disabled={!hasActiveSubscription || currentPlanId === "free"}
                 className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 Buy Credits
@@ -307,21 +310,53 @@ export function SubscriptionModal({
                 <div className="space-y-3">
                   {subscriptionPlans.map((plan) => {
                     const isPopular = "popular" in plan && (plan as { popular?: boolean }).popular;
+                    const isCurrentPlan = currentPlanId === plan.id;
+                    const isFreeTier = currentPlanId === "free";
+                    const currentPlanConfig = currentPlanId ? getSubscriptionPlanById(currentPlanId) : null;
+                    const currentPlanPrice = currentPlanConfig?.price ?? 0;
+                    const isHigherPlan = plan.basePrice > currentPlanPrice;
+                    const isLowerPlan = hasActiveSubscription && !isFreeTier && !isCurrentPlan && !isHigherPlan;
+
+                    let buttonLabel = "Subscribe";
+                    let buttonDisabled = isLoading || verifying;
+                    let tooltipText: string | null = null;
+
+                    if (verifying) {
+                      buttonLabel = "Verifying...";
+                    } else if (isCurrentPlan) {
+                      buttonLabel = "Current Plan";
+                      buttonDisabled = true;
+                      tooltipText = "This is your current active plan.";
+                    } else if (isLowerPlan) {
+                      buttonLabel = "Current plan is higher";
+                      buttonDisabled = true;
+                      tooltipText = "Your current plan already includes more credits.";
+                    } else if (isFreeTier || (hasActiveSubscription && isHigherPlan)) {
+                      buttonLabel = "Upgrade";
+                    }
+
                     return (
                       <div
                         key={plan.id}
                         className={cn(
                           "rounded-xl border p-4 transition-colors",
-                          isPopular
-                            ? "border-foreground/20 bg-muted/30"
-                            : "border-border/50"
+                          isCurrentPlan
+                            ? "border-foreground/30 bg-muted/40"
+                            : isPopular
+                              ? "border-foreground/20 bg-muted/30"
+                              : "border-border/50"
                         )}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="text-sm font-medium">{plan.name}</h3>
-                              {isPopular && (
+                              {isCurrentPlan && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                  Active
+                                </span>
+                              )}
+                              {isPopular && !isCurrentPlan && (
                                 <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-foreground text-background">
                                   Popular
                                 </span>
@@ -352,25 +387,21 @@ export function SubscriptionModal({
                               <span>
                                 <Button
                                   size="sm"
-                                  variant={isPopular ? "default" : "outline"}
+                                  variant={isCurrentPlan ? "secondary" : isPopular ? "default" : "outline"}
                                   className="h-8 rounded-lg px-4 text-xs shrink-0"
                                   onClick={() => handleSubscribe(plan)}
-                                  disabled={isLoading || hasActiveSubscription || verifying}
+                                  disabled={buttonDisabled}
                                 >
-                                  {(loadingPlanId === plan.id || verifying) && (
+                                  {(loadingPlanId === plan.id || (verifying && loadingPlanId === plan.id)) && (
                                     <Loader2 className="size-3 animate-spin mr-1.5" />
                                   )}
-                                  {verifying
-                                    ? "Verifying..."
-                                    : hasActiveSubscription
-                                      ? "Subscribed"
-                                      : "Subscribe"}
+                                  {buttonLabel}
                                 </Button>
                               </span>
                             </TooltipTrigger>
-                            {hasActiveSubscription && (
+                            {tooltipText && (
                               <TooltipContent className="text-xs">
-                                You already have an active subscription.
+                                {tooltipText}
                               </TooltipContent>
                             )}
                           </Tooltip>
@@ -378,12 +409,6 @@ export function SubscriptionModal({
                       </div>
                     );
                   })}
-
-                  {hasActiveSubscription && (
-                    <p className="text-[11px] text-muted-foreground/60 text-center pt-2">
-                      You have an active subscription. Switch to Buy Credits for more.
-                    </p>
-                  )}
                 </div>
               )}
             </TabsContent>
@@ -398,14 +423,16 @@ export function SubscriptionModal({
                     />
                   </div>
                 </div>
-              ) : !hasActiveSubscription ? (
+              ) : !hasActiveSubscription || currentPlanId === "free" ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-2">
                   <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
                     <Zap className="size-5 text-muted-foreground" />
                   </div>
-                  <h3 className="text-sm font-medium">Subscription Required</h3>
+                  <h3 className="text-sm font-medium">Paid Plan Required</h3>
                   <p className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
-                    You need an active subscription to purchase additional credits.
+                    {currentPlanId === "free"
+                      ? "Upgrade to a paid plan to purchase additional credits."
+                      : "You need an active subscription to purchase additional credits."}
                   </p>
                 </div>
               ) : (
