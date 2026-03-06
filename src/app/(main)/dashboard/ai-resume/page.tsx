@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw } from 'lucide-react'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
@@ -321,404 +322,521 @@ export default function AIResumeBuilderPage() {
   // Show LaTeX preview step
   if (currentStep === 'latex-preview') {
     return (
-      <div className="container mx-auto py-8 px-4 max-w-6xl">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h1 className="text-3xl font-bold tracking-tight">LaTeX Code Preview</h1>
-            <div className="flex items-center gap-3">
-              {usedModel && (
-                <span className={cn(
-                  "text-xs px-2.5 py-1 rounded-md",
-                  isFallback
-                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-                    : "bg-muted text-muted-foreground"
-                )}>
-                  {isFallback && "fallback: "}{getModelName(usedModel)}
-                </span>
-              )}
-              <Button variant="outline" onClick={handleReset} size="sm">
-                <X className="mr-2 h-4 w-4" />
-                Start Over
-              </Button>
-            </div>
-          </div>
-          <p className="text-muted-foreground">
-            Review and edit the generated LaTeX code before compiling to PDF.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          {/* Raw AI Response Toggle */}
-          {rawAIResponse && (
-            <div className="flex items-center justify-between border rounded-lg p-3 bg-muted/30">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">AI Response</span>
-                <span className="text-xs text-muted-foreground">
-                  View the raw response from AI before processing
-                </span>
+      <div className="container mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <button
+                onClick={handleReset}
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">LaTeX Preview</h1>
+                  {usedModel && (
+                    <span className={cn(
+                      "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                      isFallback
+                        ? "bg-amber-500/10 text-amber-600 ring-1 ring-amber-500/20 dark:text-amber-400"
+                        : "bg-muted text-muted-foreground ring-1 ring-border/60"
+                    )}>
+                      {isFallback && "fallback: "}{getModelName(usedModel)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Review, edit, or refine with AI before compiling.
+                </p>
               </div>
+            </div>
+            <div className="flex items-center gap-2 sm:self-end">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowRawResponse(!showRawResponse)}
-                className="h-7"
-              >
-                {showRawResponse ? 'Hide' : 'Show'} Raw Response
-              </Button>
-            </div>
-          )}
-
-          {/* Raw AI Response Display */}
-          {showRawResponse && rawAIResponse && (
-            <div className="border rounded-lg overflow-hidden bg-background">
-              <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-                <span className="font-mono text-sm text-muted-foreground">Raw AI Response</span>
-              </div>
-              <div className="p-4 bg-muted/20 max-h-[400px] overflow-auto">
-                <pre className="text-xs font-mono whitespace-pre-wrap wrap-break-word text-muted-foreground">
-                  {rawAIResponse}
-                </pre>
-              </div>
-            </div>
-          )}
-
-          {/* LaTeX Code Display/Editor */}
-          <div className="border rounded-lg overflow-hidden bg-background">
-            <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2">
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-sm text-muted-foreground">LaTeX Code</span>
-                {!isEditing && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleEdit}
-                    className="h-7 gap-1.5"
-                  >
-                    <Edit className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
-                )}
-                {isEditing && (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleSaveEdit}
-                      className="h-7 gap-1.5 text-green-600 hover:text-green-700"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      Save
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleCancelEdit}
-                      className="h-7 gap-1.5"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Cancel
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {isEditing ? (
-              <Textarea
-                value={editedLatex}
-                onChange={(e) => setEditedLatex(e.target.value)}
-                className={cn(
-                  "min-h-[600px] font-mono text-sm leading-relaxed",
-                  "resize-none border-0 rounded-none focus-visible:ring-0"
-                )}
-                placeholder="LaTeX code will appear here..."
-              />
-            ) : (
-              <LaTeXPreview code={latexCode} />
-            )}
-          </div>
-
-          {/* Follow-up Prompt Section */}
-          <div className="border rounded-lg p-4 bg-muted/20">
-            <div className="mb-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Sparkles className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium">AI Follow-up</span>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Ask AI to make changes to the LaTeX code. For example: &quot;Make the header more prominent&quot;, &quot;Add a color scheme&quot;, &quot;Change the font size&quot;, etc.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={followUpPrompt}
-                onChange={(e) => setFollowUpPrompt(e.target.value)}
-                placeholder="e.g., Make the header more prominent, add colors, change layout..."
-                className="flex-1"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault()
-                    handleFollowUpPrompt()
-                  }
+                onClick={() => {
+                  navigator.clipboard.writeText(editedLatex || latexCode)
+                  toast.success('LaTeX copied to clipboard')
                 }}
-                disabled={isProcessingFollowUp}
-              />
-              <Button
-                onClick={handleFollowUpPrompt}
-                disabled={isProcessingFollowUp || !followUpPrompt.trim()}
-                size="default"
+                className="gap-1.5"
               >
-                {isProcessingFollowUp ? (
+                <Copy className="size-3.5" />
+                <span className="hidden xs:inline">Copy</span>
+              </Button>
+              <Button
+                onClick={onCompilePDF}
+                disabled={isCompiling || !editedLatex.trim()}
+                size="sm"
+                className="flex-1 gap-1.5 sm:flex-initial"
+              >
+                {isCompiling ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Compiling...
                   </>
                 ) : (
                   <>
-                    <Send className="mr-2 h-4 w-4" />
-                    Apply Changes
+                    <FileDown className="size-3.5" />
+                    Download PDF
                   </>
                 )}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Press Ctrl+Enter (or Cmd+Enter on Mac) to submit
-            </p>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={handleReset}>
-              Back to Form
-            </Button>
-            <Button
-              onClick={onCompilePDF}
-              disabled={isCompiling || !editedLatex.trim()}
-              size="lg"
-            >
-              {isCompiling ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Compiling PDF...
-                </>
+          <div className="space-y-4">
+            {/* Raw AI Response Toggle */}
+            {rawAIResponse && (
+              <button
+                onClick={() => setShowRawResponse(!showRawResponse)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-border/60 bg-card px-3 py-3 text-left transition-colors hover:bg-muted/50 sm:px-4"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+                    <BrainCircuit className="size-3.5 text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-sm font-medium">Raw AI Response</span>
+                    <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">View the unprocessed output</span>
+                  </div>
+                </div>
+                <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", showRawResponse && "rotate-180")} />
+              </button>
+            )}
+
+            {showRawResponse && rawAIResponse && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden rounded-xl border border-border/60 bg-card"
+              >
+                <div className="max-h-[400px] overflow-auto p-4">
+                  <pre className="text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                    {rawAIResponse}
+                  </pre>
+                </div>
+              </motion.div>
+            )}
+
+            {/* LaTeX Code Display/Editor */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
+                    <FileText className="size-3 text-primary" />
+                  </div>
+                  <span className="truncate font-mono text-xs font-medium text-muted-foreground">resume.tex</span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {!isEditing ? (
+                    <Button variant="ghost" size="sm" onClick={handleEdit} className="h-7 gap-1.5 text-xs">
+                      <Edit className="size-3" />
+                      <span className="hidden xs:inline">Edit</span>
+                    </Button>
+                  ) : (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSaveEdit}
+                        className="h-7 gap-1.5 text-xs text-green-600 hover:text-green-700"
+                      >
+                        <Check className="size-3" />
+                        <span className="hidden xs:inline">Save</span>
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-7 gap-1.5 text-xs">
+                        <X className="size-3" />
+                        <span className="hidden xs:inline">Cancel</span>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {isEditing ? (
+                <Textarea
+                  value={editedLatex}
+                  onChange={(e) => setEditedLatex(e.target.value)}
+                  className={cn(
+                    "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
+                    "resize-none border-0 rounded-none focus-visible:ring-0"
+                  )}
+                  placeholder="LaTeX code will appear here..."
+                />
               ) : (
-                <>
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Compile to PDF
-                </>
+                <LaTeXPreview code={latexCode} />
               )}
-            </Button>
+            </div>
+
+            {/* Follow-up Prompt Section */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <Sparkles className="size-3.5 text-primary" />
+                  <span className="text-xs font-medium">Refine with AI</span>
+                  <span className="hidden text-[11px] text-muted-foreground sm:inline">— describe changes and press Cmd+Enter</span>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
+                <Input
+                  value={followUpPrompt}
+                  onChange={(e) => setFollowUpPrompt(e.target.value)}
+                  placeholder="e.g., Make the header more prominent..."
+                  className="flex-1 border-0 bg-transparent shadow-none focus-visible:ring-0"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault()
+                      handleFollowUpPrompt()
+                    }
+                  }}
+                  disabled={isProcessingFollowUp}
+                />
+                <Button
+                  onClick={handleFollowUpPrompt}
+                  disabled={isProcessingFollowUp || !followUpPrompt.trim()}
+                  size="sm"
+                  className="w-full shrink-0 gap-1.5 sm:w-auto"
+                >
+                  {isProcessingFollowUp ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Send className="size-3.5" />
+                  )}
+                  {isProcessingFollowUp ? 'Applying...' : 'Apply'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex flex-col-reverse items-start gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
+              <Button variant="ghost" size="sm" onClick={handleReset} className="gap-1.5 text-muted-foreground">
+                <RotateCcw className="size-3.5" />
+                Start Over
+              </Button>
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                Tip: Press <kbd className="rounded border border-border/60 bg-muted px-1 py-0.5 font-mono text-[10px]">Cmd+Enter</kbd> to apply AI changes
+              </p>
+            </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight mb-2">AI Resume Builder</h1>
-        <p className="text-muted-foreground">
-          Fill in your details below and we&apos;ll generate a professional LaTeX resume for you. You can review and edit the LaTeX code before compiling to PDF.
-        </p>
-      </div>
+    <div className="container mx-auto max-w-4xl px-4 py-6 sm:py-8">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+      >
+        {/* Header */}
+        <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
+          <div className="mb-3 flex items-center gap-2 rounded-full border border-border/60 bg-muted/50 px-4 py-1.5 text-xs font-medium text-muted-foreground">
+            <FileText className="size-3.5" />
+            AI-Powered Resume
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">Build Your Resume</h1>
+          <p className="mt-2 max-w-md text-sm text-muted-foreground sm:text-base">
+            Fill in your details and AI will craft a professional LaTeX resume you can edit and download as PDF.
+          </p>
+        </div>
+      </motion.div>
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onGenerateLaTeX)} className="space-y-6">
           {/* Model Selection */}
-          <div className="border rounded-lg p-4 bg-muted/20">
-            <div className="flex items-center gap-2 mb-3">
-              <BrainCircuit className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">AI Model</span>
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.05, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <BrainCircuit className="size-4 shrink-0 text-primary" />
+              <span className="shrink-0 text-sm font-medium">AI Model</span>
+              {currentModelInfo && (
+                <span className="ml-auto hidden truncate text-[11px] text-muted-foreground sm:block">
+                  {currentModelInfo.provider} • {currentModelInfo.description}
+                </span>
+              )}
             </div>
-            <Select value={selectedModel} onValueChange={setSelectedModel}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {RESUME_MODELS.map((model) => (
-                  <SelectItem key={model.id} value={model.id}>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{model.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {model.provider} — {model.description}
-                      </span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {currentModelInfo && (
-              <p className="text-xs text-muted-foreground mt-2">
-                {currentModelInfo.description} • Powered by {currentModelInfo.provider} via OpenRouter
-              </p>
-            )}
-          </div>
+            <div className="p-4">
+              <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RESUME_MODELS.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{model.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {model.provider} — {model.description}
+                        </span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </motion.div>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <FormField
-              control={form.control}
-              name="fullName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Full Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="John Doe" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          {/* Personal Info Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <User className="size-4 text-blue-500" />
+              <span className="text-sm font-medium">Personal Information</span>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="fullName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Full Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="John Doe" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="email"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email</FormLabel>
+                      <FormControl>
+                        <Input type="email" placeholder="john.doe@example.com" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+1 (555) 123-4567" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="john.doe@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          {/* Skills Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <Sparkles className="size-4 text-amber-500" />
+              <span className="text-sm font-medium">Skills</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="skills"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., JavaScript, React, Node.js, Python, SQL, AWS..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      List your technical skills, programming languages, tools, and technologies.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-          <FormField
-            control={form.control}
-            name="phone"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Phone</FormLabel>
-                <FormControl>
-                  <Input placeholder="+1 (555) 123-4567" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Experience Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <Briefcase className="size-4 text-emerald-500" />
+              <span className="text-sm font-medium">Experience</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="experience"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., Software Engineer at Company X (2020-2023) - Developed web applications..."
+                        className="min-h-[150px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Include job titles, companies, dates, and key achievements.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-          <FormField
-            control={form.control}
-            name="skills"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Skills</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="e.g., JavaScript, React, Node.js, Python, SQL, AWS..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  List your technical skills, programming languages, tools, and technologies.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Education Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <GraduationCap className="size-4 text-violet-500" />
+              <span className="text-sm font-medium">Education</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="education"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., Bachelor of Science in Computer Science, University Name (2016-2020)..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Degrees, institutions, and graduation dates.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-          <FormField
-            control={form.control}
-            name="experience"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Experience</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="e.g., Software Engineer at Company X (2020-2023) - Developed web applications..."
-                    className="min-h-[150px]"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Describe your work experience, including job titles, companies, dates, and key achievements.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Projects Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <FolderKanban className="size-4 text-rose-500" />
+              <span className="text-sm font-medium">Projects</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="projects"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., E-commerce Platform (2023) - Built a full-stack application using React and Node.js..."
+                        className="min-h-[150px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Notable projects, technologies used, and key features.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-          <FormField
-            control={form.control}
-            name="education"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Education</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="e.g., Bachelor of Science in Computer Science, University Name (2016-2020)..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  List your educational background, degrees, institutions, and graduation dates.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {/* Additional Instructions Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Settings2 className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Additional Instructions</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="additionalInstructions"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="e.g., Use a modern color scheme, make it more creative, add icons, use a two-column layout..."
+                        className="min-h-[100px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Style, layout, colors, or formatting preferences.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
 
-          <FormField
-            control={form.control}
-            name="projects"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Projects</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="e.g., E-commerce Platform (2023) - Built a full-stack application using React and Node.js..."
-                    className="min-h-[150px]"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Describe your notable projects, including technologies used and key features.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="additionalInstructions"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Additional Instructions (Optional)</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="e.g., Use a modern color scheme, make it more creative, add icons, use a two-column layout..."
-                    className="min-h-[100px]"
-                    {...field}
-                  />
-                </FormControl>
-                <FormDescription>
-                  Add any specific instructions for the resume style, layout, colors, or formatting.
-                </FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex justify-end pt-4">
-            <Button type="submit" disabled={isGenerating} size="lg">
+          {/* Submit */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+            className="flex justify-end pt-2"
+          >
+            <Button type="submit" disabled={isGenerating} size="lg" className="gap-2">
               {isGenerating ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="size-4 animate-spin" />
                   Generating LaTeX...
                 </>
               ) : (
                 <>
-                  <FileDown className="mr-2 h-4 w-4" />
-                  Generate LaTeX Code
+                  <Sparkles className="size-4" />
+                  Generate Resume
                 </>
               )}
             </Button>
-          </div>
+          </motion.div>
         </form>
       </Form>
     </div>
@@ -731,9 +849,9 @@ function LaTeXPreview({ code }: { code: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[600px] bg-muted/20">
+      <div className="flex min-h-[300px] items-center justify-center bg-muted/20 sm:min-h-[600px]">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="size-4 animate-spin" />
           <span>Loading syntax highlighter...</span>
         </div>
       </div>
@@ -744,14 +862,14 @@ function LaTeXPreview({ code }: { code: string }) {
   const lineNumberWidth = String(lines.length).length
 
   return (
-    <div className="overflow-auto max-h-[600px] bg-background" style={{ scrollbarWidth: 'thin' }}>
-      <div className="flex min-w-max">
+    <div className="max-h-[400px] overflow-auto bg-background sm:max-h-[600px]" style={{ scrollbarWidth: 'thin' }}>
+      <div className="flex min-w-0">
         {/* Line numbers */}
-        <div className="sticky left-0 z-10 flex flex-col bg-muted/30 border-r border-border select-none py-3 text-right">
+        <div className="sticky left-0 z-10 hidden flex-col border-r border-border bg-muted/30 py-3 text-right select-none sm:flex">
           {lines.map((_, i) => (
             <span
               key={i}
-              className="px-3 text-[11px] leading-5 text-muted-foreground/40 font-mono tabular-nums"
+              className="px-3 font-mono text-[11px] tabular-nums leading-5 text-muted-foreground/40"
               style={{ minWidth: `${lineNumberWidth + 2}ch` }}
             >
               {i + 1}
@@ -762,9 +880,9 @@ function LaTeXPreview({ code }: { code: string }) {
         {/* Code content */}
         <div
           className={cn(
-            'flex-1 py-3 px-4',
+            'min-w-0 flex-1 overflow-x-auto px-3 py-3 sm:px-4',
             '[&_pre]:bg-transparent! [&_pre]:m-0! [&_pre]:p-0!',
-            '[&_code]:text-[13px]! [&_code]:leading-5! [&_code]:font-mono',
+            '[&_code]:text-[12px]! [&_code]:leading-5! [&_code]:font-mono sm:[&_code]:text-[13px]!',
           )}
           dangerouslySetInnerHTML={{ __html: html }}
         />
