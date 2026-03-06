@@ -10,13 +10,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
+import { savePromptToStorage } from '@/components/ai-elements/prompt-input'
 
 // --- Animation Variants ---
 
@@ -98,6 +99,7 @@ export default function LandingPage() {
     const { theme, setTheme } = useTheme()
     const heroRef = useRef<HTMLDivElement>(null)
     const [navScrolled, setNavScrolled] = useState(false)
+    const [prompt, setPrompt] = useState('')
 
     const { scrollYProgress } = useScroll({
         target: heroRef,
@@ -112,6 +114,17 @@ export default function LandingPage() {
     })
 
     const handleGetStarted = () => {
+        if (session?.user) {
+            router.push('/chat')
+        } else {
+            router.push('/login')
+        }
+    }
+
+    const handlePromptSubmit = (value: string) => {
+        const trimmed = value.trim()
+        if (!trimmed) return
+        savePromptToStorage(trimmed, [])
         if (session?.user) {
             router.push('/chat')
         } else {
@@ -229,30 +242,67 @@ export default function LandingPage() {
                         code — complete with UI, logic, and deployable output.
                     </motion.p>
 
-                    {/* CTA */}
+                    {/* Prompt input */}
                     <motion.div
                         variants={fadeIn}
                         initial="hidden"
                         animate="visible"
                         custom={0.9}
-                        className="flex flex-col sm:flex-row items-center justify-center gap-3"
+                        className="w-full max-w-2xl mx-auto"
                     >
-                        <Button
-                            size="lg"
-                            onClick={handleGetStarted}
-                            className="rounded-full h-12 px-8 text-sm font-medium gap-2 group"
-                        >
-                            Start Building
-                            <ArrowRight className="size-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="lg"
-                            onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
-                            className="rounded-full h-12 px-8 text-sm font-medium text-muted-foreground"
-                        >
-                            See examples
-                        </Button>
+                        <div className="relative rounded-2xl border border-border/60 bg-background shadow-lg overflow-hidden focus-within:border-border focus-within:shadow-xl transition-all duration-200">
+                            <textarea
+                                value={prompt}
+                                onChange={(e) => setPrompt(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                                        e.preventDefault()
+                                        handlePromptSubmit(prompt)
+                                    }
+                                }}
+                                placeholder="Describe the app you want to build..."
+                                rows={3}
+                                className="w-full resize-none bg-transparent px-5 pt-4 pb-2 text-sm placeholder:text-muted-foreground/50 focus:outline-none"
+                            />
+                            <div className="flex items-center justify-between px-4 pb-3 pt-1">
+                                <p className="text-xs text-muted-foreground/40">Press Enter to submit &middot; Shift+Enter for new line</p>
+                                <Button
+                                    size="sm"
+                                    onClick={() => handlePromptSubmit(prompt)}
+                                    disabled={!prompt.trim()}
+                                    className="rounded-xl h-8 px-3 gap-1.5 text-xs font-medium"
+                                >
+                                    Build
+                                    <SendHorizonal className="size-3" />
+                                </Button>
+                            </div>
+                        </div>
+
+                        {/* Example prompts */}
+                        <div className="flex flex-wrap gap-2 mt-4 justify-center">
+                            {[
+                                'A todo app with drag & drop',
+                                'A SaaS dashboard with charts',
+                                'An e-commerce product page',
+                            ].map((example) => (
+                                <button
+                                    key={example}
+                                    onClick={() => handlePromptSubmit(example)}
+                                    className="text-xs text-muted-foreground/60 border border-border/40 rounded-full px-3 py-1 hover:border-border hover:text-foreground transition-colors duration-150"
+                                >
+                                    {example}
+                                </button>
+                            ))}
+                        </div>
+
+                        <p className="text-center mt-5">
+                            <button
+                                onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
+                                className="text-xs text-muted-foreground/50 hover:text-muted-foreground transition-colors duration-150"
+                            >
+                                or browse community examples
+                            </button>
+                        </p>
                     </motion.div>
                 </div>
 
