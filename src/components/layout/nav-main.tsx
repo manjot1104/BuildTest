@@ -18,6 +18,7 @@ import {
     SidebarMenuSub,
     SidebarMenuSubButton,
     SidebarMenuSubItem,
+    useSidebar,
 } from "@/components/ui/sidebar"
 import { useTheme } from "next-themes"
 import { useStateMachine } from "@/context/state-machine"
@@ -29,6 +30,8 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
     const { theme, setTheme } = useTheme()
     const { toggleHistoryModal } = useStateMachine()
     const pathname = usePathname()
+    const { state } = useSidebar()
+    const isCollapsed = state === "collapsed"
 
     const handleToggle = () => {
         setTheme(theme === "dark" ? "light" : "dark")
@@ -38,9 +41,11 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
         <>
             {sections.map((section) => (
                 <SidebarGroup key={section.label}>
-                    <SidebarGroupLabel className="hk-group-label">
-                        {section.label}
-                    </SidebarGroupLabel>
+                    {!isCollapsed && (
+                        <SidebarGroupLabel className="hk-group-label">
+                            {section.label}
+                        </SidebarGroupLabel>
+                    )}
                     <SidebarMenu>
                         {section.items.map((item) => {
                             if (!item.items) {

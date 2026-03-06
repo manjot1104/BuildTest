@@ -21,7 +21,7 @@ import {
 import { CreditsDisplay } from "@/components/payments/credits-display"
 
 import { usePathname } from "next/navigation";
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 
 const SEGMENT_LABELS: Record<string, string> = {
     "ai-chat": "AI Chat",
@@ -52,21 +52,6 @@ export default function DashboardLayout({
     const [starredOpen, setStarredOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
-    const beamRef = useRef<HTMLDivElement>(null)
-    const headerRef = useRef<HTMLElement>(null)
-
-    const handleHeaderMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
-        if (!beamRef.current || !headerRef.current) return
-        const rect = headerRef.current.getBoundingClientRect()
-        const x = e.clientX - rect.left
-        beamRef.current.style.left = `${x}px`
-        beamRef.current.style.opacity = '1'
-    }, [])
-
-    const handleHeaderMouseLeave = useCallback(() => {
-        if (!beamRef.current) return
-        beamRef.current.style.opacity = '0'
-    }, [])
 
     const handleSettingsClick = useCallback((tab: SettingsTab) => {
         setSettingsTab(tab)
@@ -82,12 +67,7 @@ export default function DashboardLayout({
                     className="hk-sidebar-border"
                 />
                 <SidebarInset>
-                    <header
-                        ref={headerRef}
-                        onMouseMove={handleHeaderMouseMove}
-                        onMouseLeave={handleHeaderMouseLeave}
-                        className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12"
-                    >
+                    <header className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
                                 <SidebarTrigger className="-ml-1 hk-nav-item" />
@@ -138,7 +118,6 @@ export default function DashboardLayout({
                                 </div>
                             </div>
                         </div>
-                        <div ref={beamRef} className="hk-header-beam" style={{ opacity: 0 }} />
                     </header>
                     <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
                         {children}

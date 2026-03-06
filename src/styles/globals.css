@@ -385,24 +385,6 @@ body {
   );
 }
 
-/* Cursor-following neon beam */
-.hk-header-beam {
-  position: absolute;
-  bottom: 0;
-  width: 120px;
-  height: 2px;
-  pointer-events: none;
-  z-index: 1;
-  transform: translateX(-50%);
-  transition: left 0.15s ease-out, opacity 0.3s ease;
-  background: radial-gradient(
-    ellipse at center,
-    var(--neon-cyan) 0%,
-    color-mix(in oklch, var(--neon-cyan) 40%, transparent) 40%,
-    transparent 70%
-  );
-  box-shadow: 0 0 8px var(--neon-cyan), 0 0 16px color-mix(in oklch, var(--neon-cyan) 30%, transparent);
-}
 
 /* ─── Breadcrumb neon active ─────────────────────────────────────────────── */
 .hk-breadcrumb-active {
