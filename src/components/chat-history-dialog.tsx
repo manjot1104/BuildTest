@@ -82,39 +82,38 @@ export function ChatHistoryDialog({
     return (
         <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
             <AlertDialogContent
-                className="p-0 gap-0 overflow-hidden border-border/50"
+                className="hk-neon-dialog p-0 gap-0 overflow-hidden rounded-none"
                 style={{ width: '95vw', maxWidth: '40rem' }}
             >
                 <div className={cn('flex flex-col', className)} {...props}>
                     {/* Header */}
-                    <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                    <div className="hk-neon-dialog-header flex items-center justify-between px-5 pt-5 pb-4">
                         <div>
-                            <h2 className="text-base font-semibold tracking-tight">Chat History</h2>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Your previous conversations
+                            <h2 className="hk-neon-dialog-title text-base font-semibold tracking-tight">Chat History</h2>
+                            <p className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                                // your previous conversations
                             </p>
                         </div>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                            className="hk-neon-close size-7 text-muted-foreground hover:text-foreground"
                             onClick={toggleHistoryModal}
                         >
                             <X className="size-3.5" />
                         </Button>
                     </div>
 
-                    <div className="border-t border-border/40" />
                     <div className="px-4 pt-3 pb-1">
   <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
-    <SelectTrigger className="h-8 text-xs">
+    <SelectTrigger className="hk-neon-select h-8 text-xs">
       <SelectValue placeholder="Filter" />
     </SelectTrigger>
 
-    <SelectContent>
-      <SelectItem value="all">All Chats</SelectItem>
-      <SelectItem value="builder">Builder</SelectItem>
-      <SelectItem value="openrouter">AI Chat</SelectItem>
+    <SelectContent className="hk-neon-dropdown">
+      <SelectItem value="all" className="hk-neon-dropdown-item font-mono text-xs">All Chats</SelectItem>
+      <SelectItem value="builder" className="hk-neon-dropdown-item font-mono text-xs">Builder</SelectItem>
+      <SelectItem value="openrouter" className="hk-neon-dropdown-item font-mono text-xs">AI Chat</SelectItem>
     </SelectContent>
   </Select>
 </div>
@@ -123,10 +122,12 @@ export function ChatHistoryDialog({
                     <div className="px-3 py-3">
                         {isLoading && (
                             <div className="flex items-center justify-center py-12">
-                                <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                                <div className="h-px w-12 overflow-hidden" style={{ background: 'linear-gradient(90deg, transparent, var(--neon-cyan), transparent)' }}>
                                     <div
-                                        className="h-full w-1/2 bg-foreground/20 rounded-full"
+                                        className="h-full w-1/2"
                                         style={{
+                                            background: 'var(--neon-cyan)',
+                                            boxShadow: '0 0 8px var(--neon-cyan)',
                                             animation: 'shimmer 1.5s ease-in-out infinite',
                                         }}
                                     />
@@ -142,19 +143,19 @@ export function ChatHistoryDialog({
 
                         {error && (
                             <div className="flex items-center justify-center py-12">
-                                <p className="text-xs text-destructive">
-                                    Failed to load chat history.
+                                <p className="font-mono text-[11px] text-destructive">
+                                    // failed to load chat history
                                 </p>
                             </div>
                         )}
 
                         {!isLoading && !error && chats?.length === 0 && (
                             <div className="flex flex-col items-center justify-center py-12 gap-2">
-                                <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
+                                <div className="hk-neon-empty-icon size-10 flex items-center justify-center">
                                     <MessageSquare className="size-5 text-muted-foreground" />
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    No conversations yet
+                                <p className="font-mono text-[11px] text-muted-foreground mt-1">
+                                    // no conversations yet
                                 </p>
                             </div>
                         )}
@@ -165,14 +166,14 @@ export function ChatHistoryDialog({
                                     <button
                                         key={chat.id}
                                        onClick={() => handleChatClick(chat)}
-                                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left group"
+                                        className="hk-neon-list-item flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50 transition-colors text-left group"
                                     >
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">
+                                            <p className="font-mono text-sm font-medium truncate">
                                                 {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
                                             </p>
                                             {chat.createdAt && (
-                                                <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                                                <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">
                                                     {formatDistanceToNow(new Date(chat.createdAt), {
                                                         addSuffix: true,
                                                     })}
@@ -194,7 +195,7 @@ export function ChatHistoryDialog({
     toggleHistoryModal()
   }}
 
-  className="p-1 rounded-md hover:bg-muted/80 transition-colors"
+  className="hk-neon-close p-1 transition-colors"
 >
   <ExternalLink className="size-3.5 text-muted-foreground/40" />
 </button>
@@ -203,7 +204,7 @@ export function ChatHistoryDialog({
                                                 onClick={(e) =>
                                                     handleStarToggle(e, chat.v0ChatId, chat.isStarred)
                                                 }
-                                                className="p-1 rounded-md hover:bg-muted/80 transition-colors"
+                                                className="hk-neon-close p-1 transition-colors"
                                             >
                                                 <Star
                                                     className={cn(
@@ -212,6 +213,7 @@ export function ChatHistoryDialog({
                                                             ? 'fill-amber-400 text-amber-400'
                                                             : 'text-muted-foreground/30 group-hover:text-muted-foreground/60'
                                                     )}
+                                                    style={chat.isStarred ? { filter: 'drop-shadow(0 0 3px rgb(251 191 36 / 0.4))' } : undefined}
                                                 />
                                             </button>
                                         </div>

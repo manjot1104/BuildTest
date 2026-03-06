@@ -21,7 +21,7 @@ import {
 import { CreditsDisplay } from "@/components/payments/credits-display"
 
 import { usePathname } from "next/navigation";
-import { Fragment, useCallback, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 
 const SEGMENT_LABELS: Record<string, string> = {
     "ai-chat": "AI Chat",
@@ -52,6 +52,21 @@ export default function DashboardLayout({
     const [starredOpen, setStarredOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
+    const beamRef = useRef<HTMLDivElement>(null)
+    const headerRef = useRef<HTMLElement>(null)
+
+    const handleHeaderMouseMove = useCallback((e: React.MouseEvent<HTMLElement>) => {
+        if (!beamRef.current || !headerRef.current) return
+        const rect = headerRef.current.getBoundingClientRect()
+        const x = e.clientX - rect.left
+        beamRef.current.style.left = `${x}px`
+        beamRef.current.style.opacity = '1'
+    }, [])
+
+    const handleHeaderMouseLeave = useCallback(() => {
+        if (!beamRef.current) return
+        beamRef.current.style.opacity = '0'
+    }, [])
 
     const handleSettingsClick = useCallback((tab: SettingsTab) => {
         setSettingsTab(tab)
@@ -64,15 +79,21 @@ export default function DashboardLayout({
                 <AppSidebar
                     onStarredClick={() => setStarredOpen(true)}
                     onSettingsClick={handleSettingsClick}
+                    className="hk-sidebar-border"
                 />
                 <SidebarInset>
-                    <header className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center border-b bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                    <header
+                        ref={headerRef}
+                        onMouseMove={handleHeaderMouseMove}
+                        onMouseLeave={handleHeaderMouseLeave}
+                        className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12"
+                    >
                         <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
                                 <SidebarTrigger className="-ml-1 hk-nav-item" />
                                 <Separator
                                     orientation="vertical"
-                                    className="mr-2 data-[orientation=vertical]:h-4"
+                                    className="mr-2 data-[orientation=vertical]:h-4 opacity-30"
                                 />
                                 <Breadcrumb>
                                     <BreadcrumbList>
@@ -91,7 +112,7 @@ export default function DashboardLayout({
                                                                 {title}
                                                             </BreadcrumbPage>
                                                         ) : (
-                                                            <BreadcrumbLink href={buildHref(idx)} className="font-mono text-xs transition-colors hover:text-primary">
+                                                            <BreadcrumbLink href={buildHref(idx)} className="font-mono text-xs text-muted-foreground transition-colors hover:text-primary">
                                                                 {title}
                                                             </BreadcrumbLink>
                                                         )}
@@ -106,17 +127,18 @@ export default function DashboardLayout({
                                 {isAdmin && !isOnAdminPage && (
                                     <Link
                                         href="/admin"
-                                        className="hk-glow-hover flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary shadow-sm transition-all hover:bg-primary hover:text-primary-foreground"
+                                        className="hk-neon-badge flex items-center gap-1.5 rounded-none border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-mono font-medium text-primary transition-all hover:bg-primary hover:text-primary-foreground"
                                     >
                                         <Shield className="size-3" />
                                         Admin
                                     </Link>
                                 )}
-                                <div className="hk-glow-hover rounded-full">
+                                <div className="hk-neon-badge rounded-full">
                                     <CreditsDisplay variant="badge" />
                                 </div>
                             </div>
                         </div>
+                        <div ref={beamRef} className="hk-header-beam" style={{ opacity: 0 }} />
                     </header>
                     <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
                         {children}

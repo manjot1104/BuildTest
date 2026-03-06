@@ -1073,20 +1073,20 @@ const toggleStar = async () => {
 
 function TypingIndicator({ modelName }: { modelName: string }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-        <Loader2 className="size-3.5 animate-spin text-primary" />
+    <div className="flex gap-3">
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Bot className="size-3.5" />
       </div>
-      <div className="flex flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="text-xs font-semibold text-muted-foreground">{modelName}</span>
-        <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-border/40 bg-muted/30 px-4 py-3">
-          <span className="inline-flex gap-1">
+        <div className="max-w-[75ch] rounded-2xl rounded-tl-sm border border-border/40 bg-muted/30 px-4 py-3">
+          <span className="inline-flex items-center gap-1.5">
             {[0, 1, 2].map((i) => (
-              <span key={i} className="size-1.5 rounded-full bg-primary/50"
-                style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+              <span key={i} className="size-1.5 rounded-full bg-muted-foreground/30"
+                style={{ animation: `typing-dot 1.4s ease-in-out ${i * 0.15}s infinite` }} />
             ))}
           </span>
-          <span className="text-xs text-muted-foreground">Generating...</span>
+          <style>{`@keyframes typing-dot { 0%, 80%, 100% { opacity: 0.3; transform: scale(1); } 40% { opacity: 1; transform: scale(1.2); } }`}</style>
         </div>
       </div>
     </div>

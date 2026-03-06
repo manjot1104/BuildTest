@@ -46,7 +46,7 @@ export function PlatformSwitcher({
                             size="lg"
                             className="hk-nav-item data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
+                            <div className="hk-neon-logo-box flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
                                 <activePlatform.logo size="sm" />
                             </div>
                             <div className="grid flex-1 text-left text-sm leading-tight">
@@ -57,19 +57,19 @@ export function PlatformSwitcher({
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        className="hk-neon-dropdown w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
                         align="start"
                         side={isMobile ? "bottom" : "right"}
                         sideOffset={4}
                     >
-                        <DropdownMenuLabel className="text-muted-foreground text-xs">
+                        <DropdownMenuLabel className="hk-group-label text-muted-foreground text-xs">
                             Platforms
                         </DropdownMenuLabel>
                         {platforms.map((platform) => (
                             <DropdownMenuItem
                                 key={platform.name}
                                 onClick={() => window.location.href = platform.url}
-                                className="gap-2 p-2"
+                                className="hk-neon-dropdown-item gap-2 p-2"
                             >
                                 <div className="flex size-6 items-center justify-center rounded-md border bg-background">
                                     <platform.logo size="sm" />

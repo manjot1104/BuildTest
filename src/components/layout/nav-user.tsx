@@ -63,14 +63,13 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
         }
     }
 
-    // If not authenticated, show login button or nothing
     if (!session?.user) {
         return (
             <SidebarMenu>
                 <SidebarMenuItem>
                     <SidebarMenuButton
                         size="lg"
-                        className="w-full"
+                        className="hk-nav-item w-full"
                         onClick={() => router.push("/login")}
                     >
                         <Avatar className="h-8 w-8 rounded-lg">
@@ -109,10 +108,12 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                             size="lg"
                             className="hk-nav-item data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <Avatar className="h-8 w-8 rounded-lg ring-1 ring-primary/20">
-                                <AvatarImage src={user.avatar} alt={user.name} />
-                                <AvatarFallback className="rounded-lg bg-primary/10 font-mono text-xs">{initials}</AvatarFallback>
-                            </Avatar>
+                            <div className="hk-neon-avatar relative rounded-lg">
+                                <Avatar className="h-8 w-8 rounded-lg">
+                                    <AvatarImage src={user.avatar} alt={user.name} />
+                                    <AvatarFallback className="rounded-lg bg-primary/10 font-mono text-xs">{initials}</AvatarFallback>
+                                </Avatar>
+                            </div>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{user.name}</span>
                                 <span className="truncate font-mono text-[10px] text-muted-foreground">{user.email}</span>
@@ -121,60 +122,62 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        className="hk-neon-dropdown w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
                         side={isMobile ? "bottom" : "right"}
                         align="end"
                         sideOffset={4}
                     >
                         <DropdownMenuLabel className="p-0 font-normal">
                             <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                <Avatar className="h-8 w-8 rounded-lg">
-                                    <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                                </Avatar>
+                                <div className="hk-neon-avatar relative rounded-lg">
+                                    <Avatar className="h-8 w-8 rounded-lg">
+                                        <AvatarImage src={user.avatar} alt={user.name} />
+                                        <AvatarFallback className="rounded-lg bg-primary/10 font-mono text-xs">{initials}</AvatarFallback>
+                                    </Avatar>
+                                </div>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
                                     <span className="truncate font-medium">{user.name}</span>
-                                    <span className="truncate text-xs">{user.email}</span>
+                                    <span className="truncate font-mono text-[10px] text-muted-foreground">{user.email}</span>
                                 </div>
                             </div>
                         </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="hk-neon-separator" />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
+                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setSubscriptionModalOpen(true)}>
                                 {hasActiveSubscription ? (
                                     <>
-                                        <Coins />
+                                        <Coins className="hk-neon-icon" />
                                         <span className="flex-1">Credits</span>
-                                        <span className="ml-auto text-xs text-muted-foreground">
+                                        <span className="ml-auto font-mono text-xs text-muted-foreground">
                                             {isLoading ? "..." : credits?.totalCredits ?? 0}
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <Sparkles />
+                                        <Sparkles className="hk-neon-icon" />
                                         Buy Pro
                                     </>
                                 )}
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
+                        <DropdownMenuSeparator className="hk-neon-separator" />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem onClick={() => onSettingsClick?.("general")}>
-                                <BadgeCheck />
+                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => onSettingsClick?.("general")}>
+                                <BadgeCheck className="hk-neon-icon" />
                                 Account
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
-                                <CreditCard />
+                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setSubscriptionModalOpen(true)}>
+                                <CreditCard className="hk-neon-icon" />
                                 Billing
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setNotificationsOpen(true)}>
-                                <Bell />
+                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setNotificationsOpen(true)}>
+                                <Bell className="hk-neon-icon" />
                                 Notifications
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout}>
-                            <LogOut />
+                        <DropdownMenuSeparator className="hk-neon-separator" />
+                        <DropdownMenuItem className="hk-neon-dropdown-item" onClick={handleLogout}>
+                            <LogOut className="hk-neon-icon" />
                             Log out
                         </DropdownMenuItem>
                     </DropdownMenuContent>

@@ -236,7 +236,22 @@ body {
 .pb-anim-hoverscale { transition: transform 0.2s ease; }
 .pb-anim-hoverscale:hover { transform: scale(1.05); }
 
-/* ─── Hacker / Cyber animations ──────────────────────────────────────────── */
+/* ─── Hacker / Cyber / Neon animations ───────────────────────────────────── */
+
+/* Neon color vars */
+:root {
+  --neon-primary: oklch(0.72 0.19 248);
+  --neon-cyan: oklch(0.82 0.14 192);
+  --neon-green: oklch(0.80 0.18 150);
+  --neon-purple: oklch(0.65 0.20 300);
+}
+
+.dark {
+  --neon-primary: oklch(0.72 0.22 248);
+  --neon-cyan: oklch(0.85 0.16 192);
+  --neon-green: oklch(0.83 0.20 150);
+  --neon-purple: oklch(0.68 0.22 300);
+}
 
 /* Scanline sweep */
 @keyframes hk-scanline {
@@ -244,16 +259,16 @@ body {
   100% { background-position: 0 200%; }
 }
 
-/* Cyber glow pulse */
+/* Neon glow pulse */
 @keyframes hk-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0px transparent; }
-  50%      { box-shadow: 0 0 8px var(--sidebar-ring), 0 0 16px color-mix(in oklch, var(--sidebar-ring) 30%, transparent); }
+  0%, 100% { box-shadow: 0 0 4px color-mix(in oklch, var(--neon-primary) 30%, transparent); }
+  50%      { box-shadow: 0 0 10px var(--neon-primary), 0 0 20px color-mix(in oklch, var(--neon-primary) 25%, transparent); }
 }
 
 /* Active item left-border slide-in */
 @keyframes hk-border-in {
-  from { transform: scaleY(0); }
-  to   { transform: scaleY(1); }
+  from { transform: scaleY(0); opacity: 0; }
+  to   { transform: scaleY(1); opacity: 1; }
 }
 
 /* Text flicker for active items */
@@ -265,7 +280,19 @@ body {
   10%      { opacity: 1; }
 }
 
-/* Hacker nav item base */
+/* Neon icon glow */
+@keyframes hk-icon-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px currentColor); }
+  50%      { filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 0 12px currentColor); }
+}
+
+/* Neon underline expand from center */
+@keyframes hk-neon-underline {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ─── Nav item base ──────────────────────────────────────────────────────── */
 .hk-nav-item {
   position: relative;
   transition: all 0.2s ease;
@@ -280,8 +307,8 @@ body {
     0deg,
     transparent,
     transparent 2px,
-    color-mix(in oklch, var(--sidebar-ring) 4%, transparent) 2px,
-    color-mix(in oklch, var(--sidebar-ring) 4%, transparent) 4px
+    color-mix(in oklch, var(--neon-primary) 5%, transparent) 2px,
+    color-mix(in oklch, var(--neon-primary) 5%, transparent) 4px
   );
   background-size: 100% 400%;
   pointer-events: none;
@@ -294,8 +321,14 @@ body {
   animation: hk-scanline 1.5s linear infinite;
 }
 
+/* Neon icon color on hover */
+.hk-nav-item:hover .hk-neon-icon {
+  color: var(--neon-cyan);
+  filter: drop-shadow(0 0 4px var(--neon-cyan)) drop-shadow(0 0 8px color-mix(in oklch, var(--neon-cyan) 40%, transparent));
+  transition: all 0.3s ease;
+}
 
-/* Active hacker item */
+/* ─── Active item ────────────────────────────────────────────────────────── */
 .hk-nav-active {
   position: relative;
 }
@@ -307,24 +340,30 @@ body {
   top: 4px;
   bottom: 4px;
   width: 2px;
-  background: var(--sidebar-ring);
+  background: var(--neon-cyan);
   border-radius: 1px;
   animation: hk-border-in 0.3s ease forwards;
   transform-origin: top;
-  box-shadow: 0 0 6px var(--sidebar-ring);
+  box-shadow: 0 0 6px var(--neon-cyan), 0 0 12px color-mix(in oklch, var(--neon-cyan) 40%, transparent);
 }
 
-/* Glow on hover for interactive elements */
+.hk-nav-active .hk-neon-icon {
+  color: var(--neon-cyan);
+  filter: drop-shadow(0 0 3px var(--neon-cyan));
+  animation: hk-icon-glow 3s ease infinite;
+}
+
+/* ─── Glow hover for interactive elements ────────────────────────────────── */
 .hk-glow-hover {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .hk-glow-hover:hover {
   animation: hk-glow-pulse 1.5s ease infinite;
-  border-color: color-mix(in oklch, var(--sidebar-ring) 40%, transparent);
+  border-color: color-mix(in oklch, var(--neon-primary) 40%, transparent);
 }
 
-/* Header cyber line */
+/* ─── Header cyber line with cursor-following beam ───────────────────────── */
 .hk-header-line {
   position: relative;
 }
@@ -339,39 +378,400 @@ body {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    var(--sidebar-ring) 20%,
-    color-mix(in oklch, var(--sidebar-ring) 60%, transparent) 50%,
-    var(--sidebar-ring) 80%,
+    color-mix(in oklch, var(--neon-cyan) 15%, transparent) 15%,
+    color-mix(in oklch, var(--neon-primary) 30%, transparent) 50%,
+    color-mix(in oklch, var(--neon-cyan) 15%, transparent) 85%,
     transparent 100%
   );
-  opacity: 0.3;
 }
 
-/* Scramble text monospace feel */
-.hk-scramble-text {
-  font-family: var(--font-mono), monospace;
-  letter-spacing: 0.02em;
+/* Cursor-following neon beam */
+.hk-header-beam {
+  position: absolute;
+  bottom: 0;
+  width: 120px;
+  height: 2px;
+  pointer-events: none;
+  z-index: 1;
+  transform: translateX(-50%);
+  transition: left 0.15s ease-out, opacity 0.3s ease;
+  background: radial-gradient(
+    ellipse at center,
+    var(--neon-cyan) 0%,
+    color-mix(in oklch, var(--neon-cyan) 40%, transparent) 40%,
+    transparent 70%
+  );
+  box-shadow: 0 0 8px var(--neon-cyan), 0 0 16px color-mix(in oklch, var(--neon-cyan) 30%, transparent);
 }
 
-/* Breadcrumb active page cyber style */
+/* ─── Breadcrumb neon active ─────────────────────────────────────────────── */
 .hk-breadcrumb-active {
   position: relative;
-  color: var(--sidebar-ring);
-  text-shadow: 0 0 8px color-mix(in oklch, var(--sidebar-ring) 40%, transparent);
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 50%, transparent),
+               0 0 12px color-mix(in oklch, var(--neon-cyan) 20%, transparent);
   animation: hk-text-flicker 4s linear infinite;
 }
 
-/* Sidebar group label cyber style */
+.hk-breadcrumb-active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--neon-cyan);
+  box-shadow: 0 0 4px var(--neon-cyan);
+  animation: hk-neon-underline 0.3s ease forwards;
+  transform-origin: center;
+}
+
+/* ─── Sidebar group label ────────────────────────────────────────────────── */
 .hk-group-label {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   font-size: 0.625rem;
   font-family: var(--font-mono), monospace;
   opacity: 0.5;
-  transition: opacity 0.2s ease;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.hk-group-label::before {
+  content: '//';
+  margin-right: 0.35em;
+  color: color-mix(in oklch, var(--neon-green) 50%, transparent);
 }
 
 .hk-group-label:hover {
   opacity: 0.8;
-  text-shadow: 0 0 4px color-mix(in oklch, var(--sidebar-ring) 20%, transparent);
+  color: var(--neon-green);
+  text-shadow: 0 0 4px color-mix(in oklch, var(--neon-green) 30%, transparent);
+}
+
+/* ─── Neon separator ─────────────────────────────────────────────────────── */
+.hk-neon-separator {
+  height: 1px !important;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--neon-primary) 20%, transparent),
+    transparent
+  ) !important;
+  border: none !important;
+}
+
+/* ─── Neon avatar ring ───────────────────────────────────────────────────── */
+.hk-neon-avatar {
+  position: relative;
+}
+
+.hk-neon-avatar::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 1px solid color-mix(in oklch, var(--neon-cyan) 30%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 15%, transparent),
+              inset 0 0 6px color-mix(in oklch, var(--neon-cyan) 10%, transparent);
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.hk-neon-avatar:hover::after {
+  border-color: color-mix(in oklch, var(--neon-cyan) 60%, transparent);
+  box-shadow: 0 0 10px color-mix(in oklch, var(--neon-cyan) 30%, transparent),
+              inset 0 0 10px color-mix(in oklch, var(--neon-cyan) 15%, transparent);
+}
+
+/* ─── Neon badge / pill ──────────────────────────────────────────────────── */
+.hk-neon-badge {
+  position: relative;
+  border-color: color-mix(in oklch, var(--neon-primary) 30%, transparent) !important;
+  box-shadow: 0 0 4px color-mix(in oklch, var(--neon-primary) 10%, transparent),
+              inset 0 0 4px color-mix(in oklch, var(--neon-primary) 5%, transparent);
+  transition: all 0.3s ease;
+}
+
+.hk-neon-badge:hover {
+  border-color: color-mix(in oklch, var(--neon-primary) 60%, transparent) !important;
+  box-shadow: 0 0 8px color-mix(in oklch, var(--neon-primary) 25%, transparent),
+              0 0 16px color-mix(in oklch, var(--neon-primary) 10%, transparent),
+              inset 0 0 6px color-mix(in oklch, var(--neon-primary) 8%, transparent);
+}
+
+/* ─── Neon dropdown menu ─────────────────────────────────────────────────── */
+.hk-neon-dropdown {
+  border-color: color-mix(in oklch, var(--neon-primary) 15%, transparent) !important;
+  box-shadow: 0 4px 24px color-mix(in oklch, var(--neon-primary) 8%, transparent),
+              0 0 1px color-mix(in oklch, var(--neon-primary) 20%, transparent) !important;
+}
+
+.hk-neon-dropdown-item {
+  transition: all 0.15s ease;
+}
+
+.hk-neon-dropdown-item:hover {
+  color: var(--neon-cyan) !important;
+  text-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 20%, transparent);
+}
+
+/* ─── Neon platform logo container ───────────────────────────────────────── */
+.hk-neon-logo-box {
+  position: relative;
+  border: 1px solid color-mix(in oklch, var(--neon-primary) 20%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--neon-primary) 10%, transparent),
+              inset 0 0 8px color-mix(in oklch, var(--neon-primary) 5%, transparent);
+  transition: all 0.3s ease;
+}
+
+.hk-nav-item:hover .hk-neon-logo-box {
+  border-color: color-mix(in oklch, var(--neon-primary) 50%, transparent);
+  box-shadow: 0 0 12px color-mix(in oklch, var(--neon-primary) 20%, transparent),
+              inset 0 0 12px color-mix(in oklch, var(--neon-primary) 8%, transparent);
+}
+
+/* ─── Sidebar neon border ────────────────────────────────────────────────── */
+.hk-sidebar-border {
+  border-right: 1px solid color-mix(in oklch, var(--neon-primary) 10%, var(--sidebar-border));
+  box-shadow: 1px 0 12px color-mix(in oklch, var(--neon-primary) 4%, transparent);
+}
+
+/* ─── Neon Dialog / Modal ────────────────────────────────────────────────── */
+.hk-neon-dialog {
+  border-color: color-mix(in oklch, var(--neon-primary) 20%, var(--border)) !important;
+  box-shadow:
+    0 0 1px color-mix(in oklch, var(--neon-primary) 30%, transparent),
+    0 4px 32px color-mix(in oklch, var(--neon-primary) 8%, transparent),
+    0 0 80px -20px color-mix(in oklch, var(--neon-primary) 6%, transparent) !important;
+}
+
+/* Dialog header with neon underline */
+.hk-neon-dialog-header {
+  position: relative;
+}
+
+.hk-neon-dialog-header::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklch, var(--neon-cyan) 25%, transparent) 20%,
+    color-mix(in oklch, var(--neon-primary) 40%, transparent) 50%,
+    color-mix(in oklch, var(--neon-cyan) 25%, transparent) 80%,
+    transparent 100%
+  );
+}
+
+/* Dialog title neon style */
+.hk-neon-dialog-title {
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.03em;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px color-mix(in oklch, var(--neon-cyan) 30%, transparent);
+}
+
+/* Dialog section cards */
+.hk-neon-card {
+  border-color: color-mix(in oklch, var(--neon-primary) 12%, var(--border)) !important;
+  border-radius: 0 !important;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.hk-neon-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: color-mix(in oklch, var(--neon-primary) 20%, transparent);
+  transition: all 0.3s ease;
+}
+
+.hk-neon-card:hover {
+  border-color: color-mix(in oklch, var(--neon-primary) 25%, var(--border)) !important;
+  box-shadow: 0 0 12px color-mix(in oklch, var(--neon-primary) 6%, transparent);
+}
+
+.hk-neon-card:hover::before {
+  background: var(--neon-cyan);
+  box-shadow: 0 0 6px var(--neon-cyan);
+}
+
+/* Neon tab triggers */
+.hk-neon-tab {
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  transition: all 0.2s ease;
+}
+
+.hk-neon-tab[data-state="active"] {
+  color: var(--neon-cyan) !important;
+  border-color: var(--neon-cyan) !important;
+  text-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 30%, transparent);
+}
+
+.hk-neon-tab:hover:not([data-state="active"]) {
+  color: color-mix(in oklch, var(--neon-cyan) 70%, var(--foreground));
+}
+
+/* Neon list items */
+.hk-neon-list-item {
+  border-radius: 0 !important;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.hk-neon-list-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: var(--neon-cyan);
+  transition: all 0.2s ease;
+  box-shadow: 0 0 4px var(--neon-cyan);
+}
+
+.hk-neon-list-item:hover {
+  background: color-mix(in oklch, var(--neon-primary) 5%, transparent) !important;
+}
+
+.hk-neon-list-item:hover::before {
+  width: 2px;
+}
+
+/* Neon input fields */
+.hk-neon-input {
+  border-radius: 0 !important;
+  border-color: color-mix(in oklch, var(--neon-primary) 15%, var(--border)) !important;
+  font-family: var(--font-mono), monospace;
+  transition: all 0.3s ease;
+}
+
+.hk-neon-input:focus {
+  border-color: color-mix(in oklch, var(--neon-cyan) 50%, var(--border)) !important;
+  box-shadow: 0 0 8px color-mix(in oklch, var(--neon-cyan) 15%, transparent),
+              inset 0 0 8px color-mix(in oklch, var(--neon-cyan) 5%, transparent) !important;
+}
+
+/* Neon button */
+.hk-neon-btn {
+  border-radius: 0 !important;
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.hk-neon-btn:hover:not(:disabled) {
+  box-shadow: 0 0 10px color-mix(in oklch, var(--neon-primary) 20%, transparent),
+              inset 0 0 10px color-mix(in oklch, var(--neon-primary) 8%, transparent);
+}
+
+.hk-neon-btn-primary {
+  border-radius: 0 !important;
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  box-shadow: 0 0 8px color-mix(in oklch, var(--neon-primary) 15%, transparent);
+}
+
+.hk-neon-btn-primary:hover:not(:disabled) {
+  box-shadow: 0 0 16px color-mix(in oklch, var(--neon-primary) 30%, transparent),
+              0 0 32px color-mix(in oklch, var(--neon-primary) 10%, transparent);
+}
+
+/* Neon empty state icon */
+.hk-neon-empty-icon {
+  border-radius: 0 !important;
+  border: 1px solid color-mix(in oklch, var(--neon-primary) 15%, transparent);
+  box-shadow: 0 0 8px color-mix(in oklch, var(--neon-primary) 8%, transparent),
+              inset 0 0 8px color-mix(in oklch, var(--neon-primary) 5%, transparent);
+}
+
+/* Neon label text */
+.hk-neon-label {
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+  color: color-mix(in oklch, var(--neon-green) 70%, var(--muted-foreground));
+}
+
+/* Neon stat number */
+.hk-neon-stat {
+  font-family: var(--font-mono), monospace;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 25%, transparent);
+}
+
+/* Neon status badge */
+.hk-neon-status-active {
+  border-radius: 0 !important;
+  background: color-mix(in oklch, var(--neon-green) 10%, transparent) !important;
+  color: var(--neon-green) !important;
+  border: 1px solid color-mix(in oklch, var(--neon-green) 25%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--neon-green) 15%, transparent);
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+}
+
+.hk-neon-status-inactive {
+  border-radius: 0 !important;
+  border: 1px solid color-mix(in oklch, var(--neon-primary) 15%, transparent);
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-size: 0.6rem;
+}
+
+/* Neon select */
+.hk-neon-select {
+  border-radius: 0 !important;
+  border-color: color-mix(in oklch, var(--neon-primary) 15%, var(--border)) !important;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.7rem;
+}
+
+/* Neon close button */
+.hk-neon-close {
+  border-radius: 0 !important;
+  border: 1px solid color-mix(in oklch, var(--neon-primary) 15%, transparent);
+  transition: all 0.2s ease;
+}
+
+.hk-neon-close:hover {
+  border-color: color-mix(in oklch, var(--neon-cyan) 40%, transparent);
+  box-shadow: 0 0 6px color-mix(in oklch, var(--neon-cyan) 15%, transparent);
+  color: var(--neon-cyan);
+}
+
+/* Neon divider */
+.hk-neon-divider {
+  border: none !important;
+  height: 1px !important;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklch, var(--neon-primary) 15%, transparent) 20%,
+    color-mix(in oklch, var(--neon-primary) 25%, transparent) 50%,
+    color-mix(in oklch, var(--neon-primary) 15%, transparent) 80%,
+    transparent
+  ) !important;
 }
