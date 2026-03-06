@@ -31,14 +31,11 @@ import {
   type CommunityBuildItem,
   type CommunityBuildsPage,
 } from '@/types/api.types'
+import { RATE_LIMITS, CREDIT_COSTS } from '@/config/credits.config'
 
 // ============================================================================
 // Type Definitions
 // ============================================================================
-
-/** Rate limiting constants */
-const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
-const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
 
 /** Insufficient credits response */
 interface InsufficientCreditsResponse {
@@ -127,7 +124,7 @@ async function checkRateLimit(
       differenceInHours: 24,
     })
 
-    if (chatCount >= MAX_MESSAGES_PER_DAY_AUTHENTICATED) {
+    if (chatCount >= RATE_LIMITS.AUTHENTICATED_MESSAGES_PER_DAY) {
       return {
         error: 'rate_limit:chat',
         message:
@@ -141,7 +138,7 @@ async function checkRateLimit(
       differenceInHours: 24,
     })
 
-    if (chatCount >= MAX_MESSAGES_PER_DAY_ANONYMOUS) {
+    if (chatCount >= RATE_LIMITS.ANONYMOUS_MESSAGES_PER_DAY) {
       return {
         error: 'rate_limit:chat',
         message:
@@ -224,7 +221,7 @@ export async function createChatHandler({
           error: 'insufficient_credits',
           message:
             'You need an active subscription to use this service. Please subscribe to continue.',
-          required: isNewChat ? 20 : 30,
+          required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
           available: 0,
         }
       }
@@ -238,7 +235,7 @@ export async function createChatHandler({
         return {
           error: 'insufficient_credits',
           message: deductResult.error ?? 'Failed to deduct credits',
-          required: isNewChat ? 20 : 30,
+          required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
           available: 0,
         }
       }
@@ -348,8 +345,12 @@ export async function createChatHandler({
     if (creditsDeducted && sessionUserId && creditsUsedAmount > 0) {
       try {
         await addAdditionalCredits(sessionUserId, creditsUsedAmount)
-      } catch {
-        // Refund failed - needs manual resolution
+      } catch (refundError) {
+        // Refund failed — log for admin manual resolution
+        console.error(
+          `CRITICAL: Credit refund failed for user ${sessionUserId}, amount: ${creditsUsedAmount}`,
+          refundError,
+        )
       }
     }
 

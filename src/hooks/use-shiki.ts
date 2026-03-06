@@ -47,12 +47,18 @@ export function useShikiHighlighter() {
 
   useEffect(() => {
     let cancelled = false
-    void getHighlighter().then((hl) => {
-      if (!cancelled) {
-        setHighlighter(hl)
-        setIsLoading(false)
-      }
-    })
+    void getHighlighter()
+      .then((hl) => {
+        if (!cancelled) {
+          setHighlighter(hl)
+          setIsLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      })
     return () => {
       cancelled = true
     }

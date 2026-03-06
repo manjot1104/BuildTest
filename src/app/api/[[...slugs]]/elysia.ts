@@ -71,6 +71,7 @@ import {
   getPublicDesignHandler,
 } from '@/server/api/controllers/studio.controller'
 import { env } from '@/env'
+import { RATE_LIMITS, CREDIT_COSTS } from '@/config/credits.config'
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -80,13 +81,20 @@ interface InsufficientCreditsResponse {
   available: number
 }
 
-const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
-const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
-
 // Speech-to-text rate limiting (in-memory, per-user, 24h sliding window)
-const MAX_STT_REQUESTS_PER_DAY = 100
 const MAX_STT_BASE64_LENGTH = 15_000_000 // ~15MB base64 string ≈ ~10MB decoded audio
 const sttRateLimitMap = new Map<string, { count: number; windowStart: number }>()
+
+// Periodically clean up expired STT rate limit entries to prevent memory leaks
+setInterval(() => {
+  const now = Date.now()
+  const windowMs = 24 * 60 * 60 * 1000
+  for (const [key, entry] of sttRateLimitMap) {
+    if (now - entry.windowStart >= windowMs) {
+      sttRateLimitMap.delete(key)
+    }
+  }
+}, 60 * 60 * 1000) // Clean up every hour
 
 /** Streaming error response type */
 interface StreamingErrorResponse {
@@ -125,7 +133,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_AUTHENTICATED) {
+            if (chatCount >= RATE_LIMITS.AUTHENTICATED_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -143,7 +151,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: 'You need an active subscription to use this service. Please subscribe to continue.',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -171,7 +179,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: deductResult.error ?? 'Failed to deduct credits',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -182,7 +190,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_ANONYMOUS) {
+            if (chatCount >= RATE_LIMITS.ANONYMOUS_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -525,7 +533,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         const windowMs = 24 * 60 * 60 * 1000
         const entry = sttRateLimitMap.get(userId)
         if (entry && now - entry.windowStart < windowMs) {
-          if (entry.count >= MAX_STT_REQUESTS_PER_DAY) {
+          if (entry.count >= RATE_LIMITS.STT_REQUESTS_PER_DAY) {
             set.status = 429
             return {
               error: 'rate_limit:speech' as const,

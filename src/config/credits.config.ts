@@ -90,6 +90,13 @@ export const CREDIT_COSTS = {
   FOLLOW_UP_PROMPT: 30, // Credits deducted for follow-up message in existing chat
 } as const;
 
+// Rate Limiting
+export const RATE_LIMITS = {
+  AUTHENTICATED_MESSAGES_PER_DAY: 50,
+  ANONYMOUS_MESSAGES_PER_DAY: 3,
+  STT_REQUESTS_PER_DAY: 100,
+} as const;
+
 // Type exports for type safety
 export type SubscriptionPlanId = keyof typeof SUBSCRIPTION_PLANS;
 export type CreditPackId = keyof typeof CREDIT_PACKS;
