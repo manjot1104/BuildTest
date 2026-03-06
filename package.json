@@ -12,14 +12,15 @@
     "db:migrate:force": "bun run scripts/db-force-migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "dev": "next dev --turbo",
+   "dev": "next dev",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "make-admin": "tsx scripts/make-admin.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.2",
@@ -73,6 +74,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.563.0",
     "motion": "^12.29.0",
+    "nanoid": "^5.1.6",
     "next": "^15.2.3",
     "next-themes": "^0.4.6",
     "nodemailer": "^8.0.1",

@@ -42,7 +42,7 @@ interface AdminUserDetail {
   subscription: AdminActiveSubscription | null;
   chats: {
     id: string;
-    v0_chat_id: string;
+   v0_chat_id: string | null;
     title: string | null;
     prompt: string | null;
     demo_url: string | null;

@@ -1,4 +1,5 @@
 "use client";
+import { useSearchParams } from "next/navigation";
 
 import {
   useState,
@@ -43,6 +44,7 @@ import {
   RotateCcw,
   ChevronDown,
   Play,
+  Star,
   Square,
   Terminal,
   Maximize2,
@@ -59,48 +61,75 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 // All IDs verified against OpenRouter /api/v1/models (Feb 2026)
+// const MODELS = [
+//   {
+//     id: "meta-llama/llama-3.3-70b-instruct:free",
+//     name: "LLaMA 3.3 70B",
+//     provider: "Meta",
+//     description: "Best model for complex reasoning & long context",
+//     badge: "Best",
+//     badgeVariant: "default" as const,
+//   },
+//   {
+//     id: "openai/gpt-oss-120b:free",
+//     name: "GPT OSS 120B",
+//     provider: "OpenAI",
+//     description: "OpenAI's powerful 120B model",
+//     badge: "New",
+//     badgeVariant: "default" as const,
+//   },
+ 
+//   {
+//     id: "mistralai/mistral-small-3.1-24b-instruct:free",
+//     name: "Mistral Small 3.1 24B",
+//     provider: "Mistral AI",
+//     description: "Fast and reliable for everyday tasks",
+//     badge: "Reliable",
+//     badgeVariant: "secondary" as const,
+//   },
+  
+  
+// ] as const;
+
+
 const MODELS = [
+  //  Highest Priority – GPT Models
   {
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    name: "LLaMA 3.3 70B",
-    provider: "Meta",
-    description: "Best model for complex reasoning & long context",
-    badge: "Best",
+    id: "openai/gpt-oss-20b:free",
+    name: "GPT OSS 20B",
+    provider: "OpenAI",
+    description: "Primary GPT model",
+    badge: "Primary",
     badgeVariant: "default" as const,
   },
   {
     id: "openai/gpt-oss-120b:free",
     name: "GPT OSS 120B",
     provider: "OpenAI",
-    description: "OpenAI's powerful 120B model",
-    badge: "New",
-    badgeVariant: "default" as const,
-  },
-  {
-    id: "nousresearch/hermes-3-llama-3.1-405b:free",
-    name: "Hermes 3 405B",
-    provider: "Nous Research",
-    description: "Massive 405B model, excellent at instruction-following",
-    badge: "405B",
+    description: "Larger GPT fallback",
+    badge: "Large",
     badgeVariant: "secondary" as const,
   },
+
+  //  Fallback Free Models
   {
     id: "mistralai/mistral-small-3.1-24b-instruct:free",
-    name: "Mistral Small 3.1 24B",
+    name: "Mistral Small 24B",
     provider: "Mistral AI",
-    description: "Fast and reliable for everyday tasks",
-    badge: "Reliable",
+    description: "Reliable fallback",
+    badge: "Fallback",
     badgeVariant: "secondary" as const,
   },
   {
-    id: "qwen/qwen3-coder:free",
-    name: "Qwen3 Coder",
-    provider: "Alibaba",
-    description: "Specialised for coding tasks and technical questions",
-    badge: "Code",
+    id: "google/gemma-3-12b-it:free",
+    name: "Gemma 3 12B",
+    provider: "Google",
+    description: "Lightweight fallback",
+    badge: "Fallback",
     badgeVariant: "secondary" as const,
   },
   {
@@ -111,12 +140,21 @@ const MODELS = [
     badge: null,
     badgeVariant: "secondary" as const,
   },
+
   {
-    id: "google/gemma-3-12b-it:free",
-    name: "Gemma 3 12B",
-    provider: "Google",
-    description: "Lighter Google model, faster responses",
-    badge: "Fast",
+    id: "qwen/qwen3-coder:free",
+    name: "Qwen3 Coder",
+    provider: "Alibaba",
+    description: "Specialised for coding tasks and technical questions",
+    badge: "Code",
+    badgeVariant: "secondary" as const,
+  },
+   {
+    id: "nousresearch/hermes-3-llama-3.1-405b:free",
+    name: "Hermes 3 405B",
+    provider: "Nous Research",
+    description: "Massive 405B model, excellent at instruction-following",
+    badge: "405B",
     badgeVariant: "secondary" as const,
   },
   {
@@ -141,6 +179,7 @@ const FALLBACK_MODEL_NAMES: Record<string, string> = {
 
 type ModelId = (typeof MODELS)[number]["id"];
 
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ChatMessage = {
@@ -151,6 +190,15 @@ type ChatMessage = {
   isFallback?: boolean;
   isError?: boolean;
   timestamp: Date;
+  starred?: boolean;
+  conversationId?: string   
+
+  
+  files?: {
+    filename: string;
+    language: string;
+    code: string;
+  }[];
 };
 
 // ─── Markdown Renderer ───────────────────────────────────────────────────────
@@ -894,7 +942,34 @@ function CopyMessageButton({ content }: { content: string }) {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  setMessages,
+}: {
+  message: ChatMessage
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
+}) {
+const toggleStar = async () => {
+  try {
+    await fetch("/api/openrouter/star", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        conversationId: message.conversationId,
+        starred: !message.starred
+      }),
+    });
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === message.id ? { ...m, starred: !m.starred } : m
+      )
+    );
+  } catch (error) {
+    console.error("Failed to star message", error);
+  }
+}
+
   const modelInfo = MODELS.find((m) => m.id === message.modelId);
   const modelLabel = modelInfo?.name
     ?? (message.modelId ? FALLBACK_MODEL_NAMES[message.modelId] : null)
@@ -908,15 +983,36 @@ function MessageBubble({ message }: { message: ChatMessage }) {
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
           </div>
           <div className="flex items-center gap-1">
-            <CopyMessageButton content={message.content} />
-            <span className="text-[11px] text-muted-foreground">
-              {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            </span>
+  <CopyMessageButton content={message.content} />
+
+  <Button
+    variant="ghost"
+    size="icon-xs"
+    onClick={toggleStar}
+    className={cn(
+      "opacity-0 transition-opacity group-hover:opacity-100",
+      message.starred && "text-yellow-500 opacity-100"
+    )}
+  >
+    <Star
+      className="size-3"
+      fill={message.starred ? "currentColor" : "none"}
+    />
+  </Button>
+
+  <span className="text-[11px] text-muted-foreground">
+    {message.timestamp.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    })}
+  </span>
+</div>
+          
           </div>
         </div>
-      </div>
-    );
-  }
+      
+);
+}
 
   return (
     <div className="group flex gap-3">
@@ -945,9 +1041,25 @@ function MessageBubble({ message }: { message: ChatMessage }) {
           <MarkdownMessage content={message.content} />
         </div>
         {!message.isError && <AppRunner content={message.content} />}
-        <div className="flex items-center gap-1">
-          <CopyMessageButton content={message.content} />
-          <span className="text-[11px] text-muted-foreground">
+       <div className="flex items-center gap-1">
+  <CopyMessageButton content={message.content} />
+
+  <Button
+    variant="ghost"
+    size="icon-xs"
+    onClick={toggleStar}
+    className={cn(
+      "opacity-0 transition-opacity group-hover:opacity-100",
+      message.starred && "text-yellow-500 opacity-100"
+    )}
+  >
+    <Star
+      className="size-3"
+      fill={message.starred ? "currentColor" : "none"}
+    />
+  </Button>
+
+  <span className="text-[11px] text-muted-foreground">
             {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
@@ -1280,8 +1392,17 @@ function ModelSelector({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OpenRouterChatPage() {
+ 
+  const [activeFiles, setActiveFiles] = useState<
+  { filename: string; language: string; code: string }[]
+>([]);
+
+const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+// const [conversationList, setConversationList] = useState<any[]>([]);
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
   const [isLoading, setIsLoading] = useState(false);
   const [genParams, setGenParams] = useState<GenerationParams>(DEFAULT_PARAMS);
@@ -1290,11 +1411,53 @@ export default function OpenRouterChatPage() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
+  useEffect(() => {
+  const chatId = searchParams.get("chatId");
 
+  if (!chatId) return;
+
+  setActiveConversationId(chatId);
+
+  fetch(`/api/openrouter/messages?conversationId=${chatId}`)
+    .then(res => res.json())
+    .then(data => {
+     const loaded = data.map((m: any) => ({
+  id: m.id,
+  role: m.role.toLowerCase(),
+  content: m.content,
+  timestamp: new Date(m.created_at),
+  modelId: m.model,
+  starred: m.starred || false,
+  conversationId: m.conversation_id  
+}));
+       
+
+      setMessages(loaded);
+    })
+    .catch(() => {
+      console.error("Failed to load conversation");
+    });
+
+}, [searchParams]);
+useEffect(() => {
+  const lastAssistant = [...messages]
+    .reverse()
+    .find((m) => m.role === "assistant" && m.files && m.files.length > 0);
+
+  if (lastAssistant?.files) {
+    setActiveFiles(lastAssistant.files);
+    setSelectedFileIndex(0);
+  }
+}, [messages]);
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-
+// useEffect(() => {
+//   fetch("/api/openrouter/conversations")
+//     .then(res => res.json())
+//     .then(data => setConversationList(data))
+//     .catch(() => {});
+// }, []);
   // Global Escape key listener to stop generation
   useEffect(() => {
     if (!isLoading) return;
@@ -1341,13 +1504,14 @@ export default function OpenRouterChatPage() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-            model: modelId,
-            streaming: true,
-            maxTokens: genParams.maxTokens,
-            temperature: genParams.temperature,
-            topP: genParams.topP,
-          }),
+  messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+  model: modelId,
+  streaming: true,
+  maxTokens: genParams.maxTokens,
+  temperature: genParams.temperature,
+  topP: genParams.topP,
+  conversationId: activeConversationId,   
+}),
           signal: controller.signal,
         });
 
@@ -1396,7 +1560,13 @@ export default function OpenRouterChatPage() {
                 const event = JSON.parse(jsonStr) as
                   | { type: "meta"; model: string; fallback: boolean }
                   | { type: "delta"; content: string }
-                  | { type: "done" }
+              | { 
+    type: "done"; 
+    cleanedText?: string; 
+    files?: { filename: string; language: string; code: string }[]; 
+    usedModel?: string;
+    conversationId?: string;
+  }
                   | { type: "error"; message: string };
 
                 switch (event.type) {
@@ -1420,8 +1590,16 @@ export default function OpenRouterChatPage() {
                     break;
                   case "error":
                     throw new Error(event.message);
-                  case "done":
-                    break;
+             case "done":
+  if (!activeConversationId && event.conversationId) {
+    setActiveConversationId(event.conversationId);
+  }
+
+  if (event.files?.length) {
+    setActiveFiles(event.files);
+    setSelectedFileIndex(0);
+  }
+  break;
                 }
               } catch (e) {
                 if (e instanceof SyntaxError) continue;
@@ -1487,7 +1665,7 @@ export default function OpenRouterChatPage() {
         textareaRef.current?.focus();
       }
     },
-    [input, isLoading, messages, modelId, genParams],
+   [ input, isLoading, messages, modelId, genParams, activeConversationId ]
   );
 
   const handleKeyDown = useCallback(
@@ -1515,11 +1693,15 @@ export default function OpenRouterChatPage() {
 
   const hasMessages = messages.length > 0;
 
-  return (
-    <div className="flex h-[calc(100svh-4rem)] flex-col -m-4">
+ return (
+ <div className="flex h-[calc(100svh-4rem)] -m-4">
 
-      {/* ── Header ── */}
-      <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
+  {/* LEFT SIDEBAR */}
+ 
+
+  {/* RIGHT SIDE — YOUR EXISTING CHAT UI */}
+  <div className="flex-1 flex flex-col">
+   <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
             <BrainCircuit className="size-4 text-primary" />
@@ -1568,7 +1750,13 @@ export default function OpenRouterChatPage() {
             />
           )}
           <div className="space-y-6">
-            {messages.map((msg) => <MessageBubble key={msg.id} message={msg} />)}
+           {messages.map((msg) => (
+  <MessageBubble
+    key={msg.id}
+    message={msg}
+    setMessages={setMessages}
+  />
+))}
             {isLoading && !(messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content) && (
               <TypingIndicator modelName={selectedModel.name} />
             )}
@@ -1636,19 +1824,94 @@ export default function OpenRouterChatPage() {
               </div>
             </div>
           </div>
-
-          <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-            Buildify AI Chat · AI responses may be inaccurate. Verify important information.
-          </p>
         </div>
       </div>
 
-      <style>{`
-        @keyframes bounce {
-          0%, 80%, 100% { transform: translateY(0); }
-          40% { transform: translateY(-4px); }
-        }
-      `}</style>
+  </div>
+
+
+
+  {/* EXISTING CHAT UI BELOW */}
+
+      {/* ── Header ── */}
+      
+   
+
+  {/* SIDEBAR */}
+{activeFiles.length > 0 && (
+  <>
+    {/* Resize Handle */}
+    <div className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" />
+
+    {/* Sidebar */}
+    <div className="w-[420px] border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl">
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
+        <div className="flex items-center gap-2">
+          <BrainCircuit className="size-4 text-primary" />
+          <span className="text-sm font-semibold tracking-tight">
+            Generated Code
+          </span>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-8"
+          onClick={() => setActiveFiles([])}
+        >
+          ✕
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex overflow-x-auto border-b">
+        {activeFiles.map((file, index) => (
+          <button
+            key={file.filename}
+            onClick={() => setSelectedFileIndex(index)}
+            className={cn(
+              "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
+              index === selectedFileIndex
+                ? "border-primary text-primary bg-primary/5"
+                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
+            )}
+          >
+            {file.filename}
+          </button>
+        ))}
+      </div>
+
+      {/* Code Area */}
+      <div className="flex-1 overflow-auto">
+        <div className="flex items-center justify-between border-b px-4 py-1.5">
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {activeFiles[selectedFileIndex]?.language}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 text-xs"
+            onClick={() =>
+              navigator.clipboard.writeText(
+                activeFiles[selectedFileIndex]?.code ?? ""
+              )
+            }
+          >
+            Copy
+          </Button>
+        </div>
+
+        <pre className="p-5 text-sm leading-relaxed overflow-x-auto font-mono bg-muted/30">
+          <code>
+            {activeFiles[selectedFileIndex]?.code}
+          </code>
+        </pre>
+      </div>
+
     </div>
-  );
-}
+  </>
+)}
+
+  </div>
+);}

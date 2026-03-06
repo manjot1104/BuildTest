@@ -186,15 +186,30 @@ export async function getChatDemoUrl({
 export async function getUserChatsByUserId({
   userId,
   limit = 50,
+  type = "all",
 }: {
   userId: string
   limit?: number
+  type?: "builder" | "openrouter" | "all"
 }): Promise<UserChat[]> {
   try {
+
     const chats = await db
       .select()
       .from(user_chats)
-      .where(eq(user_chats.user_id, userId))
+      .where(
+        type === "builder"
+          ? and(
+              eq(user_chats.user_id, userId),
+              eq(user_chats.chat_type, "BUILDER")
+            )
+          : type === "openrouter"
+          ? and(
+              eq(user_chats.user_id, userId),
+              eq(user_chats.chat_type, "OPENROUTER")
+            )
+          : eq(user_chats.user_id, userId)
+      )
       .orderBy(desc(user_chats.updated_at))
       .limit(limit)
 
@@ -219,7 +234,7 @@ export async function getChatIdsByUserId({
       .where(eq(user_chats.user_id, userId))
       .orderBy(desc(user_chats.created_at))
 
-    return chats.map((c) => c.v0ChatId)
+    return chats.map((c) => c.v0ChatId).filter(Boolean) as string[]
   } catch (error: unknown) {
     throw error
   }
@@ -259,7 +274,7 @@ export async function getCommunityChats({
 } = {}): Promise<
   {
     id: string
-    v0_chat_id: string
+    v0_chat_id: string | null
     title: string | null
     prompt: string | null
     demo_url: string | null
@@ -306,7 +321,7 @@ export async function getFeaturedChats(
 ): Promise<
   {
     id: string
-    v0_chat_id: string
+    v0_chat_id: string | null
     title: string | null
     prompt: string | null
     demo_url: string | null

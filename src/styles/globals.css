@@ -194,6 +194,18 @@ body {
 .web-preview-device-switcher {
   display: none !important;
 }
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary));
+}
 
 /* ─── Persona Builder animations ──────────────────────────────────────────── */
 @keyframes pb-fadein    { from { opacity: 0 }                                     to { opacity: 1 } }

@@ -142,6 +142,68 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
+export const chatTypeEnum = pgEnum("chat_type", [
+  "BUILDER",
+  "OPENROUTER",
+]);
+
+export const messageRoleEnum = pgEnum("message_role", [
+  "USER",
+  "ASSISTANT",
+  "SYSTEM",
+]);
+
+export const conversations = createTable(
+  "conversations",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+
+    model_name: d.text("model_name"),
+
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    title: text("title"),
+  }),
+  (t) => [
+    index("conversations_user_id_idx").on(t.user_id),
+  ],
+);
+
+export const conversation_messages = createTable(
+  "conversation_messages",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+
+    conversation_id: d
+      .text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+
+    role: messageRoleEnum("role").notNull(),
+
+    content: d.text("content").notNull(),
+
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("conversation_messages_conversation_id_idx").on(t.conversation_id),
+  ],
+);
 
 // User chats - stores chat data locally for efficient history retrieval
 // Maps V0 chat IDs to user IDs and stores chat metadata
@@ -149,7 +211,7 @@ export const user_chats = createTable(
   "user_chats",
   (d) => ({
     id: d.text("id").primaryKey(),
-    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }).notNull(),
+    v0_chat_id: d.varchar("v0_chat_id", { length: 255 }),
     user_id: d
       .text("user_id")
       .notNull()
@@ -169,13 +231,24 @@ export const user_chats = createTable(
       .timestamp("updated_at", { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    is_starred: d.boolean("is_starred").default(false).notNull()
+    is_starred: d.boolean("is_starred").default(false).notNull(),
+    chat_type: chatTypeEnum("chat_type").notNull().default("BUILDER"),
+
+model_name: d.text("model_name"),
+
+prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
+
+conversation_id: d
+  .text("conversation_id")
+  .references(() => conversations.id, { onDelete: "set null" }),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
     index("user_chats_user_id_idx").on(t.user_id),
     index("user_chats_v0_chat_id_idx").on(t.v0_chat_id),
     index("user_chats_created_at_idx").on(t.created_at),
+    index("user_chats_chat_type_idx").on(t.chat_type),
+index("user_chats_conversation_id_idx").on(t.conversation_id),
   ],
 );
 
