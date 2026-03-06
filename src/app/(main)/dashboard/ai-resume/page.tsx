@@ -727,7 +727,7 @@ export default function AIResumeBuilderPage() {
 
 // LaTeX Preview Component with Syntax Highlighting
 function LaTeXPreview({ code }: { code: string }) {
-  const { html, isLoading } = useHighlightCode(code, 'tex')
+  const { html, isLoading } = useHighlightCode(code, 'latex')
 
   if (isLoading) {
     return (
