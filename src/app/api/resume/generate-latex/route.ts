@@ -43,6 +43,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       latex: result.cleaned,
       rawResponse: result.raw,
+      model: result.model,
+      isFallback: result.isFallback,
       success: true,
     })
   } catch (error) {

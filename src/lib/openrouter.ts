@@ -12,12 +12,39 @@ export interface ResumeData {
   model?: string
 }
 
+export interface OpenRouterResult {
+  raw: string
+  cleaned: string
+  model: string
+  isFallback: boolean
+}
+
 const DEFAULT_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
 
+/** Fallback chain — tried in order when the requested model fails */
+const FALLBACK_CHAIN = [
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'qwen/qwen3-coder:free',
+  'nousresearch/hermes-3-llama-3.1-405b:free',
+  'google/gemma-3-27b-it:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'openai/gpt-oss-120b:free',
+  'arcee-ai/trinity-large-preview:free',
+  'google/gemma-3-12b-it:free',
+  'openai/gpt-oss-20b:free',
+]
+
 /**
- * Calls OpenRouter chat completions API
+ * Builds an ordered model chain: requested model first, then fallbacks
  */
-async function callOpenRouter(
+function buildModelChain(requested: string): string[] {
+  return [requested, ...FALLBACK_CHAIN.filter((m) => m !== requested)]
+}
+
+/**
+ * Calls OpenRouter chat completions API for a single model (no retry)
+ */
+async function callOpenRouterSingle(
   messages: { role: string; content: string }[],
   model: string,
 ): Promise<string> {
@@ -26,16 +53,14 @@ async function callOpenRouter(
     throw new Error('OPENROUTER_API_KEY is not configured.')
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Authorization': `Bearer ${apiKey}`,
-    'HTTP-Referer': env.NEXT_PUBLIC_APP_URL,
-    'X-Title': 'Buildify AI Resume Builder',
-  }
-
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
-    headers,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': env.NEXT_PUBLIC_APP_URL,
+      'X-Title': 'Buildify AI Resume Builder',
+    },
     body: JSON.stringify({
       model,
       messages,
@@ -47,17 +72,46 @@ async function callOpenRouter(
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
     const errorMessage = errorData.error?.message || errorData.message || response.statusText
-    throw new Error(`OpenRouter API error: ${response.status} - ${errorMessage}`)
+    throw new Error(`OpenRouter API error (${model}): ${response.status} - ${errorMessage}`)
   }
 
   const result = await response.json()
   const content = result.choices?.[0]?.message?.content
 
   if (!content) {
-    throw new Error('No response returned from OpenRouter API')
+    throw new Error(`No response returned from ${model}`)
   }
 
   return content
+}
+
+/**
+ * Calls OpenRouter with fallback chain — tries each model until one succeeds
+ */
+async function callOpenRouter(
+  messages: { role: string; content: string }[],
+  requestedModel: string,
+): Promise<{ content: string; model: string; isFallback: boolean }> {
+  const chain = buildModelChain(requestedModel)
+
+  for (let i = 0; i < chain.length; i++) {
+    const model = chain[i]!
+    try {
+      const content = await callOpenRouterSingle(messages, model)
+      return {
+        content,
+        model,
+        isFallback: i > 0,
+      }
+    } catch (error) {
+      console.warn(`Model ${model} failed:`, error instanceof Error ? error.message : error)
+      if (i === chain.length - 1) {
+        throw new Error(`All models failed. Last error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+  }
+
+  throw new Error('All models in the fallback chain failed.')
 }
 
 /**
@@ -71,9 +125,9 @@ function cleanLatexResponse(raw: string): string {
 }
 
 /**
- * Generates professional LaTeX resume code using OpenRouter API
+ * Generates professional LaTeX resume code using OpenRouter API with fallback
  */
-export async function generateLaTeXResume(data: ResumeData): Promise<{ raw: string; cleaned: string }> {
+export async function generateLaTeXResume(data: ResumeData): Promise<OpenRouterResult> {
   const model = data.model || DEFAULT_MODEL
 
   const prompt = `You are an expert LaTeX resume writer. Generate a professional, clean LaTeX resume based on the following information.
@@ -101,7 +155,7 @@ ${data.additionalInstructions ? `\nAdditional Instructions:\n${data.additionalIn
 
 Generate the complete LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
 
-  const rawResponse = await callOpenRouter(
+  const result = await callOpenRouter(
     [
       {
         role: 'system',
@@ -113,19 +167,21 @@ Generate the complete LaTeX document code now. Return ONLY the LaTeX code, nothi
   )
 
   return {
-    raw: rawResponse,
-    cleaned: cleanLatexResponse(rawResponse),
+    raw: result.content,
+    cleaned: cleanLatexResponse(result.content),
+    model: result.model,
+    isFallback: result.isFallback,
   }
 }
 
 /**
- * Processes a follow-up prompt to modify existing LaTeX code
+ * Processes a follow-up prompt to modify existing LaTeX code with fallback
  */
 export async function followUpLaTeX(
   currentLatex: string,
   prompt: string,
   model?: string,
-): Promise<{ raw: string; cleaned: string }> {
+): Promise<OpenRouterResult> {
   const selectedModel = model || DEFAULT_MODEL
 
   const followUpPrompt = `You are an expert LaTeX resume writer. I have an existing LaTeX resume code, and I want you to modify it based on the following instruction.
@@ -148,7 +204,7 @@ IMPORTANT REQUIREMENTS:
 
 Return the complete modified LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
 
-  const rawResponse = await callOpenRouter(
+  const result = await callOpenRouter(
     [
       {
         role: 'system',
@@ -159,10 +215,15 @@ Return the complete modified LaTeX document code now. Return ONLY the LaTeX code
     selectedModel,
   )
 
-  const cleaned = cleanLatexResponse(rawResponse)
+  const cleaned = cleanLatexResponse(result.content)
   if (!cleaned) {
     throw new Error('Failed to extract LaTeX code from AI response')
   }
 
-  return { raw: rawResponse, cleaned }
+  return {
+    raw: result.content,
+    cleaned,
+    model: result.model,
+    isFallback: result.isFallback,
+  }
 }

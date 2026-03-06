@@ -89,6 +89,14 @@ const RESUME_MODELS = [
 
 const DEFAULT_MODEL = RESUME_MODELS[0].id
 
+/** Get friendly model name from ID */
+function getModelName(modelId: string): string {
+  const found = RESUME_MODELS.find((m) => m.id === modelId)
+  if (found) return found.name
+  // Strip provider prefix and :free suffix for unknown models
+  return modelId.replace(/^[^/]+\//, '').replace(/:free$/, '')
+}
+
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
@@ -118,6 +126,8 @@ export default function AIResumeBuilderPage() {
   const [showRawResponse, setShowRawResponse] = useState(false)
   const [followUpPrompt, setFollowUpPrompt] = useState('')
   const [isProcessingFollowUp, setIsProcessingFollowUp] = useState(false)
+  const [usedModel, setUsedModel] = useState<string | null>(null)
+  const [isFallback, setIsFallback] = useState(false)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -163,8 +173,15 @@ export default function AIResumeBuilderPage() {
       setLatexCode(generatedLatex)
       setEditedLatex(generatedLatex)
       setRawAIResponse(rawResponse)
+      setUsedModel(result.model || selectedModel)
+      setIsFallback(result.isFallback || false)
       setCurrentStep('latex-preview')
-      toast.success('LaTeX code generated successfully!', { id: 'resume-generate' })
+
+      if (result.isFallback && result.model) {
+        toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
+      } else {
+        toast.success('LaTeX code generated successfully!', { id: 'resume-generate' })
+      }
     } catch (error) {
       console.error('Error generating LaTeX:', error)
       toast.error(
@@ -268,8 +285,15 @@ export default function AIResumeBuilderPage() {
       setLatexCode(updatedLatex)
       setEditedLatex(updatedLatex)
       setRawAIResponse(rawResponse)
+      setUsedModel(result.model || selectedModel)
+      setIsFallback(result.isFallback || false)
       setFollowUpPrompt('')
-      toast.success('LaTeX updated successfully!', { id: 'follow-up' })
+
+      if (result.isFallback && result.model) {
+        toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'follow-up' })
+      } else {
+        toast.success('LaTeX updated successfully!', { id: 'follow-up' })
+      }
     } catch (error) {
       console.error('Error processing follow-up:', error)
       toast.error(
@@ -289,6 +313,8 @@ export default function AIResumeBuilderPage() {
     setFollowUpPrompt('')
     setIsEditing(false)
     setShowRawResponse(false)
+    setUsedModel(null)
+    setIsFallback(false)
     form.reset()
   }
 
@@ -300,9 +326,14 @@ export default function AIResumeBuilderPage() {
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold tracking-tight">LaTeX Code Preview</h1>
             <div className="flex items-center gap-3">
-              {currentModelInfo && (
-                <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">
-                  {currentModelInfo.provider} / {currentModelInfo.name}
+              {usedModel && (
+                <span className={cn(
+                  "text-xs px-2.5 py-1 rounded-md",
+                  isFallback
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
+                    : "bg-muted text-muted-foreground"
+                )}>
+                  {isFallback && "fallback: "}{getModelName(usedModel)}
                 </span>
               )}
               <Button variant="outline" onClick={handleReset} size="sm">
