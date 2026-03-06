@@ -12,11 +12,9 @@
     "db:migrate:force": "bun run scripts/db-force-migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-<<<<<<< HEAD
+
     "dev": "next dev ",
-=======
-   "dev": "next dev",
->>>>>>> 4cf2a8c070c935ea37ae8398e523235ab6d49efa
+
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint": "next lint",
