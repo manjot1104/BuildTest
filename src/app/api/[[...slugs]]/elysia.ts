@@ -38,6 +38,12 @@ import {
 } from '@/server/api/controllers/admin.controller'
 import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
 import { openRouterChatHandler, openRouterStreamHandler } from '@/server/api/controllers/openrouter.controller'
+import {
+  startTestRunHandler,
+  getTestRunHandler,
+  getTestHistoryHandler,
+  getTestReportHandler,
+} from '@/server/api/controllers/testing.controller'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
 import {
@@ -1037,3 +1043,56 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({ chatId: t.String() }),
     },
   )
+
+  // ============================================
+  // Testing Engine Endpoints
+  // ============================================
+
+  // Start a new test run - POST /api/test/run
+  .post(
+    '/test/run',
+    async ({ body, set }) => {
+      const result = await startTestRunHandler({ body })
+      if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
+      return result
+    },
+    {
+      body: t.Object({
+        url: t.String(),
+        projectId: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // Get test run status + bugs - GET /api/test/run/:id
+  .get(
+    '/test/run/:id',
+    async ({ params, set }) => {
+      const result = await getTestRunHandler({ params })
+      if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+    },
+  )
+
+  // Get full report with all test cases - GET /api/test/run/:id/report
+  .get(
+    '/test/run/:id/report',
+    async ({ params, set }) => {
+      const result = await getTestReportHandler({ params })
+      if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+    },
+  )
+
+  // Get test history for current user - GET /api/test/history
+  .get('/test/history', async ({ set }) => {
+    const result = await getTestHistoryHandler()
+    if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
+    return result
+  })
