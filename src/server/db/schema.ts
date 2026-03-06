@@ -133,6 +133,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   paymentTransactions: many(payment_transactions),
   creditUsageLogs: many(credit_usage_logs),
   githubRepos: many(github_repos),
+  testRuns: many(test_runs),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -488,4 +489,299 @@ export const github_repos = createTable(
 export const githubReposRelations = relations(github_repos, ({ one }) => ({
   user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
   chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
+}));
+
+// =============================================================================
+// TINYFISH TESTING ENGINE
+// =============================================================================
+
+// -- Enums --------------------------------------------------------------------
+
+export const testRunStatusEnum = pgEnum("test_run_status", [
+  "crawling",
+  "generating",
+  "executing",
+  "reporting",
+  "complete",
+  "failed",
+]);
+
+export const testPriorityEnum = pgEnum("test_priority", [
+  "P0",
+  "P1",
+  "P2",
+]);
+
+export const testResultStatusEnum = pgEnum("test_result_status", [
+  "pending",
+  "running",
+  "passed",
+  "failed",
+  "flaky",
+  "skipped",
+]);
+
+export const bugSeverityEnum = pgEnum("bug_severity", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+]);
+
+// FIX 1: Proper enum for bug status instead of raw text
+export const bugStatusEnum = pgEnum("bug_status", [
+  "open",
+  "fixed",
+  "ignored",
+]);
+
+export const reportFormatEnum = pgEnum("report_format", [
+  "pdf",
+  "json",
+  "html",
+]);
+
+// -- Tables -------------------------------------------------------------------
+
+// Each full test execution
+export const test_runs = createTable(
+  "test_runs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // FIX 2: project_id links test to a Buildify-generated app (null = external URL)
+    project_id: d.text("project_id"),
+    target_url: d.text("target_url").notNull(),
+    // Pipeline status: crawling → generating → executing → reporting → complete | failed
+    status: testRunStatusEnum("status").notNull().default("crawling"),
+    overall_score: d.integer("overall_score"),
+    total_tests: d.integer("total_tests").default(0),
+    passed: d.integer("passed").default(0),
+    failed: d.integer("failed").default(0),
+    // FIX 3: skipped count for dashboard counter (X passed / Y failed / Z skipped)
+    skipped: d.integer("skipped").default(0),
+    started_at: d
+      .timestamp("started_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("test_runs_user_id_idx").on(t.user_id),
+    index("test_runs_status_idx").on(t.status),
+    index("test_runs_started_at_idx").on(t.started_at),
+    index("test_runs_project_id_idx").on(t.project_id),
+  ],
+);
+
+// Crawled site map data
+export const crawl_results = createTable(
+  "crawl_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    pages: d.jsonb("pages"),           // all pages found
+    elements: d.jsonb("elements"),     // buttons, inputs, links
+    forms: d.jsonb("forms"),           // all forms found
+    links: d.jsonb("links"),           // all internal/external links
+    screenshots: d.jsonb("screenshots"), // baseline screenshots per page
+    crawl_time_ms: d.integer("crawl_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("crawl_results_test_run_id_idx").on(t.test_run_id),
+  ],
+);
+
+// AI-generated test cases
+export const test_cases = createTable(
+  "test_cases",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    category: d.varchar("category", { length: 50 }), // navigation, forms, visual, performance, auth, security
+    title: d.text("title"),
+    description: d.text("description"),
+    steps: d.jsonb("steps"),           // array of natural-language step strings
+    expected_result: d.text("expected_result"),
+    priority: testPriorityEnum("priority").default("P1"),
+    tags: d.jsonb("tags"),             // string[]
+    estimated_duration: d.integer("estimated_duration"), // ms
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("test_cases_test_run_id_idx").on(t.test_run_id),
+    index("test_cases_priority_idx").on(t.priority),
+    index("test_cases_category_idx").on(t.category),
+  ],
+);
+
+// Individual test execution outcomes
+export const test_results = createTable(
+  "test_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_case_id: d
+      .text("test_case_id")
+      .notNull()
+      .references(() => test_cases.id, { onDelete: "cascade" }),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    status: testResultStatusEnum("status").default("pending"),
+    actual_result: d.text("actual_result"),
+    duration_ms: d.integer("duration_ms"),
+    screenshot_url: d.text("screenshot_url"), // Cloudflare R2 URL
+    error_details: d.text("error_details"),
+    console_logs: d.jsonb("console_logs"),    // captured browser console output
+    retry_count: d.integer("retry_count").default(0), // marked "flaky" if passes on retry
+    tinyfish_job_id: d.text("tinyfish_job_id"), // TinyFish SSE job reference
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("test_results_test_run_id_idx").on(t.test_run_id),
+    index("test_results_test_case_id_idx").on(t.test_case_id),
+    index("test_results_status_idx").on(t.status),
+  ],
+);
+
+// Found bugs (one per failed test result)
+export const bug_reports = createTable(
+  "bug_reports",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    test_result_id: d
+      .text("test_result_id")
+      .references(() => test_results.id, { onDelete: "set null" }),
+    severity: bugSeverityEnum("severity").default("medium"),
+    category: d.varchar("category", { length: 50 }),
+    title: d.text("title"),
+    description: d.text("description"),
+    reproduction_steps: d.jsonb("reproduction_steps"), // ordered string[]
+    screenshot_url: d.text("screenshot_url"),
+    ai_fix_suggestion: d.text("ai_fix_suggestion"),   // AI-generated fix with code snippet
+    page_url: d.text("page_url"),
+    // FIX 1 applied: enum instead of raw text
+    status: bugStatusEnum("status").default("open"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("bug_reports_test_run_id_idx").on(t.test_run_id),
+    index("bug_reports_severity_idx").on(t.severity),
+    index("bug_reports_status_idx").on(t.status),
+  ],
+);
+
+// Exported reports (PDF / JSON / HTML)
+export const report_exports = createTable(
+  "report_exports",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    format: reportFormatEnum("format").notNull(),
+    file_url: d.text("file_url"),       // Cloudflare R2 URL for the export file
+    ai_summary: d.text("ai_summary"),   // Plain-English executive summary
+    // FIX 4: Shareable public report links
+    shareable_slug: d.varchar("shareable_slug", { length: 100 }).unique(),
+    is_public: d.boolean("is_public").default(false).notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("report_exports_test_run_id_idx").on(t.test_run_id),
+    index("report_exports_shareable_slug_idx").on(t.shareable_slug),
+  ],
+);
+
+// -- Relations ----------------------------------------------------------------
+
+export const testRunsRelations = relations(test_runs, ({ one, many }) => ({
+  user: one(user, { fields: [test_runs.user_id], references: [user.id] }),
+  crawlResult: one(crawl_results, {
+    fields: [test_runs.id],
+    references: [crawl_results.test_run_id],
+  }),
+  testCases: many(test_cases),
+  testResults: many(test_results),
+  bugReports: many(bug_reports),
+  reportExports: many(report_exports),
+}));
+
+export const crawlResultsRelations = relations(crawl_results, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [crawl_results.test_run_id],
+    references: [test_runs.id],
+  }),
+}));
+
+export const testCasesRelations = relations(test_cases, ({ one, many }) => ({
+  testRun: one(test_runs, {
+    fields: [test_cases.test_run_id],
+    references: [test_runs.id],
+  }),
+  results: many(test_results),
+}));
+
+export const testResultsRelations = relations(test_results, ({ one }) => ({
+  testCase: one(test_cases, {
+    fields: [test_results.test_case_id],
+    references: [test_cases.id],
+  }),
+  testRun: one(test_runs, {
+    fields: [test_results.test_run_id],
+    references: [test_runs.id],
+  }),
+  bugReport: one(bug_reports, {
+    fields: [test_results.id],
+    references: [bug_reports.test_result_id],
+  }),
+}));
+
+export const bugReportsRelations = relations(bug_reports, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [bug_reports.test_run_id],
+    references: [test_runs.id],
+  }),
+  testResult: one(test_results, {
+    fields: [bug_reports.test_result_id],
+    references: [test_results.id],
+  }),
+}));
+
+export const reportExportsRelations = relations(report_exports, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [report_exports.test_run_id],
+    references: [test_runs.id],
+  }),
 }));
