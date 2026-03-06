@@ -14,7 +14,9 @@ import { useQuery } from '@tanstack/react-query'
 interface StarredChat {
     id: string
     v0_chat_id: string
+    conversation_id?: string | null
     title: string | null
+    last_message?: string | null
     demo_url: string | null
     created_at: string
 }

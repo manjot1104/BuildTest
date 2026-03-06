@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgEnum,
   pgTable,
   pgTableCreator,
@@ -615,3 +616,28 @@ export const studio_layouts = createTable(
 export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
   user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
 }));
+
+// ─── Sandbox Executions ──────────────────────────────────────────────────────
+
+export const sandbox_executions = createTable(
+  "sandbox_executions",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d.text("user_id").notNull(),
+    language: d.text("language").notNull(),
+    code: d.text("code").notNull(),
+    status: d.text("status").notNull().default("running"),
+    output: d.text("output"),
+    error: d.text("error"),
+    exit_code: integer("exit_code"),
+    execution_time_ms: integer("execution_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("sandbox_executions_user_id_idx").on(t.user_id),
+  ],
+);
