@@ -177,16 +177,13 @@ const FALLBACK_MODEL_NAMES: Record<string, string> = {
   "openrouter/free": "Auto (Free)",
 };
 
-type ModelId = (typeof MODELS)[number]["id"];
-
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  modelId?: ModelId | string;
+  modelId?: string;
   isFallback?: boolean;
   isError?: boolean;
   timestamp: Date;
@@ -211,7 +208,7 @@ function splitCodeBlocks(raw: string): Segment[] {
   const segments: Segment[] = [];
   const parts = raw.split(/(```(?:\w+)?\n?[\s\S]*?```)/g);
   for (const part of parts) {
-    const codeMatch = part.match(/^```(\w*)\n?([\s\S]*?)```$/);
+    const codeMatch = /^```(\w*)\n?([\s\S]*?)```$/.exec(part);
     if (codeMatch) {
       segments.push({
         type: "code",
@@ -293,14 +290,14 @@ function TextSegment({ content }: { content: string }) {
   };
 
   lines.forEach((line, i) => {
-    const olMatch = line.match(/^(\d+)\.\s+(.+)$/);
+    const olMatch = /^(\d+)\.\s+(.+)$/.exec(line);
     if (olMatch) {
       if (listType !== "ol") flushList(`pre-ol-${i}`);
       listType = "ol";
       listBuffer.push(olMatch[2]!);
       return;
     }
-    if (line.match(/^[-*]\s+/)) {
+    if (/^[-*]\s+/.test(line)) {
       if (listType !== "ul") flushList(`pre-ul-${i}`);
       listType = "ul";
       listBuffer.push(line.replace(/^[-*]\s+/, ""));
@@ -484,7 +481,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
 
   // Detect if code contains JSX syntax (even if tagged as js/ts)
   const looksLikeJsx = (code: string) =>
-    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || /React\.createElement/.test(code) || /from\s+['"]react['"]/.test(code);
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || code.includes("React.createElement") || /from\s+['"]react['"]/.test(code);
 
   for (const block of blocks) {
     const lang = block.lang.toLowerCase();
@@ -1452,12 +1449,16 @@ useEffect(() => {
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
-// useEffect(() => {
-//   fetch("/api/openrouter/conversations")
-//     .then(res => res.json())
-//     .then(data => setConversationList(data))
-//     .catch(() => {});
-// }, []);
+
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    toast.info("Generation stopped");
+  }, []);
+
   // Global Escape key listener to stop generation
   useEffect(() => {
     if (!isLoading) return;
@@ -1468,16 +1469,7 @@ useEffect(() => {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [isLoading]);
-
-  const handleStopGeneration = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setIsLoading(false);
-    toast.info("Generation stopped");
-  }, []);
+  }, [isLoading, handleStopGeneration]);
 
   const sendMessage = useCallback(
     async (text?: string) => {

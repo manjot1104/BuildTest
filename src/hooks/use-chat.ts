@@ -122,7 +122,7 @@ export function useChat(chatId?: string) {
             errorMessage =
               'You have exceeded your maximum number of messages for the day. Please try again later.'
           }
-        } catch (parseError) {
+        } catch {
           if (response.status === 429) {
             errorMessage =
               'You have exceeded your maximum number of messages for the day. Please try again later.'

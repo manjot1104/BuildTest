@@ -93,7 +93,6 @@ export default function ChatPage() {
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
     const [isDragOver, setIsDragOver] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
-    const [refreshKey, setRefreshKey] = useState(0)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
     const [micError, setMicError] = useState<string | null>(null)
    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
@@ -139,7 +138,8 @@ useEffect(() => {
                 newUrl.searchParams.set('chatId', result.newChatId)
                 window.location.href = newUrl.pathname + newUrl.search
             }
-        } catch (error) {
+        } catch {
+          // URL update is non-critical
         }
     }
 
@@ -161,7 +161,6 @@ useEffect(() => {
         setAttachments([])
         setIsLoading(false)
         setIsFullscreen(false)
-        setRefreshKey((prev) => prev + 1)
         setUrlChatId(null)
 
         // Clear chatId from URL
@@ -220,7 +219,8 @@ useEffect(() => {
                 files.map((file) => createImageAttachment(file)),
             )
             setAttachments((prev) => [...prev, ...newAttachments])
-        } catch (error) {
+        } catch {
+          // Image processing failed silently
         }
     }
 
@@ -279,7 +279,8 @@ useEffect(() => {
                         chatId: chatData.id,
                     }),
                 })
-            } catch (error) {
+            } catch {
+              // Fork notification is non-critical
             }
         }
     }
@@ -291,7 +292,6 @@ useEffect(() => {
 
     useEffect(() => {
     if (shouldShowPreview) {
-        setRefreshKey((prev) => prev + 1)
 
         if (window.innerWidth < 768) {
             setActivePanel('preview')
@@ -412,8 +412,6 @@ useEffect(() => {
             currentChat={hookCurrentChat}
             isFullscreen={isFullscreen}
             setIsFullscreen={setIsFullscreen}
-            //refreshKey={refreshKey}
-           // setRefreshKey={setRefreshKey}
             isBuilding={false}
         />
     ) : null

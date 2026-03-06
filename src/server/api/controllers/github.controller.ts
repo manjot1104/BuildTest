@@ -1,5 +1,3 @@
-'use server'
-
 import { getSession } from '@/server/better-auth/server'
 import {
   getGithubToken,

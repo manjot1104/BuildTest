@@ -280,7 +280,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   
  .get(
   '/apps/:chatId',
-  async ({ params, set, request }) => {
+  async ({ params, set }) => {
     try {
       const result = await getChatDemoUrl({ v0ChatId: params.chatId })
 
@@ -289,48 +289,32 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         return { error: 'App not found' }
       }
 
-      // 🔹 VISIT LOGGING START
+      // Visit logging (non-critical, fire-and-forget)
       try {
         const { db } = await import('@/server/db')
         const { demo_visits, user_chats } = await import('@/server/db/schema')
         const { eq } = await import('drizzle-orm')
-        const { nanoid } = await import('nanoid')
-        const { getSession } = await import('@/server/better-auth/server')
-        const { getFeaturedBuildsHandler } = await import('@/server/api/controllers/chat.controller')
 
         const chatId = params.chatId
 
-        const featuredResult = await getFeaturedBuildsHandler()
-        const featuredList = (featuredResult as any)?.data ?? []
-
-        const isFeatured = featuredList.some(
-          (item: any) => item.v0_chat_id === chatId
-        )
-
-        let ownerUserId: string | null = null
-
-        if (!isFeatured) {
-          const owner = await db
-            .select()
-            .from(user_chats)
-            .where(eq(user_chats.v0_chat_id, chatId))
-            .limit(1)
-
-          ownerUserId = owner[0]?.user_id ?? null
-        }
+        // Look up the chat owner in a single lightweight query
+        const [chatRecord] = await db
+          .select({ user_id: user_chats.user_id })
+          .from(user_chats)
+          .where(eq(user_chats.v0_chat_id, chatId))
+          .limit(1)
 
         const session = await getSession()
         await db.insert(demo_visits).values({
-          id: nanoid(),
+          id: crypto.randomUUID(),
           demo_id: chatId,
-          demo_type: isFeatured ? 'featured' : 'community',
-          owner_user_id: ownerUserId,
+          demo_type: 'community',
+          owner_user_id: chatRecord?.user_id ?? null,
           visitor_user_id: session?.user?.id ?? null,
         })
       } catch {
         // Visit logging is non-critical — silently ignore failures
       }
-      // 🔹 VISIT LOGGING END
 
       return result
     } catch {
@@ -417,28 +401,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         isStarred: boolean
       }
 
-      // const { db } = await import('@/server/db')
-      // const { user_chats } = await import('@/server/db/schema')
-      // const { and, eq } = await import('drizzle-orm')
-
-      // await db
-      //   .update(user_chats)
-      //   .set({
-      //     is_starred: isStarred,
-      //     updated_at: new Date(),
-      //   })
-      //   .where(
-      //     and(
-      //       eq(user_chats.id, chatId),
-      //       eq(user_chats.user_id, session.user.id),
-      //     ),
-      //   )
       await toggleStarChat({
-  userId: session.user.id,
-  chatId,       
-  isStarred,
-})
-
+        userId: session.user.id,
+        chatId,
+        isStarred,
+      })
 
       return { success: true }
     },
@@ -457,24 +424,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: 'Unauthorized' }
     }
 
-    // const { db } = await import('@/server/db')
-    // const { user_chats } = await import('@/server/db/schema')
-    // const { and, eq, desc } = await import('drizzle-orm')
-
-    // const starredChats = await db
-    //   .select()
-    //   .from(user_chats)
-    //   .where(
-    //     and(
-    //       eq(user_chats.user_id, session.user.id),
-    //       eq(user_chats.is_starred, true),
-    //     ),
-    //   )
-    //   .orderBy(desc(user_chats.updated_at))
-
-    // return starredChats
     return getStarredChats(session.user.id)
-
   })
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user

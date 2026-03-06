@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
 
 import { cn } from '@/lib/utils'
@@ -14,10 +11,18 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 
-async function fetchStarredChats() {
+interface StarredChat {
+    id: string
+    v0_chat_id: string
+    title: string | null
+    demo_url: string | null
+    created_at: string
+}
+
+async function fetchStarredChats(): Promise<StarredChat[]> {
     const res = await fetch('/api/chat/starred')
     if (!res.ok) throw new Error('Failed to fetch starred chats')
-    return res.json()
+    return res.json() as Promise<StarredChat[]>
 }
 
 export function StarredChatsDialog({
@@ -114,7 +119,7 @@ export function StarredChatsDialog({
 
                         {!isLoading && !error && chats && chats.length > 0 && (
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">
-                                {chats.map((chat: any) => (
+                                {chats.map((chat) => (
                                     <button
                                       key={chat.conversation_id || chat.v0_chat_id}
                                         onClick={() => handleChatClick(chat)}

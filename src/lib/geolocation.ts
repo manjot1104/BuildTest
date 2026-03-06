@@ -95,7 +95,8 @@ export async function detectUserCountry(): Promise<string> {
       cacheLocation(countryCode, currencyConfig.code);
       return countryCode;
     }
-  } catch (error) {
+  } catch {
+    // Geolocation detection failed, fall through to browser hints
   }
 
   // Fallback: try browser language/timezone hints
