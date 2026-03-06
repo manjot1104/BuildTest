@@ -12,17 +12,23 @@
     "db:migrate:force": "bun run scripts/db-force-migrate.ts",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+<<<<<<< HEAD
     "dev": "next dev ",
+=======
+   "dev": "next dev",
+>>>>>>> 4cf2a8c070c935ea37ae8398e523235ab6d49efa
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "format:write": "prettier --write \"**/*.{ts,tsx,js,jsx,mdx}\" --cache",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "preview": "next build && next start",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "make-admin": "tsx scripts/make-admin.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.7.2",
+    "@daytonaio/sdk": "^0.147.0",
     "@elysiajs/eden": "^1.4.6",
     "@elysiajs/node": "^1.4.3",
     "@hookform/resolvers": "^5.2.2",
@@ -74,6 +80,7 @@
     "latex.js": "^0.12.6",
     "lucide-react": "^0.563.0",
     "motion": "^12.29.0",
+    "nanoid": "^5.1.6",
     "next": "^15.2.3",
     "next-themes": "^0.4.6",
     "nodemailer": "^8.0.1",
@@ -93,6 +100,7 @@
     "tailwind-merge": "^3.4.0",
     "v0-sdk": "^0.16.1",
     "vaul": "^1.1.2",
+    "ws": "^8.19.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

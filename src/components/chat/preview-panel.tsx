@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import {
   WebPreview,
   WebPreviewNavigation,
@@ -17,11 +17,20 @@ import {
   Tablet,
   Monitor,
   Code,
+  Github,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
+
+// Lazy-load the GitHub dialog — it's heavy (pulls in React Query hooks, auth client, etc.)
+// Only mounted when user actually opens it, never on initial render.
+const GithubPushDialog = lazy(() =>
+  import('@/components/chat/github-push-dialog').then((m) => ({
+    default: m.GithubPushDialog,
+  })),
+)
 
 /* -------------------- TYPES -------------------- */
 
@@ -87,6 +96,10 @@ export function PreviewPanel({
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
+  const [githubDialogOpen, setGithubDialogOpen] = useState(false)
+
+  // Track if dialog has ever been opened — once opened, keep mounted for fast re-open
+  const [githubDialogMounted, setGithubDialogMounted] = useState(false)
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
@@ -115,6 +128,11 @@ export function PreviewPanel({
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [isFullscreen, setIsFullscreen])
+
+  const openGithubDialog = () => {
+    setGithubDialogMounted(true)
+    setGithubDialogOpen(true)
+  }
 
   return (
     <>
@@ -146,6 +164,14 @@ export function PreviewPanel({
                 onClick={() => setCodeDialogOpen(true)}
               >
                 <Code className="h-4 w-4" />
+              </WebPreviewNavigationButton>
+
+              <WebPreviewNavigationButton
+                tooltip="Push to GitHub"
+                disabled={!hasFiles}
+                onClick={openGithubDialog}
+              >
+                <Github className="h-4 w-4" />
               </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton
@@ -256,6 +282,17 @@ export function PreviewPanel({
           open={codeDialogOpen}
           onOpenChange={setCodeDialogOpen}
         />
+      )}
+
+      {/* GitHub Push Dialog — lazy loaded, only mounted after first open */}
+      {githubDialogMounted && currentChat?.id && (
+        <Suspense fallback={null}>
+          <GithubPushDialog
+            open={githubDialogOpen}
+            onOpenChange={setGithubDialogOpen}
+            chatId={currentChat.id}
+          />
+        </Suspense>
       )}
     </>
   )

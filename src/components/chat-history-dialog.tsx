@@ -6,6 +6,13 @@
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
     AlertDialog,
     AlertDialogContent,
 } from '@/components/ui/alert-dialog'
@@ -21,8 +28,9 @@ export function ChatHistoryDialog({
     ...props
 }: React.ComponentProps<'div'>) {
     const { historyModal, toggleHistoryModal } = useStateMachine()
+    const [filter, setFilter] = React.useState<"all" | "builder" | "openrouter">("all")
     const router = useRouter()
-    const { data: chats, isLoading, error } = useChatHistory()
+    const { data: chats, isLoading, error } = useChatHistory(filter)
     const [localChats, setLocalChats] = React.useState<any[]>([])
 
     React.useEffect(() => {
@@ -36,10 +44,15 @@ export function ChatHistoryDialog({
         }
     }, [chats])
 
-    const handleChatClick = (v0ChatId: string) => {
-        router.push(`/chat?chatId=${v0ChatId}`)
-        toggleHistoryModal()
-    }
+    const handleChatClick = (chat: any) => {
+  if (chat.demoUrl) {
+    router.push(`/chat?chatId=${chat.v0ChatId}`)
+  } else {
+    router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+  }
+
+  toggleHistoryModal()
+}
 
     const handleStarToggle = async (
         e: React.MouseEvent,
@@ -92,6 +105,19 @@ export function ChatHistoryDialog({
                     </div>
 
                     <div className="border-t border-border/40" />
+                    <div className="px-4 pt-3 pb-1">
+  <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+    <SelectTrigger className="h-8 text-xs">
+      <SelectValue placeholder="Filter" />
+    </SelectTrigger>
+
+    <SelectContent>
+      <SelectItem value="all">All Chats</SelectItem>
+      <SelectItem value="builder">Builder</SelectItem>
+      <SelectItem value="openrouter">AI Chat</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
 
                     {/* Content */}
                     <div className="px-3 py-3">
@@ -138,7 +164,7 @@ export function ChatHistoryDialog({
                                 {localChats.map((chat) => (
                                     <button
                                         key={chat.id}
-                                        onClick={() => handleChatClick(chat.v0ChatId)}
+                                       onClick={() => handleChatClick(chat)}
                                         className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 transition-colors text-left group"
                                     >
                                         <div className="flex-1 min-w-0">
@@ -154,9 +180,24 @@ export function ChatHistoryDialog({
                                             )}
                                         </div>
                                         <div className="flex items-center gap-1.5 shrink-0">
-                                            {chat.demoUrl && (
-                                                <ExternalLink className="size-3.5 text-muted-foreground/40" />
-                                            )}
+                                        <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation()
+
+    if (chat.demoUrl) {
+      router.push(`/chat?chatId=${chat.v0ChatId}`)
+    } else {
+      router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+    }
+
+    toggleHistoryModal()
+  }}
+
+  className="p-1 rounded-md hover:bg-muted/80 transition-colors"
+>
+  <ExternalLink className="size-3.5 text-muted-foreground/40" />
+</button>
                                             <button
                                                 type="button"
                                                 onClick={(e) =>

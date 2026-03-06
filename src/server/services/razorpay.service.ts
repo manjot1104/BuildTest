@@ -111,7 +111,14 @@ export function verifyPaymentSignature(
     .update(body)
     .digest("hex");
 
-  return expectedSignature === signature;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature, "hex"),
+      Buffer.from(signature, "hex"),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -122,8 +129,7 @@ export function verifyWebhookSignature(
   signature: string,
 ): boolean {
   if (!env.RAZORPAY_WEBHOOK_SECRET) {
-    console.warn("RAZORPAY_WEBHOOK_SECRET not set, skipping webhook verification");
-    return true;
+    return false;
   }
 
   const expectedSignature = crypto
@@ -131,7 +137,14 @@ export function verifyWebhookSignature(
     .update(body)
     .digest("hex");
 
-  return expectedSignature === signature;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(expectedSignature, "hex"),
+      Buffer.from(signature, "hex"),
+    );
+  } catch {
+    return false;
+  }
 }
 
 /**

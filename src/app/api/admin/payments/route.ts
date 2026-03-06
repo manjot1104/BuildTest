@@ -10,9 +10,12 @@ import {
   user_chats,
 } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET() {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     // ==========================
     // SUMMARY
     // ==========================
@@ -219,11 +222,10 @@ const communityVisitsResult = await db
   monthlyDemoVisits,
 }
     });
-  } catch (error) {
-    console.error("Payments module error:", error);
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch payments data" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

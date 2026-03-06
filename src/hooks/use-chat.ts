@@ -72,7 +72,6 @@ export function useChat(chatId?: string) {
   // Log chat loading errors (page handles the UI)
   useEffect(() => {
     if (chatError && chatId) {
-      console.error('Error loading chat:', chatError)
     }
   }, [chatError, chatId])
 
@@ -124,7 +123,6 @@ export function useChat(chatId?: string) {
               'You have exceeded your maximum number of messages for the day. Please try again later.'
           }
         } catch (parseError) {
-          console.error('Error parsing error response:', parseError)
           if (response.status === 429) {
             errorMessage =
               'You have exceeded your maximum number of messages for the day. Please try again later.'
@@ -134,24 +132,22 @@ export function useChat(chatId?: string) {
       }
 
       if (!response.body) {
-        throw new Error('No response body for streaming')
-      }
+  throw new Error('No response body for streaming')
+}
 
-      setIsStreaming(true)
+setIsLoading(false)
+setIsStreaming(true)
 
-      // Add placeholder for streaming response with the stream attached
-      setChatHistory((prev) => [
-        ...prev,
-        {
-          type: 'assistant',
-          content: [],
-          isStreaming: true,
-          stream: response.body,
-        },
-      ])
+setChatHistory((prev) => [
+  ...prev,
+  {
+    type: 'assistant',
+    content: [],
+    isStreaming: true,
+    stream: response.body,
+  },
+])
     } catch (error) {
-      console.error('Error:', error)
-
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -182,6 +178,25 @@ export function useChat(chatId?: string) {
 
 
   const handleStreamingComplete = async (finalContent: string | MessageBinaryFormat) => {
+    
+
+// detect generated files and update sidebar
+if (Array.isArray(finalContent)) {
+  const fileBlocks = finalContent.filter(
+    (item: any) => item?.type === "file"
+  )
+
+  if (fileBlocks.length > 0) {
+    setCurrentChat((prev) => ({
+      ...prev!,
+      files: fileBlocks.map((f: any) => ({
+        name: f.name,
+        content: f.content,
+      })),
+    }))
+  }
+}
+
     setIsStreaming(false)
     setIsLoading(false)
 
@@ -256,13 +271,11 @@ export function useChat(chatId?: string) {
     // Determine which chatId to use for fetching - URL is most reliable
     const chatIdToFetch = urlChatId ?? extractedChatId ?? chatId
 
-    console.log('Streaming complete, chatId to fetch:', chatIdToFetch)
 
     // Fetch chat details to get demo URL and title
     if (chatIdToFetch) {
       // Function to fetch and check for demo URL with retries
       const fetchChatDetails = async (attempt: number) => {
-        console.log(`Fetching chat details, attempt ${attempt}`)
 
         // Force refetch by invalidating first
         await queryClient.invalidateQueries({ queryKey: ['chat', chatIdToFetch] })
@@ -278,14 +291,9 @@ export function useChat(chatId?: string) {
 
         if (!demoUrl && attempt < 5) {
           // Retry with exponential backoff (1s, 2s, 3s, 4s, 5s)
-          console.log(`No demo URL yet, retrying in ${attempt}s...`)
           setTimeout(() => {
             void fetchChatDetails(attempt + 1)
           }, 1000 * attempt)
-        } else if (demoUrl) {
-          console.log('Demo URL available:', demoUrl)
-        } else {
-          console.log('Max retries reached, demo URL not available')
         }
       }
 

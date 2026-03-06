@@ -22,9 +22,10 @@ interface ChatInputProps {
   setMessage: (message: string) => void
   onSubmit: (
     e: React.FormEvent<HTMLFormElement>,
-    attachments?: Array<{ url: string }>,
+    attachments?: Array<{ url: string }>
   ) => void
   isLoading: boolean
+  isStreaming?: boolean
   showSuggestions: boolean
   attachments?: ImageAttachment[]
   onAttachmentsChange?: (attachments: ImageAttachment[]) => void
@@ -36,6 +37,7 @@ export function ChatInput({
   setMessage,
   onSubmit,
   isLoading,
+  isStreaming = false,
   showSuggestions,
   attachments = [],
   onAttachmentsChange,
@@ -157,7 +159,7 @@ export function ChatInput({
               />
               <PromptInputSubmit
                 disabled={!message}
-                status={isLoading ? 'streaming' : 'ready'}
+                status={isLoading || isStreaming ? 'streaming' : 'ready'}
               />
             </PromptInputTools>
           </PromptInputToolbar>

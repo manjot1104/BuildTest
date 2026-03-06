@@ -62,7 +62,14 @@
       "idx": 8,
       "version": "7",
       "when": 1771915341920,
-      "tag": "0008_wakeful_cammi",
+      "tag": "0008_fancy_squirrel_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1772717051144,
+      "tag": "0009_faulty_giant_man",
       "breakpoints": true
     },
     {

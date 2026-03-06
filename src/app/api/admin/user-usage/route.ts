@@ -2,9 +2,12 @@ import { NextResponse } from "next/server";
 import { db } from "@/server/db";
 import { demo_visits, user_chats, credit_usage_logs } from "@/server/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: Request) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("userId");
 
@@ -42,11 +45,10 @@ export async function GET(request: Request) {
       communityVisits: community[0]?.count ?? 0,
     });
 
-  } catch (error) {
-    console.error("User usage error:", error);
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch user usage" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

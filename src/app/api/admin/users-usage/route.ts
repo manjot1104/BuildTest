@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/server/db";
-import { user, user_chats, credit_usage_logs, demo_visits } from "@/server/db/schema";
 import { sql } from "drizzle-orm";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET() {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const result = await db.execute(sql`
   SELECT 
   u.id,
@@ -32,8 +34,7 @@ ORDER BY total_prompts DESC
 
     return NextResponse.json(result);
 
-  } catch (error) {
-    console.error("Users usage error:", error);
+  } catch (_error) {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

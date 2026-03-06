@@ -35,10 +35,15 @@ export function StarredChatsDialog({
         enabled: open,
     })
 
-    const handleChatClick = (v0ChatId: string) => {
-        router.push(`/chat?chatId=${v0ChatId}`)
-        onOpenChange(false)
+    const handleChatClick = (chat: any) => {
+    if (chat.chat_type === "OPENROUTER") {
+        router.push(`/ai-chat?chatId=${chat.conversation_id}`)
+    } else {
+        router.push(`/chat?chatId=${chat.v0_chat_id}`)
     }
+
+    onOpenChange(false)
+}
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -111,8 +116,8 @@ export function StarredChatsDialog({
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">
                                 {chats.map((chat: any) => (
                                     <button
-                                        key={chat.id}
-                                        onClick={() => handleChatClick(chat.v0_chat_id)}
+                                      key={chat.conversation_id || chat.v0_chat_id}
+                                        onClick={() => handleChatClick(chat)}
                                         className={cn(
                                             "flex items-center gap-3 px-3 py-2.5 rounded-lg",
                                             "hover:bg-muted/50 transition-colors text-left group"
@@ -121,7 +126,7 @@ export function StarredChatsDialog({
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">
-                                                {chat.title ?? 'Untitled Chat'}
+                                                {chat.title ?? chat.last_message ?? 'Untitled Chat'}
                                             </p>
                                             {chat.created_at && (
                                                 <p className="text-[11px] text-muted-foreground/60 mt-0.5">

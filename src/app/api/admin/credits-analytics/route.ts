@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 import { and, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import { db } from "@/server/db";
@@ -9,9 +9,12 @@ import {
   user,
   user_credits,
 } from "@/server/db/schema";
+import { requireAdmin } from "@/server/admin/require-admin";
 
 export async function GET(request: NextRequest) {
   try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
     const sp = request.nextUrl.searchParams;
     const page = parseInt(sp.get("page") ?? "1");
     const limit = parseInt(sp.get("limit") ?? "50");
@@ -220,7 +223,7 @@ export async function GET(request: NextRequest) {
       creditsUsedData.map((item) => [item.user_id, Number(item.total)]),
     );
 
-    let combinedUsers = allUsersData.map((u) => {
+    const combinedUsers = allUsersData.map((u) => {
       const subscription = subscriptionMap.get(u.user_id);
       const creditsAssigned = creditsAssignedMap.get(u.user_id) ?? 0;
       const creditsUsed = creditsUsedMap.get(u.user_id) ?? 0;
@@ -314,8 +317,7 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-  } catch (error) {
-    console.error("Credit analytics error:", error);
+  } catch (_error) {
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
       { status: 500 },

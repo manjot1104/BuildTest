@@ -33,6 +33,12 @@ export const env = createEnv({
     RAZORPAY_WEBHOOK_SECRET: z.string().min(1).optional(),
     GITHUB_CLIENT_ID: z.string().min(1).optional(),
     GITHUB_CLIENT_SECRET: z.string().min(1).optional(),
+    // Daytona Sandbox
+    DAYTONA_API_KEY: z.string().min(1).optional(),
+    DAYTONA_API_URL: z.string().url().optional(),
+    DAYTONA_TARGET: z.string().optional(),
+    // OpenRouter (AI chat)
+    OPENROUTER_API_KEY: z.string().min(1).optional(),
   },
   /**
    * Specify your client-side environment variables schema here. This way you can ensure the app
@@ -68,6 +74,10 @@ export const env = createEnv({
     NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
     GITHUB_CLIENT_ID: process.env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: process.env.GITHUB_CLIENT_SECRET,
+    DAYTONA_API_KEY: process.env.DAYTONA_API_KEY,
+    DAYTONA_API_URL: process.env.DAYTONA_API_URL,
+    DAYTONA_TARGET: process.env.DAYTONA_TARGET,
+    OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

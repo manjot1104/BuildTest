@@ -73,6 +73,7 @@ export default function DashboardLayout({
                                             const SEGMENT_LABELS: Record<string, string> = {
                                                 "ai-chat": "AI Chat",
                                                 "chat": "New Chat",
+                                                "persona-builder": "Persona Builder",
                                             };
                                             const title =
                                                 SEGMENT_LABELS[segment] ??

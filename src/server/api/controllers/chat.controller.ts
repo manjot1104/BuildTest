@@ -15,9 +15,9 @@ import {
   getFeaturedChats,
 } from '@/server/db/queries'
 import {
-  hasEnoughCredits,
   deductCreditsForPrompt,
   hasActiveSubscription,
+  addAdditionalCredits,
 } from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
@@ -153,39 +153,6 @@ async function checkRateLimit(
   return null
 }
 
-/**
- * Checks if authenticated user has enough credits for the action
- * Returns error response if insufficient credits, null otherwise
- */
-async function checkCredits(
-  userId: string,
-  isNewChat: boolean,
-): Promise<InsufficientCreditsResponse | null> {
-  // Check if user has active subscription
-  const hasSub = await hasActiveSubscription(userId)
-
-  if (!hasSub) {
-    return {
-      error: 'insufficient_credits',
-      message: 'You need an active subscription to use this service. Please subscribe to continue.',
-      required: isNewChat ? 20 : 30,
-      available: 0,
-    }
-  }
-
-  const creditCheck = await hasEnoughCredits(userId, isNewChat)
-
-  if (!creditCheck.hasCredits) {
-    return {
-      error: 'insufficient_credits',
-      message: `Insufficient credits. You need ${creditCheck.required} credits but only have ${creditCheck.available}.`,
-      required: creditCheck.required,
-      available: creditCheck.available,
-    }
-  }
-
-  return null
-}
 
 /**
  * Type guard to check if result is a ChatDetail (not a stream)
@@ -227,8 +194,12 @@ export async function createChatHandler({
   body: ChatRequestBody
   request: Request
 }): Promise<CreateChatResponse> {
+  let creditsDeducted = false
+  let creditsUsedAmount = 0
+  let sessionUserId: string | undefined
   try {
     const session = await getSession()
+    sessionUserId = session?.user?.id
     const { message, chatId, attachments } = body
 
     if (!message) {
@@ -244,14 +215,20 @@ export async function createChatHandler({
     // Determine if this is a new chat or follow-up
     const isNewChat = !chatId
 
-    // Check credits for authenticated users
+    // Atomically check and deduct credits for authenticated users
     if (session?.user?.id) {
-      const creditsResponse = await checkCredits(session.user.id, isNewChat)
-      if (creditsResponse) {
-        return creditsResponse
+      // Require active subscription
+      const hasSub = await hasActiveSubscription(session.user.id)
+      if (!hasSub) {
+        return {
+          error: 'insufficient_credits',
+          message:
+            'You need an active subscription to use this service. Please subscribe to continue.',
+          required: isNewChat ? 20 : 30,
+          available: 0,
+        }
       }
 
-      // Deduct credits before making the API call
       const deductResult = await deductCreditsForPrompt(
         session.user.id,
         isNewChat,
@@ -265,6 +242,8 @@ export async function createChatHandler({
           available: 0,
         }
       }
+      creditsDeducted = true
+      creditsUsedAmount = deductResult.creditsUsed ?? 0
     }
 
     let chatResult: ChatDetail | ReadableStream<Uint8Array>
@@ -290,7 +269,6 @@ export async function createChatHandler({
           errorMessage.includes('not_found') ||
           errorMessage.includes('Chat not found')
         ) {
-          console.warn(`Chat ${chatId} not found, creating new chat instead`)
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
             message: enhanceFirstPrompt(message),
@@ -350,9 +328,8 @@ export async function createChatHandler({
             })
           }
         }
-      } catch (error) {
-        console.error('Failed to save chat data locally:', error)
-        // Don't fail the request, just log the error
+      } catch {
+        // Don't fail the request if local save fails
       }
     }
 
@@ -366,12 +343,18 @@ export async function createChatHandler({
         experimental_content: msg.experimental_content,
       })),
     }
-  } catch (error) {
-    console.error('V0 API Error:', error)
+  } catch {
+    // Refund credits if they were deducted but the API call failed
+    if (creditsDeducted && sessionUserId && creditsUsedAmount > 0) {
+      try {
+        await addAdditionalCredits(sessionUserId, creditsUsedAmount)
+      } catch {
+        // Refund failed - needs manual resolution
+      }
+    }
 
     return {
       error: 'Failed to process request',
-      details: error instanceof Error ? error.message : 'Unknown error',
     }
   }
 }
@@ -387,8 +370,6 @@ export async function getChatDetailsHandler({
   try {
     const session = await getSession()
     const { chatId } = params
-
-    console.log('Fetching chat details for ID:', chatId)
 
     if (!chatId) {
       return { error: 'Chat ID is required', status: 400 }
@@ -416,7 +397,6 @@ export async function getChatDetailsHandler({
       }
 
       chatDetails = chatDetailsResult
-      console.log('Chat details fetched successfully from V0 API')
 
       // Only update local record if owner
       if (isOwner) {
@@ -428,12 +408,12 @@ export async function getChatDetailsHandler({
               demoUrl: chatDetails.demo ?? undefined,
               title: chatDetails.title ?? undefined,
             })
-          } catch (error) {
-            console.error('Failed to update chat data:', error)
+          } catch {
+            // Non-critical update failure
           }
         }
       }
-    } catch (error) {
+    } catch (error: unknown) {
       // Handle 404 errors from V0 API - chat doesn't exist
       const errorMessage =
         error instanceof Error ? error.message : String(error)
@@ -442,7 +422,6 @@ export async function getChatDetailsHandler({
         errorMessage.includes('not_found') ||
         errorMessage.includes('Chat not found')
       ) {
-        console.error('Chat not found in V0 API:', chatId)
         return { error: 'Chat not found', status: 404 }
       }
       // Re-throw other errors
@@ -450,18 +429,10 @@ export async function getChatDetailsHandler({
     }
 
     return { ...chatDetails, isOwner }
-  } catch (error) {
-    console.error('Error fetching chat details:', error)
-
-    // Log more detailed error information
-    if (error instanceof Error) {
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
-    }
-
+  } catch {
     return {
       error: 'Failed to fetch chat details',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
@@ -493,7 +464,10 @@ export async function createChatOwnershipHandler({
     const existingChat = await getUserChat({ v0ChatId: chatId })
 
     if (existingChat) {
-      // Update existing chat
+      // Only the owner can update an existing chat
+      if (existingChat.user_id !== session.user.id) {
+        return { error: 'Forbidden: you do not own this chat' }
+      }
       await updateUserChat({
         v0ChatId: chatId,
         demoUrl: demoUrl ?? undefined,
@@ -510,11 +484,10 @@ export async function createChatOwnershipHandler({
     }
 
     return { success: true }
-  } catch (error) {
-    console.error('Error creating chat ownership:', error)
+  } catch {
     return {
       error: 'Failed to create chat ownership',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
     }
   }
 }
@@ -564,11 +537,10 @@ export async function forkChatHandler({
       newChatId: forkedChat.id,
       demoUrl: forkedChat.demo ?? undefined,
     }
-  } catch (error) {
-    console.error('Error forking chat:', error)
+  } catch {
     return {
       error: 'Failed to fork chat',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
@@ -578,50 +550,76 @@ export async function forkChatHandler({
  * Handler for getting chat history
  * Uses local database - no v0 API call needed!
  */
-export async function getChatHistoryHandler(): Promise<GetChatHistoryResponse> {
+export async function getChatHistoryHandler({
+  query,
+}: {
+  query: { type?: "all" | "builder" | "openrouter" }
+}): Promise<GetChatHistoryResponse> {
   try {
     const session = await getSession()
 
-    // Anonymous users don't have saved chats
     if (!session?.user?.id) {
       return { data: [] }
     }
 
-    console.log('Fetching chats for user:', session.user.id)
+    const type = query?.type ?? "all"
 
-    // Get user's chats from local database (fast!)
-    const userChats = await getUserChatsByUserId({
-      userId: session.user.id,
-      limit: 50,
-    })
+    let userChats: any[] = []
 
-    // Map to ChatHistoryItem format
-    const chatHistory: ChatHistoryItem[] = userChats.map((chat) => ({
+if (type === "builder" || type === "all") {
+  const builderChats = await getUserChatsByUserId({
+    userId: session.user.id,
+    limit: 50,
+    type: "builder",
+  })
+
+  userChats.push(...builderChats)
+}
+
+if (type === "openrouter" || type === "all") {
+  const { db } = await import("@/server/db")
+  const { conversations } = await import("@/server/db/schema")
+  const { eq, desc } = await import("drizzle-orm")
+
+  const aiChats = await db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.user_id, session.user.id))
+    .orderBy(desc(conversations.created_at))
+    .limit(50)
+
+  userChats.push(
+    ...aiChats.map((chat) => ({
       id: chat.id,
-      v0ChatId: chat.v0_chat_id,
+      v0_chat_id: chat.id,
       title: chat.title,
-      prompt: chat.prompt,
-      demoUrl: chat.demo_url,
-      previewUrl: chat.preview_url,
-      createdAt: chat.created_at.toISOString(),
-      updatedAt: chat.updated_at.toISOString(),
+      prompt: null,
+      demo_url: null,
+      preview_url: null,
+      created_at: chat.created_at,
+      updated_at: chat.created_at,
     }))
+  )
+}
 
-    console.log('Chats fetched successfully:', chatHistory.length, 'chats')
+    const chatHistory: ChatHistoryItem[] = userChats
+      .filter((chat) => chat.v0_chat_id)
+      .map((chat) => ({
+        id: chat.id,
+        v0ChatId: chat.v0_chat_id!,
+        title: chat.title,
+        prompt: chat.prompt,
+        demoUrl: chat.demo_url,
+        previewUrl: chat.preview_url,
+        createdAt: chat.created_at.toISOString(),
+        updatedAt: chat.updated_at.toISOString(),
+      }))
 
     return { data: chatHistory }
-  } catch (error) {
-    console.error('Error fetching chat history:', error)
-
-    // Log more detailed error information
-    if (error instanceof Error) {
-      console.error('Error message:', error.message)
-      console.error('Error stack:', error.stack)
-    }
-
+  } catch (error: any) {
     return {
-      error: 'Failed to fetch chat history',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      error: "Failed to fetch chat history",
+      details: error.message || "An internal error occurred",
       status: 500,
     }
   }
@@ -646,18 +644,20 @@ export async function getCommunityBuildsHandler({
       getCommunityChatsCount(),
     ])
 
-    const data: CommunityBuildItem[] = chats.map((chat) => ({
-      id: chat.id,
-      v0ChatId: chat.v0_chat_id,
-      title: chat.title,
-      prompt: chat.prompt,
-      demoUrl: chat.demo_url,
-      previewUrl: chat.preview_url,
-      createdAt: chat.created_at.toISOString(),
-      updatedAt: chat.updated_at.toISOString(),
-      authorName: chat.author_name,
-      authorImage: chat.author_image,
-    }))
+   const data: CommunityBuildItem[] = chats
+  .filter((chat) => chat.v0_chat_id)
+  .map((chat) => ({
+    id: chat.id,
+    v0ChatId: chat.v0_chat_id!,
+    title: chat.title,
+    prompt: chat.prompt,
+    demoUrl: chat.demo_url,
+    previewUrl: chat.preview_url,
+    createdAt: chat.created_at.toISOString(),
+    updatedAt: chat.updated_at.toISOString(),
+    authorName: chat.author_name,
+    authorImage: chat.author_image,
+  }))
 
     return {
       data,
@@ -666,11 +666,10 @@ export async function getCommunityBuildsHandler({
       limit,
       hasMore: offset + data.length < total,
     }
-  } catch (error) {
-    console.error('Error fetching community builds:', error)
+  } catch {
     return {
       error: 'Failed to fetch community builds',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
@@ -696,25 +695,26 @@ export async function getFeaturedBuildsHandler(): Promise<
   try {
     const chats = await getFeaturedChats(FEATURED_CHAT_IDS)
 
-    const data: CommunityBuildItem[] = chats.map((chat) => ({
-      id: chat.id,
-      v0ChatId: chat.v0_chat_id,
-      title: chat.title,
-      prompt: chat.prompt,
-      demoUrl: chat.demo_url,
-      previewUrl: chat.preview_url,
-      createdAt: chat.created_at.toISOString(),
-      updatedAt: chat.updated_at.toISOString(),
-      authorName: chat.author_name,
-      authorImage: chat.author_image,
-    }))
+    const data: CommunityBuildItem[] = chats
+  .filter((chat) => chat.v0_chat_id)
+  .map((chat) => ({
+    id: chat.id,
+    v0ChatId: chat.v0_chat_id!,
+    title: chat.title,
+    prompt: chat.prompt,
+    demoUrl: chat.demo_url,
+    previewUrl: chat.preview_url,
+    createdAt: chat.created_at.toISOString(),
+    updatedAt: chat.updated_at.toISOString(),
+    authorName: chat.author_name,
+    authorImage: chat.author_image,
+  }))
 
     return { data }
-  } catch (error) {
-    console.error('Error fetching featured builds:', error)
+  } catch {
     return {
       error: 'Failed to fetch featured builds',
-      details: error instanceof Error ? error.message : 'Unknown error',
+      details: 'An internal error occurred',
       status: 500,
     }
   }
