@@ -43,8 +43,8 @@ const buildNavItems = (
         icon: BrainCircuit,
     },
     {
-        title: "Persona Builder",
-        url: "/persona-builder",
+        title: "Buildify Studio",
+        url: "/buildify-studio",
         icon: UserCircle2,
     },
     {

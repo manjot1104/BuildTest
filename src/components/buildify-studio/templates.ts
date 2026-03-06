@@ -8,7 +8,7 @@ export type TemplateCategory =
   | 'creative'
   | 'photography'
 
-export interface PersonaTemplate {
+export interface StudioTemplate {
   id: string
   name: string
   category: TemplateCategory
@@ -66,7 +66,7 @@ function mkBg(
 
 // ─── template definitions ─────────────────────────────────────────────────────
 
-export const TEMPLATES: PersonaTemplate[] = [
+export const TEMPLATES: StudioTemplate[] = [
   // ── 1. Developer Dark ────────────────────────────────────────────────────────
   {
     id: 'developer-dark',

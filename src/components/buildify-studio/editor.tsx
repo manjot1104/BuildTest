@@ -29,28 +29,28 @@ const DEFAULT_BACKGROUND: CanvasBackground = {
   imageUrl: '',
 }
 
-const LEGACY_DRAFT_KEY = 'persona_builder_draft_v2'
+const LEGACY_DRAFT_KEY = 'buildify_studio_draft_v2'
 
 type LeftTab = 'elements' | 'layers' | 'templates'
 
-interface PersonaBuilderEditorProps {
-  /** When provided, load this persona from DB and save back to it. */
-  personaId?: string
+interface BuildifyStudioEditorProps {
+  /** When provided, load this design from DB and save back to it. */
+  designId?: string
 }
 
-export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
+export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const router = useRouter()
   const editor = useEditor()
   const { state, selectedElement, loadLayout } = editor
 
-  // Track the DB record id (may differ from prop on first-save of a new persona)
-  const [currentId, setCurrentId] = useState<string | undefined>(personaId)
-  const currentIdRef = useRef<string | undefined>(personaId)
+  // Track the DB record id (may differ from prop on first-save of a new design)
+  const [currentId, setCurrentId] = useState<string | undefined>(designId)
+  const currentIdRef = useRef<string | undefined>(designId)
 
   // ── Tabs ────────────────────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<LeftTab>(() => {
-    // Open templates tab for brand-new personas with no draft
-    if (personaId) return 'elements'
+    // Open templates tab for brand-new designs with no draft
+    if (designId) return 'elements'
     try {
       const saved = localStorage.getItem(LEGACY_DRAFT_KEY)
       if (saved) {
@@ -71,11 +71,11 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
   // Template apply confirmation
   const [pendingTemplate, setPendingTemplate] = useState<{ elements: CanvasElement[]; background: CanvasBackground } | null>(null)
 
-  // ── Load from DB (if personaId provided) ───────────────────────────────────
+  // ── Load from DB (if designId provided) ───────────────────────────────────
   useEffect(() => {
-    if (personaId) {
+    if (designId) {
       // Load from DB
-      void fetch(`/api/persona/${personaId}`)
+      void fetch(`/api/design/${designId}`)
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { layout?: string; background?: string | null } | null) => {
           if (!data) return
@@ -87,7 +87,7 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
         })
       return
     }
-    // No personaId — try to migrate from legacy localStorage draft
+    // No designId — try to migrate from legacy localStorage draft
     try {
       const saved = localStorage.getItem(LEGACY_DRAFT_KEY)
       if (saved) {
@@ -100,21 +100,21 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
         }
       }
     } catch { /* ignore */ }
-  }, [personaId, loadLayout])
+  }, [designId, loadLayout])
 
   // ── Save draft to DB ───────────────────────────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
     setIsSaving(true)
     try {
       const body = {
-        title: 'My Persona',
+        title: 'Untitled',
         layout: JSON.stringify(state.elements),
         background: JSON.stringify(state.canvasBackground),
       }
 
       if (!currentIdRef.current) {
         // First save — create a new draft
-        const res = await fetch('/api/persona', {
+        const res = await fetch('/api/design', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -124,12 +124,12 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
         if (data.id) {
           currentIdRef.current = data.id
           setCurrentId(data.id)
-          // Update URL so refresh loads the right persona
-          window.history.replaceState({}, '', `/persona-builder/${data.id}`)
+          // Update URL so refresh loads the right design
+          window.history.replaceState({}, '', `/buildify-studio/${data.id}`)
         }
       } else {
         // Update existing draft
-        await fetch(`/api/persona/${currentIdRef.current}`, {
+        await fetch(`/api/design/${currentIdRef.current}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -189,7 +189,7 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
       const confirmed = window.confirm('You have unsaved changes. Leave without saving?')
       if (!confirmed) return
     }
-    router.push('/persona-builder')
+    router.push('/buildify-studio')
   }, [state.isDirty, router])
 
   // ── Template apply handler ─────────────────────────────────────────────────
@@ -328,7 +328,7 @@ export function PersonaBuilderEditor({ personaId }: PersonaBuilderEditorProps) {
       <PublishDialog
         open={publishOpen}
         onOpenChange={setPublishOpen}
-        personaId={currentId}
+        designId={currentId}
       />
 
       {/* Real-website preview modal */}

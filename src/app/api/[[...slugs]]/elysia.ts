@@ -61,15 +61,15 @@ import {
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
 import {
-  createPersonaHandler,
-  listPersonasHandler,
-  getPersonaByIdHandler,
-  updatePersonaHandler,
-  publishPersonaByIdHandler,
-  unpublishPersonaByIdHandler,
-  deletePersonaByIdHandler,
-  getPublicPersonaHandler,
-} from '@/server/api/controllers/persona.controller'
+  createDesignHandler,
+  listDesignsHandler,
+  getDesignByIdHandler,
+  updateDesignHandler,
+  publishDesignByIdHandler,
+  unpublishDesignByIdHandler,
+  deleteDesignByIdHandler,
+  getPublicDesignHandler,
+} from '@/server/api/controllers/studio.controller'
 import { env } from '@/env'
 
 /** Insufficient credits response type */
@@ -1049,21 +1049,21 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // ============================================
-  // Persona Builder Endpoints
+  // Buildify Studio Endpoints
   // ============================================
 
-  // List user's personas
-  .get('/personas', async ({ set }) => {
-    const result = await listPersonasHandler()
+  // List user's designs
+  .get('/designs', async ({ set }) => {
+    const result = await listDesignsHandler()
     if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
     return result
   })
 
-  // Create a new draft (POST /api/persona)
+  // Create a new draft
   .post(
-    '/persona',
+    '/design',
     async ({ body, set }) => {
-      const result = await createPersonaHandler({ body })
+      const result = await createDesignHandler({ body })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },
@@ -1077,22 +1077,22 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // IMPORTANT: static paths must come before parameterized ones
-  // Get public persona by slug (no auth)
+  // Get public design by slug (no auth)
   .get(
-    '/persona/public/:slug',
+    '/design/public/:slug',
     async ({ params, set }) => {
-      const result = await getPublicPersonaHandler({ params })
-      if (!result) { set.status = 404; return { error: 'Persona not found' } }
+      const result = await getPublicDesignHandler({ params })
+      if (!result) { set.status = 404; return { error: 'Not found' } }
       return result
     },
     { params: t.Object({ slug: t.String() }) },
   )
 
-  // Get one persona by id (auth required)
+  // Get one design by id (auth required)
   .get(
-    '/persona/:id',
+    '/design/:id',
     async ({ params, set }) => {
-      const result = await getPersonaByIdHandler({ params })
+      const result = await getDesignByIdHandler({ params })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },
@@ -1101,9 +1101,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
   // Update/save draft
   .put(
-    '/persona/:id',
+    '/design/:id',
     async ({ params, body, set }) => {
-      const result = await updatePersonaHandler({ params, body })
+      const result = await updateDesignHandler({ params, body })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },
@@ -1119,9 +1119,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
   // Publish
   .post(
-    '/persona/:id/publish',
+    '/design/:id/publish',
     async ({ params, body, set }) => {
-      const result = await publishPersonaByIdHandler({ params, body })
+      const result = await publishDesignByIdHandler({ params, body })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },
@@ -1133,9 +1133,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
   // Unpublish
   .post(
-    '/persona/:id/unpublish',
+    '/design/:id/unpublish',
     async ({ params, set }) => {
-      const result = await unpublishPersonaByIdHandler({ params })
+      const result = await unpublishDesignByIdHandler({ params })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },
@@ -1144,9 +1144,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
 
   // Delete
   .delete(
-    '/persona/:id',
+    '/design/:id',
     async ({ params, set }) => {
-      const result = await deletePersonaByIdHandler({ params })
+      const result = await deleteDesignByIdHandler({ params })
       if ('status' in result) { set.status = result.status; return result }
       return result
     },

@@ -15,7 +15,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 
-interface PersonaCard {
+interface DesignCard {
   id: string
   title: string
   slug: string | null
@@ -49,36 +49,36 @@ function formatDate(iso: string) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function PersonaBuilderPage() {
+export default function BuildifyStudioPage() {
   const router = useRouter()
-  const [personas, setPersonas] = useState<PersonaCard[]>([])
+  const [designs, setDesigns] = useState<DesignCard[]>([])
   const [loading, setLoading] = useState(true)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const fetchPersonas = async () => {
+  const fetchDesigns = async () => {
     try {
-      const res = await fetch('/api/personas')
+      const res = await fetch('/api/designs')
       if (!res.ok) throw new Error('Failed to fetch')
-      const data = (await res.json()) as PersonaCard[]
-      setPersonas(data)
+      const data = (await res.json()) as DesignCard[]
+      setDesigns(data)
     } catch {
-      toast.error('Failed to load personas')
+      toast.error('Failed to load designs')
     } finally {
       setLoading(false)
     }
   }
 
-  useEffect(() => { void fetchPersonas() }, [])
+  useEffect(() => { void fetchDesigns() }, [])
 
   const handleDelete = async (id: string) => {
     setDeletingId(id)
     try {
-      const res = await fetch(`/api/persona/${id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/design/${id}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to delete')
-      setPersonas((prev) => prev.filter((p) => p.id !== id))
-      toast.success('Persona deleted')
+      setDesigns((prev) => prev.filter((p) => p.id !== id))
+      toast.success('Design deleted')
     } catch {
-      toast.error('Failed to delete persona')
+      toast.error('Failed to delete design')
     } finally {
       setDeletingId(null)
     }
@@ -92,7 +92,7 @@ export default function PersonaBuilderPage() {
     )
   }
 
-  const liveCount = personas.filter((p) => p.isPublished).length
+  const liveCount = designs.filter((p) => p.isPublished).length
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-6">
@@ -115,15 +115,15 @@ export default function PersonaBuilderPage() {
               <LayoutTemplate className="size-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">Persona Builder</h1>
+              <h1 className="text-xl font-bold tracking-tight">Buildify Studio</h1>
               <p className="text-sm text-muted-foreground">
-                Design and publish your personal identity pages
+                Design and publish your pages
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
-            {personas.length > 0 && (
+            {designs.length > 0 && (
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <span className="size-1.5 rounded-full bg-green-500" />
@@ -131,43 +131,43 @@ export default function PersonaBuilderPage() {
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="size-1.5 rounded-full bg-muted-foreground/40" />
-                  {personas.length - liveCount} draft
+                  {designs.length - liveCount} draft
                 </span>
               </div>
             )}
-            <Button onClick={() => router.push('/persona-builder/new')} className="gap-2">
+            <Button onClick={() => router.push('/buildify-studio/new')} className="gap-2">
               <Plus className="size-4" />
-              New Persona
+              New
             </Button>
           </div>
         </div>
       </div>
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
-      {personas.length === 0 ? (
-        <EmptyState onNew={() => router.push('/persona-builder/new')} />
+      {designs.length === 0 ? (
+        <EmptyState onNew={() => router.push('/buildify-studio/new')} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {personas.map((persona, i) => (
-            <PersonaCardItem
-              key={persona.id}
-              persona={persona}
+          {designs.map((design, i) => (
+            <DesignCardItem
+              key={design.id}
+              design={design}
               gradient={THUMB_GRADIENTS[i % THUMB_GRADIENTS.length]!}
-              isDeleting={deletingId === persona.id}
-              onDelete={() => void handleDelete(persona.id)}
+              isDeleting={deletingId === design.id}
+              onDelete={() => void handleDelete(design.id)}
             />
           ))}
 
           {/* Add new card */}
           <button
             type="button"
-            onClick={() => router.push('/persona-builder/new')}
+            onClick={() => router.push('/buildify-studio/new')}
             className="group flex h-full min-h-[220px] flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border text-muted-foreground transition-all hover:border-primary/50 hover:bg-primary/5 hover:text-primary"
           >
             <div className="flex size-12 items-center justify-center rounded-xl border-2 border-dashed border-current opacity-50 transition-all group-hover:opacity-100">
               <Plus className="size-5" />
             </div>
-            <span className="text-sm font-medium">New Persona</span>
+            <span className="text-sm font-medium">New Design</span>
           </button>
         </div>
       )}
@@ -185,9 +185,9 @@ function EmptyState({ onNew }: { onNew: () => void }) {
         <LayoutTemplate className="size-10 text-primary" />
       </div>
 
-      <h2 className="mb-2 text-lg font-semibold">No personas yet</h2>
+      <h2 className="mb-2 text-lg font-semibold">No designs yet</h2>
       <p className="mb-8 max-w-sm text-sm text-muted-foreground">
-        Build a beautiful personal identity page — portfolio, profile, or landing page — and publish it with one click.
+        Build a beautiful page — portfolio, prototype, landing page, or e-commerce store — and publish it with one click.
       </p>
 
       {/* Feature highlights */}
@@ -209,21 +209,21 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 
       <Button onClick={onNew} size="lg" className="gap-2">
         <Plus className="size-4" />
-        Create your first persona
+        Create your first design
       </Button>
     </div>
   )
 }
 
-// ─── Persona card ─────────────────────────────────────────────────────────────
+// ─── Design card ──────────────────────────────────────────────────────────────
 
-function PersonaCardItem({
-  persona,
+function DesignCardItem({
+  design,
   gradient,
   isDeleting,
   onDelete,
 }: {
-  persona: PersonaCard
+  design: DesignCard
   gradient: string
   isDeleting: boolean
   onDelete: () => void
@@ -244,19 +244,19 @@ function PersonaCardItem({
           }}
         />
         <span className="relative text-5xl font-black text-white/25 select-none">
-          {persona.title.charAt(0).toUpperCase()}
+          {design.title.charAt(0).toUpperCase()}
         </span>
 
         {/* Status badge */}
         <div className="absolute right-2.5 top-2.5">
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold backdrop-blur-sm ${
-              persona.isPublished
+              design.isPublished
                 ? 'bg-green-500/20 text-green-300 ring-1 ring-green-500/30'
                 : 'bg-black/30 text-white/60 ring-1 ring-white/10'
             }`}
           >
-            {persona.isPublished ? (
+            {design.isPublished ? (
               <><Globe className="size-2.5" /> Live</>
             ) : (
               <><GlobeLock className="size-2.5" /> Draft</>
@@ -267,7 +267,7 @@ function PersonaCardItem({
         {/* Edit overlay on hover */}
         <div className="absolute inset-0 flex items-center justify-center bg-black/30 opacity-0 backdrop-blur-[1px] transition-opacity duration-200 group-hover:opacity-100">
           <Link
-            href={`/persona-builder/${persona.id}`}
+            href={`/buildify-studio/${design.id}`}
             className="flex items-center gap-2 rounded-lg bg-white/90 px-4 py-2 text-xs font-semibold text-gray-900 shadow-md transition-transform hover:scale-105"
           >
             <Pencil className="size-3.5" />
@@ -280,30 +280,30 @@ function PersonaCardItem({
       <div className="flex flex-1 flex-col gap-3 p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold leading-tight">{persona.title}</h2>
+            <h2 className="truncate text-sm font-semibold leading-tight">{design.title}</h2>
             <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
               <Clock className="size-3" />
-              {formatDate(persona.updatedAt)}
+              {formatDate(design.updatedAt)}
             </p>
           </div>
         </div>
 
-        {persona.isPublished && persona.slug && (
+        {design.isPublished && design.slug && (
           <a
-            href={`/persona/${persona.slug}`}
+            href={`/p/${design.slug}`}
             target="_blank"
             rel="noreferrer"
             className="flex items-center gap-1 truncate text-[11px] text-primary hover:underline"
           >
             <ExternalLink className="size-3 shrink-0" />
-            /persona/{persona.slug}
+            /p/{design.slug}
           </a>
         )}
 
         {/* Actions */}
         <div className="mt-auto flex gap-2">
           <Button size="sm" variant="outline" className="flex-1 gap-1.5 text-xs" asChild>
-            <Link href={`/persona-builder/${persona.id}`}>
+            <Link href={`/buildify-studio/${design.id}`}>
               <Pencil className="size-3.5" />
               Edit
             </Link>
@@ -321,10 +321,10 @@ function PersonaCardItem({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete persona?</AlertDialogTitle>
+                <AlertDialogTitle>Delete this design?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  &ldquo;{persona.title}&rdquo; will be permanently deleted
-                  {persona.isPublished && ' and unpublished'}. This cannot be undone.
+                  &ldquo;{design.title}&rdquo; will be permanently deleted
+                  {design.isPublished && ' and unpublished'}. This cannot be undone.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

@@ -490,9 +490,9 @@ export const githubReposRelations = relations(github_repos, ({ one }) => ({
   chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
 }))
 
-// Persona Layouts — stores published persona pages built in the Persona Builder
-export const persona_layouts = createTable(
-  "persona_layouts",
+// Studio Layouts — stores published pages built in Buildify Studio
+export const studio_layouts = createTable(
+  "persona_layouts", // DB table name — do not rename without migration
   (d) => ({
     id: d.text("id").primaryKey(),
     user_id: d
@@ -500,7 +500,7 @@ export const persona_layouts = createTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     slug: d.text("slug").unique(), // null for drafts, set at publish time
-    title: d.text("title").notNull().default("My Persona"),
+    title: d.text("title").notNull().default("Untitled"),
     layout: d.text("layout").notNull().default("[]"), // JSON string of CanvasElement[]
     background: d.text("background"), // nullable JSON string of CanvasBackground
     is_published: d.boolean("is_published").notNull().default(false),
@@ -520,6 +520,6 @@ export const persona_layouts = createTable(
   ],
 )
 
-export const personaLayoutsRelations = relations(persona_layouts, ({ one }) => ({
-  user: one(user, { fields: [persona_layouts.user_id], references: [user.id] }),
+export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
+  user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
 }));

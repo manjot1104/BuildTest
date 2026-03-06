@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { LayoutTemplate, ArrowRight } from 'lucide-react'
-import { TEMPLATES, type PersonaTemplate, type TemplateCategory } from './templates'
+import { TEMPLATES, type StudioTemplate, type TemplateCategory } from './templates'
 import { type CanvasElement, type CanvasBackground } from './types'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ const THUMB_W = 208
 const SCALE = THUMB_W / 1440
 const THUMB_H = Math.round(960 * SCALE)
 
-function TemplateThumbnail({ template }: { template: PersonaTemplate }) {
+function TemplateThumbnail({ template }: { template: StudioTemplate }) {
   return (
     <div
       style={{
@@ -111,7 +111,7 @@ function TemplateThumbnail({ template }: { template: PersonaTemplate }) {
 
 // ─── Apply template ───────────────────────────────────────────────────────────
 
-function applyTemplate(template: PersonaTemplate): { elements: CanvasElement[]; background: CanvasBackground } {
+function applyTemplate(template: StudioTemplate): { elements: CanvasElement[]; background: CanvasBackground } {
   const elements = template.elements.map((el) => ({
     ...el,
     id: crypto.randomUUID(),
