@@ -23,6 +23,14 @@ import { CreditsDisplay } from "@/components/payments/credits-display"
 import { usePathname } from "next/navigation";
 import { Fragment, useCallback, useState } from "react";
 
+const SEGMENT_LABELS: Record<string, string> = {
+    "ai-chat": "AI Chat",
+    "chat": "New Chat",
+    "buildify-studio": "Buildify Studio",
+    "ai-resume": "AI Resume Builder",
+    "docs": "Documentation",
+};
+
 export default function DashboardLayout({
   children,
   isAdmin,
@@ -58,10 +66,10 @@ export default function DashboardLayout({
                     onSettingsClick={handleSettingsClick}
                 />
                 <SidebarInset>
-                    <header className="flex flex-col h-16 shrink-0 justify-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-                        <div className="flex items-center justify-between gap-2 px-4">
+                    <header className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center border-b bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+                        <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
-                                <SidebarTrigger className="-ml-1" />
+                                <SidebarTrigger className="-ml-1 hk-nav-item" />
                                 <Separator
                                     orientation="vertical"
                                     className="mr-2 data-[orientation=vertical]:h-4"
@@ -70,23 +78,20 @@ export default function DashboardLayout({
                                     <BreadcrumbList>
                                         {segments.map((segment, idx) => {
                                             const isLast = idx === segments.length - 1;
-                                            const SEGMENT_LABELS: Record<string, string> = {
-                                                "ai-chat": "AI Chat",
-                                                "chat": "New Chat",
-                                                "buildify-studio": "Buildify Studio",
-                                            };
                                             const title =
                                                 SEGMENT_LABELS[segment] ??
                                                 (segment.charAt(0).toUpperCase() +
                                                 segment.slice(1).replace(/-/g, " "));
                                             return (
                                                 <Fragment key={buildHref(idx)}>
-                                                    {idx !== 0 && <BreadcrumbSeparator className={idx === 0 ? "hidden md:block" : ""} />}
+                                                    {idx !== 0 && <BreadcrumbSeparator />}
                                                     <BreadcrumbItem>
                                                         {isLast ? (
-                                                            <BreadcrumbPage>{title}</BreadcrumbPage>
+                                                            <BreadcrumbPage className="hk-breadcrumb-active font-mono text-xs">
+                                                                {title}
+                                                            </BreadcrumbPage>
                                                         ) : (
-                                                            <BreadcrumbLink href={buildHref(idx)}>
+                                                            <BreadcrumbLink href={buildHref(idx)} className="font-mono text-xs transition-colors hover:text-primary">
                                                                 {title}
                                                             </BreadcrumbLink>
                                                         )}
@@ -97,21 +102,23 @@ export default function DashboardLayout({
                                     </BreadcrumbList>
                                 </Breadcrumb>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                                 {isAdmin && !isOnAdminPage && (
                                     <Link
                                         href="/admin"
-                                        className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+                                        className="hk-glow-hover flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary shadow-sm transition-all hover:bg-primary hover:text-primary-foreground"
                                     >
-                                        <Shield className="size-3.5" />
-                                        Admin Panel
+                                        <Shield className="size-3" />
+                                        Admin
                                     </Link>
                                 )}
-                                <CreditsDisplay variant="button" />
+                                <div className="hk-glow-hover rounded-full">
+                                    <CreditsDisplay variant="badge" />
+                                </div>
                             </div>
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                    <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
                         {children}
                     </div>
                 </SidebarInset>

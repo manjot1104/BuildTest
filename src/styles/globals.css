@@ -235,3 +235,143 @@ body {
 /* Legacy aliases */
 .pb-anim-hoverscale { transition: transform 0.2s ease; }
 .pb-anim-hoverscale:hover { transform: scale(1.05); }
+
+/* ─── Hacker / Cyber animations ──────────────────────────────────────────── */
+
+/* Scanline sweep */
+@keyframes hk-scanline {
+  0%   { background-position: 0 -100%; }
+  100% { background-position: 0 200%; }
+}
+
+/* Cyber glow pulse */
+@keyframes hk-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0px transparent; }
+  50%      { box-shadow: 0 0 8px var(--sidebar-ring), 0 0 16px color-mix(in oklch, var(--sidebar-ring) 30%, transparent); }
+}
+
+/* Active item left-border slide-in */
+@keyframes hk-border-in {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+/* Text flicker for active items */
+@keyframes hk-text-flicker {
+  0%, 100% { opacity: 1; }
+  4%       { opacity: 0.9; }
+  6%       { opacity: 1; }
+  8%       { opacity: 0.8; }
+  10%      { opacity: 1; }
+}
+
+/* Hacker nav item base */
+.hk-nav-item {
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.hk-nav-item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    color-mix(in oklch, var(--sidebar-ring) 4%, transparent) 2px,
+    color-mix(in oklch, var(--sidebar-ring) 4%, transparent) 4px
+  );
+  background-size: 100% 400%;
+  pointer-events: none;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+}
+
+.hk-nav-item:hover::before {
+  opacity: 1;
+  animation: hk-scanline 1.5s linear infinite;
+}
+
+
+/* Active hacker item */
+.hk-nav-active {
+  position: relative;
+}
+
+.hk-nav-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--sidebar-ring);
+  border-radius: 1px;
+  animation: hk-border-in 0.3s ease forwards;
+  transform-origin: top;
+  box-shadow: 0 0 6px var(--sidebar-ring);
+}
+
+/* Glow on hover for interactive elements */
+.hk-glow-hover {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.hk-glow-hover:hover {
+  animation: hk-glow-pulse 1.5s ease infinite;
+  border-color: color-mix(in oklch, var(--sidebar-ring) 40%, transparent);
+}
+
+/* Header cyber line */
+.hk-header-line {
+  position: relative;
+}
+
+.hk-header-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--sidebar-ring) 20%,
+    color-mix(in oklch, var(--sidebar-ring) 60%, transparent) 50%,
+    var(--sidebar-ring) 80%,
+    transparent 100%
+  );
+  opacity: 0.3;
+}
+
+/* Scramble text monospace feel */
+.hk-scramble-text {
+  font-family: var(--font-mono), monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Breadcrumb active page cyber style */
+.hk-breadcrumb-active {
+  position: relative;
+  color: var(--sidebar-ring);
+  text-shadow: 0 0 8px color-mix(in oklch, var(--sidebar-ring) 40%, transparent);
+  animation: hk-text-flicker 4s linear infinite;
+}
+
+/* Sidebar group label cyber style */
+.hk-group-label {
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.625rem;
+  font-family: var(--font-mono), monospace;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.hk-group-label:hover {
+  opacity: 0.8;
+  text-shadow: 0 0 4px color-mix(in oklch, var(--sidebar-ring) 20%, transparent);
+}
