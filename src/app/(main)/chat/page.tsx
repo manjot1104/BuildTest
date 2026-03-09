@@ -1,7 +1,8 @@
 'use client'
-
+import { ModeSelection } from "./components/mode-selection"
 import React, { useState, useEffect, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { useRouter } from "next/navigation"
 import {
     PromptInput,
     PromptInputImageButton,
@@ -77,21 +78,35 @@ function SearchParamsHandler({
 }
 
 export default function ChatPage() {
+    const router = useRouter()
+    const [chatMode, setChatMode] = useState<"BUILDER" | "AI_CHAT" | null>(null)
     const [message, setMessage] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
+
+   useEffect(() => {
+  if (chatMode === "AI_CHAT") {
+    setShowChatInterface(true)
+    setUrlChatId(null)
+  }
+}, [chatMode])
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
     const [isDragOver, setIsDragOver] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
-    const [refreshKey, setRefreshKey] = useState(0)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
     const [micError, setMicError] = useState<string | null>(null)
-    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-        if (typeof window !== 'undefined') {
-            return new URLSearchParams(window.location.search).get('chatId')
-        }
-        return null
-    })
+   const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+  if (typeof window !== 'undefined') {
+    return new URLSearchParams(window.location.search).get('chatId')
+  }
+  return null
+})
+
+useEffect(() => {
+  if (urlChatId) {
+    setShowChatInterface(true)
+  }
+}, [urlChatId])
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
     const {
@@ -108,7 +123,7 @@ export default function ChatPage() {
         setShowSubscriptionModal,
     } = useChat(urlChatId ?? undefined)
 
-    const { credits, hasActiveSubscription } = useUserCredits()
+    const { credits, subscription, hasActiveSubscription } = useUserCredits()
     const { session } = useStateMachine()
     const forkChat = useForkChat()
 
@@ -123,7 +138,8 @@ export default function ChatPage() {
                 newUrl.searchParams.set('chatId', result.newChatId)
                 window.location.href = newUrl.pathname + newUrl.search
             }
-        } catch (error) {
+        } catch {
+          // URL update is non-critical
         }
     }
 
@@ -145,7 +161,6 @@ export default function ChatPage() {
         setAttachments([])
         setIsLoading(false)
         setIsFullscreen(false)
-        setRefreshKey((prev) => prev + 1)
         setUrlChatId(null)
 
         // Clear chatId from URL
@@ -204,7 +219,8 @@ export default function ChatPage() {
                 files.map((file) => createImageAttachment(file)),
             )
             setAttachments((prev) => [...prev, ...newAttachments])
-        } catch (error) {
+        } catch {
+          // Image processing failed silently
         }
     }
 
@@ -263,7 +279,8 @@ export default function ChatPage() {
                         chatId: chatData.id,
                     }),
                 })
-            } catch (error) {
+            } catch {
+              // Fork notification is non-critical
             }
         }
     }
@@ -275,7 +292,6 @@ export default function ChatPage() {
 
     useEffect(() => {
     if (shouldShowPreview) {
-        setRefreshKey((prev) => prev + 1)
 
         if (window.innerWidth < 768) {
             setActivePanel('preview')
@@ -284,7 +300,7 @@ export default function ChatPage() {
 }, [shouldShowPreview])
 
 
-    if (showChatInterface || chatHistory.length > 0 || urlChatId) {
+    if (chatMode === "AI_CHAT") {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
                 <SubscriptionModal
@@ -292,6 +308,7 @@ export default function ChatPage() {
                     onOpenChange={setShowSubscriptionModal}
                     hasActiveSubscription={hasActiveSubscription}
                     currentCredits={credits?.totalCredits ?? 0}
+                    currentPlanId={subscription?.plan_id ?? null}
                 />
                 <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
                     {/* Handle search params with Suspense boundary */}
@@ -396,8 +413,6 @@ export default function ChatPage() {
             currentChat={hookCurrentChat}
             isFullscreen={isFullscreen}
             setIsFullscreen={setIsFullscreen}
-            //refreshKey={refreshKey}
-           // setRefreshKey={setRefreshKey}
             isBuilding={false}
         />
     ) : null
@@ -417,7 +432,24 @@ export default function ChatPage() {
             </ChatActionsProvider>
         )
     }
+if (!chatMode) {
+  return (
+    <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
+   <ModeSelection
+  onSelect={(mode) => {
+    if (mode === "AI_CHAT") {
+      router.push("/ai-chat")
+    }
 
+   if (mode === "BUILDER") {
+  setChatMode("BUILDER")
+}
+  }}
+/>
+
+    </div>
+  )
+}
     const suggestions = [
         {
             label: 'Landing Page',
@@ -451,7 +483,7 @@ export default function ChatPage() {
     }
 
     return (
-        <div className="bg-background min-h-[calc(100vh-48px)] flex flex-col overflow-y-auto">
+       <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -465,8 +497,56 @@ export default function ChatPage() {
                 />
             </Suspense>
 
-            {/* Main Content */}
-            <div className="flex-1 flex flex-col px-4 sm:px-6 lg:px-8 pb-4 pt-[15vh]">
+        {showChatInterface ? (
+  <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+
+    <ResizableLayout
+      className="flex-1 min-h-0"
+      singlePanelMode={!shouldShowPreview}
+      activePanel={activePanel === "chat" ? "left" : "right"}
+      leftPanel={
+        <div className="flex flex-col h-full ">
+
+         <div className="flex-1 overflow-y-auto min-h-0">
+            <ChatMessages
+              chatHistory={chatHistory}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              currentChat={hookCurrentChat}
+              onStreamingComplete={handleStreamingComplete}
+              onChatData={handleChatData}
+              onStreamingStarted={() => setIsLoading(false)}
+            />
+          </div>
+
+          <ChatInput
+            message={message}
+            setMessage={setMessage}
+            onSubmit={handleSendMessage}
+            isLoading={isLoading}
+            isStreaming={isStreaming}
+            showSuggestions={false}
+            attachments={attachments}
+            onAttachmentsChange={setAttachments}
+            textareaRef={textareaRef}
+          />
+
+        </div>
+      }
+      rightPanel={
+        shouldShowPreview ? (
+          <PreviewPanel
+            currentChat={hookCurrentChat}
+            isFullscreen={isFullscreen}
+            setIsFullscreen={setIsFullscreen}
+            isBuilding={false}
+          />
+        ) : null
+      }
+    />
+
+  </div>
+) : (
                 <div className="max-w-2xl w-full mx-auto">
                     {/* Logo + Title */}
                     <div className="flex items-center justify-center gap-3 mb-3">
@@ -567,15 +647,16 @@ export default function ChatPage() {
                     <p className="text-[11px] text-muted-foreground/40 text-center mt-5">
                         Press <kbd className="px-1 py-0.5 rounded bg-muted/50 border border-border/30 text-[10px] font-mono">Enter</kbd> to send
                     </p>
-                </div>
-            </div>
-
-            {/* Community Builds */}
-            <div className="px-4 sm:px-6 lg:px-8 pb-12">
-                <div className="max-w-5xl w-full mx-auto">
-                    <CommunityBuildsGrid />
-                </div>
-            </div>
+                           </div>
+)}
+          {!showChatInterface && (
+  <div className="px-4 sm:px-6 lg:px-8 pb-12">
+      <div className="max-w-5xl w-full mx-auto">
+          <CommunityBuildsGrid />
+      </div>
+  </div>
+)}
         </div>
     )
+
 }

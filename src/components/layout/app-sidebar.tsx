@@ -5,9 +5,12 @@ import {
     BookOpen,
     MessageSquare,
     Settings2,
-    SquareTerminal,
     BrainCircuit,
     Bug,
+    FileText,
+    LayoutTemplate,
+    History,
+    Star,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -28,57 +31,99 @@ type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
     onSettingsClick: (tab: SettingsTab) => void
 }
 
-const buildNavItems = (
+export type NavSection = {
+    label: string
+    items: NavItem[]
+}
+
+export type NavItem = {
+    title: string
+    url?: string
+    icon?: React.ComponentType<{ className?: string }>
+    onClick?: () => void
+    items?: {
+        title: string
+        url?: string
+        onClick?: () => void
+    }[]
+}
+
+const buildNavSections = (
     onStarredClick: () => void,
     onSettingsClick: (tab: SettingsTab) => void,
-) => [
+): NavSection[] => [
     {
-        title: "New Chat",
-        url: "/chat",
-        icon: MessageSquare,
-    },
-    {
-        title: "AI Chat",
-        url: "/ai-chat",
-        icon: BrainCircuit,
-    },
-    {
-        title: "Chat",
-        url: "#",
-        icon: SquareTerminal,
-        isActive: true,
+        label: "Create",
         items: [
-            { title: "History", url: "#" },
-            { title: "Starred", onClick: onStarredClick },
+            {
+                title: "New Chat",
+                url: "/chat",
+                icon: MessageSquare,
+            },
+            {
+                title: "AI Chat",
+                url: "/ai-chat",
+                icon: BrainCircuit,
+            },
+            {
+                title: "Buildify Studio",
+                url: "/buildify-studio",
+                icon: LayoutTemplate,
+            },
+            {
+                title: "AI Resume Builder",
+                url: "/dashboard/ai-resume",
+                icon: FileText,
+            },
+            {
+                title: "Testing",
+                url: "/testing",
+                icon: Bug
+            },
         ],
     },
     {
-        title: "Documentation",
-        url: "/docs",
-        icon: BookOpen,
+        label: "Library",
         items: [
-            { title: "Introduction", url: "/docs" },
-            { title: "Get Started", url: "/docs/get-started" },
-            { title: "Tutorials", url: "/docs/tutorials" },
-            { title: "Changelog", url: "/docs/changelog" },
+            {
+                title: "History",
+                icon: History,
+                onClick: undefined, // handled specially in nav-main
+            },
+            {
+                title: "Starred",
+                icon: Star,
+                onClick: onStarredClick,
+            },
         ],
     },
     {
-        title: "Settings",
-        url: "#",
-        icon: Settings2,
+        label: "Resources",
         items: [
-            { title: "General", onClick: () => onSettingsClick("general") },
-            { title: "Team", onClick: () => onSettingsClick("team") },
-            { title: "Billing", onClick: () => onSettingsClick("billing") },
-            { title: "Limits", onClick: () => onSettingsClick("limits") },
+            {
+                title: "Documentation",
+                url: "/docs",
+                icon: BookOpen,
+                items: [
+                    { title: "Introduction", url: "/docs" },
+                    { title: "Get Started", url: "/docs/get-started" },
+                    { title: "Tutorials", url: "/docs/tutorials" },
+                    { title: "Changelog", url: "/docs/changelog" },
+                ],
+            },
+            {
+                title: "Settings",
+                url: "#",
+                icon: Settings2,
+                items: [
+                    { title: "General", onClick: () => onSettingsClick("general") },
+                    { title: "Team", onClick: () => onSettingsClick("team") },
+                    { title: "Billing", onClick: () => onSettingsClick("billing") },
+                    { title: "Limits", onClick: () => onSettingsClick("limits") },
+                ],
+            },
         ],
     },
-    {
-        title: "Testing",
-        url: "/testing",
-        icon: Bug
-    }
 ]
 
 const platforms = [
@@ -100,8 +145,8 @@ export function AppSidebar({
     onSettingsClick,
     ...props
 }: AppSidebarProps) {
-    const navItems = React.useMemo(
-        () => buildNavItems(onStarredClick, onSettingsClick),
+    const navSections = React.useMemo(
+        () => buildNavSections(onStarredClick, onSettingsClick),
         [onStarredClick, onSettingsClick],
     )
 
@@ -112,7 +157,7 @@ export function AppSidebar({
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={navItems} onStarredClick={onStarredClick} />
+                <NavMain sections={navSections} />
             </SidebarContent>
 
             <SidebarFooter>

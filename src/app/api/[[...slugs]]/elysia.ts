@@ -66,7 +66,18 @@ import {
   pushToGithubHandler,
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
+import {
+  createDesignHandler,
+  listDesignsHandler,
+  getDesignByIdHandler,
+  updateDesignHandler,
+  publishDesignByIdHandler,
+  unpublishDesignByIdHandler,
+  deleteDesignByIdHandler,
+  getPublicDesignHandler,
+} from '@/server/api/controllers/studio.controller'
 import { env } from '@/env'
+import { RATE_LIMITS, CREDIT_COSTS } from '@/config/credits.config'
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -76,13 +87,20 @@ interface InsufficientCreditsResponse {
   available: number
 }
 
-const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
-const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
-
 // Speech-to-text rate limiting (in-memory, per-user, 24h sliding window)
-const MAX_STT_REQUESTS_PER_DAY = 100
 const MAX_STT_BASE64_LENGTH = 15_000_000 // ~15MB base64 string ≈ ~10MB decoded audio
 const sttRateLimitMap = new Map<string, { count: number; windowStart: number }>()
+
+// Periodically clean up expired STT rate limit entries to prevent memory leaks
+setInterval(() => {
+  const now = Date.now()
+  const windowMs = 24 * 60 * 60 * 1000
+  for (const [key, entry] of sttRateLimitMap) {
+    if (now - entry.windowStart >= windowMs) {
+      sttRateLimitMap.delete(key)
+    }
+  }
+}, 60 * 60 * 1000) // Clean up every hour
 
 /** Streaming error response type */
 interface StreamingErrorResponse {
@@ -121,7 +139,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_AUTHENTICATED) {
+            if (chatCount >= RATE_LIMITS.AUTHENTICATED_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -139,7 +157,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: 'You need an active subscription to use this service. Please subscribe to continue.',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -167,7 +185,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: deductResult.error ?? 'Failed to deduct credits',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -178,7 +196,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_ANONYMOUS) {
+            if (chatCount >= RATE_LIMITS.ANONYMOUS_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -276,7 +294,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   
  .get(
   '/apps/:chatId',
-  async ({ params, set, request }) => {
+  async ({ params, set }) => {
     try {
       const result = await getChatDemoUrl({ v0ChatId: params.chatId })
 
@@ -285,48 +303,32 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         return { error: 'App not found' }
       }
 
-      // 🔹 VISIT LOGGING START
+      // Visit logging (non-critical, fire-and-forget)
       try {
         const { db } = await import('@/server/db')
         const { demo_visits, user_chats } = await import('@/server/db/schema')
         const { eq } = await import('drizzle-orm')
-        const { nanoid } = await import('nanoid')
-        const { getSession } = await import('@/server/better-auth/server')
-        const { getFeaturedBuildsHandler } = await import('@/server/api/controllers/chat.controller')
 
         const chatId = params.chatId
 
-        const featuredResult = await getFeaturedBuildsHandler()
-        const featuredList = (featuredResult as any)?.data ?? []
-
-        const isFeatured = featuredList.some(
-          (item: any) => item.v0_chat_id === chatId
-        )
-
-        let ownerUserId: string | null = null
-
-        if (!isFeatured) {
-          const owner = await db
-            .select()
-            .from(user_chats)
-            .where(eq(user_chats.v0_chat_id, chatId))
-            .limit(1)
-
-          ownerUserId = owner[0]?.user_id ?? null
-        }
+        // Look up the chat owner in a single lightweight query
+        const [chatRecord] = await db
+          .select({ user_id: user_chats.user_id })
+          .from(user_chats)
+          .where(eq(user_chats.v0_chat_id, chatId))
+          .limit(1)
 
         const session = await getSession()
         await db.insert(demo_visits).values({
-          id: nanoid(),
+          id: crypto.randomUUID(),
           demo_id: chatId,
-          demo_type: isFeatured ? 'featured' : 'community',
-          owner_user_id: ownerUserId,
+          demo_type: 'community',
+          owner_user_id: chatRecord?.user_id ?? null,
           visitor_user_id: session?.user?.id ?? null,
         })
       } catch {
         // Visit logging is non-critical — silently ignore failures
       }
-      // 🔹 VISIT LOGGING END
 
       return result
     } catch {
@@ -413,28 +415,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         isStarred: boolean
       }
 
-      // const { db } = await import('@/server/db')
-      // const { user_chats } = await import('@/server/db/schema')
-      // const { and, eq } = await import('drizzle-orm')
-
-      // await db
-      //   .update(user_chats)
-      //   .set({
-      //     is_starred: isStarred,
-      //     updated_at: new Date(),
-      //   })
-      //   .where(
-      //     and(
-      //       eq(user_chats.id, chatId),
-      //       eq(user_chats.user_id, session.user.id),
-      //     ),
-      //   )
       await toggleStarChat({
-  userId: session.user.id,
-  chatId,       
-  isStarred,
-})
-
+        userId: session.user.id,
+        chatId,
+        isStarred,
+      })
 
       return { success: true }
     },
@@ -453,24 +438,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: 'Unauthorized' }
     }
 
-    // const { db } = await import('@/server/db')
-    // const { user_chats } = await import('@/server/db/schema')
-    // const { and, eq, desc } = await import('drizzle-orm')
-
-    // const starredChats = await db
-    //   .select()
-    //   .from(user_chats)
-    //   .where(
-    //     and(
-    //       eq(user_chats.user_id, session.user.id),
-    //       eq(user_chats.is_starred, true),
-    //     ),
-    //   )
-    //   .orderBy(desc(user_chats.updated_at))
-
-    // return starredChats
     return getStarredChats(session.user.id)
-
   })
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user
@@ -526,10 +494,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Chat history endpoint - GET /api/chats
-  .get('/chats', async ({ set }) => {
-    const result = await getChatHistoryHandler()
+ .get(
+  '/chats',
+  async ({ query, set }) => {
+    const result = await getChatHistoryHandler({ query })
 
-    // Handle error responses with status codes
     if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
         set.status = (result as ApiErrorResponse).status ?? 500
@@ -537,7 +506,19 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     }
 
     return result
-  })
+  },
+  {
+    query: t.Object({
+      type: t.Optional(
+        t.Union([
+          t.Literal("all"),
+          t.Literal("builder"),
+          t.Literal("openrouter"),
+        ])
+      ),
+    }),
+  },
+)
 
   // Speech-to-text endpoint - POST /api/speech-to-text
   .post(
@@ -558,7 +539,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         const windowMs = 24 * 60 * 60 * 1000
         const entry = sttRateLimitMap.get(userId)
         if (entry && now - entry.windowStart < windowMs) {
-          if (entry.count >= MAX_STT_REQUESTS_PER_DAY) {
+          if (entry.count >= RATE_LIMITS.STT_REQUESTS_PER_DAY) {
             set.status = 429
             return {
               error: 'rate_limit:speech' as const,
@@ -938,16 +919,16 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
-
+    // ============================================
+  // Resume Builder Endpoints
   // ============================================
-  // Sandbox Execution Endpoints
-  // ============================================
 
-  // Execute code in sandbox - POST /api/sandbox/execute
+  // Generate LaTeX resume - POST /api/resume/generate
   .post(
-    '/sandbox/execute',
+    '/resume/generate',
     async ({ body, set }) => {
-      const result = await executeCodeHandler({ body })
+      const { generateResumeLatexHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumeLatexHandler({ body })
 
       if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500
@@ -957,77 +938,127 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       body: t.Object({
-        code: t.String(),
-        language: t.String(),
+        resumeData: t.Object({
+          personalInfo: t.Object({
+            name: t.String(),
+            email: t.String(),
+            phone: t.String(),
+            address: t.Optional(t.String()),
+            linkedin: t.Optional(t.String()),
+            github: t.Optional(t.String()),
+            website: t.Optional(t.String()),
+          }),
+          summary: t.Optional(t.String()),
+          experience: t.Array(
+            t.Object({
+              company: t.String(),
+              position: t.String(),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              description: t.Array(t.String()),
+              achievements: t.Optional(t.Array(t.String())),
+            })
+          ),
+          education: t.Array(
+            t.Object({
+              institution: t.String(),
+              degree: t.String(),
+              field: t.Optional(t.String()),
+              startDate: t.String(),
+              endDate: t.Optional(t.String()),
+              gpa: t.Optional(t.String()),
+              honors: t.Optional(t.Array(t.String())),
+            })
+          ),
+          skills: t.Array(
+            t.Object({
+              category: t.String(),
+              items: t.Array(t.String()),
+            })
+          ),
+          projects: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                description: t.String(),
+                technologies: t.Array(t.String()),
+                link: t.Optional(t.String()),
+              })
+            )
+          ),
+          certifications: t.Optional(
+            t.Array(
+              t.Object({
+                name: t.String(),
+                issuer: t.String(),
+                date: t.String(),
+                credentialId: t.Optional(t.String()),
+              })
+            )
+          ),
+          languages: t.Optional(
+            t.Array(
+              t.Object({
+                language: t.String(),
+                proficiency: t.String(),
+              })
+            )
+          ),
+        }),
+        templateId: t.Optional(t.String()),
       }),
     },
   )
 
-  // ============================================
-  // OpenRouter AI Chat Endpoint
-  // ============================================
-
+  // Generate PDF from LaTeX - POST /api/resume/pdf
   .post(
-    '/openrouter/chat',
+    '/resume/pdf',
     async ({ body, set }) => {
-      if (body.streaming) {
-        const result = await openRouterStreamHandler({ body })
-        if (result instanceof Response) return result
-        // Error object — set status and return JSON
-        if (isApiError(result)) {
-          set.status = (result as ApiErrorResponse).status ?? 500
-        }
-        return result
-      }
+      const { generateResumePDFHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await generateResumePDFHandler({ body })
 
-      const result = await openRouterChatHandler({ body })
       if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500
       }
+
       return result
     },
     {
       body: t.Object({
-        messages: t.Optional(
-          t.Array(t.Object({ role: t.String(), content: t.String() })),
-        ),
-        message: t.Optional(t.String()),
-        model: t.Optional(t.String()),
-        systemPrompt: t.Optional(t.String()),
-        streaming: t.Optional(t.Boolean()),
-        maxTokens: t.Optional(t.Number()),
-        temperature: t.Optional(t.Number()),
-        topP: t.Optional(t.Number()),
+        resumeId: t.String(),
+        latex: t.Optional(t.String()),
       }),
     },
   )
 
-  // ============================================
-  // GitHub Endpoints
-  // ============================================
+  // Get user's resumes - GET /api/resume/list
+  .get('/resume/list', async ({ set }) => {
+    const { getUserResumesHandler } = await import('@/server/api/controllers/resume.controller')
+    const result = await getUserResumesHandler()
 
-  .get('/github/status', async ({ set }) => {
-    const result = await getGithubStatusHandler()
-    if ('status' in result && result.status) set.status = result.status
+    if (isApiError(result)) {
+      set.status = (result as ApiErrorResponse).status ?? 500
+    }
+
     return result
   })
 
-  .post(
-    '/github/push',
-    async ({ body, set }) => {
-      const result = await pushToGithubHandler({ body })
-      if ('status' in result && result.status) set.status = result.status
+  // Get resume by ID - GET /api/resume/:id
+  .get(
+    '/resume/:id',
+    async ({ params, set }) => {
+      const { getResumeByIdHandler } = await import('@/server/api/controllers/resume.controller')
+      const result = await getResumeByIdHandler({ params })
+
+      if (isApiError(result)) {
+        set.status = (result as ApiErrorResponse).status ?? 500
+      }
+
       return result
     },
     {
-      body: t.Object({
-        chatId: t.String(),
-        branchName: t.String(),
-        commitMessage: t.Optional(t.String()),
-        confirmExistingBranch: t.Optional(t.Boolean()),
-        repoName: t.Optional(t.String()),
-        visibility: t.Optional(t.Union([t.Literal('public'), t.Literal('private')])),
-        replaceRepo: t.Optional(t.Boolean()), // True when user confirmed they want to replace the active repo with a new one
+      params: t.Object({
+        id: t.String(),
       }),
     },
   )
@@ -1044,6 +1075,111 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
+  // ============================================
+  // Buildify Studio Endpoints
+  // ============================================
+
+  // List user's designs
+  .get('/designs', async ({ set }) => {
+    const result = await listDesignsHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  // Create a new draft
+  .post(
+    '/design',
+    async ({ body, set }) => {
+      const result = await createDesignHandler({ body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // IMPORTANT: static paths must come before parameterized ones
+  // Get public design by slug (no auth)
+  .get(
+    '/design/public/:slug',
+    async ({ params, set }) => {
+      const result = await getPublicDesignHandler({ params })
+      if (!result) { set.status = 404; return { error: 'Not found' } }
+      return result
+    },
+    { params: t.Object({ slug: t.String() }) },
+  )
+
+  // Get one design by id (auth required)
+  .get(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await getDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Update/save draft
+  .put(
+    '/design/:id',
+    async ({ params, body, set }) => {
+      const result = await updateDesignHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.Nullable(t.String())),
+      }),
+    },
+  )
+
+  // Publish
+  .post(
+    '/design/:id/publish',
+    async ({ params, body, set }) => {
+      const result = await publishDesignByIdHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ slug: t.String(), title: t.Optional(t.String()) }),
+    },
+  )
+
+  // Unpublish
+  .post(
+    '/design/:id/unpublish',
+    async ({ params, set }) => {
+      const result = await unpublishDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Delete
+  .delete(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await deleteDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  
   // ============================================
   // Testing Engine Endpoints
   // ============================================

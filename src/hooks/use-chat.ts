@@ -122,7 +122,7 @@ export function useChat(chatId?: string) {
             errorMessage =
               'You have exceeded your maximum number of messages for the day. Please try again later.'
           }
-        } catch (parseError) {
+        } catch {
           if (response.status === 429) {
             errorMessage =
               'You have exceeded your maximum number of messages for the day. Please try again later.'
@@ -132,21 +132,21 @@ export function useChat(chatId?: string) {
       }
 
       if (!response.body) {
-        throw new Error('No response body for streaming')
-      }
+  throw new Error('No response body for streaming')
+}
 
-      setIsStreaming(true)
+setIsLoading(false)
+setIsStreaming(true)
 
-      // Add placeholder for streaming response with the stream attached
-      setChatHistory((prev) => [
-        ...prev,
-        {
-          type: 'assistant',
-          content: [],
-          isStreaming: true,
-          stream: response.body,
-        },
-      ])
+setChatHistory((prev) => [
+  ...prev,
+  {
+    type: 'assistant',
+    content: [],
+    isStreaming: true,
+    stream: response.body,
+  },
+])
     } catch (error) {
       const errorMessage =
         error instanceof Error
@@ -178,6 +178,25 @@ export function useChat(chatId?: string) {
 
 
   const handleStreamingComplete = async (finalContent: string | MessageBinaryFormat) => {
+    
+
+// detect generated files and update sidebar
+if (Array.isArray(finalContent)) {
+  const fileBlocks = finalContent.filter(
+    (item: any) => item?.type === "file"
+  )
+
+  if (fileBlocks.length > 0) {
+    setCurrentChat((prev) => ({
+      ...prev!,
+      files: fileBlocks.map((f: any) => ({
+        name: f.name,
+        content: f.content,
+      })),
+    }))
+  }
+}
+
     setIsStreaming(false)
     setIsLoading(false)
 

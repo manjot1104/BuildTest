@@ -1,9 +1,7 @@
-'use server'
-
 import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user, github_repos } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts } from './schema'
 import { db } from './index'
 
 // ============================================================================
@@ -186,15 +184,30 @@ export async function getChatDemoUrl({
 export async function getUserChatsByUserId({
   userId,
   limit = 50,
+  type = "all",
 }: {
   userId: string
   limit?: number
+  type?: "builder" | "openrouter" | "all"
 }): Promise<UserChat[]> {
   try {
+
     const chats = await db
       .select()
       .from(user_chats)
-      .where(eq(user_chats.user_id, userId))
+      .where(
+        type === "builder"
+          ? and(
+              eq(user_chats.user_id, userId),
+              eq(user_chats.chat_type, "BUILDER")
+            )
+          : type === "openrouter"
+          ? and(
+              eq(user_chats.user_id, userId),
+              eq(user_chats.chat_type, "OPENROUTER")
+            )
+          : eq(user_chats.user_id, userId)
+      )
       .orderBy(desc(user_chats.updated_at))
       .limit(limit)
 
@@ -219,7 +232,7 @@ export async function getChatIdsByUserId({
       .where(eq(user_chats.user_id, userId))
       .orderBy(desc(user_chats.created_at))
 
-    return chats.map((c) => c.v0ChatId)
+    return chats.map((c) => c.v0ChatId).filter(Boolean) as string[]
   } catch (error: unknown) {
     throw error
   }
@@ -259,7 +272,7 @@ export async function getCommunityChats({
 } = {}): Promise<
   {
     id: string
-    v0_chat_id: string
+    v0_chat_id: string | null
     title: string | null
     prompt: string | null
     demo_url: string | null
@@ -306,7 +319,7 @@ export async function getFeaturedChats(
 ): Promise<
   {
     id: string
-    v0_chat_id: string
+    v0_chat_id: string | null
     title: string | null
     prompt: string | null
     demo_url: string | null
@@ -579,4 +592,101 @@ export async function updateGithubRepoVisibility({
   } catch (error: unknown) {
     throw error
   }
+}
+
+// ============================================================================
+// Studio Layout Queries
+// ============================================================================
+
+export type StudioLayout = typeof studio_layouts.$inferSelect
+
+export async function createStudioLayout({
+  userId,
+  title,
+  layout,
+  background,
+}: {
+  userId: string
+  title?: string
+  layout?: string
+  background?: string | null
+}): Promise<StudioLayout> {
+  const id = randomUUID()
+  const [row] = await db
+    .insert(studio_layouts)
+    .values({
+      id,
+      user_id: userId,
+      title: title ?? 'Untitled',
+      layout: layout ?? '[]',
+      background: background ?? null,
+    })
+    .returning()
+  return row!
+}
+
+export async function getStudioLayoutsByUserId(userId: string): Promise<StudioLayout[]> {
+  return db
+    .select()
+    .from(studio_layouts)
+    .where(eq(studio_layouts.user_id, userId))
+    .orderBy(desc(studio_layouts.updated_at))
+}
+
+export async function getStudioLayoutById(id: string): Promise<StudioLayout | null> {
+  const [row] = await db
+    .select()
+    .from(studio_layouts)
+    .where(eq(studio_layouts.id, id))
+  return row ?? null
+}
+
+export async function getStudioLayoutBySlug(slug: string): Promise<StudioLayout | null> {
+  const [row] = await db
+    .select()
+    .from(studio_layouts)
+    .where(and(eq(studio_layouts.slug, slug), eq(studio_layouts.is_published, true)))
+  return row ?? null
+}
+
+export async function updateStudioLayout(
+  id: string,
+  userId: string,
+  data: { title?: string; layout?: string; background?: string | null },
+): Promise<void> {
+  await db
+    .update(studio_layouts)
+    .set({ ...data, updated_at: new Date() })
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+}
+
+export async function publishStudioLayout(
+  id: string,
+  userId: string,
+  slug: string,
+  title?: string,
+): Promise<void> {
+  await db
+    .update(studio_layouts)
+    .set({
+      slug,
+      is_published: true,
+      published_at: new Date(),
+      updated_at: new Date(),
+      ...(title ? { title } : {}),
+    })
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+}
+
+export async function unpublishStudioLayout(id: string, userId: string): Promise<void> {
+  await db
+    .update(studio_layouts)
+    .set({ is_published: false, updated_at: new Date() })
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+}
+
+export async function deleteStudioLayout(id: string, userId: string): Promise<void> {
+  await db
+    .delete(studio_layouts)
+    .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
 }

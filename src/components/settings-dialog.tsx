@@ -40,22 +40,25 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[560px] p-0 gap-0 overflow-hidden">
-                <DialogHeader className="px-6 pt-6 pb-4">
-                    <DialogTitle className="text-lg font-semibold tracking-tight">Settings</DialogTitle>
-                    <DialogDescription className="text-xs text-muted-foreground">
-                        Manage your account and preferences.
-                    </DialogDescription>
-                </DialogHeader>
+            <DialogContent className="hk-neon-dialog sm:max-w-[560px] p-0 gap-0 overflow-hidden rounded-none" showCloseButton={false}>
+                <div className="hk-neon-dialog-header px-6 pt-6 pb-4">
+                    <DialogHeader>
+                        <DialogTitle className="hk-neon-dialog-title text-lg font-semibold tracking-tight">Settings</DialogTitle>
+                        <DialogDescription className="font-mono text-[11px] text-muted-foreground">
+                            // manage your account and preferences
+                        </DialogDescription>
+                    </DialogHeader>
+                </div>
                 <Tabs defaultValue={defaultTab} key={defaultTab} className="w-full">
-                    <div className="border-b border-border/40 px-6">
+                    <div className="px-6">
                         <TabsList className="h-9 w-full justify-start bg-transparent p-0 gap-4">
-                            <TabsTrigger value="general" className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none">General</TabsTrigger>
-                            <TabsTrigger value="team" className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none">Team</TabsTrigger>
-                            <TabsTrigger value="billing" className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none">Billing</TabsTrigger>
-                            <TabsTrigger value="limits" className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none">Limits</TabsTrigger>
+                            <TabsTrigger value="general" className="hk-neon-tab h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none">General</TabsTrigger>
+                            <TabsTrigger value="team" className="hk-neon-tab h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none">Team</TabsTrigger>
+                            <TabsTrigger value="billing" className="hk-neon-tab h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none">Billing</TabsTrigger>
+                            <TabsTrigger value="limits" className="hk-neon-tab h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none">Limits</TabsTrigger>
                         </TabsList>
                     </div>
+                    <div className="hk-neon-divider" />
 
                     <div className="px-6 py-5 min-h-[320px]">
                         <TabsContent value="general" className="mt-0">
@@ -99,20 +102,20 @@ function GeneralTab() {
     return (
         <div className="space-y-6">
             <div className="space-y-2">
-                <Label htmlFor="display-name" className="text-xs font-medium text-muted-foreground">Display Name</Label>
+                <Label htmlFor="display-name" className="hk-neon-label">Display Name</Label>
                 <div className="flex gap-2">
                     <Input
                         id="display-name"
                         value={displayName}
                         onChange={(e) => setDisplayName(e.target.value)}
                         placeholder="Your name"
-                        className="h-9 rounded-lg text-sm"
+                        className="hk-neon-input h-9 text-sm"
                     />
                     <Button
                         onClick={handleSaveName}
                         disabled={saving || displayName.trim() === (session?.user?.name ?? "")}
                         size="sm"
-                        className="h-9 rounded-lg px-4 text-xs"
+                        className="hk-neon-btn-primary h-9 px-4"
                     >
                         {saving && <Loader2 className="mr-1.5 size-3 animate-spin" />}
                         Save
@@ -121,18 +124,19 @@ function GeneralTab() {
             </div>
 
             <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Email</Label>
+                <Label htmlFor="email" className="hk-neon-label">Email</Label>
                 <Input
                     id="email"
                     value={session?.user?.email ?? ""}
                     disabled
-                    className="h-9 rounded-lg text-sm opacity-50"
+                    className="hk-neon-input h-9 text-sm opacity-50"
                 />
-                <p className="text-[11px] text-muted-foreground/60">Email cannot be changed.</p>
+                <p className="font-mono text-[10px] text-muted-foreground/60">// email cannot be changed</p>
             </div>
 
-            <div className="border-t border-border/40 pt-5 space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground">Theme</Label>
+            <div className="hk-neon-divider pt-0" />
+            <div className="space-y-2">
+                <Label className="hk-neon-label">Theme</Label>
                 <div className="flex gap-1.5">
                     {[
                         { value: "light", label: "Light", icon: Sun },
@@ -144,7 +148,7 @@ function GeneralTab() {
                             variant={theme === value ? "default" : "outline"}
                             size="sm"
                             onClick={() => setTheme(value)}
-                            className="h-8 rounded-lg px-3 text-xs gap-1.5"
+                            className={theme === value ? "hk-neon-btn-primary h-8 px-3 gap-1.5" : "hk-neon-btn h-8 px-3 gap-1.5"}
                         >
                             <Icon className="size-3" />
                             {label}
@@ -159,12 +163,12 @@ function GeneralTab() {
 function TeamTab() {
     return (
         <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center mb-3">
+            <div className="hk-neon-empty-icon size-10 flex items-center justify-center mb-3">
                 <Users className="size-5 text-muted-foreground" />
             </div>
-            <h3 className="text-sm font-medium">Team features coming soon</h3>
-            <p className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                Collaborate with your team on projects, share chats, and manage access.
+            <h3 className="font-mono text-sm font-medium">Team features coming soon</h3>
+            <p className="font-mono text-[10px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                // collaborate with your team on projects, share chats, and manage access
             </p>
         </div>
     )
@@ -175,27 +179,28 @@ function BillingTab() {
 
     return (
         <div className="space-y-4">
-            <div className="rounded-xl border border-border/50 p-4 space-y-3">
+            <div className="hk-neon-card border p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground">Subscription</span>
-                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                    <span className="hk-neon-label">Subscription</span>
+                    <span className={
                         hasActiveSubscription
-                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            : 'bg-muted text-muted-foreground'
-                    }`}>
+                            ? 'hk-neon-status-active px-2 py-0.5'
+                            : 'hk-neon-status-inactive px-2 py-0.5 text-muted-foreground'
+                    }>
                         {hasActiveSubscription ? "Active" : "Inactive"}
                     </span>
                 </div>
                 {subscription && (
                     <>
-                        <div className="border-t border-border/30 pt-3 grid grid-cols-2 gap-3">
+                        <div className="hk-neon-divider" />
+                        <div className="pt-1 grid grid-cols-2 gap-3">
                             <div>
-                                <p className="text-[11px] text-muted-foreground">Plan</p>
-                                <p className="text-sm font-medium mt-0.5">{subscription.plan_name}</p>
+                                <p className="hk-neon-label">Plan</p>
+                                <p className="font-mono text-sm font-medium mt-0.5">{subscription.plan_name}</p>
                             </div>
                             <div>
-                                <p className="text-[11px] text-muted-foreground">Period ends</p>
-                                <p className="text-sm font-medium mt-0.5">
+                                <p className="hk-neon-label">Period ends</p>
+                                <p className="font-mono text-sm font-medium mt-0.5">
                                     {new Date(subscription.current_period_end).toLocaleDateString()}
                                 </p>
                             </div>
@@ -204,22 +209,23 @@ function BillingTab() {
                 )}
             </div>
 
-            <div className="rounded-xl border border-border/50 p-4 space-y-3">
-                <span className="text-xs font-medium text-muted-foreground">Credits</span>
-                <div className="border-t border-border/30 pt-3 grid grid-cols-3 gap-3">
+            <div className="hk-neon-card border p-4 space-y-3">
+                <span className="hk-neon-label">Credits</span>
+                <div className="hk-neon-divider" />
+                <div className="pt-1 grid grid-cols-3 gap-3">
                     <div>
-                        <p className="text-[11px] text-muted-foreground">Total</p>
-                        <p className="text-xl font-bold mt-0.5 tabular-nums">{credits?.totalCredits ?? 0}</p>
+                        <p className="hk-neon-label">Total</p>
+                        <p className="hk-neon-stat text-xl font-bold mt-0.5 tabular-nums">{credits?.totalCredits ?? 0}</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-muted-foreground">Subscription</p>
-                        <p className="text-xl font-bold mt-0.5 tabular-nums">{credits?.subscriptionCredits ?? 0}</p>
-                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">Resets each cycle</p>
+                        <p className="hk-neon-label">Subscription</p>
+                        <p className="hk-neon-stat text-xl font-bold mt-0.5 tabular-nums">{credits?.subscriptionCredits ?? 0}</p>
+                        <p className="font-mono text-[9px] text-muted-foreground/60 mt-0.5">// resets each cycle</p>
                     </div>
                     <div>
-                        <p className="text-[11px] text-muted-foreground">Additional</p>
-                        <p className="text-xl font-bold mt-0.5 tabular-nums">{credits?.additionalCredits ?? 0}</p>
-                        <p className="text-[10px] text-muted-foreground/60 mt-0.5">Never expires</p>
+                        <p className="hk-neon-label">Additional</p>
+                        <p className="hk-neon-stat text-xl font-bold mt-0.5 tabular-nums">{credits?.additionalCredits ?? 0}</p>
+                        <p className="font-mono text-[9px] text-muted-foreground/60 mt-0.5">// never expires</p>
                     </div>
                 </div>
             </div>
@@ -230,36 +236,38 @@ function BillingTab() {
 function LimitsTab() {
     return (
         <div className="space-y-4">
-            <div className="rounded-xl border border-border/50 p-4 space-y-3">
-                <span className="text-xs font-medium text-muted-foreground">Rate Limits</span>
-                <div className="border-t border-border/30 pt-3 space-y-2.5">
+            <div className="hk-neon-card border p-4 space-y-3">
+                <span className="hk-neon-label">Rate Limits</span>
+                <div className="hk-neon-divider" />
+                <div className="pt-1 space-y-2.5">
                     <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">Authenticated users</span>
-                        <span className="text-xs font-medium tabular-nums">50 / day</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">authenticated_users</span>
+                        <span className="hk-neon-stat font-mono text-xs font-medium tabular-nums">50 / day</span>
                     </div>
                     <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">Anonymous users</span>
-                        <span className="text-xs font-medium tabular-nums">3 / day</span>
-                    </div>
-                </div>
-            </div>
-
-            <div className="rounded-xl border border-border/50 p-4 space-y-3">
-                <span className="text-xs font-medium text-muted-foreground">Credit Costs</span>
-                <div className="border-t border-border/30 pt-3 space-y-2.5">
-                    <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">New chat</span>
-                        <span className="text-xs font-medium tabular-nums">{CREDIT_COSTS.NEW_PROMPT} credits</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                        <span className="text-xs text-muted-foreground">Follow-up message</span>
-                        <span className="text-xs font-medium tabular-nums">{CREDIT_COSTS.FOLLOW_UP_PROMPT} credits</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">anonymous_users</span>
+                        <span className="hk-neon-stat font-mono text-xs font-medium tabular-nums">3 / day</span>
                     </div>
                 </div>
             </div>
 
-            <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
-                Rate limits reset daily at midnight UTC. Credits are deducted before each generation.
+            <div className="hk-neon-card border p-4 space-y-3">
+                <span className="hk-neon-label">Credit Costs</span>
+                <div className="hk-neon-divider" />
+                <div className="pt-1 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                        <span className="font-mono text-[11px] text-muted-foreground">new_chat</span>
+                        <span className="hk-neon-stat font-mono text-xs font-medium tabular-nums">{CREDIT_COSTS.NEW_PROMPT} credits</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="font-mono text-[11px] text-muted-foreground">follow_up_message</span>
+                        <span className="hk-neon-stat font-mono text-xs font-medium tabular-nums">{CREDIT_COSTS.FOLLOW_UP_PROMPT} credits</span>
+                    </div>
+                </div>
+            </div>
+
+            <p className="font-mono text-[10px] text-muted-foreground/60 leading-relaxed">
+                // rate limits reset daily at midnight UTC. credits are deducted before each generation.
             </p>
         </div>
     )

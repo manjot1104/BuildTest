@@ -12,6 +12,16 @@ import {
 
 // Subscription Plans (base prices in INR)
 export const SUBSCRIPTION_PLANS = {
+  FREE: {
+    id: "free",
+    name: "Free",
+    price: 0, // INR - Free plan auto-assigned on signup
+    credits: 200, // One-time 200 credits
+    currency: "INR",
+    interval: "monthly" as const,
+    description: "Get started with 200 free credits",
+    freeTier: true, // Flag to mark as auto-assigned free tier
+  },
   STARTER: {
     id: "starter",
     name: "Starter",
@@ -88,6 +98,13 @@ export const CREDIT_PACKS = {
 export const CREDIT_COSTS = {
   NEW_PROMPT: 20, // Credits deducted for a new chat/prompt
   FOLLOW_UP_PROMPT: 30, // Credits deducted for follow-up message in existing chat
+} as const;
+
+// Rate Limiting
+export const RATE_LIMITS = {
+  AUTHENTICATED_MESSAGES_PER_DAY: 50,
+  ANONYMOUS_MESSAGES_PER_DAY: 3,
+  STT_REQUESTS_PER_DAY: 100,
 } as const;
 
 // Type exports for type safety
@@ -188,6 +205,7 @@ export function getAllLocalizedSubscriptionPlans(
 ): LocalizedPlan[] {
   return Object.values(SUBSCRIPTION_PLANS)
     .filter((plan) => includeAdminPlans || !("adminOnly" in plan && plan.adminOnly))
+    .filter((plan) => !("freeTier" in plan && plan.freeTier))
     .map((plan) => getLocalizedSubscriptionPlan(plan, currency));
 }
 
@@ -196,7 +214,9 @@ export function getAllLocalizedSubscriptionPlans(
  */
 export function getAllSubscriptionPlans(includeAdminPlans = false): SubscriptionPlan[] {
   return Object.values(SUBSCRIPTION_PLANS).filter(
-    (plan) => includeAdminPlans || !("adminOnly" in plan && plan.adminOnly)
+    (plan) =>
+      (includeAdminPlans || !("adminOnly" in plan && plan.adminOnly)) &&
+      !("freeTier" in plan && plan.freeTier)
   );
 }
 

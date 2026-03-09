@@ -1,5 +1,3 @@
-'use server'
-
 import { getSession } from '@/server/better-auth/server'
 import {
   getGithubToken,
@@ -7,6 +5,7 @@ import {
   getGithubUser,
   createGithubRepository,
   createGithubBranch,
+  waitForBranch,
   pushFilesToBranch,
   checkRepoStatus,
   checkBranchExists,
@@ -330,9 +329,11 @@ export async function pushToGithubHandler({
         }
       }
 
-      // Create the branch only if it doesn't already exist
+      // Create the branch only if it doesn't already exist, then wait for
+      // GitHub to propagate the new ref before we attempt to push to it
       if (!branchExists) {
         await createGithubBranch(token, { owner: ghUser.login, repo: repoName, branchName })
+        await waitForBranch(token, ghUser.login, repoName, branchName)
       }
     } else {
       // ── Case 1 or Case 3: Creating a new GitHub repo ──
@@ -379,11 +380,13 @@ export async function pushToGithubHandler({
       visibility = body.visibility
       isNewRepo = true
 
-      // Create the requested branch if it differs from the repo default
+      // Create the requested branch if it differs from the repo default, then
+      // wait for GitHub to propagate the new ref before we attempt to push to it
       if (branchName !== repo.default_branch) {
         const branchExists = await checkBranchExists(token, ghUser.login, repo.name, branchName)
         if (!branchExists) {
           await createGithubBranch(token, { owner: ghUser.login, repo: repo.name, branchName })
+          await waitForBranch(token, ghUser.login, repo.name, branchName)
         }
       }
     }

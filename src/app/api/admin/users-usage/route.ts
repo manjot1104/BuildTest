@@ -34,7 +34,7 @@ ORDER BY total_prompts DESC
 
     return NextResponse.json(result);
 
-  } catch (_error) {
+  } catch {
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }

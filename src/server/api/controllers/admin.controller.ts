@@ -42,7 +42,7 @@ interface AdminUserDetail {
   subscription: AdminActiveSubscription | null;
   chats: {
     id: string;
-    v0_chat_id: string;
+   v0_chat_id: string | null;
     title: string | null;
     prompt: string | null;
     demo_url: string | null;
@@ -125,7 +125,7 @@ const visitsByType = await getDemoVisitsByType()
 }
 
 /**
- * GET /api/admin/users - List all users
+ * GET /api/admin/users - List all users (capped at 500 to prevent payload explosion)
  */
 export async function getAdminUsersHandler(): Promise<
   AdminUserListItem[] | ApiErrorResponse
@@ -142,6 +142,7 @@ export async function getAdminUsersHandler(): Promise<
       createdAt: true,
     },
     orderBy: (u, { desc }) => [desc(u.createdAt)],
+    limit: 500,
   });
 }
 

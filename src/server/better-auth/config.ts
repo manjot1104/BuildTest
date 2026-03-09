@@ -3,14 +3,18 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { emailOTP } from "better-auth/plugins";
 
 import { db } from "@/server/db";
+import { env } from "@/env";
 import {
   sendVerificationEmail,
   sendPasswordResetEmail,
   sendOTPEmail,
   sendWelcomeEmail,
 } from "@/server/services/email.service";
+import { provisionFreeTier } from "@/server/services/credits.service";
 
 export const auth = betterAuth({
+  baseURL: env.BETTER_AUTH_URL ?? env.NEXT_PUBLIC_APP_URL,
+  trustedOrigins: ["https://buildify.sh", "https://www.buildify.sh"],
   database: drizzleAdapter(db, {
     provider: "pg",
   }),
@@ -37,11 +41,11 @@ export const auth = betterAuth({
     },
   },
   socialProviders: {
-    ...(process.env.GITHUB_CLIENT_ID &&
-      process.env.GITHUB_CLIENT_SECRET && {
+    ...(env.GITHUB_CLIENT_ID &&
+      env.GITHUB_CLIENT_SECRET && {
         github: {
-          clientId: process.env.GITHUB_CLIENT_ID,
-          clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          clientId: env.GITHUB_CLIENT_ID,
+          clientSecret: env.GITHUB_CLIENT_SECRET,
           scope: ["read:user", "user:email", "repo"],
         },
       }),
@@ -58,6 +62,18 @@ export const auth = betterAuth({
   ],
   databaseHooks: {
     user: {
+      create: {
+        after: async (user) => {
+          // Provision free tier for OAuth users (email already verified on creation)
+          if (user.emailVerified) {
+            try {
+              await provisionFreeTier(user.id);
+            } catch {
+              // Non-critical — can be provisioned later
+            }
+          }
+        },
+      },
       update: {
         after: async (user) => {
           // Send welcome email when email gets verified for the first time
@@ -69,6 +85,13 @@ export const auth = betterAuth({
             // Only send if verification happened within the last 2 minutes
             // This prevents re-sending on subsequent profile updates
             if (diffMs < 2 * 60 * 1000) {
+              // Provision free tier (subscription + 200 credits)
+              try {
+                await provisionFreeTier(user.id);
+              } catch {
+                // Free tier provisioning failed - non-critical, can be retried
+              }
+
               try {
                 await sendWelcomeEmail({
                   to: user.email,

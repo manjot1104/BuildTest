@@ -317,7 +317,7 @@ export async function GET(request: NextRequest) {
         },
       },
     });
-  } catch (_error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
       { status: 500 },

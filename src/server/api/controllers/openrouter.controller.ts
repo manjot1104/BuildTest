@@ -1,10 +1,10 @@
-'use server'
-
 import OpenAI from 'openai'
 import { getSession } from '@/server/better-auth/server'
 import { env } from '@/env'
 import type { ApiErrorResponse } from '@/types/api.types'
-
+import { db } from '@/server/db'   // <-- confirm path
+import { conversations, conversation_messages } from '@/server/db/schema'
+import { nanoid } from 'nanoid'
 // ============================================================================
 // Types
 // ============================================================================
@@ -19,6 +19,7 @@ interface OpenRouterResponse {
   usedModel: string
   fallback: boolean
   originalModel: string
+  conversationId: string
 }
 
 type OpenRouterBody = {
@@ -133,7 +134,8 @@ export async function openRouterChatHandler({
 
   const result = validateAndBuildMessages(body)
   if (result.error) return result.error
-
+const session = await getSession()
+const userId = session!.user!.id
   const maxTokens = Math.min(Math.max(body.maxTokens ?? 4096, 128), 32768)
   const temperature = Math.min(Math.max(body.temperature ?? 0.7, 0), 2)
   const topP = Math.min(Math.max(body.topP ?? 1, 0), 1)
@@ -153,12 +155,52 @@ export async function openRouterChatHandler({
       })
       const reply = completion.choices[0]?.message?.content ?? ''
       if (!reply || reply.trim().length < 20) continue
-      return {
-        reply,
-        usedModel: modelId,
-        fallback: modelId !== requested,
-        originalModel: requested,
-      }
+     // ==========================
+//  CREATE CONVERSATION
+// ==========================
+const conversationId = nanoid()
+
+await db.insert(conversations).values({
+  id: conversationId,
+  user_id: userId,
+  model_name: modelId,
+})
+
+// ==========================
+//  SAVE USER MESSAGE
+// ==========================
+const userMessage =
+  body.message ??
+  body.messages?.[body.messages.length - 1]?.content ??
+  ''
+
+await db.insert(conversation_messages).values({
+  id: nanoid(),
+  conversation_id: conversationId,
+  role: 'USER',
+  content: userMessage,
+})
+
+// ==========================
+//  SAVE ASSISTANT MESSAGE
+// ==========================
+await db.insert(conversation_messages).values({
+  id: nanoid(),
+  conversation_id: conversationId,
+  role: 'ASSISTANT',
+  content: reply,
+})
+
+// ==========================
+// RETURN RESPONSE
+// ==========================
+return {
+  reply,
+  usedModel: modelId,
+  fallback: modelId !== requested,
+  originalModel: requested,
+  conversationId, // important
+}
     } catch {
       // Model failed, try next in chain
     }

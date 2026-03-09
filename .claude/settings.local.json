@@ -1,19 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "Glob",
-      "Grep",
-      "WebFetch",
-      "WebSearch",
-      "NotebookEdit",
-      "Agent",
-      "Skill",
-      "mcp__ide__getDiagnostics",
-      "Bash(git merge:*)"
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "NotebookEdit(*)",
+      "Agent(*)",
+      "mcp__*",
+      "mcp__ide__getDiagnostics"
     ]
   }
 }
