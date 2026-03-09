@@ -10,6 +10,12 @@ const LIMITS = {
   EXECUTE_TEST_TIMEOUT_MS: 150_000,
 } as const;
 
+// ---------------------------------------------------------------------------
+// Maximum retries for a failed test before it's marked "failed" permanently.
+// If a test passes on any retry ≤ MAX_RETRIES it is marked "flaky".
+// ---------------------------------------------------------------------------
+export const MAX_TEST_RETRIES = 2;
+
 export interface CrawlOptions {
   maxPages?: number;
   allowedDomain?: string;
@@ -46,7 +52,46 @@ export interface TestExecutionResult {
   screenshotUrl: string | null;
   durationMs: number;
   consoleLogs: string[];
+  // NEW: captured network errors/requests for Bug Detail Modal
+  networkLogs: NetworkLogEntry[];
+  jobId: string | null;
 }
+
+// NEW: structured network log entry stored in test_results.network_logs
+export interface NetworkLogEntry {
+  url: string;
+  method: string;
+  status: number | null;
+  error: string | null;
+  durationMs: number | null;
+}
+
+// NEW: per-page Core Web Vitals returned by the performance crawl step
+export interface PagePerformanceMetrics {
+  pageUrl: string;
+  lcpMs: number | null;
+  fidMs: number | null;
+  cls: number | null;
+  ttfbMs: number | null;
+  rawMetrics: Record<string, unknown>;
+}
+
+// ---------------------------------------------------------------------------
+// SSE event shapes emitted by the pipeline and consumed by the frontend.
+// Every event has a `type` discriminant so the client can switch on it.
+// ---------------------------------------------------------------------------
+
+export type PipelineSSEEvent =
+  | { type: "status";    status: string; percent: number }
+  | { type: "test_update"; testResultId: string; testCaseId: string; title: string; status: "pending" | "running" | "passed" | "failed" | "flaky" | "skipped"; durationMs?: number }
+  | { type: "counter";  passed: number; failed: number; running: number; skipped: number; total: number }
+  | { type: "bug_found"; bug: { id: string; title: string; severity: string; category: string; pageUrl: string; screenshotUrl: string | null } }
+  | { type: "complete"; overallScore: number; passed: number; failed: number; skipped: number; total: number; aiSummary: string; shareableSlug: string | null }
+  | { type: "error";    message: string };
+
+// ---------------------------------------------------------------------------
+// Utility helpers
+// ---------------------------------------------------------------------------
 
 function extractHostname(url: string): string {
   try { return new URL(url).hostname; } catch { return ""; }
@@ -80,6 +125,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label = "o
   });
   return Promise.race([promise.finally(() => clearTimeout(timer)), timeout]);
 }
+
+// ---------------------------------------------------------------------------
+// Core TinyFish SSE runner
+// ---------------------------------------------------------------------------
 
 async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
   if (!TINYFISH_API_KEY) throw new Error("TINYFISH_API_KEY is not set");
@@ -128,7 +177,7 @@ async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
         } catch { /* skip malformed */ }
       }
     }
-    // If stream ends but we have rawText that looks like JSON, try to recover
+    // Stream ended without COMPLETE — try to recover JSON from rawText
     if (rawText) {
       try {
         const cleaned = rawText.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
@@ -150,13 +199,25 @@ async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Fallback: try to parse JSON from rawText when resultJson is null
+// ---------------------------------------------------------------------------
+
+function tryParseRawText(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    try { return JSON.parse(cleaned) as Record<string, unknown>; } catch { /* continue */ }
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
+    }
+  } catch { /* could not recover */ }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Crawl goal — SPA-hardened
-//
-// Strategy:
-//   1. Hard-wait for JS hydration (React, Vue, Angular, Next.js, etc.)
-//   2. Use JS to extract ALL anchors + router links from the live DOM
-//   3. Explicitly enumerate nav/sidebar/menu/footer patterns used by SPAs
-//   4. Return a minimal, well-typed JSON — no markdown, no prose
 // ---------------------------------------------------------------------------
 
 function buildCrawlGoal(url: string, allowedHostname: string): string {
@@ -210,24 +271,41 @@ Return ONLY a single valid JSON object. No markdown fences. No explanation. No t
 }
 
 // ---------------------------------------------------------------------------
-// Fallback: try to parse JSON from rawText when resultJson is null
+// Performance metrics goal — measures Core Web Vitals per page.
+// Uses the Performance API and PerformanceObserver to capture LCP, FID,
+// CLS, and TTFB. Returns a well-typed JSON object.
 // ---------------------------------------------------------------------------
 
-function tryParseRawText(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
-    // Try full parse
-    try { return JSON.parse(cleaned) as Record<string, unknown>; } catch { /* continue */ }
-    // Extract first {...}
-    const start = cleaned.indexOf("{");
-    const end = cleaned.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>;
-    }
-  } catch { /* could not recover */ }
-  return null;
+function buildPerformanceGoal(url: string): string {
+  return `You are a web performance auditor. Navigate to this URL: ${url}
+
+== INSTRUCTIONS ==
+1. Navigate to the URL and wait for the page to fully load (network idle).
+2. After the page loads, use JavaScript (window.performance, PerformanceObserver) to collect Core Web Vitals.
+3. Also collect: LCP (Largest Contentful Paint), FID or INP (Interaction to Next Paint), CLS (Cumulative Layout Shift), TTFB (Time to First Byte).
+4. Use the PerformancePaintTiming, PerformanceNavigationTiming, and LayoutShift APIs where available.
+5. TTFB = responseStart - requestStart from PerformanceNavigationTiming.
+6. LCP = last entry from PerformanceObserver type "largest-contentful-paint" .startTime.
+7. CLS = sum of all LayoutShift entry values where hadRecentInput is false.
+8. FID = first "first-input" entry .processingStart - .startTime (use 0 if not available).
+9. All timing values in milliseconds. CLS is unitless (0.0–1.0+).
+
+== OUTPUT FORMAT ==
+Return ONLY a single valid JSON object. No markdown. No text before or after. Start with { and end with }.
+
+{
+  "pageUrl": "${url}",
+  "lcpMs": <number or null>,
+  "fidMs": <number or null>,
+  "cls": <number or null>,
+  "ttfbMs": <number or null>,
+  "rawMetrics": {}
+}`;
 }
+
+// ---------------------------------------------------------------------------
+// crawlPage
+// ---------------------------------------------------------------------------
 
 export async function crawlPage(url: string, allowedHostname: string): Promise<CrawledPage> {
   const emptyPage: CrawledPage = { url, title: "", elements: [], internalLinks: [], externalLinks: [], forms: [] };
@@ -239,7 +317,6 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
     `crawlPage(${url})`,
   );
 
-  // Try resultJson first, fall back to rawText parsing
   const rawData = result.resultJson ?? tryParseRawText(result.rawText);
 
   if (!rawData) {
@@ -254,7 +331,6 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
     forms?: CrawledPage["forms"];
   };
 
-  // Resolve relative → absolute, filter noise, deduplicate
   const seen = new Set<string>();
   const internalLinks: string[] = [];
   for (const raw of (data.internalLinks ?? [])) {
@@ -267,7 +343,6 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
     internalLinks.push(resolved);
   }
 
-  // Also scrape any hrefs from elements array that we might have missed
   for (const el of (data.elements ?? [])) {
     if (el.type === "link" && el.href) {
       const resolved = resolveUrl(el.href, url);
@@ -292,18 +367,60 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
 }
 
 // ---------------------------------------------------------------------------
-// executeTest — structured, explicit, foolproof
+// measurePagePerformance — new function
+// Runs a TinyFish job that collects Core Web Vitals for a single page.
+// Called once per crawled page by the pipeline.
+// ---------------------------------------------------------------------------
+
+export async function measurePagePerformance(url: string): Promise<PagePerformanceMetrics> {
+  const fallback: PagePerformanceMetrics = {
+    pageUrl: url,
+    lcpMs: null,
+    fidMs: null,
+    cls: null,
+    ttfbMs: null,
+    rawMetrics: {},
+  };
+
+  const result = await withTimeout(
+    runTinyFish({ url, goal: buildPerformanceGoal(url), browser_profile: "lite" }),
+    LIMITS.CRAWL_PAGE_TIMEOUT_MS,
+    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    `measurePagePerformance(${url})`,
+  );
+
+  const rawData = result.resultJson ?? tryParseRawText(result.rawText);
+  if (!rawData) {
+    console.warn(`[TinyFish] measurePagePerformance failed for ${url}: ${result.error}`);
+    return fallback;
+  }
+
+  const d = rawData as {
+    pageUrl?: string;
+    lcpMs?: number | null;
+    fidMs?: number | null;
+    cls?: number | null;
+    ttfbMs?: number | null;
+    rawMetrics?: Record<string, unknown>;
+  };
+
+  return {
+    pageUrl: d.pageUrl ?? url,
+    lcpMs: typeof d.lcpMs === "number" ? d.lcpMs : null,
+    fidMs: typeof d.fidMs === "number" ? d.fidMs : null,
+    cls: typeof d.cls === "number" ? d.cls : null,
+    ttfbMs: typeof d.ttfbMs === "number" ? d.ttfbMs : null,
+    rawMetrics: d.rawMetrics ?? {},
+  };
+}
+
+// ---------------------------------------------------------------------------
+// executeTest
 //
-// Problems with the old approach:
-//   - "Expected: X" at the end was ambiguous
-//   - No explicit PASS/FAIL criteria
-//   - No instruction to verify the result before returning
-//
-// New approach:
-//   - Each step is a concrete action
-//   - Verification step is explicit
-//   - The agent is told what "passed" and "failed" mean
-//   - JSON schema is strict and minimal
+// Changes vs original:
+//  - Returns `networkLogs` (new field in TestExecutionResult)
+//  - Returns `jobId` so the controller can store tinyfish_job_id
+//  - Prompts the agent to also capture network errors in the JSON response
 // ---------------------------------------------------------------------------
 
 export async function executeTest(url: string, goal: string, stealth = false): Promise<TestExecutionResult> {
@@ -325,15 +442,17 @@ ${goal}
 5. "passed" = true ONLY if the expected result was confirmed in the browser.
 6. "passed" = false if any step failed, an error appeared, or the expected result was NOT confirmed.
 7. Be conservative: if you are unsure, set passed = false.
+8. Capture any network requests that returned 4xx or 5xx status codes in networkLogs.
+9. Capture any browser console errors in consoleLogs.
 
 == RESPONSE FORMAT ==
 Return ONLY this JSON. No markdown. No explanation. Start with { and end with }.
 
 If test PASSED:
-{"passed":true,"actualResult":"<one sentence: what you observed>","errorDetails":null,"consoleLogs":[]}
+{"passed":true,"actualResult":"<one sentence: what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
 
 If test FAILED:
-{"passed":false,"actualResult":"<one sentence: what you observed>","errorDetails":"<specific error or mismatch>","consoleLogs":[]}`;
+{"passed":false,"actualResult":"<one sentence: what you observed>","errorDetails":"<specific error or mismatch>","consoleLogs":[],"networkLogs":[{"url":"<request url>","method":"GET","status":500,"error":"Internal Server Error","durationMs":120}]}`;
 
   const result = await withTimeout(
     runTinyFish({ url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" }),
@@ -343,8 +462,6 @@ If test FAILED:
   );
 
   const durationMs = Date.now() - startTime;
-
-  // Try resultJson first, then rawText fallback
   const rawData = result.resultJson ?? tryParseRawText(result.rawText);
 
   if (!rawData) {
@@ -355,24 +472,44 @@ If test FAILED:
       screenshotUrl: null,
       durationMs,
       consoleLogs: [],
+      networkLogs: [],
+      jobId: result.jobId,
     };
   }
 
-  const r = rawData as { passed?: boolean; actualResult?: string; errorDetails?: string | null; consoleLogs?: string[] };
+  const r = rawData as {
+    passed?: boolean;
+    actualResult?: string;
+    errorDetails?: string | null;
+    consoleLogs?: string[];
+    networkLogs?: NetworkLogEntry[];
+  };
+
   return {
-    passed: r.passed === true, // strict — must be exactly true
+    passed: r.passed === true,
     actualResult: r.actualResult ?? "No result returned",
     errorDetails: r.errorDetails ?? null,
     screenshotUrl: null,
     durationMs,
     consoleLogs: r.consoleLogs ?? [],
+    networkLogs: r.networkLogs ?? [],
+    jobId: result.jobId,
   };
 }
+
+// ---------------------------------------------------------------------------
+// crawlSite — also collects performance metrics for each page in parallel
+// ---------------------------------------------------------------------------
 
 export async function crawlSite(
   rootUrl: string,
   options: CrawlOptions = {},
-): Promise<{ pages: CrawledPage[]; allLinks: string[]; crawlTimeMs: number }> {
+): Promise<{
+  pages: CrawledPage[];
+  allLinks: string[];
+  crawlTimeMs: number;
+  performanceMetrics: PagePerformanceMetrics[];
+}> {
   const startTime = Date.now();
   const maxPages = Math.min(options.maxPages ?? LIMITS.MAX_PAGES_PRO, LIMITS.MAX_PAGES_PRO);
   const allowedHostname = options.allowedDomain ?? extractHostname(rootUrl);
@@ -398,8 +535,16 @@ export async function crawlSite(
 
   const pages = [rootPage, ...additionalPages];
   const allLinks = [...new Set(pages.flatMap((p) => p.internalLinks))];
+
+  // Step 4: Measure Core Web Vitals for every crawled page in parallel.
+  // This runs alongside the crawl results being stored, not sequentially.
+  console.log(`[TinyFish] Step 4: Measuring performance for ${pages.length} pages...`);
+  const performanceMetrics = await Promise.all(
+    pages.map((p) => measurePagePerformance(p.url)),
+  );
+
   const crawlTimeMs = Date.now() - startTime;
 
   console.log(`[TinyFish] ═══ Done: ${pages.length} pages | ${allLinks.length} links | ${(crawlTimeMs / 1000).toFixed(1)}s`);
-  return { pages, allLinks, crawlTimeMs };
+  return { pages, allLinks, crawlTimeMs, performanceMetrics };
 }

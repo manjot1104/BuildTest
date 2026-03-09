@@ -12,9 +12,20 @@ const MODELS = [
   "openrouter/auto",
 ];
 
+// The 6 categories that map to the 6 Category Ring Charts on the dashboard.
+// "auth" and "error_handling" from old test generation are merged under
+// "security" and "forms" respectively to match the dashboard spec.
+export type TestCategory =
+  | "navigation"
+  | "forms"
+  | "visual"
+  | "performance"
+  | "a11y"
+  | "security";
+
 export interface TestCase {
   id: string;
-  category: "navigation" | "forms" | "auth" | "responsive" | "visual" | "performance" | "accessibility" | "error_handling" | "security";
+  category: TestCategory;
   title: string;
   description: string;
   steps: string[];
@@ -32,6 +43,8 @@ export interface SiteContext {
   buildifyContext?: { routes?: string[]; components?: string[]; hasAuth?: boolean; dbSchema?: string };
 }
 
+// Extended summary input — now includes per-category breakdowns for ring charts
+// and per-page Core Web Vitals for the AI summary paragraph.
 export interface TestRunSummaryInput {
   targetUrl: string;
   overallScore: number;
@@ -40,6 +53,10 @@ export interface TestRunSummaryInput {
   failed: number;
   skipped: number;
   bugs: { severity: "critical" | "high" | "medium" | "low"; title: string; pageUrl: string; category: string }[];
+  // NEW: category-level pass/fail counts → drives the 6 donut chart data
+  categoryResults: Record<string, { passed: number; failed: number; total: number }>;
+  // NEW: worst Core Web Vitals per page → mentioned in AI summary when relevant
+  performanceSummary?: { pageUrl: string; lcpMs: number | null; cls: number | null; ttfbMs: number | null }[];
 }
 
 interface OpenRouterMessage { role: "system" | "user" | "assistant"; content: string }
@@ -135,14 +152,13 @@ function buildCrawlSummary(context: SiteContext): string {
 // ---------------------------------------------------------------------------
 // generateTestCases
 //
-// KEY CHANGE: Steps must be concrete browser actions, not vague descriptions.
-// TinyFish is a browser automation agent — it needs instructions like:
-//   "Click the element with text 'About'"
-//   "Type 'test@example.com' into the email input field"
-//   "Verify the URL contains '/about'"
+// Updated category list to match the 6 dashboard ring charts:
+//   navigation | forms | visual | performance | a11y | security
 //
-// Vague steps like "Navigate to the about page" cause failures because the
-// agent doesn't know HOW to navigate (click link? type URL?).
+// "auth" → covered under "security"
+// "error_handling" → covered under "forms"
+// "responsive" → covered under "visual"
+// "accessibility" → renamed to "a11y"
 // ---------------------------------------------------------------------------
 
 export async function generateTestCases(context: SiteContext): Promise<TestCase[]> {
@@ -169,10 +185,11 @@ ${crawlSummary}
 
 CATEGORIES TO COVER (generate tests only for categories that have relevant content in the crawl data):
 - navigation (P0): Test that clicking nav links loads the correct page. Use exact link text from crawl data.
-- forms (P0): Test form submission flows. Use exact field names and button labels from crawl data.
-- visual (P1): Test that key page elements are visible after navigation.
-- error_handling (P2): Test form validation (empty submission, invalid email format, etc.)
-- security (P2): Test for obvious issues (e.g. XSS in inputs, access to protected routes).
+- forms (P0): Test form submission flows, validation, and error handling. Use exact field names and button labels.
+- visual (P1): Test that key page elements are visible and images render after navigation. Test responsive breakpoints if relevant.
+- performance (P1): Test that key pages load within acceptable time. Verify no obvious blocking resources.
+- a11y (P1): Test keyboard navigation, focus management, ARIA labels on interactive elements, and image alt texts.
+- security (P2): Test for obvious issues (XSS in inputs, access to protected routes without auth, CSRF).
 
 For each test, use ONLY URLs that appear in the crawl data. Do not invent URLs.
 
@@ -197,6 +214,7 @@ JSON format for each test case — every field is required:
 }
 
 Rules:
+- category MUST be one of: navigation, forms, visual, performance, a11y, security
 - target_url must be a URL from the crawl data
 - steps are concrete browser actions for an AI agent — be specific, reference exact element text
 - Return ONLY the JSON array, starting with [ and ending with ]`;
@@ -210,35 +228,72 @@ Rules:
 
   const testCases = extractJsonArray<TestCase[]>(raw);
 
+  const validCategories: TestCategory[] = ["navigation", "forms", "visual", "performance", "a11y", "security"];
+
   return testCases
     .filter((tc) => tc.title && tc.steps?.length > 0 && tc.category)
     .map((tc, i) => ({
       ...tc,
       id: tc.id ?? `tc_${String(i + 1).padStart(3, "0")}`,
+      // Normalise legacy category names that the model might still emit
+      category: ((): TestCategory => {
+        const raw = tc.category as string;
+        if (validCategories.includes(raw as TestCategory)) return raw as TestCategory;
+        if (raw === "accessibility") return "a11y";
+        if (raw === "auth") return "security";
+        if (raw === "error_handling") return "forms";
+        if (raw === "responsive") return "visual";
+        return "navigation";
+      })(),
       priority: (["P0", "P1", "P2"].includes(tc.priority) ? tc.priority : "P1") as "P0" | "P1" | "P2",
       tags: tc.tags ?? [],
       estimated_duration: tc.estimated_duration ?? 15000,
       target_url: tc.target_url ?? context.rootUrl,
-      // Post-process: ensure each step starts with a verb
       steps: tc.steps.map((s) => s.trim()).filter(Boolean),
     }));
 }
 
+// ---------------------------------------------------------------------------
+// generateAISummary
+//
+// Updated to include:
+//  - Category-level breakdown (for the AI to reference ring chart data)
+//  - Performance summary (LCP/CLS/TTFB issues per page)
+//  - The 3-sentence structure: score → critical issues → recommendation
+// ---------------------------------------------------------------------------
+
 export async function generateAISummary(input: TestRunSummaryInput): Promise<string> {
+  // Build a compact category summary string for the prompt
+  const categoryLines = Object.entries(input.categoryResults)
+    .map(([cat, r]) => `  ${cat}: ${r.passed}/${r.total} passed`)
+    .join("\n");
+
+  // Build performance issues string (only pages with poor metrics)
+  const perfIssues = (input.performanceSummary ?? [])
+    .filter((p) => (p.lcpMs !== null && p.lcpMs > 4000) || (p.cls !== null && p.cls > 0.25) || (p.ttfbMs !== null && p.ttfbMs > 1800))
+    .map((p) => `  ${p.pageUrl}: LCP=${p.lcpMs ?? "?"}ms, CLS=${p.cls ?? "?"}, TTFB=${p.ttfbMs ?? "?"}ms`)
+    .join("\n");
+
   const systemPrompt = `You are a QA analyst. Write a 3-4 sentence plain-English executive summary of a test report. No markdown, no bullets, plain text only.`;
+
   const userPrompt = `Site: ${input.targetUrl}
 Score: ${input.overallScore}/100
 Results: ${input.passed} passed, ${input.failed} failed, ${input.skipped} skipped of ${input.totalTests} total
 
+Category breakdown:
+${categoryLines || "  (no category data)"}
+
+${perfIssues ? `Performance issues:\n${perfIssues}` : ""}
+
 Top bugs:
 ${input.bugs.slice(0, 5).map((b) => `- [${b.severity.toUpperCase()}] ${b.title} (${b.pageUrl})`).join("\n")}
 
-Write 3-4 sentences. Start with score context, then critical issues, then recommendation. Plain text only.`;
+Write 3-4 sentences. Start with overall score context, then highlight the most critical issues (include specific page names and bug titles), then give one concrete recommendation. Reference performance data if there are slow pages. Plain text only, no markdown.`;
 
   const summary = await callOpenRouter([
     { role: "system", content: systemPrompt },
     { role: "user", content: userPrompt },
-  ], 500);
+  ], 600);
 
   return summary.trim();
 }
