@@ -275,7 +275,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
             [
               { preset: 'desktop', width: 1440, height: 960,  Icon: Monitor,    title: 'Desktop (1440)' },
               { preset: 'tablet',  width: 768,  height: 1024, Icon: Tablet,     title: 'Tablet (768)' },
-              { preset: 'mobile',  width: 390,  height: 844,  Icon: Smartphone, title: 'Mobile (390)' },
+              { preset: 'mobile',  width: 375,  height: 844,  Icon: Smartphone, title: 'Mobile (375)' },
             ] as const
           ).map(({ preset, width, height, Icon, title }) => (
             <button

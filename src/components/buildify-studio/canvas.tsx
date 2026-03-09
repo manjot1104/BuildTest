@@ -4,6 +4,7 @@ import React, { useRef, useCallback, useMemo, useEffect } from 'react'
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import { ElementRenderer } from './element-renderer'
+import { computeResponsiveLayout } from './types'
 
 interface CanvasProps {
   editor: UseEditorReturn
@@ -33,17 +34,17 @@ const DEVICE_LABELS: Record<string, string> = {
 export function Canvas({ editor }: CanvasProps) {
   const {
     state,
+    activeDevice,
     selectElement,
     selectElements,
     toggleSelectElement,
     setZoom,
     setPan,
-    updateElement,
+    updateElementResponsive,
     setDevice,
   } = editor
 
   const canvasWidth = state.device.width
-  const canvasHeight = state.device.height
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -53,11 +54,22 @@ export function Canvas({ editor }: CanvasProps) {
   const rubberBandStartRef = useRef({ vpX: 0, vpY: 0 })
   const isRubberBandRef = useRef(false)
 
-  // Sort elements by zIndex for rendering
-  const sortedElements = useMemo(
-    () => [...state.elements].sort((a, b) => a.zIndex - b.zIndex),
-    [state.elements],
-  )
+  // Compute responsive layout (auto-reflow for tablet/mobile) and sort by zIndex
+  const sortedElements = useMemo(() => {
+    const layout = computeResponsiveLayout(state.elements, activeDevice)
+    return [...layout].sort((a, b) => a.zIndex - b.zIndex)
+  }, [state.elements, activeDevice])
+
+  // Auto-extend canvas height when reflowed elements exceed the preset height
+  const canvasHeight = useMemo(() => {
+    const baseHeight = state.device.height
+    if (sortedElements.length === 0) return baseHeight
+    const maxBottom = sortedElements.reduce(
+      (max, el) => Math.max(max, el.y + el.height),
+      0,
+    )
+    return Math.max(baseHeight, maxBottom + 40)
+  }, [state.device.height, sortedElements])
 
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -145,7 +157,7 @@ export function Canvas({ editor }: CanvasProps) {
             const canvasRight = (selRight - s.panX) / s.zoom
             const canvasBottom = (selBottom - s.panY) / s.zoom
 
-            const ids = s.elements
+            const ids = sortedRef.current
               .filter((el) => !el.hidden && !el.locked)
               .filter(
                 (el) =>
@@ -168,6 +180,10 @@ export function Canvas({ editor }: CanvasProps) {
     },
     [state.isPreview, state.panX, state.panY, selectElements, setPan],
   )
+
+  // Keep a ref to the computed layout for rubber-band selection
+  const sortedRef = useRef(sortedElements)
+  sortedRef.current = sortedElements
 
   // Refs for non-passive wheel handler
   const stateRef = useRef(state)
@@ -221,29 +237,29 @@ export function Canvas({ editor }: CanvasProps) {
   const handleDragEnd = useCallback(
     (id: string, x: number, y: number) => {
       const { snap, size } = state.grid
-      updateElement(id, { x: snapToGrid(x, size, snap), y: snapToGrid(y, size, snap) })
+      updateElementResponsive(id, { x: snapToGrid(x, size, snap), y: snapToGrid(y, size, snap) })
     },
-    [updateElement, state.grid],
+    [updateElementResponsive, state.grid],
   )
 
   const handleResizeEnd = useCallback(
     (id: string, x: number, y: number, width: number, height: number) => {
       const { snap, size } = state.grid
-      updateElement(id, {
+      updateElementResponsive(id, {
         x: snapToGrid(x, size, snap),
         y: snapToGrid(y, size, snap),
         width: snapToGrid(width, size, snap),
         height: snapToGrid(height, size, snap),
       })
     },
-    [updateElement, state.grid],
+    [updateElementResponsive, state.grid],
   )
 
   const handleContentChange = useCallback(
     (id: string, content: string) => {
-      updateElement(id, { content }, true)
+      updateElementResponsive(id, { content }, true)
     },
-    [updateElement],
+    [updateElementResponsive],
   )
 
   const handleElementSelect = useCallback(
