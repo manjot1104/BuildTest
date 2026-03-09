@@ -39,6 +39,7 @@ export function Canvas({ editor }: CanvasProps) {
     setZoom,
     setPan,
     updateElement,
+    setDevice,
   } = editor
 
   const canvasWidth = state.device.width
@@ -256,6 +257,33 @@ export function Canvas({ editor }: CanvasProps) {
     [selectElement, toggleSelectElement],
   )
 
+  // Bottom-edge resize handle for canvas height
+  const handleHeightResize = useCallback(
+    (e: React.MouseEvent) => {
+      if (state.isPreview) return
+      e.preventDefault()
+      e.stopPropagation()
+      const startY = e.clientY
+      const startHeight = state.device.height
+      const zoom = state.zoom
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const delta = (ev.clientY - startY) / zoom
+        const newHeight = Math.max(200, Math.round(startHeight + delta))
+        setDevice({ ...state.device, preset: 'custom', height: newHeight })
+      }
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+      }
+      document.body.style.cursor = 'ns-resize'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [state.isPreview, state.device, state.zoom, setDevice],
+  )
+
   const canvasBgStyle = getCanvasBg(state.canvasBackground)
 
   return (
@@ -289,7 +317,6 @@ export function Canvas({ editor }: CanvasProps) {
             transformOrigin: '0 0',
             ...canvasBgStyle,
             boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 20px 80px rgba(0,0,0,0.5)',
-            overflow: 'hidden',
           }}
         >
           {/* Grid overlay */}
@@ -347,6 +374,37 @@ export function Canvas({ editor }: CanvasProps) {
               </div>
             </div>
           )}
+
+          {/* Bottom resize handle */}
+          {!state.isPreview && (
+            <div
+              onMouseDown={handleHeightResize}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                width: '100%',
+                height: 8,
+                cursor: 'ns-resize',
+                zIndex: 99999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 4,
+                  borderRadius: 2,
+                  background: 'rgba(99,102,241,0.5)',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'rgba(99,102,241,0.9)' }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'rgba(99,102,241,0.5)' }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Rubber-band selection rect */}
@@ -362,7 +420,7 @@ export function Canvas({ editor }: CanvasProps) {
 
         {/* Canvas size / device label */}
         <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 font-mono text-xs text-white/70">
-          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} — {canvasWidth}×{canvasHeight}
+          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} — {canvasWidth}×{Math.round(canvasHeight)}
         </div>
       </div>
 

@@ -273,9 +273,9 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
         <div className="hidden items-center gap-0.5 rounded-lg border border-border/50 bg-muted/40 p-0.5 md:flex">
           {(
             [
-              { preset: 'desktop', width: 1440, height: 960,  Icon: Monitor,    title: 'Desktop (1440×960)' },
-              { preset: 'tablet',  width: 768,  height: 1024, Icon: Tablet,     title: 'Tablet (768×1024)' },
-              { preset: 'mobile',  width: 390,  height: 844,  Icon: Smartphone, title: 'Mobile (390×844)' },
+              { preset: 'desktop', width: 1440, height: 960,  Icon: Monitor,    title: 'Desktop (1440)' },
+              { preset: 'tablet',  width: 768,  height: 1024, Icon: Tablet,     title: 'Tablet (768)' },
+              { preset: 'mobile',  width: 390,  height: 844,  Icon: Smartphone, title: 'Mobile (390)' },
             ] as const
           ).map(({ preset, width, height, Icon, title }) => (
             <button
@@ -292,6 +292,26 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
               <Icon className="size-4" />
             </button>
           ))}
+        </div>
+
+        {/* Canvas height control */}
+        <div className="hidden items-center gap-1 md:flex">
+          <span className="text-[10px] font-medium text-muted-foreground">H</span>
+          <input
+            type="number"
+            min={200}
+            step={100}
+            value={state.device.height}
+            onChange={(e) => {
+              const h = parseInt(e.target.value)
+              if (!isNaN(h) && h >= 200) {
+                setDevice({ ...state.device, preset: 'custom', height: h })
+              }
+            }}
+            className="h-7 w-16 rounded-md border border-border/50 bg-muted/40 px-1.5 text-center font-mono text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+            title="Canvas height (px)"
+          />
+          <span className="text-[10px] text-muted-foreground">px</span>
         </div>
 
         <div className="hidden h-5 w-px bg-border md:block" />

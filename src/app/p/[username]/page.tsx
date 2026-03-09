@@ -257,6 +257,11 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
   const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
   const bgCss = getBgCss(bg)
 
+  // Compute page height from element positions (absolute positioning doesn't contribute to parent height)
+  const pageHeight = elements.length > 0
+    ? Math.max(960, ...elements.map((el) => el.y + el.height)) + 40
+    : 960
+
   return (
     <>
       <style>{`
@@ -277,8 +282,9 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         *{box-sizing:border-box;margin:0;padding:0}
         html{scroll-behavior:smooth}
         body{font-family:system-ui,-apple-system,sans-serif}
-        main{position:relative;width:1440px;height:960px;margin:0 auto;${bgCss}overflow:hidden}
-        @media(max-width:1460px){main{transform-origin:top left;transform:scale(calc(100vw / 1440));height:calc(960px * (100vw / 1440))}}
+        main{position:relative;width:1440px;height:${pageHeight}px;margin:0 auto;${bgCss}}
+        @media(max-width:1460px){main{transform-origin:top left;transform:scale(calc(100vw / 1440));width:1440px;height:${pageHeight}px}
+        body{height:calc(${pageHeight}px * (100vw / 1440));overflow-x:hidden}}
       `}</style>
       <main>
         {sorted.map((el) => <StaticElement key={el.id} el={el} />)}
