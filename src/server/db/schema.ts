@@ -6,6 +6,7 @@ import {
   pgEnum,
   pgTable,
   pgTableCreator,
+  real,
   text,
   timestamp,
   unique,
@@ -687,7 +688,7 @@ export const testResultStatusEnum = pgEnum("test_result_status", [
   "running",
   "passed",
   "failed",
-  "flaky",
+  "flaky",   // passes on retry — prevents false positives
   "skipped",
 ]);
 
@@ -698,7 +699,6 @@ export const bugSeverityEnum = pgEnum("bug_severity", [
   "low",
 ]);
 
-// FIX 1: Proper enum for bug status instead of raw text
 export const bugStatusEnum = pgEnum("bug_status", ["open", "fixed", "ignored"]);
 
 export const reportFormatEnum = pgEnum("report_format", [
@@ -710,6 +710,7 @@ export const reportFormatEnum = pgEnum("report_format", [
 // -- Tables -------------------------------------------------------------------
 
 // Each full test execution
+// Trend chart data is derived by ordering test_runs by started_at for the same user/project.
 export const test_runs = createTable(
   "test_runs",
   (d) => ({
@@ -718,17 +719,19 @@ export const test_runs = createTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    // FIX 2: project_id links test to a Buildify-generated app (null = external URL)
+    // null = external URL test, non-null = Buildify-generated app
     project_id: d.text("project_id"),
     target_url: d.text("target_url").notNull(),
     // Pipeline status: crawling → generating → executing → reporting → complete | failed
     status: testRunStatusEnum("status").notNull().default("crawling"),
-    overall_score: d.integer("overall_score"),
+    overall_score: d.integer("overall_score"), // 0-100; drives Score Hero gauge colour
     total_tests: d.integer("total_tests").default(0),
     passed: d.integer("passed").default(0),
     failed: d.integer("failed").default(0),
-    // FIX 3: skipped count for dashboard counter (X passed / Y failed / Z skipped)
+    // Skipped count — shown in live counter "X passed / Y failed / Z skipped"
     skipped: d.integer("skipped").default(0),
+    // Running count — shown in live counter during SSE streaming
+    running: d.integer("running").default(0),
     started_at: d
       .timestamp("started_at", { withTimezone: true })
       .$defaultFn(() => new Date())
@@ -740,6 +743,8 @@ export const test_runs = createTable(
     index("test_runs_status_idx").on(t.status),
     index("test_runs_started_at_idx").on(t.started_at),
     index("test_runs_project_id_idx").on(t.project_id),
+    // Composite index for trend chart query (user + time)
+    index("test_runs_user_id_started_at_idx").on(t.user_id, t.started_at),
   ],
 );
 
@@ -752,10 +757,10 @@ export const crawl_results = createTable(
       .text("test_run_id")
       .notNull()
       .references(() => test_runs.id, { onDelete: "cascade" }),
-    pages: d.jsonb("pages"), // all pages found
-    elements: d.jsonb("elements"), // buttons, inputs, links
-    forms: d.jsonb("forms"), // all forms found
-    links: d.jsonb("links"), // all internal/external links
+    pages: d.jsonb("pages"),         // all pages found
+    elements: d.jsonb("elements"),   // buttons, inputs, links
+    forms: d.jsonb("forms"),         // all forms found
+    links: d.jsonb("links"),         // all internal/external links
     screenshots: d.jsonb("screenshots"), // baseline screenshots per page
     crawl_time_ms: d.integer("crawl_time_ms"),
     created_at: d
@@ -775,13 +780,15 @@ export const test_cases = createTable(
       .text("test_run_id")
       .notNull()
       .references(() => test_runs.id, { onDelete: "cascade" }),
-    category: d.varchar("category", { length: 50 }), // navigation, forms, visual, performance, auth, security
+    // navigation | forms | visual | performance | a11y | security
+    // Maps 1-to-1 with the 6 Category Ring Charts on the dashboard
+    category: d.varchar("category", { length: 50 }),
     title: d.text("title"),
     description: d.text("description"),
-    steps: d.jsonb("steps"), // array of natural-language step strings
+    steps: d.jsonb("steps"),          // array of natural-language step strings
     expected_result: d.text("expected_result"),
     priority: testPriorityEnum("priority").default("P1"),
-    tags: d.jsonb("tags"), // string[]
+    tags: d.jsonb("tags"),            // string[]
     estimated_duration: d.integer("estimated_duration"), // ms
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -813,8 +820,11 @@ export const test_results = createTable(
     duration_ms: d.integer("duration_ms"),
     screenshot_url: d.text("screenshot_url"), // Cloudflare R2 URL
     error_details: d.text("error_details"),
-    console_logs: d.jsonb("console_logs"), // captured browser console output
-    retry_count: d.integer("retry_count").default(0), // marked "flaky" if passes on retry
+    console_logs: d.jsonb("console_logs"),    // captured browser console output
+    // NEW: captured browser network errors/requests (shown in Bug Detail Modal)
+    network_logs: d.jsonb("network_logs"),
+    // retry_count: incremented on each retry; status set to "flaky" if passes on retry ≤ 2
+    retry_count: d.integer("retry_count").default(0),
     tinyfish_job_id: d.text("tinyfish_job_id"), // TinyFish SSE job reference
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -841,14 +851,17 @@ export const bug_reports = createTable(
       .text("test_result_id")
       .references(() => test_results.id, { onDelete: "set null" }),
     severity: bugSeverityEnum("severity").default("medium"),
+    // navigation | forms | visual | performance | a11y | security
     category: d.varchar("category", { length: 50 }),
     title: d.text("title"),
     description: d.text("description"),
     reproduction_steps: d.jsonb("reproduction_steps"), // ordered string[]
     screenshot_url: d.text("screenshot_url"),
+    // NEW: bounding box for the red annotation overlay in Bug Detail Modal
+    // Shape: { x: number, y: number, width: number, height: number }
+    annotation_box: d.jsonb("annotation_box"),
     ai_fix_suggestion: d.text("ai_fix_suggestion"), // AI-generated fix with code snippet
     page_url: d.text("page_url"),
-    // FIX 1 applied: enum instead of raw text
     status: bugStatusEnum("status").default("open"),
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -859,6 +872,11 @@ export const bug_reports = createTable(
     index("bug_reports_test_run_id_idx").on(t.test_run_id),
     index("bug_reports_severity_idx").on(t.severity),
     index("bug_reports_status_idx").on(t.status),
+    // Composite index for bug list table filtered by category
+    index("bug_reports_test_run_id_category_idx").on(
+      t.test_run_id,
+      t.category,
+    ),
   ],
 );
 
@@ -872,11 +890,13 @@ export const report_exports = createTable(
       .notNull()
       .references(() => test_runs.id, { onDelete: "cascade" }),
     format: reportFormatEnum("format").notNull(),
-    file_url: d.text("file_url"), // Cloudflare R2 URL for the export file
+    file_url: d.text("file_url"),   // Cloudflare R2 URL for the export file
     ai_summary: d.text("ai_summary"), // Plain-English executive summary
-    // FIX 4: Shareable public report links
+    // Shareable public report link — /report/[shareable_slug] requires no login
     shareable_slug: d.varchar("shareable_slug", { length: 100 }).unique(),
     is_public: d.boolean("is_public").default(false).notNull(),
+    // NEW: opaque token used to render the "Tested by Buildify — Score: N" embed badge
+    embed_badge_token: d.varchar("embed_badge_token", { length: 64 }).unique(),
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())
@@ -885,6 +905,40 @@ export const report_exports = createTable(
   (t) => [
     index("report_exports_test_run_id_idx").on(t.test_run_id),
     index("report_exports_shareable_slug_idx").on(t.shareable_slug),
+    index("report_exports_embed_badge_token_idx").on(t.embed_badge_token),
+  ],
+);
+
+// =============================================================================
+// NEW TABLE: per-page Core Web Vitals
+// Powers the "Performance Gauges" dashboard section (LCP / FID / CLS / TTFB)
+// with green / yellow / red thresholds per page.
+// =============================================================================
+export const performance_metrics = createTable(
+  "performance_metrics",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    // The specific page this measurement was taken on
+    page_url: d.text("page_url").notNull(),
+    // Core Web Vitals — all in milliseconds except CLS (unitless score)
+    lcp_ms: real("lcp_ms"),   // Largest Contentful Paint  — green <2500, yellow <4000, red ≥4000
+    fid_ms: real("fid_ms"),   // First Input Delay         — green <100,  yellow <300,  red ≥300
+    cls: real("cls"),         // Cumulative Layout Shift   — green <0.1,  yellow <0.25, red ≥0.25
+    ttfb_ms: real("ttfb_ms"), // Time to First Byte        — green <800,  yellow <1800, red ≥1800
+    // Raw Lighthouse / Playwright timing data for future use
+    raw_metrics: d.jsonb("raw_metrics"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("performance_metrics_test_run_id_idx").on(t.test_run_id),
+    index("performance_metrics_page_url_idx").on(t.page_url),
   ],
 );
 
@@ -900,6 +954,7 @@ export const testRunsRelations = relations(test_runs, ({ one, many }) => ({
   testResults: many(test_results),
   bugReports: many(bug_reports),
   reportExports: many(report_exports),
+  performanceMetrics: many(performance_metrics),
 }));
 
 export const crawlResultsRelations = relations(crawl_results, ({ one }) => ({
@@ -949,3 +1004,13 @@ export const reportExportsRelations = relations(report_exports, ({ one }) => ({
     references: [test_runs.id],
   }),
 }));
+
+export const performanceMetricsRelations = relations(
+  performance_metrics,
+  ({ one }) => ({
+    testRun: one(test_runs, {
+      fields: [performance_metrics.test_run_id],
+      references: [test_runs.id],
+    }),
+  }),
+);
