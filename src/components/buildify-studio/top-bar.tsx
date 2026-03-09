@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Undo2, Redo2, Eye, Save, Globe, ArrowLeft, Loader2,
   Grid3X3, Copy, Trash2, ChevronDown, Monitor, Tablet, Smartphone,
@@ -25,8 +26,21 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
     duplicateElements, deleteSelected, setGrid, setCanvasBackground, setDevice,
   } = editor
   const [bgOpen, setBgOpen] = useState(false)
+  const bgBtnRef = useRef<HTMLButtonElement>(null)
+  const [bgPos, setBgPos] = useState({ top: 0, left: 0 })
   const bg = state.canvasBackground
   const hasSelection = state.selectedIds.length > 0
+
+  // Compute dropdown position when opened
+  useEffect(() => {
+    if (bgOpen && bgBtnRef.current) {
+      const rect = bgBtnRef.current.getBoundingClientRect()
+      setBgPos({
+        top: rect.bottom + 8,
+        left: rect.left + rect.width / 2 - 128, // 128 = half of w-64 (256px)
+      })
+    }
+  }, [bgOpen])
 
   const updBg = (patch: Partial<CanvasBackground>) =>
     setCanvasBackground({ ...bg, ...patch })
@@ -124,6 +138,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
           {/* Canvas background picker */}
           <div className="relative">
             <button
+              ref={bgBtnRef}
               type="button"
               onClick={() => setBgOpen((o) => !o)}
               title="Canvas background"
@@ -144,10 +159,13 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
               <ChevronDown className="size-3" />
             </button>
 
-            {bgOpen && (
+            {bgOpen && createPortal(
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setBgOpen(false)} />
-                <div className="absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-xl border border-border bg-background p-4 shadow-2xl">
+                <div className="fixed inset-0 z-[9990]" onClick={() => setBgOpen(false)} />
+                <div
+                  className="fixed z-[9991] w-64 rounded-xl border border-border bg-background p-4 shadow-2xl"
+                  style={{ top: bgPos.top, left: bgPos.left }}
+                >
                   <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Canvas Background
                   </p>
@@ -250,7 +268,8 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
                     Done
                   </button>
                 </div>
-              </>
+              </>,
+              document.body,
             )}
           </div>
 
