@@ -44,6 +44,21 @@ interface ApiErrorResponse {
   error: string;
 }
 
+async function parseJsonResponse(response: Response): Promise<SuccessResponse | ApiErrorResponse> {
+  const text = await response.text();
+  if (!text) {
+    if (!response.ok) {
+      return { error: `Request failed with status ${response.status}` };
+    }
+    return { success: true };
+  }
+  try {
+    return JSON.parse(text) as SuccessResponse | ApiErrorResponse;
+  } catch {
+    return { error: text || `Request failed with status ${response.status}` };
+  }
+}
+
 // ============================================================================
 // Mutation Hooks
 // ============================================================================
@@ -64,9 +79,7 @@ export function useAssignSubscription() {
         body: JSON.stringify(data),
       });
 
-      const result = (await response.json()) as
-        | SuccessResponse
-        | ApiErrorResponse;
+      const result = await parseJsonResponse(response);
 
       if (!response.ok || "error" in result) {
         throw new Error(
@@ -106,9 +119,7 @@ export function useCancelUserSubscription() {
         body: JSON.stringify(data),
       });
 
-      const result = (await response.json()) as
-        | SuccessResponse
-        | ApiErrorResponse;
+      const result = await parseJsonResponse(response);
 
       if (!response.ok || "error" in result) {
         throw new Error(
@@ -146,9 +157,7 @@ export function useAddCredits() {
         body: JSON.stringify(data),
       });
 
-      const result = (await response.json()) as
-        | SuccessResponse
-        | ApiErrorResponse;
+      const result = await parseJsonResponse(response);
 
       if (!response.ok || "error" in result) {
         throw new Error(
@@ -185,9 +194,7 @@ export function useToggleUserRole() {
         body: JSON.stringify(data),
       });
 
-      const result = (await response.json()) as
-        | SuccessResponse
-        | ApiErrorResponse;
+      const result = await parseJsonResponse(response);
 
       if (!response.ok || "error" in result) {
         throw new Error(
@@ -224,9 +231,7 @@ export function useDeductCredits() {
         body: JSON.stringify(data),
       });
 
-      const result = (await response.json()) as
-        | SuccessResponse
-        | ApiErrorResponse;
+      const result = await parseJsonResponse(response);
 
       if (!response.ok || "error" in result) {
         throw new Error(

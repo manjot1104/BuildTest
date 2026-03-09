@@ -2,14 +2,14 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
-import { type CanvasElement, type CanvasBackground, type EnterAnimation } from './types'
+import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
 
 // ─── Device presets ───────────────────────────────────────────────────────────
 
 const DEVICES = [
   { id: 'desktop' as const, label: 'Desktop', Icon: Monitor,    width: 1440, height: 960  },
   { id: 'tablet'  as const, label: 'Tablet',  Icon: Tablet,     width: 768,  height: 1024 },
-  { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 390,  height: 844  },
+  { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 375,  height: 844  },
 ]
 
 // ─── Icon characters ──────────────────────────────────────────────────────────
@@ -226,22 +226,36 @@ function StaticEl({ el }: { el: CanvasElement }) {
 
 // ─── Scaled preview canvas ────────────────────────────────────────────────────
 
-function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH }: {
+function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH, deviceId }: {
   elements: CanvasElement[]
   background: CanvasBackground
   deviceWidth: number
   deviceHeight: number
   containerW: number
   containerH: number
+  deviceId: 'desktop' | 'tablet' | 'mobile'
 }) {
-  const scale = Math.min((containerW - 32) / deviceWidth, (containerH - 32) / deviceHeight, 1)
-  const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
+  // Apply responsive reflow for tablet/mobile
+  const responsiveDevice: ResponsiveDevice = deviceId
+  const layout = computeResponsiveLayout(elements, responsiveDevice)
+  const sorted = [...layout].sort((a, b) => a.zIndex - b.zIndex)
+
+  // Compute actual content height (elements may reflow below the preset device height)
+  const contentHeight = sorted.length > 0
+    ? Math.max(deviceHeight, ...sorted.map((el) => el.y + el.height)) + 40
+    : deviceHeight
+
+  // Scale based on width only so the full page is visible at correct width
+  const scale = Math.min((containerW - 32) / deviceWidth, 1)
+  // Scaled dimensions for the outer wrapper
+  const scaledW = deviceWidth * scale
+  const scaledH = contentHeight * scale
 
   return (
     <div
       style={{
-        width: deviceWidth * scale,
-        height: deviceHeight * scale,
+        width: scaledW,
+        height: scaledH,
         position: 'relative',
         overflow: 'hidden',
         flexShrink: 0,
@@ -252,7 +266,7 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
       <div
         style={{
           width: deviceWidth,
-          height: deviceHeight,
+          height: contentHeight,
           position: 'absolute',
           top: 0,
           left: 0,
@@ -263,7 +277,9 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
           overflow: 'hidden',
         }}
       >
-        {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
+        <div style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}>
+          {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
+        </div>
       </div>
     </div>
   )
@@ -378,11 +394,11 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
         </div>
       </div>
 
-      {/* Preview content */}
+      {/* Preview content — scrollable, top-aligned so long pages scroll naturally */}
       <div
         ref={contentRef}
-        className="flex flex-1 items-center justify-center overflow-auto"
-        style={{ background: '#141416', padding: 24 }}
+        className="flex flex-1 justify-center overflow-y-auto overflow-x-hidden"
+        style={{ background: '#141416', padding: 24, alignItems: 'flex-start' }}
       >
         {containerSize.w > 0 && (
           <PreviewCanvas
@@ -392,6 +408,7 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
             deviceHeight={device.height}
             containerW={containerSize.w}
             containerH={containerSize.h}
+            deviceId={device.id}
           />
         )}
       </div>

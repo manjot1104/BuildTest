@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Undo2, Redo2, Eye, Save, Globe, ArrowLeft, Loader2,
   Grid3X3, Copy, Trash2, ChevronDown, Monitor, Tablet, Smartphone,
@@ -25,8 +26,21 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
     duplicateElements, deleteSelected, setGrid, setCanvasBackground, setDevice,
   } = editor
   const [bgOpen, setBgOpen] = useState(false)
+  const bgBtnRef = useRef<HTMLButtonElement>(null)
+  const [bgPos, setBgPos] = useState({ top: 0, left: 0 })
   const bg = state.canvasBackground
   const hasSelection = state.selectedIds.length > 0
+
+  // Compute dropdown position when opened
+  useEffect(() => {
+    if (bgOpen && bgBtnRef.current) {
+      const rect = bgBtnRef.current.getBoundingClientRect()
+      setBgPos({
+        top: rect.bottom + 8,
+        left: rect.left + rect.width / 2 - 128, // 128 = half of w-64 (256px)
+      })
+    }
+  }, [bgOpen])
 
   const updBg = (patch: Partial<CanvasBackground>) =>
     setCanvasBackground({ ...bg, ...patch })
@@ -124,6 +138,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
           {/* Canvas background picker */}
           <div className="relative">
             <button
+              ref={bgBtnRef}
               type="button"
               onClick={() => setBgOpen((o) => !o)}
               title="Canvas background"
@@ -144,10 +159,13 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
               <ChevronDown className="size-3" />
             </button>
 
-            {bgOpen && (
+            {bgOpen && createPortal(
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setBgOpen(false)} />
-                <div className="absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-xl border border-border bg-background p-4 shadow-2xl">
+                <div className="fixed inset-0 z-[9990]" onClick={() => setBgOpen(false)} />
+                <div
+                  className="fixed z-[9991] w-64 rounded-xl border border-border bg-background p-4 shadow-2xl"
+                  style={{ top: bgPos.top, left: bgPos.left }}
+                >
                   <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                     Canvas Background
                   </p>
@@ -250,7 +268,8 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
                     Done
                   </button>
                 </div>
-              </>
+              </>,
+              document.body,
             )}
           </div>
 
@@ -273,9 +292,9 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
         <div className="hidden items-center gap-0.5 rounded-lg border border-border/50 bg-muted/40 p-0.5 md:flex">
           {(
             [
-              { preset: 'desktop', width: 1440, height: 960,  Icon: Monitor,    title: 'Desktop (1440×960)' },
-              { preset: 'tablet',  width: 768,  height: 1024, Icon: Tablet,     title: 'Tablet (768×1024)' },
-              { preset: 'mobile',  width: 390,  height: 844,  Icon: Smartphone, title: 'Mobile (390×844)' },
+              { preset: 'desktop', width: 1440, height: 960,  Icon: Monitor,    title: 'Desktop (1440)' },
+              { preset: 'tablet',  width: 768,  height: 1024, Icon: Tablet,     title: 'Tablet (768)' },
+              { preset: 'mobile',  width: 375,  height: 844,  Icon: Smartphone, title: 'Mobile (375)' },
             ] as const
           ).map(({ preset, width, height, Icon, title }) => (
             <button
@@ -292,6 +311,26 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
               <Icon className="size-4" />
             </button>
           ))}
+        </div>
+
+        {/* Canvas height control */}
+        <div className="hidden items-center gap-1 md:flex">
+          <span className="text-[10px] font-medium text-muted-foreground">H</span>
+          <input
+            type="number"
+            min={200}
+            step={100}
+            value={state.device.height}
+            onChange={(e) => {
+              const h = parseInt(e.target.value)
+              if (!isNaN(h) && h >= 200) {
+                setDevice({ ...state.device, preset: 'custom', height: h })
+              }
+            }}
+            className="h-7 w-16 rounded-md border border-border/50 bg-muted/40 px-1.5 text-center font-mono text-xs text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+            title="Canvas height (px)"
+          />
+          <span className="text-[10px] text-muted-foreground">px</span>
         </div>
 
         <div className="hidden h-5 w-px bg-border md:block" />

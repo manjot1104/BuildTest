@@ -421,29 +421,34 @@ export async function addCreditsHandler({
     return { error: "Credit amounts cannot exceed 100,000", status: 400 };
   }
 
-  const existing = await db.query.user_credits.findFirst({
-    where: eq(user_credits.user_id, userId),
-  });
-
-  if (!existing) {
-    await db.insert(user_credits).values({
-      id: crypto.randomUUID(),
-      user_id: userId,
-      subscription_credits: subCredits,
-      additional_credits: addCredits,
+  try {
+    const existing = await db.query.user_credits.findFirst({
+      where: eq(user_credits.user_id, userId),
     });
-  } else {
-    await db
-      .update(user_credits)
-      .set({
-        subscription_credits: existing.subscription_credits + subCredits,
-        additional_credits: existing.additional_credits + addCredits,
-        updated_at: new Date(),
-      })
-      .where(eq(user_credits.user_id, userId));
-  }
 
-  return { success: true };
+    if (!existing) {
+      await db.insert(user_credits).values({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        subscription_credits: subCredits,
+        additional_credits: addCredits,
+      });
+    } else {
+      await db
+        .update(user_credits)
+        .set({
+          subscription_credits: existing.subscription_credits + subCredits,
+          additional_credits: existing.additional_credits + addCredits,
+          updated_at: new Date(),
+        })
+        .where(eq(user_credits.user_id, userId));
+    }
+
+    return { success: true };
+  } catch (err: unknown) {
+    console.error("[addCreditsHandler] DB error:", err);
+    return { error: "Failed to add credits", status: 500 };
+  }
 }
 
 /**

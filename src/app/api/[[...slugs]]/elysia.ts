@@ -111,6 +111,19 @@ interface ChatRequestBody {
 }
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
+  .onError(({ code, error, set }) => {
+    console.error(`[Elysia Error] code=${code}`, error)
+    if (code === 'VALIDATION') {
+      set.status = 422
+      return { error: 'Validation failed', details: error.message }
+    }
+    if (code === 'NOT_FOUND') {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    set.status = 500
+    return { error: error?.message ?? 'Internal server error' }
+  })
   // Chat endpoint - POST /api/chat
   // Note: Streaming requests are handled inline (use fetch directly)
   // Non-streaming requests use the controller

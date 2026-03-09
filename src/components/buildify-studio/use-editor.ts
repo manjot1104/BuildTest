@@ -10,6 +10,8 @@ import {
   type GridSettings,
   type FormField,
   type SocialLinkItem,
+  type ResponsiveOverride,
+  type ResponsiveDevice,
 } from './types'
 
 const MAX_HISTORY = 50
@@ -411,6 +413,59 @@ export function useEditor() {
     [],
   )
 
+  /** Returns 'desktop' | 'tablet' | 'mobile' based on current device preset */
+  const activeDevice: ResponsiveDevice =
+    state.device.preset === 'tablet' ? 'tablet'
+    : state.device.preset === 'mobile' ? 'mobile'
+    : 'desktop'
+
+  /**
+   * Device-aware update: on desktop writes to base element,
+   * on tablet/mobile writes to responsiveStyles overrides.
+   */
+  const updateElementResponsive = useCallback(
+    (id: string, updates: Partial<CanvasElement>, skipHistory = false) => {
+      const device = state.device.preset === 'tablet' ? 'tablet'
+        : state.device.preset === 'mobile' ? 'mobile'
+        : 'desktop'
+
+      if (device === 'desktop') {
+        dispatch({
+          type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
+          id,
+          updates,
+        })
+        return
+      }
+
+      // Build responsive override from the updates
+      const el = state.elements.find((e) => e.id === id)
+      if (!el) return
+
+      const override: ResponsiveOverride = {}
+      if (updates.x !== undefined) override.x = updates.x
+      if (updates.y !== undefined) override.y = updates.y
+      if (updates.width !== undefined) override.width = updates.width
+      if (updates.height !== undefined) override.height = updates.height
+      if (updates.hidden !== undefined) override.hidden = updates.hidden
+      if (updates.styles) {
+        override.styles = { ...(el.responsiveStyles?.[device]?.styles ?? {}), ...updates.styles }
+      }
+
+      const newResponsive = {
+        ...el.responsiveStyles,
+        [device]: { ...(el.responsiveStyles?.[device] ?? {}), ...override },
+      }
+
+      dispatch({
+        type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
+        id,
+        updates: { responsiveStyles: newResponsive },
+      })
+    },
+    [state.device.preset, state.elements],
+  )
+
   const deleteElement = useCallback((id: string) => {
     dispatch({ type: 'DELETE_ELEMENT', id })
   }, [])
@@ -491,12 +546,14 @@ export function useEditor() {
 
   return {
     state,
+    activeDevice,
     selectedElement,
     selectedElements,
     canUndo,
     canRedo,
     addElement,
     updateElement,
+    updateElementResponsive,
     deleteElement,
     deleteSelected,
     selectElement,
