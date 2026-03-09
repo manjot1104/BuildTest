@@ -101,14 +101,15 @@ export async function getUserCreditsHandler(): Promise<
     return { error: "Unauthorized", status: 401 };
   }
 
-  const credits = await getUserCreditsBreakdown(session.user.id);
-  const subscription = await getUserActiveSubscription(session.user.id);
-  const hasSubscription = await hasActiveSubscription(session.user.id);
+  const [credits, subscription] = await Promise.all([
+    getUserCreditsBreakdown(session.user.id),
+    getUserActiveSubscription(session.user.id),
+  ]);
 
   return {
     credits,
     subscription,
-    hasActiveSubscription: hasSubscription,
+    hasActiveSubscription: !!subscription,
   };
 }
 
@@ -146,18 +147,33 @@ export async function createSubscriptionOrderHandler({
     return { error: "Invalid plan ID", status: 400 };
   }
 
-  // Security: Prevent admin plans from being purchased through normal flow
+  // Security: Prevent admin and free plans from being purchased through normal flow
   if ("adminOnly" in plan && plan.adminOnly) {
+    return { error: "This plan cannot be purchased", status: 403 };
+  }
+  if ("freeTier" in plan && plan.freeTier) {
     return { error: "This plan cannot be purchased", status: 403 };
   }
 
   // Check if user already has an active subscription
   const existingSubscription = await getUserActiveSubscription(session.user.id);
   if (existingSubscription) {
-    return {
-      error: "You already have an active subscription. Please cancel it first or buy additional credits.",
-      status: 400,
-    };
+    // Allow upgrading from free tier — cancel the free subscription automatically
+    if (existingSubscription.plan_id === "free") {
+      await db
+        .update(subscriptions)
+        .set({
+          status: "cancelled",
+          cancelled_at: new Date(),
+          updated_at: new Date(),
+        })
+        .where(eq(subscriptions.id, existingSubscription.id));
+    } else {
+      return {
+        error: "You already have an active subscription. Please cancel it first or buy additional credits.",
+        status: 400,
+      };
+    }
   }
 
   try {
@@ -235,11 +251,17 @@ export async function createCreditPackOrderHandler({
     return { error: "Invalid pack ID", status: 400 };
   }
 
-  // User must have an active subscription to buy additional credits
-  const hasSubscription = await hasActiveSubscription(session.user.id);
-  if (!hasSubscription) {
+  // User must have an active paid subscription to buy additional credits
+  const activeSubscription = await getUserActiveSubscription(session.user.id);
+  if (!activeSubscription) {
     return {
       error: "You need an active subscription to purchase additional credits",
+      status: 400,
+    };
+  }
+  if (activeSubscription.plan_id === "free") {
+    return {
+      error: "Upgrade to a paid plan to purchase additional credits",
       status: 400,
     };
   }
@@ -306,58 +328,87 @@ export async function verifyPaymentHandler({
     return { error: "Invalid payment signature", status: 400 };
   }
 
-  // Find the pending transaction
-  const transaction = await db.query.payment_transactions.findFirst({
-    where: and(
-      eq(payment_transactions.razorpay_order_id, razorpay_order_id),
-      eq(payment_transactions.user_id, session.user.id),
-      eq(payment_transactions.status, "pending"),
-    ),
-  });
-
-  if (!transaction) {
-    return { error: "Transaction not found", status: 404 };
-  }
-
   try {
-    // Update transaction as completed
-    await db
-      .update(payment_transactions)
-      .set({
-        razorpay_payment_id,
-        razorpay_signature,
-        status: "completed",
-        updated_at: new Date(),
-      })
-      .where(eq(payment_transactions.id, transaction.id));
+    // Use a transaction with SELECT ... FOR UPDATE to prevent double-verification
+    const result = await db.transaction(async (tx) => {
+      // Lock the transaction row to prevent concurrent verification
+      const [transaction] = await tx
+        .select()
+        .from(payment_transactions)
+        .where(
+          and(
+            eq(payment_transactions.razorpay_order_id, razorpay_order_id),
+            eq(payment_transactions.user_id, session.user.id),
+          ),
+        )
+        .for("update")
+        .limit(1);
 
-    if (transaction.type === "subscription" && transaction.subscription_id) {
-      // Activate subscription
-      const now = new Date();
-      const periodEnd = new Date(now);
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
+      if (!transaction) {
+        return { error: "Transaction not found" as const, status: 404 };
+      }
 
-      await db
-        .update(subscriptions)
+      // Idempotency: if already completed, return success without double-crediting
+      if (transaction.status === "completed") {
+        return { success: true as const, message: "Payment already verified" };
+      }
+
+      if (transaction.status !== "pending") {
+        return { error: "Transaction is not pending" as const, status: 400 };
+      }
+
+      // Update transaction as completed
+      await tx
+        .update(payment_transactions)
         .set({
-          status: "active",
-          current_period_start: now,
-          current_period_end: periodEnd,
-          updated_at: now,
+          razorpay_payment_id,
+          razorpay_signature,
+          status: "completed",
+          updated_at: new Date(),
         })
-        .where(eq(subscriptions.id, transaction.subscription_id));
+        .where(eq(payment_transactions.id, transaction.id));
 
-      // Add subscription credits
+      if (transaction.type === "subscription" && transaction.subscription_id) {
+        // Activate subscription
+        const now = new Date();
+        const periodEnd = new Date(now);
+        periodEnd.setMonth(periodEnd.getMonth() + 1);
+
+        await tx
+          .update(subscriptions)
+          .set({
+            status: "active",
+            current_period_start: now,
+            current_period_end: periodEnd,
+            updated_at: now,
+          })
+          .where(eq(subscriptions.id, transaction.subscription_id));
+      }
+
+      return { transaction };
+    });
+
+    // Handle non-transaction results
+    if ("error" in result && result.error) {
+      return { error: result.error, status: result.status } as ApiErrorResponse;
+    }
+    if ("success" in result && result.success) {
+      return { success: true, message: result.message ?? "Payment verified" };
+    }
+
+    // Add credits outside the transaction (these use their own atomic operations)
+    const transaction = "transaction" in result ? result.transaction : null;
+    if (!transaction) {
+      return { success: true, message: "Payment verified successfully" };
+    }
+    if (transaction.type === "subscription") {
       await addSubscriptionCredits(session.user.id, transaction.credits_added);
-
       return {
         success: true,
         message: `Subscription activated! ${transaction.credits_added} credits added.`,
       };
     } else if (transaction.type === "credit_pack") {
-      // Add additional credits
       await addAdditionalCredits(session.user.id, transaction.credits_added);
-
       return {
         success: true,
         message: `${transaction.credits_added} credits added to your account.`,

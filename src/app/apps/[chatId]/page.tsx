@@ -22,8 +22,6 @@ export default function AppPage() {
   const [iframeLoading, setIframeLoading] = useState(true)
 
   useEffect(() => {
-  console.log("CHAT ID:", chatId)
-
   if (!chatId) {
     setState({ status: 'error', message: 'No app ID provided.' })
     return
@@ -32,8 +30,6 @@ export default function AppPage() {
   let cancelled = false
 
   async function fetchApp() {
-    console.log("FETCHING API FOR:", chatId)
-
     setState({ status: 'loading' })
     try {
       const res = await fetch(`/api/apps/${chatId}`)
@@ -57,7 +53,7 @@ export default function AppPage() {
         if (!cancelled) {
           setState({ status: 'ready', data })
         }
-      } catch (_err) {
+      } catch {
         if (!cancelled) {
           setState({
             status: 'error',

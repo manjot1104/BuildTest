@@ -10,7 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2 } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -362,7 +362,7 @@ export default function LandingPage() {
                     >
                         <span className="inline-flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground border border-border/60 rounded-full px-4 py-1.5 bg-muted/30">
                             <span className="size-1.5 rounded-full bg-emerald-500" />
-                            Now in Public Beta
+                            Start free — 200 credits included
                         </span>
                     </motion.div>
 
@@ -587,10 +587,92 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* ── Features Section ── */}
-            <section id="features" className="relative py-32 md:py-40 px-6">
+            {/* ── Free Tier ── */}
+            <section className="relative py-32 md:py-40 px-6">
                 <div className="max-w-6xl mx-auto">
-                    {/* Section header */}
+                    <div className="max-w-xl mb-20">
+                        <SectionLabel>Free tier</SectionLabel>
+                        <RevealText delay={0.1} className="mt-4">
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                                No credit card.
+                            </h2>
+                        </RevealText>
+                        <RevealText delay={0.2}>
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1] text-muted-foreground/40">
+                                No catch.
+                            </h2>
+                        </RevealText>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-20 md:gap-32 items-start">
+                        {/* Left — big number + details */}
+                        <motion.div
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.2}
+                        >
+                            <div className="flex items-baseline gap-3">
+                                <span className="text-[clamp(4rem,10vw,7rem)] font-bold tracking-tighter leading-none">200</span>
+                                <span className="text-lg md:text-xl font-medium text-muted-foreground/60">credits</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground leading-relaxed mt-4 max-w-sm">
+                                Every new account starts with 200 credits on signup.
+                                Use them in the Builder to generate full applications — or explore every other tool for free, forever.
+                            </p>
+                            <motion.div
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-60px' }}
+                                custom={0.5}
+                                className="mt-8"
+                            >
+                                <Button
+                                    onClick={handleGetStarted}
+                                    className="rounded-full h-10 px-6 text-sm font-medium gap-2 group"
+                                >
+                                    Create free account
+                                    <ArrowRight className="size-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
+                                </Button>
+                            </motion.div>
+                        </motion.div>
+
+                        {/* Right — what's included */}
+                        <motion.div
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.3}
+                            className="space-y-6"
+                        >
+                            <p className="text-xs font-medium tracking-[0.2em] uppercase text-muted-foreground/80">
+                                Included in every account
+                            </p>
+                            {[
+                                { step: '01', title: 'Builder', text: 'Generate full-stack apps, dashboards, and landing pages with AI. Uses credits from your balance.' },
+                                { step: '02', title: 'AI Chat', text: 'Chat with multiple AI models for brainstorming, debugging, and explanations. Always free.' },
+                                { step: '03', title: 'Resume Builder', text: 'Create ATS-friendly resumes from LaTeX templates and export as PDF. Always free.' },
+                                { step: '04', title: 'Buildify Studio', text: 'Design and publish web pages visually with a live editor. Always free.' },
+                            ].map((item, i) => (
+                                <div key={i} className="flex gap-5">
+                                    <span className="text-xs font-mono text-muted-foreground/50 mt-1 shrink-0">{item.step}</span>
+                                    <div>
+                                        <h3 className="text-base font-semibold mb-1">{item.title}</h3>
+                                        <p className="text-sm text-muted-foreground leading-relaxed">{item.text}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </motion.div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Capabilities Section ── */}
+            <section id="features" className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-6xl mx-auto">
                     <div className="max-w-xl mb-20">
                         <SectionLabel>Capabilities</SectionLabel>
                         <RevealText delay={0.1} className="mt-4">
@@ -605,7 +687,6 @@ export default function LandingPage() {
                         </RevealText>
                     </div>
 
-                    {/* Bento grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px bg-border/50 rounded-2xl overflow-hidden border border-border/50">
                         {[
                             {
@@ -733,7 +814,7 @@ export default function LandingPage() {
                                         <div className="size-2.5 rounded-full bg-border" />
                                         <div className="size-2.5 rounded-full bg-border" />
                                     </div>
-                                    <span className="text-[10px] text-muted-foreground/50 font-mono ml-3">buildify.ai</span>
+                                    <span className="text-[10px] text-muted-foreground/50 font-mono ml-3">buildify.sh</span>
                                 </div>
                                 <div className="p-6 space-y-4">
                                     <div className="flex gap-3 items-start">
@@ -823,7 +904,7 @@ export default function LandingPage() {
                         custom={0.3}
                         className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
-                        Join thousands of developers shipping faster with AI-powered code generation.
+                        Start with 200 free credits. No credit card, no trial — just sign up and build.
                     </motion.p>
                     <motion.div
                         variants={fadeIn}

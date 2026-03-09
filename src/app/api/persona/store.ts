@@ -1,7 +1,7 @@
-// Shared in-memory persona store.
+// Shared in-memory design store.
 // Persists for the lifetime of the server process (resets on restart/redeploy).
 
-export interface PersonaEntry {
+export interface DesignEntry {
   slug: string
   title: string
   layout: string
@@ -9,4 +9,4 @@ export interface PersonaEntry {
   publishedAt: string
 }
 
-export const personaStore = new Map<string, PersonaEntry>()
+export const designStore = new Map<string, DesignEntry>()

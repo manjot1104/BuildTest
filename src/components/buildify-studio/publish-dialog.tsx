@@ -17,21 +17,21 @@ import { Label } from '@/components/ui/label'
 interface PublishDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  personaId?: string
+  designId?: string
 }
 
 type PublishState = 'idle' | 'publishing' | 'done' | 'error'
 
-export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogProps) {
+export function PublishDialog({ open, onOpenChange, designId }: PublishDialogProps) {
   const [slug, setSlug] = useState('')
-  const [title, setTitle] = useState('My Persona')
+  const [title, setTitle] = useState('Untitled')
   const [state, setState] = useState<PublishState>('idle')
   const [publishedUrl, setPublishedUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
 
   const handlePublish = async () => {
-    if (!personaId) {
+    if (!designId) {
       setErrorMsg('Save your draft before publishing.')
       setState('error')
       return
@@ -43,10 +43,10 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
     setErrorMsg('')
 
     try {
-      const res = await fetch(`/api/persona/${personaId}/publish`, {
+      const res = await fetch(`/api/design/${designId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: cleanSlug, title: title.trim() || 'My Persona' }),
+        body: JSON.stringify({ slug: cleanSlug, title: title.trim() || 'Untitled' }),
       })
 
       if (res.status === 409) {
@@ -54,7 +54,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
       }
       if (!res.ok) throw new Error('Failed to publish')
 
-      const url = `${window.location.origin}/persona/${cleanSlug}`
+      const url = `${window.location.origin}/p/${cleanSlug}`
       setPublishedUrl(url)
       setState('done')
     } catch (err) {
@@ -83,9 +83,9 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Publish Your Persona</DialogTitle>
+          <DialogTitle>Publish Your Design</DialogTitle>
           <DialogDescription>
-            Choose a URL slug for your published persona page.
+            Choose a URL slug for your published page.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,7 +97,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
             </div>
 
             <div>
-              <Label className="mb-1.5 block text-sm">Your persona URL</Label>
+              <Label className="mb-1.5 block text-sm">Your published URL</Label>
               <div className="flex gap-2">
                 <Input value={publishedUrl} readOnly className="font-mono text-xs" />
                 <Button size="icon" variant="outline" onClick={copyUrl} title="Copy URL">
@@ -122,7 +122,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {!personaId && (
+            {!designId && (
               <p className="rounded-md bg-yellow-500/10 px-3 py-2 text-sm text-yellow-700 dark:text-yellow-400">
                 Save your draft first (Ctrl+S) before publishing.
               </p>
@@ -136,7 +136,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
                 id="pb-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="My Persona"
+                placeholder="Untitled"
               />
             </div>
 
@@ -146,7 +146,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
               </Label>
               <div className="flex items-center gap-0 overflow-hidden rounded-md border border-input">
                 <span className="shrink-0 bg-muted px-3 py-2 text-xs text-muted-foreground">
-                  /persona/
+                  /p/
                 </span>
                 <input
                   id="pb-slug"
@@ -171,7 +171,7 @@ export function PublishDialog({ open, onOpenChange, personaId }: PublishDialogPr
               </Button>
               <Button
                 onClick={handlePublish}
-                disabled={!slug.trim() || state === 'publishing' || !personaId}
+                disabled={!slug.trim() || state === 'publishing' || !designId}
               >
                 {state === 'publishing' ? (
                   <>

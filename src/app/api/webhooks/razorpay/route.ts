@@ -57,17 +57,19 @@ export async function POST(request: NextRequest) {
 
     // Verify webhook signature
     if (!signature) {
-      console.warn("Razorpay webhook received without signature — processing anyway");
-    } else if (!verifyWebhookSignature(body, signature)) {
-      console.error("Invalid Razorpay webhook signature");
+      return NextResponse.json(
+        { error: "Missing signature" },
+        { status: 401 },
+      );
+    }
+    if (!verifyWebhookSignature(body, signature)) {
       return NextResponse.json(
         { error: "Invalid signature" },
-        { status: 400 },
+        { status: 401 },
       );
     }
 
     const event: RazorpayWebhookEvent = JSON.parse(body);
-    console.log("Razorpay webhook event:", event.event);
 
     switch (event.event) {
       case "payment.captured":
@@ -97,7 +99,7 @@ export async function POST(request: NextRequest) {
         break;
 
       default:
-        console.log(`Unhandled webhook event: ${event.event}`);
+        break;
     }
 
     return NextResponse.json({ received: true });
@@ -136,8 +138,7 @@ async function handlePaymentCaptured(event: RazorpayWebhookEvent) {
 
   // Idempotency: skip if already completed
   if (transaction.status === "completed") {
-    console.log(`Transaction already completed for order: ${orderId} — skipping`);
-    return;
+    return; // Already completed — idempotent skip
   }
 
   // Update transaction status
@@ -150,7 +151,6 @@ async function handlePaymentCaptured(event: RazorpayWebhookEvent) {
     })
     .where(eq(payment_transactions.id, transaction.id));
 
-  console.log(`Payment captured for order: ${orderId}`);
 }
 
 async function handlePaymentFailed(event: RazorpayWebhookEvent) {
@@ -185,7 +185,6 @@ async function handlePaymentFailed(event: RazorpayWebhookEvent) {
     }
   }
 
-  console.log(`Payment failed for order: ${orderId}`);
 }
 
 async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
@@ -218,8 +217,7 @@ async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
 
   // Idempotency: skip if already active
   if (sub.status === "active") {
-    console.log(`Subscription already active for user: ${sub.user_id} — skipping`);
-    return;
+    return; // Already active — idempotent skip
   }
 
   const now = new Date();
@@ -240,7 +238,6 @@ async function handleSubscriptionActivated(event: RazorpayWebhookEvent) {
   // Add subscription credits
   await addSubscriptionCredits(sub.user_id, sub.credits_per_month);
 
-  console.log(`Subscription activated for user: ${sub.user_id}`);
 }
 
 async function handleSubscriptionCharged(event: RazorpayWebhookEvent) {
@@ -273,7 +270,6 @@ async function handleSubscriptionCharged(event: RazorpayWebhookEvent) {
     await resetSubscriptionCredits(sub.user_id);
     await addSubscriptionCredits(sub.user_id, sub.credits_per_month);
 
-    console.log(`Subscription charged for user: ${sub.user_id}, credits renewed`);
   }
 }
 
@@ -301,7 +297,6 @@ async function handleSubscriptionEnded(event: RazorpayWebhookEvent) {
     // Reset subscription credits (additional credits remain)
     await resetSubscriptionCredits(sub.user_id);
 
-    console.log(`Subscription ended for user: ${sub.user_id}, subscription credits removed`);
   }
 }
 
@@ -309,5 +304,4 @@ async function handleSubscriptionPending(event: RazorpayWebhookEvent) {
   const subscription = event.payload.subscription?.entity;
   if (!subscription) return;
 
-  console.log(`Subscription pending: ${subscription.id}`);
 }

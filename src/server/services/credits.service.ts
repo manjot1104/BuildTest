@@ -6,7 +6,7 @@ import {
   credit_usage_logs,
 } from "@/server/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { calculateCreditCost } from "@/config/credits.config";
+import { calculateCreditCost, SUBSCRIPTION_PLANS } from "@/config/credits.config";
 
 /**
  * Get or create user credits record
@@ -254,6 +254,43 @@ export async function getCreditUsageHistory(
   });
 
   return logs;
+}
+
+/**
+ * Provision free tier for a new user.
+ * Creates an active FREE subscription and adds 200 additional credits (one-time, never expire).
+ * Idempotent — skips if user already has an active subscription.
+ */
+export async function provisionFreeTier(userId: string): Promise<boolean> {
+  // Skip if user already has an active subscription
+  const existing = await getUserActiveSubscription(userId);
+  if (existing) return false;
+
+  const freePlan = SUBSCRIPTION_PLANS.FREE;
+
+  // Create active free subscription (no billing period — lasts forever until upgraded)
+  await db.insert(subscriptions).values({
+    id: crypto.randomUUID(),
+    user_id: userId,
+    plan_id: freePlan.id,
+    plan_name: freePlan.name,
+    plan_price: 0,
+    credits_per_month: 0, // No monthly renewal for free tier
+    status: "active",
+  });
+
+  // Add 200 one-time credits as additional credits (never expire)
+  await addAdditionalCredits(userId, freePlan.credits);
+
+  return true;
+}
+
+/**
+ * Check if user is on the free tier
+ */
+export async function isOnFreeTier(userId: string): Promise<boolean> {
+  const subscription = await getUserActiveSubscription(userId);
+  return subscription?.plan_id === "free";
 }
 
 /**

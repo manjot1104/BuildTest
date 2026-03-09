@@ -61,16 +61,17 @@ import {
   getGithubRepoForChatHandler,
 } from '@/server/api/controllers/github.controller'
 import {
-  createPersonaHandler,
-  listPersonasHandler,
-  getPersonaByIdHandler,
-  updatePersonaHandler,
-  publishPersonaByIdHandler,
-  unpublishPersonaByIdHandler,
-  deletePersonaByIdHandler,
-  getPublicPersonaHandler,
-} from '@/server/api/controllers/persona.controller'
+  createDesignHandler,
+  listDesignsHandler,
+  getDesignByIdHandler,
+  updateDesignHandler,
+  publishDesignByIdHandler,
+  unpublishDesignByIdHandler,
+  deleteDesignByIdHandler,
+  getPublicDesignHandler,
+} from '@/server/api/controllers/studio.controller'
 import { env } from '@/env'
+import { RATE_LIMITS, CREDIT_COSTS } from '@/config/credits.config'
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -80,13 +81,20 @@ interface InsufficientCreditsResponse {
   available: number
 }
 
-const MAX_MESSAGES_PER_DAY_AUTHENTICATED = 50
-const MAX_MESSAGES_PER_DAY_ANONYMOUS = 3
-
 // Speech-to-text rate limiting (in-memory, per-user, 24h sliding window)
-const MAX_STT_REQUESTS_PER_DAY = 100
 const MAX_STT_BASE64_LENGTH = 15_000_000 // ~15MB base64 string ≈ ~10MB decoded audio
 const sttRateLimitMap = new Map<string, { count: number; windowStart: number }>()
+
+// Periodically clean up expired STT rate limit entries to prevent memory leaks
+setInterval(() => {
+  const now = Date.now()
+  const windowMs = 24 * 60 * 60 * 1000
+  for (const [key, entry] of sttRateLimitMap) {
+    if (now - entry.windowStart >= windowMs) {
+      sttRateLimitMap.delete(key)
+    }
+  }
+}, 60 * 60 * 1000) // Clean up every hour
 
 /** Streaming error response type */
 interface StreamingErrorResponse {
@@ -125,7 +133,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_AUTHENTICATED) {
+            if (chatCount >= RATE_LIMITS.AUTHENTICATED_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -143,7 +151,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: 'You need an active subscription to use this service. Please subscribe to continue.',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -171,7 +179,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               return {
                 error: 'insufficient_credits',
                 message: deductResult.error ?? 'Failed to deduct credits',
-                required: isNewChat ? 20 : 30,
+                required: isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT,
                 available: 0,
               } satisfies InsufficientCreditsResponse
             }
@@ -182,7 +190,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               differenceInHours: 24,
             })
 
-            if (chatCount >= MAX_MESSAGES_PER_DAY_ANONYMOUS) {
+            if (chatCount >= RATE_LIMITS.ANONYMOUS_MESSAGES_PER_DAY) {
               set.status = 429
               return {
                 error: 'rate_limit:chat',
@@ -280,7 +288,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   
  .get(
   '/apps/:chatId',
-  async ({ params, set, request }) => {
+  async ({ params, set }) => {
     try {
       const result = await getChatDemoUrl({ v0ChatId: params.chatId })
 
@@ -289,48 +297,32 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         return { error: 'App not found' }
       }
 
-      // 🔹 VISIT LOGGING START
+      // Visit logging (non-critical, fire-and-forget)
       try {
         const { db } = await import('@/server/db')
         const { demo_visits, user_chats } = await import('@/server/db/schema')
         const { eq } = await import('drizzle-orm')
-        const { nanoid } = await import('nanoid')
-        const { getSession } = await import('@/server/better-auth/server')
-        const { getFeaturedBuildsHandler } = await import('@/server/api/controllers/chat.controller')
 
         const chatId = params.chatId
 
-        const featuredResult = await getFeaturedBuildsHandler()
-        const featuredList = (featuredResult as any)?.data ?? []
-
-        const isFeatured = featuredList.some(
-          (item: any) => item.v0_chat_id === chatId
-        )
-
-        let ownerUserId: string | null = null
-
-        if (!isFeatured) {
-          const owner = await db
-            .select()
-            .from(user_chats)
-            .where(eq(user_chats.v0_chat_id, chatId))
-            .limit(1)
-
-          ownerUserId = owner[0]?.user_id ?? null
-        }
+        // Look up the chat owner in a single lightweight query
+        const [chatRecord] = await db
+          .select({ user_id: user_chats.user_id })
+          .from(user_chats)
+          .where(eq(user_chats.v0_chat_id, chatId))
+          .limit(1)
 
         const session = await getSession()
         await db.insert(demo_visits).values({
-          id: nanoid(),
+          id: crypto.randomUUID(),
           demo_id: chatId,
-          demo_type: isFeatured ? 'featured' : 'community',
-          owner_user_id: ownerUserId,
+          demo_type: 'community',
+          owner_user_id: chatRecord?.user_id ?? null,
           visitor_user_id: session?.user?.id ?? null,
         })
       } catch {
         // Visit logging is non-critical — silently ignore failures
       }
-      // 🔹 VISIT LOGGING END
 
       return result
     } catch {
@@ -417,28 +409,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         isStarred: boolean
       }
 
-      // const { db } = await import('@/server/db')
-      // const { user_chats } = await import('@/server/db/schema')
-      // const { and, eq } = await import('drizzle-orm')
-
-      // await db
-      //   .update(user_chats)
-      //   .set({
-      //     is_starred: isStarred,
-      //     updated_at: new Date(),
-      //   })
-      //   .where(
-      //     and(
-      //       eq(user_chats.id, chatId),
-      //       eq(user_chats.user_id, session.user.id),
-      //     ),
-      //   )
       await toggleStarChat({
-  userId: session.user.id,
-  chatId,       
-  isStarred,
-})
-
+        userId: session.user.id,
+        chatId,
+        isStarred,
+      })
 
       return { success: true }
     },
@@ -457,24 +432,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: 'Unauthorized' }
     }
 
-    // const { db } = await import('@/server/db')
-    // const { user_chats } = await import('@/server/db/schema')
-    // const { and, eq, desc } = await import('drizzle-orm')
-
-    // const starredChats = await db
-    //   .select()
-    //   .from(user_chats)
-    //   .where(
-    //     and(
-    //       eq(user_chats.user_id, session.user.id),
-    //       eq(user_chats.is_starred, true),
-    //     ),
-    //   )
-    //   .orderBy(desc(user_chats.updated_at))
-
-    // return starredChats
     return getStarredChats(session.user.id)
-
   })
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user
@@ -575,7 +533,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         const windowMs = 24 * 60 * 60 * 1000
         const entry = sttRateLimitMap.get(userId)
         if (entry && now - entry.windowStart < windowMs) {
-          if (entry.count >= MAX_STT_REQUESTS_PER_DAY) {
+          if (entry.count >= RATE_LIMITS.STT_REQUESTS_PER_DAY) {
             set.status = 429
             return {
               error: 'rate_limit:speech' as const,
@@ -1097,4 +1055,121 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         id: t.String(),
       }),
     },
+  )
+
+  .get(
+    '/github/repo/:chatId',
+    async ({ params, set }) => {
+      const result = await getGithubRepoForChatHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // ============================================
+  // Buildify Studio Endpoints
+  // ============================================
+
+  // List user's designs
+  .get('/designs', async ({ set }) => {
+    const result = await listDesignsHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  // Create a new draft
+  .post(
+    '/design',
+    async ({ body, set }) => {
+      const result = await createDesignHandler({ body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // IMPORTANT: static paths must come before parameterized ones
+  // Get public design by slug (no auth)
+  .get(
+    '/design/public/:slug',
+    async ({ params, set }) => {
+      const result = await getPublicDesignHandler({ params })
+      if (!result) { set.status = 404; return { error: 'Not found' } }
+      return result
+    },
+    { params: t.Object({ slug: t.String() }) },
+  )
+
+  // Get one design by id (auth required)
+  .get(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await getDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Update/save draft
+  .put(
+    '/design/:id',
+    async ({ params, body, set }) => {
+      const result = await updateDesignHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        title: t.Optional(t.String()),
+        layout: t.Optional(t.String()),
+        background: t.Optional(t.Nullable(t.String())),
+      }),
+    },
+  )
+
+  // Publish
+  .post(
+    '/design/:id/publish',
+    async ({ params, body, set }) => {
+      const result = await publishDesignByIdHandler({ params, body })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ slug: t.String(), title: t.Optional(t.String()) }),
+    },
+  )
+
+  // Unpublish
+  .post(
+    '/design/:id/unpublish',
+    async ({ params, set }) => {
+      const result = await unpublishDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  // Delete
+  .delete(
+    '/design/:id',
+    async ({ params, set }) => {
+      const result = await deleteDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
   )

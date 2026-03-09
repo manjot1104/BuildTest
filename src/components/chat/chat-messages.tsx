@@ -1,9 +1,4 @@
 'use client'
-function getAIConfidence(text: string): "high" | "medium" | "low" {
-  if (text.length > 800) return "high"
-  if (text.length > 300) return "medium"
-  return "low"
-}
 
 import React, { useRef, useEffect } from 'react'
 import {
@@ -33,28 +28,6 @@ interface ChatMessagesProps {
   onChatData: (chatData: { id?: string; webUrl?: string; url?: string }) => void
   onStreamingStarted?: () => void
 }
-function AIConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" }) {
-  const styles = {
-    high: "text-green-600 bg-green-100",
-    medium: "text-yellow-700 bg-yellow-100",
-    low: "text-red-600 bg-red-100",
-  }
-
-  const labels = {
-    high: "High confidence",
-    medium: "Medium confidence",
-    low: "Low confidence",
-  }
-
-  return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full font-medium ${styles[confidence]}`}
-    >
-      {labels[confidence]}
-    </span>
-  )
-}
-
 // Unified message wrapper component for consistent styling
 function MessageWrapper({
   role,

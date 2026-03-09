@@ -1,5 +1,3 @@
-'use server'
-
 import OpenAI from 'openai'
 import { getSession } from '@/server/better-auth/server'
 import { env } from '@/env'

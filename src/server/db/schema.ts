@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
   pgEnum,
   pgTable,
   pgTableCreator,
@@ -527,3 +528,116 @@ export const userResumesRelations = relations(user_resumes, ({ one }) => ({
 export const resumeTemplatesRelations = relations(resume_templates, ({ many }) => ({
   resumes: many(user_resumes),
 }));
+
+// GitHub Repos — one row per GitHub repo linked to a chat
+// - One row per GitHub repo (github_repo_id is globally unique)
+// - A chat can have multiple repo rows over time, but only one has is_active = true
+// - When user links a new repo to a chat, old row is set to is_active = false
+// - All pushes target the active repo for the chat
+export const github_repos = createTable(
+  "github_repos",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    chat_id: d
+      .text("chat_id")
+      .notNull()
+      .references(() => user_chats.id, { onDelete: "cascade" }),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // GitHub's own repo ID — enforces one chat per repo globally
+    github_repo_id: d.text("github_repo_id").notNull(),
+    repo_name: d.text("repo_name").notNull(),
+    repo_full_name: d.text("repo_full_name").notNull(),
+    repo_url: d.text("repo_url").notNull(),
+    // Kept for future: allow changing visibility from the app
+    visibility: d
+      .text("visibility", { enum: ["public", "private"] })
+      .notNull()
+      .default("public"),
+    // Only one repo per chat can be active at a time.
+    // Deactivated repos are kept for history but never pushed to.
+    is_active: d.boolean("is_active").notNull().default(true),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    // A GitHub repo can only ever belong to one chat
+    unique("github_repos_github_repo_id_unique").on(t.github_repo_id),
+    index("github_repos_user_id_idx").on(t.user_id),
+    index("github_repos_chat_id_idx").on(t.chat_id),
+    // Composite index for the most common query: active repo for a given chat
+    index("github_repos_chat_id_is_active_idx").on(t.chat_id, t.is_active),
+  ],
+);
+
+export const githubReposRelations = relations(github_repos, ({ one }) => ({
+  user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
+  chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
+}));
+
+// Studio Layouts — stores published pages built in Buildify Studio
+export const studio_layouts = createTable(
+  "persona_layouts", // DB table name — do not rename without migration
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    slug: d.text("slug").unique(), // null for drafts, set at publish time
+    title: d.text("title").notNull().default("Untitled"),
+    layout: d.text("layout").notNull().default("[]"), // JSON string of CanvasElement[]
+    background: d.text("background"), // nullable JSON string of CanvasBackground
+    is_published: d.boolean("is_published").notNull().default(false),
+    published_at: d.timestamp("published_at", { withTimezone: true }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("persona_layouts_user_id_idx").on(t.user_id),
+    index("persona_layouts_slug_idx").on(t.slug),
+  ],
+);
+
+export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
+  user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
+}));
+
+// ─── Sandbox Executions ──────────────────────────────────────────────────────
+
+export const sandbox_executions = createTable(
+  "sandbox_executions",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d.text("user_id").notNull(),
+    language: d.text("language").notNull(),
+    code: d.text("code").notNull(),
+    status: d.text("status").notNull().default("running"),
+    output: d.text("output"),
+    error: d.text("error"),
+    exit_code: integer("exit_code"),
+    execution_time_ms: integer("execution_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("sandbox_executions_user_id_idx").on(t.user_id),
+  ],
+);

@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
 
 import { cn } from '@/lib/utils'
@@ -14,10 +11,20 @@ import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
 
-async function fetchStarredChats() {
+interface StarredChat {
+    id: string
+    v0_chat_id: string
+    conversation_id?: string | null
+    title: string | null
+    last_message?: string | null
+    demo_url: string | null
+    created_at: string
+}
+
+async function fetchStarredChats(): Promise<StarredChat[]> {
     const res = await fetch('/api/chat/starred')
     if (!res.ok) throw new Error('Failed to fetch starred chats')
-    return res.json()
+    return res.json() as Promise<StarredChat[]>
 }
 
 export function StarredChatsDialog({
@@ -48,38 +55,38 @@ export function StarredChatsDialog({
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent
-                className="p-0 gap-0 overflow-hidden border-border/50"
+                className="hk-neon-dialog p-0 gap-0 overflow-hidden rounded-none"
                 style={{ width: '95vw', maxWidth: '40rem' }}
             >
                 <div className="flex flex-col">
                     {/* Header */}
-                    <div className="flex items-center justify-between px-5 pt-5 pb-4">
+                    <div className="hk-neon-dialog-header flex items-center justify-between px-5 pt-5 pb-4">
                         <div>
-                            <h2 className="text-base font-semibold tracking-tight">Starred Chats</h2>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                                Conversations you marked as important
+                            <h2 className="hk-neon-dialog-title text-base font-semibold tracking-tight">Starred Chats</h2>
+                            <p className="font-mono text-[11px] text-muted-foreground mt-0.5">
+                                // conversations you marked as important
                             </p>
                         </div>
                         <Button
                             variant="ghost"
                             size="icon"
-                            className="size-7 rounded-full text-muted-foreground hover:text-foreground"
+                            className="hk-neon-close size-7 text-muted-foreground hover:text-foreground"
                             onClick={() => onOpenChange(false)}
                         >
                             <X className="size-3.5" />
                         </Button>
                     </div>
 
-                    <div className="border-t border-border/40" />
-
                     {/* Content */}
                     <div className="px-3 py-3">
                         {isLoading && (
                             <div className="flex items-center justify-center py-12">
-                                <div className="h-px w-8 bg-border rounded-full overflow-hidden">
+                                <div className="h-px w-12 overflow-hidden" style={{ background: 'linear-gradient(90deg, transparent, var(--neon-cyan), transparent)' }}>
                                     <div
-                                        className="h-full w-1/2 bg-foreground/20 rounded-full"
+                                        className="h-full w-1/2"
                                         style={{
+                                            background: 'var(--neon-cyan)',
+                                            boxShadow: '0 0 8px var(--neon-cyan)',
                                             animation: 'shimmer 1.5s ease-in-out infinite',
                                         }}
                                     />
@@ -95,41 +102,41 @@ export function StarredChatsDialog({
 
                         {error && (
                             <div className="flex items-center justify-center py-12">
-                                <p className="text-xs text-destructive">
-                                    Failed to load starred chats.
+                                <p className="font-mono text-[11px] text-destructive">
+                                    // failed to load starred chats
                                 </p>
                             </div>
                         )}
 
                         {!isLoading && !error && chats?.length === 0 && (
                             <div className="flex flex-col items-center justify-center py-12 gap-2">
-                                <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
+                                <div className="hk-neon-empty-icon size-10 flex items-center justify-center">
                                     <Star className="size-5 text-muted-foreground" />
                                 </div>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    No starred conversations yet
+                                <p className="font-mono text-[11px] text-muted-foreground mt-1">
+                                    // no starred conversations yet
                                 </p>
                             </div>
                         )}
 
                         {!isLoading && !error && chats && chats.length > 0 && (
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">
-                                {chats.map((chat: any) => (
+                                {chats.map((chat) => (
                                     <button
                                       key={chat.conversation_id || chat.v0_chat_id}
                                         onClick={() => handleChatClick(chat)}
                                         className={cn(
-                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg",
+                                            "hk-neon-list-item flex items-center gap-3 px-3 py-2.5",
                                             "hover:bg-muted/50 transition-colors text-left group"
                                         )}
                                     >
-                                        <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
+                                        <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" style={{ filter: 'drop-shadow(0 0 3px rgb(251 191 36 / 0.4))' }} />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">
+                                            <p className="font-mono text-sm font-medium truncate">
                                                 {chat.title ?? chat.last_message ?? 'Untitled Chat'}
                                             </p>
                                             {chat.created_at && (
-                                                <p className="text-[11px] text-muted-foreground/60 mt-0.5">
+                                                <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">
                                                     {formatDistanceToNow(new Date(chat.created_at), {
                                                         addSuffix: true,
                                                     })}
@@ -137,7 +144,7 @@ export function StarredChatsDialog({
                                             )}
                                         </div>
                                         {chat.demo_url && (
-                                            <ExternalLink className="size-3.5 text-muted-foreground/40" />
+                                            <ExternalLink className="size-3.5 text-muted-foreground/40 group-hover:text-[var(--neon-cyan)] transition-colors" />
                                         )}
                                     </button>
                                 ))}

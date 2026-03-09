@@ -3,19 +3,31 @@ import { NextResponse } from "next/server";
 import { user_chats } from "@/server/db/schema";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
+import { env } from "@/env";
 import { conversations, conversation_messages } from "@/server/db/schema";
 import { nanoid } from "nanoid";
-import { eq} from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { logger } from "@/lib/logger";
+
 const BASE_URL = "https://openrouter.ai/api/v1";
 
 const FALLBACK_CHAIN = [
-  "openai/gpt-oss-20b:free",
-  "openai/gpt-oss-120b:free",
+  "arcee-ai/trinity-large-preview:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "qwen/qwen3-coder:free",
   "mistralai/mistral-small-3.1-24b-instruct:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
   "google/gemma-3-27b-it:free",
   "google/gemma-3-12b-it:free",
-  "qwen/qwen3-coder:free",
+  "openai/gpt-oss-120b:free",
+  "openai/gpt-oss-20b:free",
 ];
+
+/** Models that don't support system role messages */
+const NO_SYSTEM_PROMPT_MODELS = new Set([
+  "google/gemma-3-12b-it:free",
+  "google/gemma-3-27b-it:free",
+]);
 
 const DEFAULT_SYSTEM_PROMPT =
   "You are a concise, helpful AI assistant. Keep answers brief and direct. " +
@@ -98,21 +110,6 @@ type ChatMessage = {
   content: string;
 };
 
-async function tryModel(
-  openai: OpenAI,
-  modelId: string,
-  messages: ChatMessage[],
-) {
-  const stream = await openai.chat.completions.create({
-    model: modelId,
-    messages,
-    max_tokens: 1,
-    temperature: 0,
-    stream: true,
-  });
-
-  return stream;
-}
 type ParsedFile = {
   filename: string;
   language: string;
@@ -160,41 +157,51 @@ const code = extracted ? extracted.trim() : innerContent;
   };
 }
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = env.OPENROUTER_API_KEY;
+  logger.info("POST /api/openrouter/chat - started");
+  logger.debug("API key present:", !!apiKey);
+
   if (!apiKey) {
+    logger.error("OPENROUTER_API_KEY is missing");
     return NextResponse.json(
       { error: "OPENROUTER_API_KEY missing" },
-      { status: 503 }
+      { status: 503 },
     );
   }
 
   try {
     const session = await getSession();
-if (!session?.user?.id) {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-const userId = session.user.id;
+    logger.debug("Session:", session?.user?.id ? `user=${session.user.id}` : "none");
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const userId = session.user.id;
+
     const body = await req.json();
-   const { messages, model, conversationId } = body;
-    const latestUserMessage =
-  messages[messages.length - 1]?.content ?? "";
-
-const enhancedSystemPrompt = buildEnhancedSystemPrompt(
-  DEFAULT_SYSTEM_PROMPT,
-  latestUserMessage
-);
-
-const apiMessages: ChatMessage[] = [
-  { role: "system", content: enhancedSystemPrompt },
-  ...messages,
-];
+    const { messages, model, conversationId } = body;
+    logger.info("Request payload:", { model, conversationId, messageCount: messages?.length });
 
     if (!messages || !Array.isArray(messages)) {
+      logger.error("Invalid messages payload");
       return NextResponse.json(
         { error: "messages array required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
+
+    const latestUserMessage = messages[messages.length - 1]?.content ?? "";
+    logger.debug("Latest user message:", latestUserMessage.slice(0, 100));
+
+    const enhancedSystemPrompt = buildEnhancedSystemPrompt(
+      DEFAULT_SYSTEM_PROMPT,
+      latestUserMessage,
+    );
+
+    const apiMessages: ChatMessage[] = [
+      { role: "system", content: enhancedSystemPrompt },
+      ...messages,
+    ];
 
     const openai = new OpenAI({
       baseURL: BASE_URL,
@@ -202,161 +209,197 @@ const apiMessages: ChatMessage[] = [
     });
 
     const requested = model ?? FALLBACK_CHAIN[0];
-    const chain = [requested, ...FALLBACK_CHAIN.filter(m => m !== requested)];
+    const chain = [requested, ...FALLBACK_CHAIN.filter((m) => m !== requested)];
+    logger.info("Model chain:", chain);
 
+    // Save conversation & user message before streaming
+    let activeConversationId = conversationId ?? nanoid();
+
+    if (!conversationId) {
+      logger.info("Creating new conversation:", activeConversationId);
+      await db.insert(conversations).values({
+        id: activeConversationId,
+        user_id: userId,
+        model_name: requested,
+        title: latestUserMessage.slice(0, 40),
+      });
+    }
+
+    // ensure user_chats entry exists
+    if (activeConversationId) {
+      await db
+        .insert(user_chats)
+        .values({
+          id: nanoid(),
+          v0_chat_id: `or_${activeConversationId}`,
+          user_id: userId,
+          conversation_id: activeConversationId,
+          title: latestUserMessage.slice(0, 50).replace(/\n/g, " "),
+          chat_type: "OPENROUTER",
+          is_starred: false,
+          created_at: new Date(),
+          updated_at: new Date(),
+        })
+        .onConflictDoNothing();
+    }
+
+    logger.info("Conversation ready:", activeConversationId);
+
+    // Save USER message
+    await db.insert(conversation_messages).values({
+      id: nanoid(),
+      conversation_id: activeConversationId,
+      role: "USER",
+      content: latestUserMessage,
+    });
+
+    // ---------------------------
+    //  Try each model in chain until one streams successfully
+    // ---------------------------
     let selectedModel: string | null = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let stream: any = null;
 
-    // ---------------------------
-    //  PHASE 1: Select Working Model
-    // ---------------------------
     for (const modelId of chain) {
+      logger.info(`Trying model: ${modelId}`);
       try {
-       await openai.chat.completions.create({
-  model: modelId,
-  messages: apiMessages,
-  max_tokens: 1,
-  temperature: 0,
-});
+        // For models that don't support system prompts, merge into first user message
+        let messagesForModel = apiMessages;
+        if (NO_SYSTEM_PROMPT_MODELS.has(modelId)) {
+          const systemMsg = apiMessages.find((m) => m.role === "system");
+          messagesForModel = apiMessages
+            .filter((m) => m.role !== "system")
+            .map((m, i) =>
+              i === 0 && systemMsg
+                ? { ...m, content: `${systemMsg.content}\n\n${m.content}` }
+                : m,
+            );
+        }
 
+        stream = await openai.chat.completions.create({
+          model: modelId,
+          messages: messagesForModel,
+          max_tokens: 2048,
+          temperature: 0.7,
+          stream: true,
+        });
         selectedModel = modelId;
+        logger.info(`Stream started with model: ${modelId}`);
         break;
       } catch (err: any) {
-        if (err?.message?.includes("429")) continue;
+        const status = err?.status ?? err?.statusCode;
+        const msg = err?.message ?? "";
+        logger.warn(`Model ${modelId} failed`, {
+          status,
+          message: msg.slice(0, 200),
+          errorBody: err?.error,
+          errorCode: err?.code,
+        });
+        continue;
       }
     }
 
-    if (!selectedModel) {
+    if (!selectedModel || !stream) {
+      logger.error("All models in fallback chain failed");
       return NextResponse.json(
-        { error: "All models rate limited" },
-        { status: 503 }
+        { error: "All models are currently unavailable. Please try again later." },
+        { status: 503 },
       );
     }
-    console.log(" Creating conversation for user:", userId);
 
-let activeConversationId = conversationId ?? nanoid();
-
-// create conversation if new
-if (!conversationId) {
-  await db.insert(conversations).values({
-    id: activeConversationId,
-    user_id: userId,
-    model_name: selectedModel,
-    title: latestUserMessage.slice(0, 40),
-  });
-}
-
-// ⭐ ensure user_chats entry exists
-if (activeConversationId) {
-  await db.insert(user_chats).values({
-  id: nanoid(),
-  user_id: userId,
-  conversation_id: activeConversationId,
-  title: latestUserMessage.slice(0, 50).replace(/\n/g, " "),
-  chat_type: "OPENROUTER",
-  is_starred: false,
-  created_at: new Date(),
-  updated_at: new Date(),
-}).onConflictDoNothing();
-}
-
-
-console.log(" Conversation inserted:", activeConversationId);
-
-// Save USER message immediately
-
-
-await db.insert(conversation_messages).values({
-  id: nanoid(),
-  conversation_id: activeConversationId,
-  role: "USER",
-  content: latestUserMessage,
-});
-
-// If conversation was newly created, update title using first user message
-if (!conversationId) {
-  await db
-    .update(conversations)
-    .set({
-      model_name: selectedModel, // keep model
-    })
-    .where(eq(conversations.id, activeConversationId));
-}
-    // ---------------------------
-    //  PHASE 2: Real Streaming
-    // ---------------------------
-
-    const stream = await openai.chat.completions.create({
-  model: selectedModel,
-  messages: apiMessages,
-      max_tokens: 2048,
-      temperature: 0.7,
-      stream: true,
-    });
+    // Update conversation with the model that actually worked
+    if (!conversationId) {
+      await db
+        .update(conversations)
+        .set({ model_name: selectedModel })
+        .where(eq(conversations.id, activeConversationId));
+    }
 
     let fullText = "";
 
+    const isFallback = selectedModel !== requested;
     const readable = new ReadableStream({
       async start(controller) {
         try {
+          // Send meta event so UI knows which model is responding
+          controller.enqueue(
+            `data: ${JSON.stringify({
+              type: "meta",
+              model: selectedModel,
+              fallback: isFallback,
+            })}\n\n`,
+          );
+
           for await (const chunk of stream) {
-  const token = chunk.choices?.[0]?.delta?.content;
-  if (!token) continue;
+            const token = chunk.choices?.[0]?.delta?.content;
+            if (!token) continue;
 
-  await new Promise(r => setTimeout(r, 15)); // 👈 10–20ms delay
+            await new Promise((r) => setTimeout(r, 15));
+            fullText += token;
 
-  fullText += token;
-
- controller.enqueue(
-  `data: ${JSON.stringify({
-    type: "delta",
-    content: token,
-  })}\n\n`
-);
-}
+            controller.enqueue(
+              `data: ${JSON.stringify({
+                type: "delta",
+                content: token,
+              })}\n\n`,
+            );
+          }
 
           // -----------------------
           // AFTER STREAM COMPLETE
           // -----------------------
-
           const { cleanedText, files } = parseAIResponse(fullText);
+          logger.info("Stream complete", {
+            model: selectedModel,
+            fullTextLength: fullText.length,
+            filesCount: files.length,
+          });
 
-console.log(" Saving assistant message...");
+          await db.insert(conversation_messages).values({
+            id: nanoid(),
+            conversation_id: activeConversationId,
+            role: "ASSISTANT",
+            content: fullText,
+          });
 
-await db.insert(conversation_messages).values({
-  id: nanoid(),
- conversation_id: activeConversationId,
-  role: "ASSISTANT",
-  content: fullText,
-});
           controller.enqueue(
-  `data: ${JSON.stringify({
-    type: "done",
-    cleanedText,
-    files,
-    usedModel: selectedModel,
-    conversationId: activeConversationId,
-  })}\n\n`
-);
+            `data: ${JSON.stringify({
+              type: "done",
+              cleanedText,
+              files,
+              usedModel: selectedModel,
+              conversationId: activeConversationId,
+            })}\n\n`,
+          );
 
           controller.close();
-        } catch (err) {
+        } catch (err: any) {
+          logger.error("Stream error:", {
+            message: err?.message,
+            status: err?.status,
+            code: err?.code,
+          });
           controller.error(err);
         }
       },
     });
 
-  return new Response(readable, {
-  headers: {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  },
-});
-
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (err: any) {
+    logger.error("Unhandled error in POST /api/openrouter/chat:", {
+      message: err?.message,
+      status: err?.status,
+      stack: err?.stack?.slice(0, 300),
+    });
     return NextResponse.json(
       { error: err?.message || "Unexpected error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

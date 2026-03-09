@@ -31,6 +31,7 @@ import {
   type LocalizedPlan,
   type LocalizedCreditPack,
   CREDIT_COSTS,
+  getSubscriptionPlanById,
 } from "@/config/credits.config";
 import { useLocalizedPricing } from "@/hooks/use-localized-pricing";
 import { type SupportedCurrency } from "@/config/currency.config";
@@ -48,6 +49,7 @@ interface SubscriptionModalProps {
   onOpenChange?: (open: boolean) => void;
   hasActiveSubscription?: boolean;
   currentCredits?: number;
+  currentPlanId?: string | null;
 }
 
 export function SubscriptionModal({
@@ -56,6 +58,7 @@ export function SubscriptionModal({
   onOpenChange,
   hasActiveSubscription = false,
   currentCredits = 0,
+  currentPlanId = null,
 }: SubscriptionModalProps) {
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
@@ -221,156 +224,225 @@ export function SubscriptionModal({
     }
   };
 
+  const isLowCredits = currentCredits > 0 && currentCredits <= 50;
+  const isEmptyCredits = currentCredits === 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[640px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="px-6 pt-6 pb-4">
-          <DialogTitle className="text-lg font-semibold tracking-tight">
-            Subscription & Credits
-          </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
-            Choose a plan or buy additional credits to continue building.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="hk-neon-dialog sm:max-w-[680px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto rounded-none" showCloseButton={false}>
+        {/* Header */}
+        <div className="hk-neon-dialog-header relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-background px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
+          <DialogHeader>
+            <DialogTitle className="hk-neon-dialog-title text-lg font-bold tracking-tight sm:text-xl">
+              Credits & Plans
+            </DialogTitle>
+            <DialogDescription className="font-mono text-[11px] text-muted-foreground">
+              // manage your subscription and credits
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* Balance bar */}
-        <div className="mx-6 rounded-xl border border-border/50 p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[11px] text-muted-foreground">Current Balance</p>
-            <p className="text-2xl font-bold tabular-nums mt-0.5">{currentCredits}</p>
-            <p className="text-[10px] text-muted-foreground/60 mt-0.5">credits available</p>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-1.5">
-              <Globe className="size-3 text-muted-foreground/50" />
-              <Select value={currency} onValueChange={handleCurrencyChange}>
-                <SelectTrigger className="w-[110px] h-7 text-xs rounded-lg border-border/50">
-                  <SelectValue placeholder="Currency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCurrencies.map((curr) => (
-                    <SelectItem key={curr.code} value={curr.code} className="text-xs">
-                      {curr.symbol} {curr.code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Balance card */}
+          <div className={cn(
+            "hk-neon-card mt-4 flex flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between",
+            isEmptyCredits
+              ? "border-red-500/20 bg-red-500/5"
+              : isLowCredits
+                ? "border-amber-500/20 bg-amber-500/5"
+                : "",
+          )}>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "hk-neon-empty-icon flex size-10 shrink-0 items-center justify-center sm:size-12",
+                isEmptyCredits
+                  ? "bg-red-500/10"
+                  : isLowCredits
+                    ? "bg-amber-500/10"
+                    : "bg-primary/10",
+              )}>
+                <Zap className={cn(
+                  "size-5 sm:size-6",
+                  isEmptyCredits ? "text-red-500" : isLowCredits ? "text-amber-500" : "text-primary",
+                )} />
+              </div>
+              <div>
+                <p className="hk-neon-label">Balance</p>
+                <div className="flex items-baseline gap-1.5">
+                  <p className="hk-neon-stat text-2xl font-bold tabular-nums sm:text-3xl">{currentCredits}</p>
+                  <p className="font-mono text-[10px] text-muted-foreground">credits</p>
+                </div>
+                {isEmptyCredits && (
+                  <p className="font-mono text-[10px] font-medium text-red-500 dark:text-red-400">// no credits remaining</p>
+                )}
+                {isLowCredits && !isEmptyCredits && (
+                  <p className="font-mono text-[10px] font-medium text-amber-500 dark:text-amber-400">// running low</p>
+                )}
+              </div>
             </div>
-            <div className="text-right text-[11px] text-muted-foreground/60">
-              <p>New chat: {CREDIT_COSTS.NEW_PROMPT} cr</p>
-              <p>Follow-up: {CREDIT_COSTS.FOLLOW_UP_PROMPT} cr</p>
+            <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-2">
+              <div className="flex items-center gap-1.5">
+                <Globe className="size-3 text-muted-foreground/50" />
+                <Select value={currency} onValueChange={handleCurrencyChange}>
+                  <SelectTrigger className="hk-neon-select w-[100px] h-7 text-xs sm:w-[110px]">
+                    <SelectValue placeholder="Currency" />
+                  </SelectTrigger>
+                  <SelectContent className="hk-neon-dropdown">
+                    {availableCurrencies.map((curr) => (
+                      <SelectItem key={curr.code} value={curr.code} className="hk-neon-dropdown-item font-mono text-xs">
+                        {curr.symbol} {curr.code}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-3 font-mono text-[10px] text-muted-foreground/60 sm:flex-col sm:gap-0 sm:text-right">
+                <p>new_chat: <span className="hk-neon-stat font-medium">{CREDIT_COSTS.NEW_PROMPT}</span> cr</p>
+                <p>follow_up: <span className="hk-neon-stat font-medium">{CREDIT_COSTS.FOLLOW_UP_PROMPT}</span> cr</p>
+              </div>
             </div>
           </div>
         </div>
 
         <Tabs
-          defaultValue={hasActiveSubscription ? "credits" : "subscription"}
-          className="w-full mt-4"
+          defaultValue={hasActiveSubscription && currentPlanId !== "free" ? "credits" : "subscription"}
+          className="w-full"
         >
-          <div className="border-b border-border/40 px-6">
-            <TabsList className="h-9 w-full justify-start bg-transparent p-0 gap-4">
+          <div className="hk-neon-divider" />
+          <div className="px-5 sm:px-6">
+            <TabsList className="h-10 w-full justify-start bg-transparent p-0 gap-1">
               <TabsTrigger
                 value="subscription"
-                className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="hk-neon-tab h-10 rounded-none border-b-2 border-transparent px-3 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 Plans
               </TabsTrigger>
               <TabsTrigger
                 value="credits"
-                disabled={!hasActiveSubscription}
-                className="h-9 rounded-none border-b-2 border-transparent px-0 pb-2.5 pt-2 text-xs font-medium data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                disabled={!hasActiveSubscription || currentPlanId === "free"}
+                className="hk-neon-tab h-10 rounded-none border-b-2 border-transparent px-3 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
               >
                 Buy Credits
+                {(!hasActiveSubscription || currentPlanId === "free") && (
+                  <span className="hk-neon-status-active ml-1.5 px-1 py-0.5">PRO</span>
+                )}
               </TabsTrigger>
             </TabsList>
           </div>
+          <div className="hk-neon-divider" />
 
-          <div className="px-6 py-5 min-h-[280px]">
+          <div className="px-5 py-5 min-h-[280px] sm:px-6">
             <TabsContent value="subscription" className="mt-0">
               {isPricingLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="h-px w-8 bg-border rounded-full overflow-hidden">
-                    <div
-                      className="h-full w-1/2 bg-foreground/20 rounded-full"
-                      style={{ animation: 'shimmer 1.5s ease-in-out infinite' }}
-                    />
-                  </div>
-                  <style>{`
-                    @keyframes shimmer {
-                      0%, 100% { transform: translateX(-100%); }
-                      50% { transform: translateX(200%); }
-                    }
-                  `}</style>
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
               ) : (
                 <div className="space-y-3">
                   {subscriptionPlans.map((plan) => {
                     const isPopular = "popular" in plan && (plan as { popular?: boolean }).popular;
+                    const isCurrentPlan = currentPlanId === plan.id;
+                    const isFreeTier = currentPlanId === "free";
+                    const currentPlanConfig = currentPlanId ? getSubscriptionPlanById(currentPlanId) : null;
+                    const currentPlanPrice = currentPlanConfig?.price ?? 0;
+                    const isHigherPlan = plan.basePrice > currentPlanPrice;
+                    const isLowerPlan = hasActiveSubscription && !isFreeTier && !isCurrentPlan && !isHigherPlan;
+
+                    let buttonLabel = "Subscribe";
+                    let buttonDisabled = isLoading || verifying;
+                    let tooltipText: string | null = null;
+
+                    if (verifying) {
+                      buttonLabel = "Verifying...";
+                    } else if (isCurrentPlan) {
+                      buttonLabel = "Current";
+                      buttonDisabled = true;
+                      tooltipText = "This is your current active plan.";
+                    } else if (isLowerPlan) {
+                      buttonLabel = "Downgrade";
+                      buttonDisabled = true;
+                      tooltipText = "Your current plan already includes more credits.";
+                    } else if (isFreeTier || (hasActiveSubscription && isHigherPlan)) {
+                      buttonLabel = "Upgrade";
+                    }
+
                     return (
                       <div
                         key={plan.id}
                         className={cn(
-                          "rounded-xl border p-4 transition-colors",
-                          isPopular
-                            ? "border-foreground/20 bg-muted/30"
-                            : "border-border/50"
+                          "hk-neon-card group relative border p-4 transition-all",
+                          isCurrentPlan
+                            ? "border-primary/30 bg-primary/[0.03]"
+                            : isPopular
+                              ? "border-foreground/15 bg-muted/20"
+                              : ""
                         )}
                       >
-                        <div className="flex items-start justify-between gap-4">
+                        <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h3 className="text-sm font-medium">{plan.name}</h3>
-                              {isPopular && (
-                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-foreground text-background">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="font-mono text-sm font-semibold">{plan.name}</h3>
+                              {isCurrentPlan && (
+                                <span className="hk-neon-status-active inline-flex items-center gap-1 px-2 py-0.5">
+                                  <Check className="size-2.5" />
+                                  Active
+                                </span>
+                              )}
+                              {isPopular && !isCurrentPlan && (
+                                <span className="hk-neon-status-active px-2 py-0.5">
                                   Popular
                                 </span>
                               )}
                             </div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{plan.description}</p>
-                            <div className="flex items-baseline gap-3 mt-2">
-                              <span className="text-lg font-bold tabular-nums">{plan.formattedPrice}</span>
-                              <span className="text-[11px] text-muted-foreground">/month</span>
+                            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground leading-relaxed">{plan.description}</p>
+                            <div className="mt-2 flex items-baseline gap-1">
+                              <span className="hk-neon-stat text-xl font-bold tabular-nums">{plan.formattedPrice}</span>
+                              <span className="font-mono text-[10px] text-muted-foreground">/month</span>
                             </div>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
-                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                <Check className="size-3 text-emerald-500" />
+                            <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">
+                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                                  <Check className="size-2.5 text-emerald-500" />
+                                </span>
                                 {plan.credits} credits/mo
                               </span>
-                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                <Check className="size-3 text-emerald-500" />
-                                {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)} new prompts
+                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                                  <Check className="size-2.5 text-emerald-500" />
+                                </span>
+                                {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)} new chats
                               </span>
-                              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                                <Check className="size-3 text-emerald-500" />
-                                Buy additional credits
+                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
+                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                                  <Check className="size-2.5 text-emerald-500" />
+                                </span>
+                                buy extra credits
                               </span>
                             </div>
                           </div>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span>
+                              <span className="shrink-0">
                                 <Button
                                   size="sm"
-                                  variant={isPopular ? "default" : "outline"}
-                                  className="h-8 rounded-lg px-4 text-xs shrink-0"
+                                  variant={isCurrentPlan ? "secondary" : isPopular ? "default" : "outline"}
+                                  className={cn(
+                                    isPopular ? "hk-neon-btn-primary" : "hk-neon-btn",
+                                    "h-8 w-full px-5 sm:w-auto",
+                                    isCurrentPlan && "pointer-events-none opacity-60",
+                                  )}
                                   onClick={() => handleSubscribe(plan)}
-                                  disabled={isLoading || hasActiveSubscription || verifying}
+                                  disabled={buttonDisabled}
                                 >
-                                  {(loadingPlanId === plan.id || verifying) && (
+                                  {(loadingPlanId === plan.id || (verifying && loadingPlanId === plan.id)) && (
                                     <Loader2 className="size-3 animate-spin mr-1.5" />
                                   )}
-                                  {verifying
-                                    ? "Verifying..."
-                                    : hasActiveSubscription
-                                      ? "Subscribed"
-                                      : "Subscribe"}
+                                  {buttonLabel}
                                 </Button>
                               </span>
                             </TooltipTrigger>
-                            {hasActiveSubscription && (
-                              <TooltipContent className="text-xs">
-                                You already have an active subscription.
+                            {tooltipText && (
+                              <TooltipContent className="font-mono text-xs max-w-[200px]">
+                                {tooltipText}
                               </TooltipContent>
                             )}
                           </Tooltip>
@@ -378,12 +450,6 @@ export function SubscriptionModal({
                       </div>
                     );
                   })}
-
-                  {hasActiveSubscription && (
-                    <p className="text-[11px] text-muted-foreground/60 text-center pt-2">
-                      You have an active subscription. Switch to Buy Credits for more.
-                    </p>
-                  )}
                 </div>
               )}
             </TabsContent>
@@ -391,52 +457,57 @@ export function SubscriptionModal({
             <TabsContent value="credits" className="mt-0">
               {isPricingLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="h-px w-8 bg-border rounded-full overflow-hidden">
-                    <div
-                      className="h-full w-1/2 bg-foreground/20 rounded-full"
-                      style={{ animation: 'shimmer 1.5s ease-in-out infinite' }}
-                    />
-                  </div>
+                  <Loader2 className="size-5 animate-spin text-muted-foreground" />
                 </div>
-              ) : !hasActiveSubscription ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-2">
-                  <div className="size-10 rounded-full bg-muted/50 flex items-center justify-center">
-                    <Zap className="size-5 text-muted-foreground" />
+              ) : !hasActiveSubscription || currentPlanId === "free" ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="hk-neon-empty-icon size-12 flex items-center justify-center bg-muted/50">
+                    <Zap className="size-6 text-muted-foreground" />
                   </div>
-                  <h3 className="text-sm font-medium">Subscription Required</h3>
-                  <p className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed">
-                    You need an active subscription to purchase additional credits.
+                  <h3 className="font-mono text-sm font-semibold">Paid Plan Required</h3>
+                  <p className="font-mono text-[10px] text-muted-foreground text-center max-w-xs leading-relaxed">
+                    {currentPlanId === "free"
+                      ? "// upgrade to a paid plan to purchase additional credits"
+                      : "// you need an active subscription to purchase additional credits"}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-[11px] text-muted-foreground/60 mb-3">
-                    Additional credits never expire and persist after subscription ends.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-4">
+                  <div className="hk-neon-card flex items-center gap-2 border px-3 py-2">
+                    <div className="size-1.5 bg-emerald-500 shadow-[0_0_4px] shadow-emerald-500" />
+                    <p className="font-mono text-[10px] text-muted-foreground">
+                      additional credits <span className="hk-neon-stat font-medium">never expire</span> and persist after subscription ends
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
                     {creditPacks.map((pack) => (
                       <div
                         key={pack.id}
-                        className="rounded-xl border border-border/50 p-3.5 flex flex-col"
+                        className="hk-neon-card group relative flex flex-col border bg-card p-4 transition-all"
                       >
-                        <p className="text-xs font-medium">{pack.name}</p>
-                        <div className="flex items-baseline gap-1 mt-1.5">
-                          <span className="text-lg font-bold tabular-nums">{pack.formattedPrice}</span>
+                        <div className="flex items-start justify-between">
+                          <p className="font-mono text-sm font-semibold">{pack.name}</p>
+                          <span className="hk-neon-status-active px-1.5 py-0.5">
+                            {pack.credits} cr
+                          </span>
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {Math.floor(pack.credits / CREDIT_COSTS.NEW_PROMPT)} new prompts
+                        <div className="mt-2 flex items-baseline gap-1">
+                          <span className="hk-neon-stat text-xl font-bold tabular-nums">{pack.formattedPrice}</span>
+                        </div>
+                        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                          ~{Math.floor(pack.credits / CREDIT_COSTS.NEW_PROMPT)} new chats
                         </p>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-7 rounded-lg text-xs mt-3 w-full"
+                          className="hk-neon-btn mt-3 h-8 w-full"
                           onClick={() => handleBuyCredits(pack)}
                           disabled={isLoading}
                         >
                           {loadingPlanId === pack.id && (
                             <Loader2 className="size-3 animate-spin mr-1.5" />
                           )}
-                          Buy
+                          Purchase
                         </Button>
                       </div>
                     ))}

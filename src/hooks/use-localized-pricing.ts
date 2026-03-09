@@ -27,9 +27,13 @@ export function useLocalizedPricing() {
 
   // Detect user's currency on mount
   useEffect(() => {
-    void getUserCurrency().then((detectedCurrency) => {
-      setCurrency(detectedCurrency.code);
-    });
+    void getUserCurrency()
+      .then((detectedCurrency) => {
+        setCurrency(detectedCurrency.code);
+      })
+      .catch(() => {
+        // Fall back to default currency (already set from sync cache)
+      });
   }, []);
 
   // Use the Eden-based query hook

@@ -15,7 +15,6 @@ import {
   ImageIcon,
   Loader2Icon,
   MicIcon,
-  MicOffIcon,
   SquareIcon,
   XIcon,
 } from 'lucide-react'
@@ -516,7 +515,7 @@ export const PromptInputMicButton = ({
       if (recognitionRef.current) {
         try {
           recognitionRef.current.stop()
-        } catch (_e) {
+        } catch {
           // Ignore errors when cleaning up
         }
       }
@@ -538,7 +537,7 @@ export const PromptInputMicButton = ({
       try {
         recognitionRef.current.stop()
         setIsListening(false)
-      } catch (_error) {
+      } catch {
         // Ignore errors when stopping
       }
     } else {

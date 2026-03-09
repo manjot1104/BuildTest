@@ -2,38 +2,43 @@ import { useState, useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import type { HighlighterCore } from 'shiki'
 
-let highlighterPromise: Promise<HighlighterCore> | null = null
+let highlighterPromise: Promise<HighlighterCore | null> | null = null
 
 function getHighlighter() {
   if (!highlighterPromise) {
-    highlighterPromise = import('shiki').then((shiki) =>
-      shiki.createHighlighter({
-        themes: ['github-dark', 'github-light'],
-        langs: [
-          'typescript',
-          'tsx',
-          'javascript',
-          'jsx',
-          'json',
-          'css',
-          'html',
-          'markdown',
-          'mdx',
-          'yaml',
-          'toml',
-          'xml',
-          'bash',
-          'python',
-          'rust',
-          'go',
-          'sql',
-          'graphql',
-          'dockerfile',
-          'latex',
-          'tex',
-        ],
-      }),
-    )
+    highlighterPromise = import('shiki')
+      .then((shiki) =>
+        shiki.createHighlighter({
+          themes: ['github-dark', 'github-light'],
+          langs: [
+            'typescript',
+            'tsx',
+            'javascript',
+            'jsx',
+            'json',
+            'css',
+            'html',
+            'markdown',
+            'mdx',
+            'yaml',
+            'toml',
+            'xml',
+            'bash',
+            'python',
+            'rust',
+            'go',
+            'sql',
+            'graphql',
+            'dockerfile',
+            'latex',
+          ],
+        }),
+      )
+      .catch(() => {
+        // Reset so it can retry on next call
+        highlighterPromise = null
+        return null
+      })
   }
   return highlighterPromise
 }
@@ -47,12 +52,18 @@ export function useShikiHighlighter() {
 
   useEffect(() => {
     let cancelled = false
-    void getHighlighter().then((hl) => {
-      if (!cancelled) {
-        setHighlighter(hl)
-        setIsLoading(false)
-      }
-    })
+    void getHighlighter()
+      .then((hl) => {
+        if (!cancelled) {
+          if (hl) setHighlighter(hl)
+          setIsLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      })
     return () => {
       cancelled = true
     }
@@ -73,13 +84,24 @@ export function useHighlightCode(code: string, language: string) {
   const theme = resolvedTheme === 'dark' ? 'github-dark' : 'github-light'
 
   useEffect(() => {
-    if (!highlighter || !code) {
+    if (!code) {
       setHtml('')
       return
     }
 
+    // If highlighter failed to load, render as plain text
+    if (!highlighter) {
+      if (!highlighterLoading) {
+        const escaped = code
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+        setHtml(`<pre style="margin:0;padding:1rem;overflow-x:auto;"><code>${escaped}</code></pre>`)
+      }
+      return
+    }
+
     try {
-      // Check if the language is loaded, fall back to 'text' if not
       const loadedLangs = highlighter.getLoadedLanguages()
       const lang = loadedLangs.includes(language) ? language : 'text'
 
@@ -89,14 +111,13 @@ export function useHighlightCode(code: string, language: string) {
       })
       setHtml(result)
     } catch {
-      // Fallback: render as plain text
       const escaped = code
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-      setHtml(`<pre><code>${escaped}</code></pre>`)
+      setHtml(`<pre style="margin:0;padding:1rem;overflow-x:auto;"><code>${escaped}</code></pre>`)
     }
-  }, [highlighter, code, language, theme])
+  }, [highlighter, highlighterLoading, code, language, theme])
 
   return { html, isLoading: highlighterLoading }
 }

@@ -48,7 +48,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
         <div className="hidden h-5 w-px bg-border sm:block" />
 
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold tracking-tight">Persona Builder</span>
+          <span className="text-sm font-semibold tracking-tight">Buildify Studio</span>
           {state.isDirty && (
             <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
               <span className="size-1.5 rounded-full bg-amber-500" />

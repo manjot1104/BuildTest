@@ -2,6 +2,7 @@
  * Email Configuration
  * Centralized configuration for all email-related values and templates
  */
+import { env } from "@/env";
 
 export const EMAIL_CONFIG = {
   fromEmail: "Buildify <noreply@buildify.app>",
@@ -40,9 +41,9 @@ function emailLayout(content: string): string {
         <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:480px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="padding:32px 32px 0;text-align:center;">
-              <div style="display:inline-block;background-color:#3B7EFF;border-radius:8px;padding:8px 10px;margin-bottom:16px;">
-                <span style="color:#ffffff;font-size:16px;font-weight:bold;letter-spacing:-0.5px;">B</span>
-              </div>
+              <a href="${env.NEXT_PUBLIC_APP_URL}" style="text-decoration:none;">
+                <img src="${env.NEXT_PUBLIC_APP_URL}/favicon.png" alt="${EMAIL_CONFIG.companyName}" width="40" height="40" style="display:block;margin:0 auto 12px;border:0;outline:none;" />
+              </a>
               <h2 style="margin:0 0 8px;color:#18181b;font-size:18px;font-weight:600;">${EMAIL_CONFIG.companyName}</h2>
             </td>
           </tr>
@@ -53,7 +54,7 @@ function emailLayout(content: string): string {
           </tr>
           <tr>
             <td style="padding:16px 32px;border-top:1px solid #e4e4e7;text-align:center;">
-              <p style="margin:0;color:#a1a1aa;font-size:12px;">&copy; ${new Date().getFullYear()} ${EMAIL_CONFIG.companyName}. All rights reserved.</p>
+              <p style="margin:0;color:#a1a1aa;font-size:12px;">&copy; ${new Date().getFullYear()} <a href="${env.NEXT_PUBLIC_APP_URL}" style="color:#a1a1aa;text-decoration:none;">${EMAIL_CONFIG.companyName}</a>. All rights reserved.</p>
             </td>
           </tr>
         </table>
@@ -181,11 +182,11 @@ export function getWelcomeEmailTemplate({
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
       <tr>
         <td align="center" style="padding:0 0 24px;">
-          <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/chat" style="display:inline-block;background-color:#3B7EFF;color:#ffffff;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Start Building</a>
+          <a href="${env.NEXT_PUBLIC_APP_URL}/chat" style="display:inline-block;background-color:#3B7EFF;color:#ffffff;font-size:14px;font-weight:500;text-decoration:none;padding:10px 24px;border-radius:6px;">Start Building</a>
         </td>
       </tr>
     </table>
-    <p style="margin:0;color:#a1a1aa;font-size:12px;">Need help? Check out our <a href="${process.env.NEXT_PUBLIC_APP_URL ?? "https://buildify.app"}/docs" style="color:#3b82f6;text-decoration:none;">documentation</a>.</p>`;
+    <p style="margin:0;color:#a1a1aa;font-size:12px;">Need help? Check out our <a href="${env.NEXT_PUBLIC_APP_URL}/docs" style="color:#3b82f6;text-decoration:none;">documentation</a>.</p>`;
 
   return {
     subject: `Welcome to ${EMAIL_CONFIG.companyName}!`,
