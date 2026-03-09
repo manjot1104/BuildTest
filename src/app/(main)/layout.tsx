@@ -7,6 +7,7 @@ import { db } from "@/server/db";
 import { user } from "@/server/db/schema";
 import MainLayoutClient from './main-layout-client';
 
+export const dynamic = 'force-dynamic';
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const requestHeaders = await headers();
@@ -24,7 +25,10 @@ export default async function Layout({ children }: { children: React.ReactNode }
       },
     });
 
-    isAdmin = dbUser?.roles?.includes("admin") ?? false;
+    const roles = dbUser?.roles;
+    if (Array.isArray(roles)) {
+      isAdmin = roles.some((r) => String(r) === "admin");
+    }
   }
 
   return (
