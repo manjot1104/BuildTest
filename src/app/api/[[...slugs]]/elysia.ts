@@ -122,7 +122,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: 'Not found' }
     }
     set.status = 500
-    return { error: error?.message ?? 'Internal server error' }
+    return { error: (error as Error)?.message ?? 'Internal server error' }
   })
   // Chat endpoint - POST /api/chat
   // Note: Streaming requests are handled inline (use fetch directly)
