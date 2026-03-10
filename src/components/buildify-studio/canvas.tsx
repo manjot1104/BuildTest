@@ -302,12 +302,12 @@ export function Canvas({ editor }: CanvasProps) {
 
   const canvasBgStyle = getCanvasBg(state.canvasBackground)
 
-  return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-[#141416]">
+ return (
+  <div className="relative flex flex-1 flex-col overflow-auto bg-[#141416]">
       {/* Canvas viewport */}
       <div
         ref={viewportRef}
-        className="relative flex-1 overflow-hidden"
+       className="relative flex-1 overflow-auto"
         onMouseDown={handleCanvasMouseDown}
         style={{ cursor: 'default' }}
       >

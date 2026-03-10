@@ -8,6 +8,7 @@ import {
   Play,
 } from 'lucide-react'
 import { type CanvasElement, type EnterAnimation, type HoverAnimation, type SocialPlatform } from './types'
+import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
 
 const HANDLE_SIZE = 8
 
@@ -130,32 +131,36 @@ const headingSizes = {
   6: 18,
 }
 
-const style: React.CSSProperties = {
-  width: '100%',
-  minHeight: '100%',
-  color: styles.color ?? '#1a1a1a',
-overflow: 'hidden',
- fontSize: styles.fontSize ?? 48,
+  const style: React.CSSProperties = {
+    width: '100%',
+    minHeight: '100%',
+    color: styles.color ?? '#1a1a1a',
+    overflow: 'hidden',
+    fontSize: styles.fontSize ?? 48,
+    fontWeight: styles.fontWeight ?? '700',
+    fontFamily: styles.fontFamily ?? 'inherit',
+    textAlign: styles.textAlign ?? 'left',
+    letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+    lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
+    padding: styles.padding ?? 4,
+    background: styles.backgroundColor,
+    borderRadius: styles.borderRadius ?? 0,
+    textDecoration: styles.textDecoration,
+    wordBreak: 'break-word',
+    whiteSpace: 'pre-wrap',
+    margin: 0,
+  }
 
-  fontWeight: styles.fontWeight ?? '700',
-  fontFamily: styles.fontFamily ?? 'inherit',
-  textAlign: styles.textAlign ?? 'left',
-  letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-  lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
-  padding: styles.padding ?? 4,
-  background: styles.backgroundColor,
-  borderRadius: styles.borderRadius ?? 0,
-  textDecoration: styles.textDecoration,
-  wordBreak: 'break-word',
-  whiteSpace: 'pre-wrap',
-  margin: 0,
-}
+  const slugId = content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+
   return (
     <Tag
+      id={slugId}
+      data-heading={content.toLowerCase()}
       contentEditable={!isPreview && isSelected}
       suppressContentEditableWarning
-      onBlur={(e) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
-      onMouseDown={isSelected && !isPreview ? (e) => e.stopPropagation() : undefined}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
+      onMouseDown={isSelected && !isPreview ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
       style={style}
     >
       {content}
@@ -259,6 +264,8 @@ function SectionRenderer({ element }: { element: CanvasElement }) {
   const bgStyle = getBackgroundStyle(styles)
   return (
     <div
+   
+
       style={{
         width: '100%',
         height: '100%',
@@ -497,13 +504,18 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
         {navItems.map((item, i) => (
           <a
             key={i}
-            href={isPreview ? item.href : undefined}
-            onClick={isPreview ? (e) => {
-              if (item.href.startsWith('#')) {
-                e.preventDefault()
-                document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: 'smooth' })
+            href={item.href || '#'}
+            onClick={(e) => {
+              if (item.href && item.href !== '#') return
+              e.preventDefault()
+              e.stopPropagation()
+              if (!isPreview) return
+
+              const targetHeading = findSectionHeading(item.label)
+              if (targetHeading) {
+                smoothScrollToElement(targetHeading)
               }
-            } : undefined}
+            }}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -857,10 +869,17 @@ export function ElementRenderer({
   return (
     <div
       ref={elementRef}
-      id={element.anchorId || undefined}
+data-section={
+  element.type === 'section' || element.type === 'container'
+    ? element.id
+    : undefined
+}
       className={[enterClass, hoverClass].filter(Boolean).join(' ')}
       style={containerStyle}
-      onMouseDown={startDrag}
+     onMouseDown={(e) => {
+  if (element.type === 'navbar') return
+  startDrag(e)
+}}
       onClick={(e) => {
         e.stopPropagation()
         if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)
