@@ -13,9 +13,13 @@ import {
 } from "@/server/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { crawlSite, executeTest } from "@/server/services/tinyfish.service";
+import {
+  crawlSite,
+  executeTest,
+  type PagePerformanceMetrics,
+  type PipelineSSEEvent,
+} from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
-import type { PagePerformanceMetrics, PipelineSSEEvent } from "@/server/services/tinyfish.service";
 import {
   generateTestCases,
   generateAISummary,
@@ -79,32 +83,40 @@ function buildTestGoal(tc: TestCase): string {
 }
 
 // ---------------------------------------------------------------------------
-// FIX 2: In-memory set to track which test runs have an active pipeline
-// This prevents the SSE handler from starting a SECOND pipeline when the
-// first one was already started by startTestRunHandler.
+// In-memory pipeline state
 //
-// Root cause of the double pipeline:
-//   1. POST /api/test/run → calls runPipeline() in background (void)
-//   2. Frontend immediately opens GET /api/test/stream/:id
-//   3. streamTestRunHandler sees status = "crawling" (not complete/failed)
-//      so it calls runPipeline() AGAIN — two full pipelines running in parallel
+// Three module-level collections that coordinate between HTTP handlers and the
+// background pipeline. All are keyed by testRunId (nanoid string).
 //
-// Fix: track active pipeline IDs in memory. SSE handler only starts pipeline
-// if one isn't already running.
+// activePipelines     — Set of runs with a pipeline currently executing.
+//                       Prevents the SSE handler from spawning a second pipeline
+//                       when startTestRunHandler already started one (double-pipeline bug).
+//
+// cancelledPipelines  — Set of runs the user has requested to cancel.
+//                       Checked at every major pipeline checkpoint (crawl → generate
+//                       → execute batch → report). If the server restarts, the DB
+//                       status is already "cancelled" so the pipeline won't restart.
+//
+// crawlAbortControllers — Map of AbortControllers for in-flight crawlSite calls.
+//                         cancelTestRunHandler calls .abort() immediately, stopping
+//                         BFS workers before their next TinyFish call without
+//                         waiting for the current 120s extraction timeout.
 // ---------------------------------------------------------------------------
-const activePipelines   = new Set<string>();
 
-// cancelledPipelines: IDs of runs the user has explicitly cancelled.
-// The pipeline checks this set at each major step and aborts if found.
-// Using an in-memory Set is sufficient — if the server restarts, the DB
-// status is already "cancelled" so the pipeline won't start again.
-const cancelledPipelines = new Set<string>();
+const activePipelines        = new Set<string>();
+const cancelledPipelines     = new Set<string>();
+const crawlAbortControllers  = new Map<string, AbortController>();
 
-// Helper: check if this run has been cancelled. Throws if so.
+/** Throws CANCELLED:<id> if the run has been cancelled. Used at pipeline stage gates. */
 function checkCancelled(testRunId: string): void {
   if (cancelledPipelines.has(testRunId)) {
     throw new Error(`CANCELLED:${testRunId}`);
   }
+}
+
+/** Returns true if cancelled. Used inside loops where throwing would skip cleanup. */
+function isCancelledRun(testRunId: string): boolean {
+  return cancelledPipelines.has(testRunId);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +130,24 @@ async function runPipeline(
 ): Promise<void> {
   const send = (event: PipelineSSEEvent) => emit?.(buildSSELine(event));
 
+  // Create an AbortController so cancelTestRunHandler can abort crawlSite mid-flight.
+  // Stored in module-level map so the cancel handler can reach it without a closure.
+  const abortController = new AbortController();
+  crawlAbortControllers.set(testRunId, abortController);
+
+  try {
+    await runPipelineStages(testRunId, targetUrl, send, abortController.signal);
+  } finally {
+    crawlAbortControllers.delete(testRunId);
+  }
+}
+
+async function runPipelineStages(
+  testRunId: string,
+  targetUrl: string,
+  send: (event: PipelineSSEEvent) => void,
+  abortSignal: AbortSignal,
+): Promise<void> {
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
   checkCancelled(testRunId);
   await updateRunStatus(testRunId, "crawling");
@@ -125,8 +155,12 @@ async function runPipeline(
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
   try {
-    siteData = await crawlSite(targetUrl, { testRunId });
+    siteData = await crawlSite(targetUrl, { testRunId, abortSignal });
   } catch (err) {
+    // Treat abort as user cancellation rather than a real crawl failure
+    if (abortSignal.aborted || isCancelledRun(testRunId)) {
+      throw new Error(`CANCELLED:${testRunId}`);
+    }
     const msg = `Crawl failed: ${err instanceof Error ? err.message : String(err)}`;
     send({ type: "error", message: msg });
     throw new Error(msg);
@@ -761,16 +795,24 @@ export async function getTestRunHandler({
 // DELETE /api/test/run/[id]  — Cancel a running test
 // ---------------------------------------------------------------------------
 //
-// Called when the user clicks "Stop" / "Cancel" in the UI.
+// Three-layer cancellation (fastest to slowest):
 //
-// How it works:
-//   1. Mark the run as "cancelled" in DB immediately
-//   2. Add to cancelledPipelines Set (in-memory signal checked by pipeline
-//      at each major step — crawl, generate, execute batch, report)
-//   3. Remove from activePipelines (prevents SSE handler from re-attaching)
+//   1. crawlAbortControllers.get(id).abort()
+//      Aborts the AbortSignal passed into crawlSite. BFS workers check
+//      signal.aborted at the top of every iteration, so no new TinyFish
+//      call is made after this point. Effect is near-immediate.
 //
-// The pipeline checks cancelledPipelines before each step and throws
-// "CANCELLED:<id>" which the catch handler converts to DB status "cancelled".
+//   2. cancelledPipelines.add(id)
+//      Checked by checkCancelled() at each pipeline stage gate (crawl →
+//      generate → execute batch → report). If the crawl abort fires between
+//      iterations rather than mid-page, this gate catches it.
+//
+//   3. DB update: status = "cancelled", running = 0
+//      Written immediately so history and poll endpoints reflect the new
+//      state without waiting for the pipeline catch handler to run.
+//
+// The pipeline's catch block detects CANCELLED:<id> and calls
+// updateRunStatus("cancelled") — a no-op if the DB write above already ran.
 // ---------------------------------------------------------------------------
 
 export async function cancelTestRunHandler({
@@ -800,6 +842,15 @@ export async function cancelTestRunHandler({
 
   // Signal the in-memory pipeline to stop at its next checkpoint
   cancelledPipelines.add(params.id);
+
+  // Abort any in-flight crawlSite fetch immediately — this stops the BFS
+  // worker loop mid-page rather than waiting for the current TinyFish call
+  // to complete or timeout (which could take up to 120s).
+  const crawlAbort = crawlAbortControllers.get(params.id);
+  if (crawlAbort) {
+    crawlAbort.abort();
+    console.log(`[Testing] Aborted active crawl for ${params.id}`);
+  }
 
   // Update DB immediately so history shows "cancelled" without waiting
   await db
