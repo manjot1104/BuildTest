@@ -1,11 +1,14 @@
 // src/server/services/openrouter.service.ts
-import type { CrawledPage, SiteProfile } from "./tinyfish.service";
+import type { CrawledPage, TestBudgetAllocation } from "./tinyfish.service";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_API_KEY  = process.env.OPENROUTER_API_KEY;
 
-const DEFAULT_MIN_TESTS           = 30;
-const DEFAULT_TARGET_TESTS_PER_PAGE = 15;
+// Fallback values used only when no testBudget is provided (legacy callers /
+// unit tests that don't go through crawlSite). Real values come from
+// tinyfish.allocateTestBudget() via the crawl pipeline.
+const FALLBACK_TESTS_PER_PAGE = 3;
+const FALLBACK_MIN_TESTS      = 5;
 
 const MODELS = [
   "openrouter/auto",
@@ -41,7 +44,12 @@ export interface SiteContext {
   rootUrl: string;
   pages: CrawledPage[];
   allLinks: string[];
-  siteProfile?: SiteProfile;
+  /**
+   * Test budget from tinyfish.allocateTestBudget().
+   * Replaces the old SiteProfile — per-page counts and total are already
+   * computed so OpenRouter just reads them directly.
+   */
+  testBudget?: TestBudgetAllocation;
   buildifyContext?: {
     routes?: string[];
     components?: string[];
@@ -237,14 +245,15 @@ function buildPageContext(page: CrawledPage): string {
   return [
     `URL: ${page.url}`,
     `Title: ${page.title || "(no title)"}`,
+    `Complexity score: ${page.complexityScore.toFixed(1)}`,
     "",
-    links.length > 0      ? `Navigation Links (${links.length}):\n${links.join("\n")}`   : "Navigation Links: none",
-    buttons.length > 0    ? `Buttons (${buttons.length}):\n${buttons.join("\n")}`         : "Buttons: none",
-    inputs.length > 0     ? `Inputs (${inputs.length}):\n${inputs.join("\n")}`            : "Inputs: none",
-    formSummaries.length > 0 ? `Forms (${formSummaries.length}):\n${formSummaries.join("\n")}` : "Forms: none",
-    apiList.length > 0    ? `API Endpoints:\n${apiList.join("\n")}`                       : "API Endpoints: none",
-    navMenus.length > 0   ? `Nav Menus:\n${navMenus.join("\n")}`                          : "",
-    internalLinksList.length > 0 ? `Internal Links:\n${internalLinksList.join("\n")}`    : "",
+    links.length > 0         ? `Navigation Links (${links.length}):\n${links.join("\n")}`              : "Navigation Links: none",
+    buttons.length > 0       ? `Buttons (${buttons.length}):\n${buttons.join("\n")}`                   : "Buttons: none",
+    inputs.length > 0        ? `Inputs (${inputs.length}):\n${inputs.join("\n")}`                      : "Inputs: none",
+    formSummaries.length > 0 ? `Forms (${formSummaries.length}):\n${formSummaries.join("\n")}`         : "Forms: none",
+    apiList.length > 0       ? `API Endpoints:\n${apiList.join("\n")}`                                 : "API Endpoints: none",
+    navMenus.length > 0      ? `Nav Menus:\n${navMenus.join("\n")}`                                    : "",
+    internalLinksList.length > 0 ? `Internal Links:\n${internalLinksList.join("\n")}`                 : "",
   ]
     .filter(Boolean)
     .join("\n");
@@ -279,7 +288,7 @@ async function generateTestsForPage(
   rootUrl: string,
   pageIndex: number,
   totalPages: number,
-  targetTestsPerPage: number,
+  targetTestCount: number,
 ): Promise<TestCase[]> {
   const pageCtx = buildPageContext(page);
 
@@ -298,7 +307,7 @@ async function generateTestsForPage(
   ].filter(Boolean);
 
   const userPrompt =
-`Generate ${targetTestsPerPage} browser test cases for this page.
+`Generate exactly ${targetTestCount} browser test cases for this page.
 
 PAGE DATA:
 ${pageCtx}
@@ -333,6 +342,7 @@ IMPORTANT:
 - Use ONLY element text, link text, button text, input names that appear in the PAGE DATA above
 - Do NOT invent URLs, element names, or text that are not in the PAGE DATA
 - If a category has no relevant elements on this page, skip it entirely
+- Generate AT LEAST 1 test and AT MOST ${targetTestCount} tests
 - Return ONLY the JSON array. No explanation. Start with [ end with ].`;
 
   try {
@@ -351,22 +361,24 @@ IMPORTANT:
   }
 }
 
-async function generateGlobalTests(context: SiteContext): Promise<TestCase[]> {
+async function generateGlobalTests(context: SiteContext, globalBudget: number): Promise<TestCase[]> {
   // I-07: Skip global tests when fewer than 3 pages were crawled.
   // With 1-2 pages there are no meaningful cross-page flows to test,
   // and the AI fabricates URLs that don't exist — causing false failures.
-  if (context.pages.length < 3) {
-    console.log(`[OpenRouter] Skipping global tests (pages=${context.pages.length} < 3)`);
+  if (context.pages.length < 3 || globalBudget <= 0) {
+    console.log(`[OpenRouter] Skipping global tests (pages=${context.pages.length} budget=${globalBudget})`);
     return [];
   }
+
+  const globalCount = Math.min(globalBudget, 8);
 
   const allPageUrls = context.pages.map((p) => p.url);
   const allNavLinks = context.pages
     .flatMap((p) => p.elements.filter((e) => e.type === "link"))
     .filter((e) => e.text?.trim())
-    .reduce<{ text: string; href: string; url: string }[]>((acc, e, _, arr) => {
+    .reduce<{ text: string; href: string }[]>((acc, e) => {
       if (!acc.find((x) => x.href === e.href)) {
-        acc.push({ text: e.text, href: e.href ?? "", url: context.rootUrl });
+        acc.push({ text: e.text, href: e.href ?? "" });
       }
       return acc;
     }, [])
@@ -385,7 +397,7 @@ async function generateGlobalTests(context: SiteContext): Promise<TestCase[]> {
   ].join("\n");
 
   const userPrompt =
-`Generate 10 cross-page site-wide browser test cases.
+`Generate ${globalCount} cross-page site-wide browser test cases.
 
 SITE DATA:
 ${siteSummary}
@@ -420,13 +432,11 @@ Return ONLY the JSON array. Start with [ end with ].`;
 async function generateGapFillTests(
   context: SiteContext,
   existingCount: number,
-  minTests: number,
-  targetPerPage: number,
+  needed: number,
 ): Promise<TestCase[]> {
-  const needed = minTests - existingCount;
   if (needed <= 0) return [];
 
-  console.log(`[OpenRouter] Gap-fill: need ${needed} more tests to reach ${minTests}`);
+  console.log(`[OpenRouter] Gap-fill: need ${needed} more tests (have ${existingCount})`);
 
   const allPagesCtx = context.pages
     .slice(0, 5)
@@ -499,22 +509,34 @@ function normaliseAndFilter(
 }
 
 export async function generateTestCases(context: SiteContext): Promise<TestCase[]> {
-  const profile           = context.siteProfile;
-  const targetPerPage     = profile?.targetTestsPerPage ?? DEFAULT_TARGET_TESTS_PER_PAGE;
-  const minTests          = profile?.minTests           ?? DEFAULT_MIN_TESTS;
+  const budget = context.testBudget;
+
+  // Per-page target: read from budget allocation map, fall back for legacy callers.
+  const getPageCount = (url: string): number =>
+    budget?.testsPerPage.get(url) ?? FALLBACK_TESTS_PER_PAGE;
+
+  // Total tests we're aiming for across all pages + globals.
+  const totalTarget = budget?.totalTests
+    ?? (context.pages.length * FALLBACK_TESTS_PER_PAGE + FALLBACK_MIN_TESTS);
+
+  // Budget available for global cross-page tests = totalTarget minus per-page sum.
+  // This is 0 for tight budgets (standard/free presets) and positive for deep.
+  const perPageSum  = context.pages.reduce((sum, p) => sum + getPageCount(p.url), 0);
+  const globalBudget = Math.max(0, totalTarget - perPageSum);
 
   console.log(
-    `[OpenRouter] Generating tests | size=${profile?.size ?? "unknown"} | ` +
-    `pages=${context.pages.length} | targetPerPage=${targetPerPage} | minTests=${minTests}`,
+    `[OpenRouter] Generating tests | pages=${context.pages.length} | ` +
+    `totalTarget=${totalTarget} | globalBudget=${globalBudget} | ` +
+    `perPage: ${context.pages.map((p) => `${new URL(p.url).pathname}×${getPageCount(p.url)}`).join(", ")}`,
   );
 
   const [perPageResults, globalTests] = await Promise.all([
     Promise.all(
       context.pages.map((page, i) =>
-        generateTestsForPage(page, context.rootUrl, i, context.pages.length, targetPerPage),
+        generateTestsForPage(page, context.rootUrl, i, context.pages.length, getPageCount(page.url)),
       ),
     ),
-    generateGlobalTests(context),
+    generateGlobalTests(context, globalBudget),
   ]);
 
   const perPageTests = perPageResults.flat();
@@ -523,16 +545,17 @@ export async function generateTestCases(context: SiteContext): Promise<TestCase[
 
   const merged = dedupeTestCases([...perPageTests, ...globalTests]);
 
-  console.log(`[OpenRouter] After dedup: ${merged.length} | Target minimum: ${minTests}`);
+  console.log(`[OpenRouter] After dedup: ${merged.length} (target: ${totalTarget})`);
 
+  // Single gap-fill pass for significant shortfalls (model under-generated).
+  // The budget design already guarantees minimums; this only runs when the AI
+  // failed to produce enough cases (not a budget design flaw).
   let final = merged;
-  let gapAttempts = 0;
-  while (final.length < minTests && gapAttempts < 3) {
-    gapAttempts++;
-    console.log(`[OpenRouter] Gap-fill attempt ${gapAttempts}: have ${final.length}, need ${minTests}`);
-    const gapFill = await generateGapFillTests(context, final.length, minTests, targetPerPage);
+  if (final.length < totalTarget * 0.8) {
+    console.log(`[OpenRouter] Under target (${final.length}/${totalTarget}) — gap-fill`);
+    const needed  = totalTarget - final.length;
+    const gapFill = await generateGapFillTests(context, final.length, needed);
     final = dedupeTestCases([...final, ...gapFill]);
-    if (gapFill.length === 0) break;
   }
 
   const numbered = final.map((tc, i) => ({
@@ -540,7 +563,7 @@ export async function generateTestCases(context: SiteContext): Promise<TestCase[
     id: `tc_${String(i + 1).padStart(3, "0")}`,
   }));
 
-  console.log(`[OpenRouter] ✓ Final test count: ${numbered.length} (target was ${minTests})`);
+  console.log(`[OpenRouter] ✓ Final test count: ${numbered.length} (target was ${totalTarget})`);
   return numbered;
 }
 

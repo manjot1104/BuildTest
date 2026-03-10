@@ -13,7 +13,7 @@ import {
 } from "@/server/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { crawlSite, executeTest, MAX_TEST_RETRIES } from "@/server/services/tinyfish.service";
+import { crawlSite, executeTest } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import type { PagePerformanceMetrics, PipelineSSEEvent } from "@/server/services/tinyfish.service";
 import {
@@ -24,6 +24,13 @@ import {
   type TestCase,
 } from "@/server/services/openRouter.service";
 import type { ApiErrorResponse } from "@/types/api.types";
+
+// MAX_TEST_RETRIES governs how many times the controller re-runs a *test
+// execution* when it fails. This is separate from MAX_EXTRACTION_RETRIES
+// in tinyfish.service (which governs per-page crawl retries). They were
+// previously the same import but serve different purposes and should be
+// tuned independently.
+const MAX_TEST_RETRIES = 2;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -161,12 +168,10 @@ async function runPipeline(
   send({ type: "status", status: "generating", percent: 30 });
 
   const siteContext: SiteContext = {
-    rootUrl:     targetUrl,
-    pages:       siteData.pages,
-    allLinks:    siteData.allLinks,
-    // Pass the SiteProfile so OpenRouter knows whether to generate
-    // 30 tests (small site) or 500 tests (large site).
-    siteProfile: siteData.siteProfile,
+    rootUrl:  targetUrl,
+    pages:    siteData.pages,
+    allLinks: siteData.allLinks,
+    testBudget: siteData.testBudget,
     buildifyContext: {
       hasAuth:      siteData.hasLogin || siteData.hasSignup || siteData.hasProtectedRoutes,
       apiEndpoints: siteData.pages.flatMap((p) => p.apiEndpoints),
@@ -232,6 +237,9 @@ async function runPipeline(
   const categoryResults: Record<string, { passed: number; failed: number; total: number }> = {};
 
   for (const [batchIndex, batch] of chunk(pairs, 50).entries()) {
+    // Check cancellation before each batch — stops TinyFish calls immediately
+    checkCancelled(testRunId);
+
     console.log(`[Testing] Batch ${batchIndex + 1}: ${batch.length} tests`);
 
     totalRunning += batch.length;
@@ -263,8 +271,6 @@ async function runPipeline(
               result = retryResult;
               break;
             }
-            // FIX 3: Keep the last retry result so we have the most recent
-            // actualResult and errorDetails for the bug report
             result = retryResult;
           }
         }
@@ -272,9 +278,6 @@ async function runPipeline(
         const status = isFlaky ? "flaky" : result.passed ? "passed" : "failed";
         const testResultId = nanoid();
 
-        // FIX 3: Upload screenshot for FAILED tests to S3
-        // Previously screenshotUrl was always null — now we capture a
-        // screenshot via a dedicated TinyFish screenshot call on failure
         let screenshotUrl: string | null = null;
         if (status === "failed" && testRunId) {
           try {
@@ -289,7 +292,6 @@ async function runPipeline(
               });
             }
           } catch (err) {
-            // Non-fatal — continue without screenshot
             console.warn(`[Testing] Failed to capture screenshot for "${tc.title}":`, err);
           }
         }
@@ -338,7 +340,7 @@ async function runPipeline(
             title: `${tc.title} — FAILED`,
             description: result.actualResult,
             reproduction_steps: tc.steps,
-            screenshot_url: screenshotUrl,   // FIX 3: now populated
+            screenshot_url: screenshotUrl,
             annotation_box: null,
             ai_fix_suggestion: null,
             page_url: testUrl,
@@ -353,7 +355,7 @@ async function runPipeline(
               severity: tc.priority === "P0" ? "critical" : tc.priority === "P1" ? "high" : "medium",
               category: tc.category,
               pageUrl: testUrl,
-              screenshotUrl: screenshotUrl,   // FIX 3: now populated
+              screenshotUrl: screenshotUrl,
             },
           });
         }
@@ -508,22 +510,23 @@ export async function startTestRunHandler({
     });
 
     // FIX 2: Mark this pipeline as active BEFORE starting it
-    // so the SSE handler knows not to start a second one
     activePipelines.add(testRunId);
 
     void runPipeline(testRunId, targetUrl).catch(async (err) => {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.startsWith("CANCELLED:")) {
-        // User cancelled — update DB status, don't log as error
         console.log(`[Testing] Pipeline cancelled: ${testRunId}`);
-        await updateRunStatus(testRunId, "cancelled" as typeof test_runs.$inferInsert.status);
+        await updateRunStatus(testRunId, "cancelled" as typeof test_runs.$inferInsert.status, {
+          completed_at: new Date(),
+          running: 0,
+        });
       } else {
         console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
         await updateRunStatus(testRunId, "failed");
       }
     }).finally(() => {
       activePipelines.delete(testRunId);
-      cancelledPipelines.delete(testRunId); // clean up cancel marker
+      cancelledPipelines.delete(testRunId);
     });
 
     return { testRunId };
@@ -554,23 +557,33 @@ export async function streamTestRunHandler({
   if (!run) return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
   if (run.user_id !== session.user.id) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
-  // Already complete or failed — send final event immediately
-  if (run.status === "complete" || run.status === "failed") {
-    const report = await db.query.report_exports.findFirst({
-      where: eq(report_exports.test_run_id, params.id),
-    });
-    const event: PipelineSSEEvent = run.status === "complete"
-      ? {
-          type: "complete",
-          overallScore: run.overall_score ?? 0,
-          passed: run.passed ?? 0,
-          failed: run.failed ?? 0,
-          skipped: run.skipped ?? 0,
-          total: run.total_tests ?? 0,
-          aiSummary: report?.ai_summary ?? "",
-          shareableSlug: report?.shareable_slug ?? null,
-        }
-      : { type: "error", message: "Test run failed" };
+  // FIX: Handle all terminal states — complete, failed, AND cancelled.
+  // Previously "cancelled" fell through and restarted the pipeline.
+  const isTerminal = run.status === "complete" || run.status === "failed" || (run.status as string) === "cancelled";
+  if (isTerminal) {
+    const report = run.status === "complete"
+      ? await db.query.report_exports.findFirst({ where: eq(report_exports.test_run_id, params.id) })
+      : null;
+
+    let event: PipelineSSEEvent;
+    if (run.status === "complete") {
+      event = {
+        type: "complete",
+        overallScore: run.overall_score ?? 0,
+        passed: run.passed ?? 0,
+        failed: run.failed ?? 0,
+        skipped: run.skipped ?? 0,
+        total: run.total_tests ?? 0,
+        aiSummary: report?.ai_summary ?? "",
+        shareableSlug: report?.shareable_slug ?? null,
+      };
+    } else if ((run.status as string) === "cancelled") {
+      // Use sentinel message "CANCELLED" so the client can distinguish
+      // user-cancelled from error-failed and show the right UI state.
+      event = { type: "error", message: "CANCELLED" };
+    } else {
+      event = { type: "error", message: "Test run failed" };
+    }
 
     const body = buildSSELine(event);
     return new Response(body, {
@@ -597,28 +610,30 @@ export async function streamTestRunHandler({
   });
 
   // FIX 2: Only start a new pipeline if one isn't already running
-  // Previously this ALWAYS called runPipeline() causing double execution
   if (!activePipelines.has(params.id)) {
     console.log(`[Testing] SSE handler starting pipeline for ${params.id} (no active pipeline found)`);
     activePipelines.add(params.id);
 
     void runPipeline(params.id, run.target_url, emitToStream)
-      .catch((err) => {
-        console.error(`[Testing] SSE pipeline failed for ${params.id}:`, err);
-        emitToStream(buildSSELine({ type: "error", message: String(err) }));
+      .catch(async (err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.startsWith("CANCELLED:")) {
+          emitToStream(buildSSELine({ type: "error", message: "CANCELLED" }));
+        } else {
+          console.error(`[Testing] SSE pipeline failed for ${params.id}:`, err);
+          emitToStream(buildSSELine({ type: "error", message: String(err) }));
+        }
       })
       .finally(() => {
         activePipelines.delete(params.id);
+        cancelledPipelines.delete(params.id);
         closeStream();
       });
   } else {
-    // Pipeline already running from startTestRunHandler —
-    // we need to attach this SSE stream to receive its events.
-    // For now, poll the DB and forward status updates until complete.
+    // Pipeline already running from startTestRunHandler — attach poll
     console.log(`[Testing] SSE handler: pipeline already active for ${params.id} — attaching poll`);
 
     void (async () => {
-      // Poll DB every 3s and forward status to SSE stream
       const poll = setInterval(async () => {
         try {
           const current = await db.query.test_runs.findFirst({
@@ -627,7 +642,6 @@ export async function streamTestRunHandler({
 
           if (!current) { clearInterval(poll); closeStream(); return; }
 
-          // Forward counter updates
           emitToStream(buildSSELine({
             type: "counter",
             passed: current.passed ?? 0,
@@ -637,14 +651,14 @@ export async function streamTestRunHandler({
             total: current.total_tests ?? 0,
           }));
 
-          // Forward status
           emitToStream(buildSSELine({
             type: "status",
             status: current.status,
-            percent: { crawling: 10, generating: 30, executing: 70, reporting: 90, complete: 100, failed: 0 ,cancelled: 0}[current.status] ?? 0,
+            percent: { crawling: 10, generating: 30, executing: 70, reporting: 90, complete: 100, failed: 0, cancelled: 0 }[current.status] ?? 0,
           }));
 
-          if (current.status === "complete" || current.status === "failed") {
+          const isNowTerminal = current.status === "complete" || current.status === "failed" || (current.status as string) === "cancelled";
+          if (isNowTerminal) {
             clearInterval(poll);
 
             if (current.status === "complete") {
@@ -661,6 +675,8 @@ export async function streamTestRunHandler({
                 aiSummary: report?.ai_summary ?? "",
                 shareableSlug: report?.shareable_slug ?? null,
               }));
+            } else if ((current.status as string) === "cancelled") {
+              emitToStream(buildSSELine({ type: "error", message: "CANCELLED" }));
             } else {
               emitToStream(buildSSELine({ type: "error", message: "Test run failed" }));
             }
@@ -724,7 +740,7 @@ export async function getTestRunHandler({
   return {
     id: run.id,
     status: run.status,
-    percent: progressMap[run.status],
+    percent: progressMap[run.status] ?? 0,
     targetUrl: run.target_url,
     overallScore: run.overall_score,
     totalTests: run.total_tests,
@@ -745,19 +761,15 @@ export async function getTestRunHandler({
 // DELETE /api/test/run/[id]  — Cancel a running test
 // ---------------------------------------------------------------------------
 //
-// Called when the user:
-//   1. Clicks "Stop" on an in-progress test run
-//   2. Navigates away from the test page (frontend fires this on unmount)
-//   3. Clicks a history item while a run is still active
+// Called when the user clicks "Stop" / "Cancel" in the UI.
 //
 // How it works:
-//   1. Mark the run as "cancelled" in DB immediately (stops future SSE polls
-//      from showing it as active in history)
+//   1. Mark the run as "cancelled" in DB immediately
 //   2. Add to cancelledPipelines Set (in-memory signal checked by pipeline
-//      at each major step — crawl, generate, execute, report)
+//      at each major step — crawl, generate, execute batch, report)
 //   3. Remove from activePipelines (prevents SSE handler from re-attaching)
 //
-// The pipeline itself checks cancelledPipelines before each step and throws
+// The pipeline checks cancelledPipelines before each step and throws
 // "CANCELLED:<id>" which the catch handler converts to DB status "cancelled".
 // ---------------------------------------------------------------------------
 
@@ -778,8 +790,11 @@ export async function cancelTestRunHandler({
   if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
 
   // Already in a terminal state — nothing to cancel
-  if (run.status === "complete" || run.status === "failed" ||
-      (run.status as string) === "cancelled") {
+  if (
+    run.status === "complete" ||
+    run.status === "failed" ||
+    (run.status as string) === "cancelled"
+  ) {
     return { cancelled: false };
   }
 
@@ -787,10 +802,13 @@ export async function cancelTestRunHandler({
   cancelledPipelines.add(params.id);
 
   // Update DB immediately so history shows "cancelled" without waiting
-  // for the pipeline to reach its next checkpoint
   await db
     .update(test_runs)
-    .set({ status: "cancelled" as typeof test_runs.$inferInsert.status, completed_at: new Date() })
+    .set({
+      status: "cancelled" as typeof test_runs.$inferInsert.status,
+      completed_at: new Date(),
+      running: 0,
+    })
     .where(eq(test_runs.id, params.id));
 
   // Remove from active pipelines so SSE doesn't re-attach

@@ -7,7 +7,7 @@ import {
   Eye, Navigation, FileText, Lock, Bug, ArrowRight, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
-  Code2, X, Map, Network, Image,
+  Code2, X, Map, Network, Image, StopCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,7 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   useStartTestRun, useTestRunStatus, useTestReport,
-  useTestHistory, useTestRunSSE,
+  useTestHistory, useTestRunSSE, useCancelTestRun,
   type Bug as BugType, type TestCase, type PerformanceGauge,
   type TrendDataPoint, type SSEState, type TestHistoryItem,
 } from "@/client-api/query-hooks/use-testing-hooks";
@@ -55,13 +55,6 @@ const STATUS_CONFIG = {
   failed:   { icon: XCircle,       color: "text-red-400",     bg: "bg-red-500/10 border-red-500/20",         label: "Failed"   },
   flaky:    { icon: AlertTriangle, color: "text-yellow-400",  bg: "bg-yellow-500/10 border-yellow-500/20",   label: "Flaky"    },
   skipped:  { icon: Clock,         color: "text-zinc-500",    bg: "bg-zinc-500/10 border-zinc-500/20",       label: "Skipped"  },
-};
-
-const CWV_LABELS = {
-  lcp:  { name: "LCP",  unit: "ms", good: 2500, medium: 4000, desc: "Largest Contentful Paint" },
-  fid:  { name: "FID",  unit: "ms", good: 100,  medium: 300,  desc: "First Input Delay"        },
-  cls:  { name: "CLS",  unit: "",   good: 0.1,  medium: 0.25, desc: "Cumulative Layout Shift"  },
-  ttfb: { name: "TTFB", unit: "ms", good: 800,  medium: 1800, desc: "Time to First Byte"       },
 };
 
 // ─── Types (extended) ────────────────────────────────────────────────────────
@@ -279,7 +272,6 @@ function ScreenshotViewer({ screenshots }: { screenshots: PageScreenshot[] }) {
 
   return (
     <div className="space-y-4">
-      {/* Page selector */}
       {pagesWithScreenshots.length > 1 && (
         <div className="flex gap-1 flex-wrap">
           {pagesWithScreenshots.map((s, i) => (
@@ -292,8 +284,6 @@ function ScreenshotViewer({ screenshots }: { screenshots: PageScreenshot[] }) {
           ))}
         </div>
       )}
-
-      {/* Viewport selector */}
       <div className="flex gap-2">
         {viewports.map(({ key, label, icon }) => (
           <button key={key} onClick={() => setActiveViewport(key)}
@@ -310,8 +300,6 @@ function ScreenshotViewer({ screenshots }: { screenshots: PageScreenshot[] }) {
         ))}
         <span className="ml-auto text-xs font-mono text-zinc-600 self-center truncate">{page.pageUrl}</span>
       </div>
-
-      {/* Screenshot */}
       {activeUrl ? (
         <div className="relative rounded-xl border border-zinc-800 overflow-hidden bg-zinc-900 group">
           <img src={activeUrl} alt={`Screenshot at ${activeViewport}`} className="w-full object-cover" />
@@ -410,7 +398,6 @@ function NavStructurePanel({ navStructure }: {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumbs */}
       {navStructure.breadcrumbs.length > 0 && (
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
           <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Breadcrumb Trail</p>
@@ -428,8 +415,6 @@ function NavStructurePanel({ navStructure }: {
           </div>
         </div>
       )}
-
-      {/* Menus */}
       {navStructure.menus.map((menu) => (
         <div key={menu.label} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
           <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3 flex items-center gap-1.5">
@@ -678,8 +663,24 @@ function TestCaseCard({ tc, liveStatus }: {
 
 // ─── History Panel ────────────────────────────────────────────────────────────
 
-function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string) => void; onClose: () => void }) {
+function HistoryPanel({ onSelect, onClose }: {
+  // Now passes status alongside id so the parent can skip SSE for terminal runs
+  onSelect: (id: string, status: string) => void;
+  onClose: () => void;
+}) {
   const { data: history, isLoading } = useTestHistory();
+
+  function statusBadge(status: string) {
+    if (status === "complete")   return <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />;
+    if (status === "failed")     return <XCircle className="h-4 w-4 text-red-400 shrink-0" />;
+    if (status === "cancelled")  return (
+      <span className="inline-flex items-center gap-1 text-xs font-mono text-zinc-500 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full shrink-0">
+        <StopCircle className="h-3 w-3" /> Cancelled
+      </span>
+    );
+    return <Loader2 className="h-4 w-4 animate-spin text-zinc-500 shrink-0" />;
+  }
+
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-end" onClick={onClose}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
@@ -701,9 +702,12 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string) => void; o
           )}
           {history?.map((item: TestHistoryItem) => {
             const scoreColor = (item.overallScore ?? 0) >= 90 ? "text-emerald-400" : (item.overallScore ?? 0) >= 70 ? "text-yellow-400" : "text-red-400";
+            const isCancelled = item.status === "cancelled";
             return (
-              <button key={item.id} onClick={() => { onSelect(item.id); onClose(); }}
-                className="w-full text-left p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all group">
+              <button key={item.id} onClick={() => { onSelect(item.id, item.status); onClose(); }}
+                className={`w-full text-left p-4 rounded-xl border bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all group ${
+                  isCancelled ? "border-zinc-800/60 opacity-70" : "border-zinc-800"
+                }`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-zinc-400 font-mono truncate">{item.targetUrl}</p>
@@ -711,11 +715,12 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string) => void; o
                       {new Date(item.startedAt).toLocaleDateString()} · {new Date(item.startedAt).toLocaleTimeString()}
                     </p>
                   </div>
-                  {item.status === "complete" && item.overallScore !== null && (
-                    <span className={`text-lg font-bold tabular-nums shrink-0 ${scoreColor}`}>{item.overallScore}</span>
-                  )}
-                  {item.status === "failed" && <XCircle className="h-4 w-4 text-red-400 shrink-0" />}
-                  {item.status !== "complete" && item.status !== "failed" && <Loader2 className="h-4 w-4 animate-spin text-zinc-500 shrink-0" />}
+                  <div className="shrink-0">
+                    {item.status === "complete" && item.overallScore !== null
+                      ? <span className={`text-lg font-bold tabular-nums ${scoreColor}`}>{item.overallScore}</span>
+                      : statusBadge(item.status)
+                    }
+                  </div>
                 </div>
                 {item.status === "complete" && (
                   <div className="flex gap-3 mt-2 text-xs font-mono">
@@ -724,9 +729,14 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string) => void; o
                     <span className="text-zinc-600">{item.skipped ?? 0} skipped</span>
                   </div>
                 )}
-                {item.aiSummary && <p className="mt-2 text-xs text-zinc-500 line-clamp-2">{item.aiSummary}</p>}
+                {isCancelled && (
+                  <p className="mt-1.5 text-xs text-zinc-600 font-mono italic">Stopped by user</p>
+                )}
+                {item.aiSummary && !isCancelled && (
+                  <p className="mt-2 text-xs text-zinc-500 line-clamp-2">{item.aiSummary}</p>
+                )}
                 <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-xs text-zinc-500 flex items-center gap-1"><ArrowRight className="h-3 w-3" /> View report</span>
+                  <span className="text-xs text-zinc-500 flex items-center gap-1"><ArrowRight className="h-3 w-3" /> View details</span>
                 </div>
               </button>
             );
@@ -750,13 +760,17 @@ export default function TestingPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [copied, setCopied]         = useState(false);
 
-  const { mutate: startTest, isPending: isStarting } = useStartTestRun();
+  const { mutate: startTest, isPending: isStarting }   = useStartTestRun();
+  const { mutate: cancelTest, isPending: isCancelling } = useCancelTestRun();
   const { data: run } = useTestRunStatus(testRunId);
-  const { sseState } = useTestRunSSE(testRunId);
 
-  const isComplete = run?.status === "complete" || sseState.isComplete;
-  const isFailed   = run?.status === "failed" || sseState.pipelineStatus === "failed";
-  const isRunning  = !!testRunId && !isComplete && !isFailed;
+  // ── KEY FIX: pass run?.status so SSE skips connection for terminal runs ──
+  const { sseState } = useTestRunSSE(testRunId, run?.status);
+
+  const isComplete   = run?.status === "complete"  || sseState.isComplete;
+  const isFailed     = run?.status === "failed"    || sseState.pipelineStatus === "failed";
+  const isCancelled  = run?.status === "cancelled" || sseState.isCancelled;
+  const isRunning    = !!testRunId && !isComplete && !isFailed && !isCancelled;
 
   const { data: report } = useTestReport(testRunId, isComplete);
 
@@ -789,6 +803,18 @@ export default function TestingPage() {
     });
   };
 
+  const handleCancel = () => {
+    if (!testRunId) return;
+    cancelTest(testRunId, {
+      onSuccess: (data) => {
+        if (data.cancelled) {
+          toast.info("Test run cancelled — no further TinyFish calls will be made.");
+        }
+      },
+      onError: (err) => toast.error(err.message ?? "Failed to cancel test run"),
+    });
+  };
+
   const handleReset = () => {
     setUrl(""); setTestRunId(null);
     setFilterSeverity("all"); setFilterCategory("all");
@@ -806,7 +832,13 @@ export default function TestingPage() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
-      {showHistory && <HistoryPanel onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }} onClose={() => setShowHistory(false)} />}
+      {showHistory && (
+        <HistoryPanel
+          // Pass status so the page can skip SSE for terminal runs
+          onSelect={(id, status) => { setTestRunId(id); setActiveTab("tests"); }}
+          onClose={() => setShowHistory(false)}
+        />
+      )}
 
       {/* Header */}
       <div className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur sticky top-0 z-20">
@@ -931,6 +963,22 @@ export default function TestingPage() {
               </div>
             </div>
 
+            {/* ── CANCEL BUTTON ── */}
+            <div className="flex justify-center w-full max-w-xl mx-auto">
+              <Button
+                onClick={handleCancel}
+                disabled={isCancelling}
+                variant="outline"
+                className="border-red-900/60 text-red-400 hover:bg-red-950/40 hover:border-red-700 gap-2 text-sm transition-all"
+              >
+                {isCancelling
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <StopCircle className="h-4 w-4" />
+                }
+                {isCancelling ? "Stopping…" : "Stop Test Run"}
+              </Button>
+            </div>
+
             {pipelineStatus === "executing" && (
               <div className="grid grid-cols-4 gap-3 w-full max-w-xl mx-auto">
                 {[
@@ -971,6 +1019,29 @@ export default function TestingPage() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── CANCELLED ── */}
+        {isCancelled && (
+          <div className="flex flex-col items-center gap-6 py-16">
+            <div className="h-16 w-16 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center">
+              <StopCircle className="h-8 w-8 text-zinc-400" />
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-zinc-200">Test run cancelled</h3>
+              <p className="text-zinc-500 text-sm mt-1">
+                You stopped this run. No further TinyFish calls will be made.
+              </p>
+              {(counter.passed > 0 || counter.failed > 0) && (
+                <p className="text-zinc-600 text-xs font-mono mt-2">
+                  {counter.passed} passed · {counter.failed} failed before stopping
+                </p>
+              )}
+            </div>
+            <Button onClick={handleReset} variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2">
+              <RotateCcw className="h-4 w-4" /> Run New Test
+            </Button>
           </div>
         )}
 
@@ -1054,7 +1125,7 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Tabs — now includes Crawl tab */}
+            {/* Tabs */}
             <div className="flex gap-1 border-b border-zinc-800 overflow-x-auto">
               {([
                 { key: "tests",       label: "Test Cases",  count: report.testCases?.length ?? 0,        icon: FlaskConical },
@@ -1179,10 +1250,9 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Crawl Data Tab — NEW */}
+            {/* Crawl Data Tab */}
             {activeTab === "crawl" && (
               <div className="space-y-8">
-                {/* Screenshots */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <Image className="h-4 w-4 text-zinc-400" />
@@ -1191,8 +1261,6 @@ export default function TestingPage() {
                   </div>
                   <ScreenshotViewer screenshots={crawlScreenshots} />
                 </div>
-
-                {/* API Endpoints */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <Network className="h-4 w-4 text-zinc-400" />
@@ -1203,8 +1271,6 @@ export default function TestingPage() {
                   </div>
                   <ApiEndpointsTable endpoints={apiEndpoints} />
                 </div>
-
-                {/* Navigation Structure */}
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <Map className="h-4 w-4 text-zinc-400" />

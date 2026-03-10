@@ -1,82 +1,117 @@
 // src/server/services/tinyfish.service.ts
 //
 // ═══════════════════════════════════════════════════════════════════════════
-// CRAWLER ARCHITECTURE  —  Why the old approach failed
+// CRAWLER ARCHITECTURE
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Old approach (broken):
-//   1 TinyFish call asking it to: extract elements + intercept API + navigate
-//   every nav link one by one + take 3 screenshots — all in a single goal.
-//   On an SPA this ALWAYS timed out because:
-//     a) JS hydration wasn't awaited properly
-//     b) "navigate each link one by one" = 15+ browser round trips in 1 call
-//     c) Too many goals = TinyFish returns partial JSON or nothing
+// Design principles:
+//   1. No separate discovery stage. Discovery IS extraction. The root page is
+//      extracted first; its links seed the BFS queue. Every subsequent page
+//      does the same. No wasted TinyFish credits on a discovery-only call.
 //
-// New approach (this file):
+//   2. Hard budget caps enforced up front: maxPages and maxTests are first-class
+//      parameters, not suggestions. The crawler stops the moment either cap is hit.
+//
+//   3. Test budget is allocated proportionally after crawl completes. Each page
+//      gets at least 1 test; remaining budget is distributed by page complexity
+//      (interactive element count). No page can starve another entirely.
+//
+//   4. Free seeding before any TinyFish call. robots.txt → sitemap → static HTML
+//      parse runs in parallel with zero AI cost. On SSR sites this often gives
+//      the full URL pool for free and the BFS queue starts pre-populated.
+//
+//   5. Per-crawl context object, not module globals. Concurrent crawl jobs cannot
+//      poison each other via shared mutable state.
+//
+// Pipeline:
 // ┌─────────────────────────────────────────────────────────────────────────┐
-// │ STAGE 0 │ Free URL seeding (no TinyFish credit)                        │
-// │         │ robots.txt → sitemap.xml → static HTML fetch → parse <a>     │
-// │         │ Gets 80% of links on SSR sites for free before any AI call    │
+// │ STAGE 0 │ Free URL seeding                                              │
+// │         │ robots.txt → sitemap.xml → static HTML → parse <a> hrefs     │
+// │         │ Zero TinyFish cost. Pre-populates BFS queue.                  │
 // ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 1 │ TinyFish: SPA route discovery (1 call, focused goal)         │
-// │         │ Single job: navigate root, wait for hydration, extract all    │
-// │         │ href values from the DOM after JS renders. That's ALL it does.│
-// │         │ We DO NOT ask it to click through links — too slow.           │
+// │ STAGE 1 │ BFS extraction (unified crawl + discovery)                    │
+// │         │ N concurrent workers drain a shared queue.                    │
+// │         │ Each extracted page's internalLinks are immediately enqueued. │
+// │         │ Workers stop when pages.length === maxPages or queue empties. │
 // ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 2 │ Parallel page extraction (batched, max 3 concurrent)         │
-// │         │ Per page: elements + forms + links + API interception.        │
-// │         │ No screenshots. Focused goal = fast, rarely times out.        │
-// │         │ Batching prevents rate-limit hammer.                          │
+// │ STAGE 2 │ Test budget allocation                                        │
+// │         │ Distribute maxTests across crawled pages.                     │
+// │         │ Floor: 1 test/page. Ceiling: MAX_TESTS_PER_PAGE.              │
+// │         │ Remaining budget goes to most complex pages first.            │
 // ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 3 │ Background: screenshots + performance (non-blocking void)     │
-// │         │ Fire after returning. Pipeline starts test generation         │
-// │         │ immediately with the rich extraction data from Stage 2.       │
+// │ STAGE 3 │ Background: screenshots + perf (non-blocking, awaitable)      │
+// │         │ Returned as stage3Promise so caller can await before DB write.│
 // └─────────────────────────────────────────────────────────────────────────┘
 
 import { uploadPageScreenshots, urlToSlug } from "./s3.service";
 
 const TINYFISH_API_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
-const TINYFISH_API_KEY  = process.env.TINYFISH_API_KEY;
+const TINYFISH_API_KEY = process.env.TINYFISH_API_KEY;
 
-export type SiteSize = "small" | "medium" | "large";
+// ─── Budget & limits ──────────────────────────────────────────────────────────
 
-export interface SiteProfile {
-  size: SiteSize;
+export interface CrawlBudget {
+  /** Max pages to crawl. Hard cap — crawler stops the moment this is reached. */
   maxPages: number;
+  /** Max test cases to generate across all pages. Hard cap. */
+  maxTests: number;
+  /** Concurrency of BFS extraction workers. */
   concurrency: number;
-  targetTestsPerPage: number;
-  minTests: number;
 }
 
-const SIZE_THRESHOLDS = { MEDIUM_MIN_URLS: 11, LARGE_MIN_URLS: 51 } as const;
-
-export function detectSiteSize(seededUrlCount: number): SiteProfile {
-  if (seededUrlCount >= SIZE_THRESHOLDS.LARGE_MIN_URLS) {
-    return { size: "large",  maxPages: 50, concurrency: 5, targetTestsPerPage: 12, minTests: 500 };
-  }
-  if (seededUrlCount >= SIZE_THRESHOLDS.MEDIUM_MIN_URLS) {
-    return { size: "medium", maxPages: 25, concurrency: 4, targetTestsPerPage: 10, minTests: 100 };
-  }
-  return { size: "small",  maxPages: 10, concurrency: 3, targetTestsPerPage: 15, minTests: 30  };
+export interface TestBudgetAllocation {
+  /** URL → number of test cases to generate for this page */
+  testsPerPage: Map<string, number>;
+  totalTests: number;
 }
 
-const LIMITS = {
-  MAX_PAGES_HARD_CAP:      50,
-  MAX_PAGES_FREE:           2,
-  DISCOVERY_TIMEOUT_MS:    120_000,  // I-04: Netlify cold-start + React hydration = 70-80s; 75s had zero margin
-  EXTRACTION_TIMEOUT_MS:   120_000,  // I-05: Bot-protected/geo-redirect sites need 80-100s to load
-  SCREENSHOT_TIMEOUT_MS:   60_000,
-  PERF_TIMEOUT_MS:         55_000,
-  EXECUTE_TEST_TIMEOUT_MS: 120_000,  // I-02: 100% of test executions timed out at 80s on cold-start hosts
-  SCREENSHOT_CAPTURE_MS:   60_000,   // I-08: Failure screenshots always timed out; slow hosts are slow by definition
+/** Sensible defaults for different use cases. Callers may override any field. */
+export const BUDGET_PRESETS = {
+  free: { maxPages: 3, maxTests: 5, concurrency: 2 } satisfies CrawlBudget,
+  standard: { maxPages: 5, maxTests: 10, concurrency: 3 } satisfies CrawlBudget,
+  deep: { maxPages: 10, maxTests: 15, concurrency: 4 } satisfies CrawlBudget,
 } as const;
 
-export const MAX_TEST_RETRIES = 2;
+// Hard ceilings — callers cannot exceed these regardless of budget preset.
+const HARD_CAPS = {
+  MAX_PAGES: 10,
+  MAX_TESTS: 15,
+  MAX_TESTS_PER_PAGE: 5, // prevents one huge page eating all budget
+  MIN_TESTS_PER_PAGE: 1, // every successfully crawled page gets at least 1 test
+} as const;
+
+const TIMEOUTS = {
+  EXTRACTION_MS: 120_000, // I-05: bot-protected/geo-redirect sites need up to 100s
+  SCREENSHOT_MS: 60_000,
+  PERF_MS: 55_000,
+  EXECUTE_TEST_MS: 120_000, // I-02: cold-start hosts need full 2min
+  SCREENSHOT_FAIL_MS: 60_000, // I-08: failure screenshots on slow hosts
+} as const;
+
+export const MAX_EXTRACTION_RETRIES = 1;
+
+// ─── Per-crawl context (not module-global) ────────────────────────────────────
+
+interface CrawlContext {
+  creditsExhausted: boolean;
+}
+
+function makeCrawlContext(): CrawlContext {
+  return { creditsExhausted: false };
+}
+
+// ─── Public interfaces ────────────────────────────────────────────────────────
 
 export interface CrawlOptions {
-  maxPages?: number;
+  budget?: Partial<CrawlBudget>;
   allowedDomain?: string;
   testRunId?: string;
+  /**
+   * Optional AbortSignal from the caller (e.g. testing.controller cancel handler).
+   * When aborted, BFS workers stop before their next TinyFish call and the crawl
+   * returns whatever pages have been collected so far — no further credits are spent.
+   */
+  abortSignal?: AbortSignal;
 }
 
 export interface TinyFishRequest {
@@ -101,13 +136,24 @@ export interface NavMenu {
 export interface CrawledPage {
   url: string;
   title: string;
-  elements: { type: string; text: string; href?: string; selector?: string; isVisible: boolean }[];
+  elements: {
+    type: string;
+    text: string;
+    href?: string;
+    selector?: string;
+    isVisible: boolean;
+  }[];
   internalLinks: string[];
   externalLinks: string[];
   forms: {
     action?: string;
     method?: string;
-    fields: { name: string; type: string; required: boolean; pattern?: string }[];
+    fields: {
+      name: string;
+      type: string;
+      required: boolean;
+      pattern?: string;
+    }[];
   }[];
   apiEndpoints: ApiEndpoint[];
   navStructure: {
@@ -119,6 +165,8 @@ export interface CrawledPage {
     url768: string | null;
     url1440: string | null;
   };
+  /** Complexity score used for test budget allocation. Higher = more tests assigned. */
+  complexityScore: number;
 }
 
 export interface ApiEndpoint {
@@ -158,24 +206,63 @@ export interface PagePerformanceMetrics {
 }
 
 export type PipelineSSEEvent =
-  | { type: "status";      status: string; percent: number }
-  | { type: "test_update"; testResultId: string; testCaseId: string; title: string; status: "pending" | "running" | "passed" | "failed" | "flaky" | "skipped"; durationMs?: number }
-  | { type: "counter";     passed: number; failed: number; running: number; skipped: number; total: number }
-  | { type: "bug_found";   bug: { id: string; title: string; severity: string; category: string; pageUrl: string; screenshotUrl: string | null } }
-  | { type: "complete";    overallScore: number; passed: number; failed: number; skipped: number; total: number; aiSummary: string; shareableSlug: string | null }
-  | { type: "error";       message: string };
+  | { type: "status"; status: string; percent: number }
+  | {
+      type: "test_update";
+      testResultId: string;
+      testCaseId: string;
+      title: string;
+      status: "pending" | "running" | "passed" | "failed" | "flaky" | "skipped";
+      durationMs?: number;
+    }
+  | {
+      type: "counter";
+      passed: number;
+      failed: number;
+      running: number;
+      skipped: number;
+      total: number;
+    }
+  | {
+      type: "bug_found";
+      bug: {
+        id: string;
+        title: string;
+        severity: string;
+        category: string;
+        pageUrl: string;
+        screenshotUrl: string | null;
+      };
+    }
+  | {
+      type: "complete";
+      overallScore: number;
+      passed: number;
+      failed: number;
+      skipped: number;
+      total: number;
+      aiSummary: string;
+      shareableSlug: string | null;
+    }
+  | { type: "error"; message: string };
 
 export class TinyFishCreditsExhaustedError extends Error {
   constructor() {
-    super("TinyFish credits exhausted. Top up at https://tinyfish.ai/dashboard");
+    super(
+      "TinyFish credits exhausted. Top up at https://tinyfish.ai/dashboard",
+    );
     this.name = "TinyFishCreditsExhaustedError";
   }
 }
 
-let creditsExhausted = false;
+// ─── URL utilities ────────────────────────────────────────────────────────────
 
 function extractHostname(url: string): string {
-  try { return new URL(url).hostname; } catch { return ""; }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
 }
 
 function resolveAbsolute(raw: string, base: string): string | null {
@@ -188,52 +275,104 @@ function resolveAbsolute(raw: string, base: string): string | null {
       t.startsWith("mailto:") ||
       t.startsWith("tel:") ||
       t.startsWith("data:")
-    ) return null;
+    )
+      return null;
     const resolved = new URL(t, base);
     resolved.hash = "";
     return resolved.href;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
-function dedupeUrl(url: string): string {
+function normalizeUrl(url: string): string {
   try {
     const u = new URL(url);
     if (u.pathname !== "/") u.pathname = u.pathname.replace(/\/$/, "");
     return u.href;
-  } catch { return url; }
+  } catch {
+    return url;
+  }
 }
 
-// I-05: Extended to match 2-segment country-locale paths (e.g. /cm-en, /bh-ar, /ch-fr, /id-en)
-// that caused all 4 metroopinion.com extraction calls to timeout.
-const LOCALE_PATH_RE = /^\/(?:[a-z]{2}(?:[_-][a-zA-Z]{2})?|ar|he|fa|zh|ko|ja|th|vi|hi|ur)(?:\/|$)/;
+function decodeHtmlEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+// Locale-prefixed paths: /en, /en-US, /fr-FR, /cm-en, /bh-ar, etc.
+const LOCALE_PATH_RE = /^\/(?:[a-z]{2}(?:[_-][a-zA-Z]{2})?)(?:\/|$)/;
 
 function isAllowedUrl(candidate: string, allowedHostname: string): boolean {
+  // Reject un-decoded HTML entity artifacts from raw HTML parsing
+  if (candidate.includes("&amp;")) return false;
+
   try {
     const p = new URL(candidate);
+
     if (p.hostname !== allowedHostname) return false;
-    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|tar|gz|mp4|mp3|wav|ico|woff|woff2|ttf|eot|css|js|map|xml)$/i
-        .test(p.pathname)) return false;
-    if (/[?&](page|offset|cursor|after|before|from|start|p)=\d/i.test(p.search)) return false;
+
+    // Static assets
+    if (
+      /\.(jpg|jpeg|png|gif|webp|svg|pdf|zip|tar|gz|mp4|mp3|wav|ico|woff|woff2|ttf|eot|css|js|map|xml)$/i.test(
+        p.pathname,
+      )
+    )
+      return false;
+
+    // Pagination
+    if (/[?&](page|offset|cursor|after|before|from|start|p)=\d/i.test(p.search))
+      return false;
     if (/\/page\/\d+/i.test(p.pathname)) return false;
-    if (/\/(logout|signout|sign-out|log-out|delete|remove|destroy)/i.test(p.pathname)) return false;
+
+    // Destructive / session actions
+    if (
+      /\/(logout|signout|sign-out|log-out|delete|remove|destroy)/i.test(
+        p.pathname,
+      )
+    )
+      return false;
+
+    // Per-content / action query params — these produce near-identical or
+    // transient pages with no structural QA value (HN vote/hide/user/item URLs)
+    if (/[?&](id|how|goto|site|whence|hmac|auth)=/i.test(p.search))
+      return false;
+    if (
+      /\/(vote|hide|flag|reply|fave|upvote|downvote|react)\b/i.test(p.pathname)
+    )
+      return false;
+
+    // Locale paths
     if (LOCALE_PATH_RE.test(p.pathname)) return false;
+
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
-const MAX_PER_PATTERN = 3;
+// Cap structural duplicates: max N URLs sharing the same first-two-segment pattern.
+// /products/shoes, /products/hats → same pattern "/products". Allows 2 by default.
+// Prevents blog/e-commerce sites flooding the queue with hundreds of similar pages.
+const DEFAULT_MAX_PER_PATTERN = 2;
 
-function dedupeUrlPool(urls: string[]): string[] {
-  const patternCount = new Map<string, number>();
+function filterByPathPattern(
+  urls: string[],
+  maxPerPattern = DEFAULT_MAX_PER_PATTERN,
+): string[] {
+  const counts = new Map<string, number>();
   const result: string[] = [];
   for (const url of urls) {
     try {
-      const p = new URL(url);
-      const segments = p.pathname.split("/").filter(Boolean);
-      const pattern  = segments.slice(0, 2).join("/") || "root";
-      const count    = patternCount.get(pattern) ?? 0;
-      if (count < MAX_PER_PATTERN) {
-        patternCount.set(pattern, count + 1);
+      const segs = new URL(url).pathname.split("/").filter(Boolean);
+      const key = segs.slice(0, 2).join("/") || "root";
+      const n = counts.get(key) ?? 0;
+      if (n < maxPerPattern) {
+        counts.set(key, n + 1);
         result.push(url);
       }
     } catch {
@@ -243,38 +382,40 @@ function dedupeUrlPool(urls: string[]): string[] {
   return result;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T, label = "op"): Promise<T> {
+// ─── Async utilities ──────────────────────────────────────────────────────────
+
+function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  fallback: T,
+  label = "op",
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
-  const timeoutP = new Promise<T>((resolve) => {
+  const race = new Promise<T>((resolve) => {
     timer = setTimeout(() => {
       console.warn(`[TinyFish] Timeout ${ms}ms: ${label}`);
       resolve(fallback);
     }, ms);
   });
-  return Promise.race([promise.finally(() => clearTimeout(timer)), timeoutP]);
+  return Promise.race([promise.finally(() => clearTimeout(timer)), race]);
 }
 
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  fn: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let nextIndex = 0;
-
-  async function worker() {
-    while (nextIndex < items.length) {
-      const i = nextIndex++;
-      results[i] = await fn(items[i]!, i);
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
-  await Promise.all(workers);
-  return results;
+// Node 16-safe abort signal (AbortSignal.timeout added in Node 17.3)
+function makeAbortSignal(ms: number): {
+  signal: AbortSignal;
+  clear: () => void;
+} {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => clearTimeout(timer) };
 }
 
-async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
+// ─── TinyFish API client ──────────────────────────────────────────────────────
+
+async function runTinyFish(
+  request: TinyFishRequest,
+  ctx: CrawlContext,
+): Promise<TinyFishResult> {
   if (!TINYFISH_API_KEY) throw new Error("TINYFISH_API_KEY is not set");
   console.log(`[TinyFish] → ${request.url}`);
 
@@ -282,31 +423,50 @@ async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
   let jobId: string | null = null;
 
   try {
-    const response = await fetch(TINYFISH_API_URL, {
-      method: "POST",
-      headers: {
-        "X-API-Key":    TINYFISH_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(request),
-    });
+    const { signal, clear } = makeAbortSignal(30_000);
+    let response: Response;
+    try {
+      response = await fetch(TINYFISH_API_URL, {
+        method: "POST",
+        headers: {
+          "X-API-Key": TINYFISH_API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+        signal,
+      });
+    } finally {
+      clear();
+    }
 
     console.log(`[TinyFish] ← HTTP ${response.status} ${request.url}`);
 
     if (!response.ok) {
       const err = await response.text();
       if (response.status === 403 && err.includes("Insufficient credits")) {
-        creditsExhausted = true;
+        ctx.creditsExhausted = true;
         throw new TinyFishCreditsExhaustedError();
       }
-      return { success: false, resultJson: null, rawText: null, error: `HTTP ${response.status}: ${err}`, jobId: null };
+      return {
+        success: false,
+        resultJson: null,
+        rawText: null,
+        error: `HTTP ${response.status}: ${err}`,
+        jobId: null,
+      };
     }
 
     if (!response.body) {
-      return { success: false, resultJson: null, rawText: null, error: "No body", jobId: null };
+      return {
+        success: false,
+        resultJson: null,
+        rawText: null,
+        error: "No body",
+        jobId: null,
+      };
     }
 
-    const reader  = response.body.getReader();
+    const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let eventCount = 0;
 
@@ -335,53 +495,73 @@ async function runTinyFish(request: TinyFishRequest): Promise<TinyFishResult> {
           if (event.text) rawText += event.text;
 
           if (event.type === "COMPLETE") {
-            console.log(`[TinyFish] ✓ ${jobId} → ${event.status} (${eventCount} events)`);
+            console.log(
+              `[TinyFish] ✓ ${jobId} → ${event.status} (${eventCount} events)`,
+            );
             if (event.status === "COMPLETED") {
               return {
-                success:    true,
+                success: true,
                 resultJson: event.resultJson ?? null,
-                rawText:    rawText || null,
-                error:      null,
+                rawText: rawText || null,
+                error: null,
                 jobId,
               };
             }
             return {
-              success:    false,
+              success: false,
               resultJson: null,
-              rawText:    rawText || null,
-              error:      event.error ?? `Completed with status: ${event.status}`,
+              rawText: rawText || null,
+              error: event.error ?? `Status: ${event.status}`,
               jobId,
             };
           }
-        } catch { /* skip malformed event */ }
+        } catch {
+          /* skip malformed SSE event */
+        }
       }
     }
 
+    // Stream ended without COMPLETE — attempt JSON recovery from rawText
     if (rawText) {
       const recovered = tryParseRawText(rawText);
       if (recovered) {
-        console.log(`[TinyFish] Recovered JSON from rawText (${rawText.length} chars)`);
-        return { success: true, resultJson: recovered, rawText, error: null, jobId };
+        console.log(
+          `[TinyFish] Recovered JSON from rawText (${rawText.length} chars)`,
+        );
+        return {
+          success: true,
+          resultJson: recovered,
+          rawText,
+          error: null,
+          jobId,
+        };
       }
     }
 
     return {
-      success:    false,
+      success: false,
       resultJson: null,
-      rawText:    rawText || null,
-      error:      "Stream ended without COMPLETE event",
+      rawText: rawText || null,
+      error: "Stream ended without COMPLETE event",
       jobId,
     };
-
   } catch (err) {
     if (err instanceof TinyFishCreditsExhaustedError) throw err;
     const msg = err instanceof Error ? err.message : String(err);
     if (msg === "terminated" || msg.includes("terminated")) {
-      console.warn(`[TinyFish] Connection reset (Vercel terminated): ${request.url}`);
+      console.warn(
+        `[TinyFish] Connection reset (Vercel terminated): ${request.url}`,
+      );
     } else {
       console.error(`[TinyFish] Fetch error: ${msg}`);
     }
-    return { success: false, resultJson: null, rawText: null, error: msg, jobId };
+    return {
+      success: false,
+      resultJson: null,
+      rawText: null,
+      error: msg,
+      jobId,
+    };
   }
 }
 
@@ -392,19 +572,35 @@ function tryParseRawText(raw: string | null): Record<string, unknown> | null {
       .replace(/```json\s*/gi, "")
       .replace(/```\s*/gi, "")
       .trim();
-
-    try { return JSON.parse(cleaned) as Record<string, unknown>; } catch { /* continue */ }
-
-    const start = cleaned.indexOf("{");
-    const end   = cleaned.lastIndexOf("}");
-    if (start !== -1 && end > start) {
-      try { return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>; } catch { /* continue */ }
+    try {
+      return JSON.parse(cleaned) as Record<string, unknown>;
+    } catch {
+      /* continue */
     }
-  } catch { /* give up */ }
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start !== -1 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1)) as Record<
+          string,
+          unknown
+        >;
+      } catch {
+        /* continue */
+      }
+    }
+  } catch {
+    /* give up */
+  }
   return null;
 }
 
-async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promise<string[]> {
+// ─── Stage 0: Free URL seeding ────────────────────────────────────────────────
+
+async function fetchSitemapUrls(
+  rootUrl: string,
+  allowedHostname: string,
+): Promise<string[]> {
   const candidates = [
     `${rootUrl.replace(/\/$/, "")}/sitemap.xml`,
     `${rootUrl.replace(/\/$/, "")}/sitemap_index.xml`,
@@ -413,25 +609,34 @@ async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promi
 
   for (const candidateUrl of candidates) {
     try {
-      const res = await fetch(candidateUrl, {
-        headers: { "User-Agent": "Buildify/1.0 (automated testing)" },
-        signal:  AbortSignal.timeout(8_000),
-      });
+      const { signal, clear } = makeAbortSignal(8_000);
+      let res: Response;
+      try {
+        res = await fetch(candidateUrl, {
+          headers: { "User-Agent": "Buildify/1.0 (automated testing)" },
+          signal,
+        });
+      } finally {
+        clear();
+      }
       if (!res.ok) continue;
 
       const text = await res.text();
 
       if (candidateUrl.endsWith("robots.txt")) {
-        const sitemapUrls = [...text.matchAll(/^Sitemap:\s*(.+)$/gim)]
-          .map((m) => m[1]!.trim());
-        for (const sitemapUrl of sitemapUrls) {
-          const locs = await fetchSitemapUrls(sitemapUrl, allowedHostname);
+        const sitemapUrls = [...text.matchAll(/^Sitemap:\s*(.+)$/gim)].map(
+          (m) => m[1]!.trim(),
+        );
+        for (const su of sitemapUrls) {
+          const locs = await fetchSitemapUrls(su, allowedHostname);
           if (locs.length > 0) return locs;
         }
         continue;
       }
 
-      const locs = [...text.matchAll(/<loc>\s*(https?:\/\/[^\s<]+)\s*<\/loc>/gi)]
+      const locs = [
+        ...text.matchAll(/<loc>\s*(https?:\/\/[^\s<]+)\s*<\/loc>/gi),
+      ]
         .map((m) => m[1]!.trim())
         .filter((u) => isAllowedUrl(u, allowedHostname))
         .slice(0, 50);
@@ -440,149 +645,104 @@ async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promi
         console.log(`[Stage0] Sitemap: ${locs.length} URLs`);
         return locs;
       }
-    } catch { /* silent — sitemap is always optional */ }
+    } catch {
+      /* sitemap is always optional */
+    }
   }
   return [];
 }
 
-async function fetchStaticHtmlLinks(rootUrl: string, allowedHostname: string): Promise<string[]> {
+async function fetchStaticHtmlLinks(
+  rootUrl: string,
+  allowedHostname: string,
+): Promise<string[]> {
   try {
-    const res = await fetch(rootUrl, {
-      headers: {
-        "User-Agent": "Buildify/1.0 (automated testing)",
-        "Accept":     "text/html",
-      },
-      signal: AbortSignal.timeout(10_000),
-    });
+    const { signal, clear } = makeAbortSignal(10_000);
+    let res: Response;
+    try {
+      res = await fetch(rootUrl, {
+        headers: {
+          "User-Agent": "Buildify/1.0 (automated testing)",
+          Accept: "text/html",
+        },
+        signal,
+      });
+    } finally {
+      clear();
+    }
     if (!res.ok) return [];
 
     const html = await res.text();
-
     const links = [...html.matchAll(/href=["']([^"']+)["']/gi)]
-      .map((m) => m[1]!)
+      .map((m) => decodeHtmlEntities(m[1]!))
       .map((href) => resolveAbsolute(href, rootUrl))
       .filter((u): u is string => u !== null)
       .filter((u) => isAllowedUrl(u, allowedHostname))
-      .map(dedupeUrl);
+      .map(normalizeUrl);
 
     const unique = [...new Set(links)];
-    if (unique.length > 0) {
+    if (unique.length > 0)
       console.log(`[Stage0] Static HTML: ${unique.length} links`);
-    }
     return unique;
   } catch {
     return [];
   }
 }
 
-function buildDiscoveryGoal(url: string, allowedHostname: string): string {
-  return `Navigate to this URL: ${url}
+// ─── Prompt builders ──────────────────────────────────────────────────────────
 
+// Single source of truth for hydration wait logic. Keeps all goal builders
+// consistent — previously copy-pasted with subtle differences.
+const WAIT_PREAMBLE = `
 WAIT FOR FULL RENDER:
-1. Wait for the page to load completely (network idle).
-2. If you see <div id="root">, <div id="app">, __NEXT_DATA__, window.React, or window.__nuxt — this is a JavaScript-rendered app. Wait an ADDITIONAL 4 seconds for the client-side JavaScript to finish rendering.
-3. Wait for any loading spinners or skeleton screens to fully disappear.
-4. Do NOT interact with any login modals or cookie banners — just dismiss or ignore them.
-
-EXTRACT ALL HREF VALUES:
-After the page has fully rendered, find EVERY <a> element on the page (including those rendered by React Router, Vue Router, Next.js Link, etc — they all produce <a> tags in the final DOM).
-
-For each <a> element, record:
-- text: the trimmed innerText of the element
-- href: the raw href attribute value
-
-Only include links where the href resolves to the same domain: ${allowedHostname}
-Convert relative hrefs to absolute: "/about" becomes "https://${allowedHostname}/about"
-
-Look in ALL of these areas:
-- Navigation bars (top nav, side nav, mobile nav)
-- Header and footer
-- Dropdown menus (expand them if needed)
-- Sidebar menus
-- Tab bars
-- Any cards or tiles with navigation links
-
-IMPORTANT: This is a READ-ONLY operation. Do NOT click any links. Do NOT navigate away from ${url}. Just read the DOM after hydration.
-
-Return ONLY valid JSON. No markdown. No explanation. Start with { end with }.
-{
-  "pageTitle": "string",
-  "siteType": "spa" | "ssr" | "static",
-  "links": [
-    {"text": "About", "resolvedUrl": "https://${allowedHostname}/about"},
-    {"text": "Contact", "resolvedUrl": "https://${allowedHostname}/contact"},
-    {"text": "Alphabets", "resolvedUrl": "https://${allowedHostname}/alphabets"}
-  ]
-}`;
-}
+1. Wait for the page to fully load (network idle).
+2. If you see <div id="root">, <div id="app">, __NEXT_DATA__, window.React, or window.__nuxt — JavaScript-rendered app. Wait an EXTRA 4 seconds for JS rendering to complete.
+3. Wait for loading spinners and skeleton screens to disappear.
+4. Dismiss or ignore login modals and cookie banners — do NOT interact with them.
+`.trim();
 
 function buildExtractionGoal(url: string, allowedHostname: string): string {
   return `Navigate to this URL: ${url}
 
-WAIT FOR FULL RENDER:
-1. Wait for network idle.
-2. If this is a JavaScript app (React, Vue, Next.js, Vite — check for <div id="root">, <div id="app">, or __NEXT_DATA__), wait an EXTRA 3 seconds after network idle for JS rendering.
-3. Wait for spinners and skeleton screens to disappear.
+${WAIT_PREAMBLE}
 
-INTERCEPT NETWORK REQUESTS (during page load only):
-Record fetch/XHR requests where the URL contains /api/, /v1/, /v2/, /graphql, or the Content-Type is application/json.
-Record: url, method (GET/POST/etc), status (HTTP code), responseType, durationMs.
-Cap at 15 requests.
+INTERCEPT NETWORK REQUESTS during page load:
+Record fetch/XHR calls where URL contains /api/, /v1/, /v2/, /graphql, or Content-Type is application/json.
+Fields: url, method, status (HTTP code), responseType, durationMs. Cap at 15.
 
-EXTRACT THE FOLLOWING DATA:
+EXTRACT:
 
-1. PAGE TITLE: value of document.title
+1. PAGE TITLE: document.title
 
-2. INTERACTIVE ELEMENTS — record type, text (or placeholder/aria-label if no text), isVisible:
-   - All <a> tags → type: "link", include href attribute
-   - All <button> tags → type: "button"
-   - All <input> tags → type: "input", use placeholder or aria-label as text
-   - All <select> tags → type: "select"
-   - All <textarea> tags → type: "textarea"
+2. INTERACTIVE ELEMENTS — for each, record type, text (or placeholder/aria-label), isVisible:
+   <a>        → type "link", include href attribute
+   <button>   → type "button"
+   <input>    → type "input", text = placeholder or aria-label
+   <select>   → type "select"
+   <textarea> → type "textarea"
 
-3. FORMS — for each <form> element:
-   - action: the action attribute (or null)
-   - method: "get" or "post" (default "get" if not specified)
-   - fields: array of { name, type, required, pattern } for each input/select/textarea inside the form
+3. FORMS — for each <form>:
+   action (or null), method (default "get"), fields: [{name, type, required, pattern}]
 
-4. INTERNAL LINKS — array of absolute URLs on domain ${allowedHostname} only.
-   Convert relative paths to absolute. Deduplicate. Max 30 links.
+4. INTERNAL LINKS — absolute URLs on ${allowedHostname} only.
+   Decode HTML entities (&amp; → &). Resolve relative paths. Deduplicate. Max 30.
 
-5. NAVIGATION STRUCTURE:
-   - breadcrumbs: array of breadcrumb text strings in left-to-right order
-   - menus: array of { label: "top-nav" | "sidebar" | "footer", items: [{text, href}] }
+5. NAVIGATION: breadcrumbs array, menus [{label:"top-nav"|"sidebar"|"footer", items:[{text,href}]}]
 
 Return ONLY valid JSON. No markdown. Start with { end with }.
 {
   "title": "string",
   "elements": [
-    {"type": "link",     "text": "About",    "href": "/about",            "isVisible": true},
-    {"type": "button",   "text": "Submit",                                 "isVisible": true},
-    {"type": "input",    "text": "Search",                                 "isVisible": true},
-    {"type": "link",     "text": "Alphabets","href": "/alphabets",         "isVisible": true}
+    {"type":"link","text":"About","href":"/about","isVisible":true},
+    {"type":"button","text":"Submit","isVisible":true},
+    {"type":"input","text":"Search","isVisible":true}
   ],
-  "internalLinks": [
-    "https://${allowedHostname}/about",
-    "https://${allowedHostname}/alphabets",
-    "https://${allowedHostname}/contact"
-  ],
-  "forms": [
-    {
-      "action": "/search",
-      "method": "get",
-      "fields": [
-        {"name": "q", "type": "text", "required": false, "pattern": null}
-      ]
-    }
-  ],
-  "apiEndpoints": [
-    {"url": "https://api.example.com/v1/data", "method": "GET", "status": 200, "responseType": "json", "durationMs": 120}
-  ],
+  "internalLinks": ["https://${allowedHostname}/about","https://${allowedHostname}/contact"],
+  "forms": [{"action":"/search","method":"get","fields":[{"name":"q","type":"text","required":false,"pattern":null}]}],
+  "apiEndpoints": [{"url":"https://api.example.com/v1/data","method":"GET","status":200,"responseType":"json","durationMs":120}],
   "navStructure": {
-    "breadcrumbs": ["Home", "Products"],
-    "menus": [
-      {"label": "top-nav", "items": [{"text": "About", "href": "/about"}, {"text": "Alphabets", "href": "/alphabets"}]}
-    ]
+    "breadcrumbs": ["Home","Products"],
+    "menus": [{"label":"top-nav","items":[{"text":"About","href":"/about"}]}]
   }
 }`;
 }
@@ -590,19 +750,16 @@ Return ONLY valid JSON. No markdown. Start with { end with }.
 function buildScreenshotGoal(url: string): string {
   return `Navigate to: ${url}
 
-Wait for the page to fully load including JavaScript rendering. Wait for loading spinners to disappear.
+${WAIT_PREAMBLE}
 
-Take a full-page screenshot at each of these viewport widths:
-- 375px wide (mobile)
-- 768px wide (tablet)  
-- 1440px wide (desktop)
+Take full-page screenshots at these viewport widths: 375px (mobile), 768px (tablet), 1440px (desktop).
 
 Return ONLY this JSON. No markdown. Start with { end with }.
 {
   "screenshots": {
-    "viewport375": "<base64-encoded PNG string, or null if failed>",
-    "viewport768": "<base64-encoded PNG string, or null if failed>",
-    "viewport1440": "<base64-encoded PNG string, or null if failed>"
+    "viewport375": "<base64 PNG or null>",
+    "viewport768": "<base64 PNG or null>",
+    "viewport1440": "<base64 PNG or null>"
   }
 }`;
 }
@@ -610,26 +767,61 @@ Return ONLY this JSON. No markdown. Start with { end with }.
 function buildPerformanceGoal(url: string): string {
   return `Navigate to: ${url}
 
-Wait for the page to fully load (network idle).
+${WAIT_PREAMBLE}
 
-Collect Core Web Vitals using the browser Performance API:
-- LCP in milliseconds: get the last "largest-contentful-paint" PerformanceObserver entry, use .startTime
-- FID in milliseconds: get the first "first-input" entry, calculate processingStart minus startTime (return 0 if no interaction)
-- CLS score: sum all LayoutShift entries where hadRecentInput is false
-- TTFB in milliseconds: from PerformanceNavigationTiming, calculate responseStart minus requestStart
+Collect Core Web Vitals using the Performance API:
+- LCP ms: last "largest-contentful-paint" PerformanceObserver entry, .startTime
+- FID ms: first "first-input" entry, processingStart - startTime (0 if no interaction)
+- CLS: sum all LayoutShift entries where hadRecentInput is false
+- TTFB ms: PerformanceNavigationTiming responseStart - requestStart
 
 Return ONLY this JSON. No markdown. Start with { end with }.
-{"pageUrl":"${url}","lcpMs":<number or null>,"fidMs":<number or null>,"cls":<number or null>,"ttfbMs":<number or null>,"rawMetrics":{}}`;
+{"pageUrl":"${url}","lcpMs":null,"fidMs":null,"cls":null,"ttfbMs":null,"rawMetrics":{}}`;
 }
 
-function extractPage(
+// ─── Page data extraction ─────────────────────────────────────────────────────
+
+/**
+ * Complexity score for test budget allocation.
+ *
+ * Scoring rationale:
+ *   Forms (+2 each)       — richest test surface: inputs, validation, submission
+ *   Interactive els (+1)  — buttons/inputs worth testing for clicks and state
+ *   Internal links (+0.5) — navigation coverage, lower priority
+ *   Has API calls (+3)    — integration-level tests are high value
+ */
+function scorePageComplexity(
+  page: Omit<CrawledPage, "complexityScore" | "screenshots">,
+): number {
+  const interactive = page.elements.filter(
+    (e) =>
+      e.type === "button" ||
+      e.type === "input" ||
+      e.type === "select" ||
+      e.type === "textarea",
+  ).length;
+  return (
+    page.forms.length * 2 +
+    interactive * 1 +
+    page.internalLinks.length * 0.5 +
+    (page.apiEndpoints.length > 0 ? 3 : 0)
+  );
+}
+
+function extractPageData(
   url: string,
   rawData: Record<string, unknown>,
   allowedHostname: string,
 ): Omit<CrawledPage, "screenshots"> {
   const d = rawData as {
     title?: string;
-    elements?: { type: string; text: string; href?: string; selector?: string; isVisible: boolean }[];
+    elements?: {
+      type: string;
+      text: string;
+      href?: string;
+      selector?: string;
+      isVisible: boolean;
+    }[];
     internalLinks?: unknown[];
     forms?: CrawledPage["forms"];
     apiEndpoints?: unknown[];
@@ -641,47 +833,115 @@ function extractPage(
 
   const addLink = (raw: unknown) => {
     if (typeof raw !== "string" || !raw) return;
-    const resolved = resolveAbsolute(raw, url);
+    const decoded = decodeHtmlEntities(raw);
+    const resolved = resolveAbsolute(decoded, url);
     if (!resolved) return;
-    const deduped = dedupeUrl(resolved);
-    if (!isAllowedUrl(deduped, allowedHostname) || seen.has(deduped)) return;
-    seen.add(deduped);
-    internalLinks.push(deduped);
+    const normalized = normalizeUrl(resolved);
+    if (!isAllowedUrl(normalized, allowedHostname) || seen.has(normalized))
+      return;
+    seen.add(normalized);
+    internalLinks.push(normalized);
   };
 
-  for (const raw of (d.internalLinks ?? [])) addLink(raw);
-
-  for (const el of (d.elements ?? [])) {
+  for (const raw of d.internalLinks ?? []) addLink(raw);
+  for (const el of d.elements ?? []) {
     if (el.type === "link" && el.href) addLink(el.href);
   }
 
   const apiEndpoints: ApiEndpoint[] = ((d.apiEndpoints ?? []) as unknown[])
-    .filter((e): e is { url: string; method?: string; status?: number; responseType?: string; durationMs?: number } =>
-      typeof e === "object" && e !== null && typeof (e as { url?: unknown }).url === "string"
+    .filter(
+      (
+        e,
+      ): e is {
+        url: string;
+        method?: string;
+        status?: number;
+        responseType?: string;
+        durationMs?: number;
+      } =>
+        typeof e === "object" &&
+        e !== null &&
+        typeof (e as { url?: unknown }).url === "string",
     )
     .map((e) => ({
-      url:          e.url,
-      method:       e.method ?? "GET",
-      status:       typeof e.status === "number" ? e.status : null,
+      url: e.url,
+      method: e.method ?? "GET",
+      status: typeof e.status === "number" ? e.status : null,
       responseType: e.responseType ?? null,
-      durationMs:   typeof e.durationMs === "number" ? e.durationMs : null,
+      durationMs: typeof e.durationMs === "number" ? e.durationMs : null,
     }))
     .slice(0, 15);
 
-  return {
+  const partial: Omit<CrawledPage, "complexityScore" | "screenshots"> = {
     url,
-    title:         typeof d.title === "string" ? d.title : "",
-    elements:      d.elements ?? [],
+    title: typeof d.title === "string" ? d.title : "",
+    elements: d.elements ?? [],
     internalLinks,
     externalLinks: [],
-    forms:         d.forms ?? [],
+    forms: d.forms ?? [],
     apiEndpoints,
     navStructure: {
       breadcrumbs: d.navStructure?.breadcrumbs ?? [],
-      menus:       d.navStructure?.menus ?? [],
+      menus: d.navStructure?.menus ?? [],
     },
   };
+
+  return { ...partial, complexityScore: scorePageComplexity(partial) };
 }
+
+// ─── Stage 2: Test budget allocation ─────────────────────────────────────────
+
+/**
+ * Distribute maxTests across crawled pages.
+ *
+ * Algorithm:
+ *   1. Every page gets the floor (MIN_TESTS_PER_PAGE = 1).
+ *   2. remaining = maxTests - pages.length (budget after flooring everyone)
+ *   3. Pages ranked by complexityScore descending claim additional tests
+ *      up to MAX_TESTS_PER_PAGE until remaining is exhausted.
+ *
+ * This guarantees: every page gets ≥1, complex pages get proportionally more,
+ * no single page can monopolise the budget.
+ */
+export function allocateTestBudget(
+  pages: CrawledPage[],
+  maxTests: number,
+): TestBudgetAllocation {
+  const cap = Math.min(maxTests, HARD_CAPS.MAX_TESTS);
+  const floor = HARD_CAPS.MIN_TESTS_PER_PAGE;
+  const ceiling = HARD_CAPS.MAX_TESTS_PER_PAGE;
+
+  const allocation = new Map<string, number>(pages.map((p) => [p.url, floor]));
+  let remaining = cap - pages.length * floor;
+
+  if (remaining > 0) {
+    const ranked = [...pages].sort(
+      (a, b) => b.complexityScore - a.complexityScore,
+    );
+    for (const page of ranked) {
+      if (remaining <= 0) break;
+      const current = allocation.get(page.url) ?? floor;
+      const canAdd = Math.min(ceiling - current, remaining);
+      if (canAdd > 0) {
+        allocation.set(page.url, current + canAdd);
+        remaining -= canAdd;
+      }
+    }
+  }
+
+  const totalTests = [...allocation.values()].reduce((sum, n) => sum + n, 0);
+  console.log(
+    `[Budget] ${pages.length} pages | cap=${cap} | allocated=${totalTests} | ` +
+      [...allocation.entries()]
+        .sort(([, a], [, b]) => b - a)
+        .map(([u, n]) => `${new URL(u).pathname}×${n}`)
+        .join(", "),
+  );
+
+  return { testsPerPage: allocation, totalTests };
+}
+
+// ─── Main crawl ───────────────────────────────────────────────────────────────
 
 export async function crawlSite(
   rootUrl: string,
@@ -691,307 +951,482 @@ export async function crawlSite(
   allLinks: string[];
   crawlTimeMs: number;
   performanceMetrics: PagePerformanceMetrics[];
+  testBudget: TestBudgetAllocation;
   hasLogin: boolean;
   hasSignup: boolean;
   hasSearch: boolean;
   hasProtectedRoutes: boolean;
-  siteProfile: SiteProfile;
+  stage3Promise: Promise<void>;
 }> {
-  const startTime       = Date.now();
+  const startTime = Date.now();
   const allowedHostname = options.allowedDomain ?? extractHostname(rootUrl);
-  const testRunId       = options.testRunId;
+  const testRunId = options.testRunId;
+  const abortSignal = options.abortSignal;
+  const ctx = makeCrawlContext();
 
-  creditsExhausted = false;
+  const budget: CrawlBudget = {
+    maxPages: Math.min(
+      options.budget?.maxPages ?? BUDGET_PRESETS.standard.maxPages,
+      HARD_CAPS.MAX_PAGES,
+    ),
+    maxTests: Math.min(
+      options.budget?.maxTests ?? BUDGET_PRESETS.standard.maxTests,
+      HARD_CAPS.MAX_TESTS,
+    ),
+    concurrency:
+      options.budget?.concurrency ?? BUDGET_PRESETS.standard.concurrency,
+  };
 
-  console.log(`[Crawler] ══ START: ${rootUrl}`);
+  console.log(
+    `[Crawler] ══ START: ${rootUrl} | ` +
+      `maxPages=${budget.maxPages} maxTests=${budget.maxTests} concurrency=${budget.concurrency}`,
+  );
 
+  // ── Stage 0: Free seeding ──────────────────────────────────────────────────
   const [sitemapUrls, staticHtmlLinks] = await Promise.all([
     fetchSitemapUrls(rootUrl, allowedHostname),
     fetchStaticHtmlLinks(rootUrl, allowedHostname),
   ]);
 
-  const seedUrls = new Set<string>([
-    dedupeUrl(rootUrl),
-    ...sitemapUrls.map(dedupeUrl),
-    ...staticHtmlLinks.map(dedupeUrl),
+  const rootNorm = normalizeUrl(rootUrl);
+  const visited = new Set<string>([rootNorm]);
+
+  // Root goes first in queue; seeded URLs fill the rest (pattern-filtered)
+  const queue: string[] = [rootNorm];
+  const seedLinks = filterByPathPattern([
+    ...new Set(
+      [...sitemapUrls, ...staticHtmlLinks]
+        .map(normalizeUrl)
+        .filter((u) => !visited.has(u) && isAllowedUrl(u, allowedHostname)),
+    ),
   ]);
-
-  const profile  = detectSiteSize(seedUrls.size);
-  const maxPages = options.maxPages
-    ? Math.min(options.maxPages, LIMITS.MAX_PAGES_HARD_CAP)
-    : Math.min(profile.maxPages, LIMITS.MAX_PAGES_HARD_CAP);
-
-  console.log(
-    `[Stage0] size=${profile.size} | seeded=${seedUrls.size} URLs ` +
-    `(sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length}) | ` +
-    `maxPages=${maxPages} concurrency=${profile.concurrency} minTests=${profile.minTests}`,
-  );
-
-  console.log(`[Stage1] SPA discovery on root page...`);
-
-  const discoveryResult = await withTimeout(
-    runTinyFish({
-      url:             rootUrl,
-      goal:            buildDiscoveryGoal(rootUrl, allowedHostname),
-      browser_profile: "stealth",
-    }),
-    LIMITS.DISCOVERY_TIMEOUT_MS,
-    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
-    `discovery(${rootUrl})`,
-  );
-
-  const discoveryData = discoveryResult.resultJson ?? tryParseRawText(discoveryResult.rawText);
-
-  if (discoveryData) {
-    const d = discoveryData as {
-      pageTitle?: string;
-      siteType?: string;
-      links?: { text: string; resolvedUrl: string }[];
-    };
-
-    const newLinks = (d.links ?? [])
-      .map((l) => l.resolvedUrl)
-      .filter((u) => typeof u === "string" && isAllowedUrl(u, allowedHostname))
-      .map(dedupeUrl);
-
-    for (const u of newLinks) seedUrls.add(u);
-
-    console.log(
-      `[Stage1] type=${d.siteType ?? "unknown"} | ` +
-      `${d.links?.length ?? 0} links found | ` +
-      `total pool: ${seedUrls.size} URLs`,
-    );
-  } else {
-    console.warn(`[Stage1] Discovery failed (${discoveryResult.error ?? "no data"}) — using Stage 0 URLs only`);
+  for (const u of seedLinks) {
+    visited.add(u);
+    queue.push(u);
   }
 
-  const rootDeduped = dedupeUrl(rootUrl);
-  const otherUrls   = dedupeUrlPool(
-    [...seedUrls].filter((u) => u !== rootDeduped),
-  ).slice(0, maxPages - 1);
-
-  const urlsToExtract = [rootDeduped, ...otherUrls];
-
   console.log(
-    `[Stage2] Extracting ${urlsToExtract.length} pages ` +
-    `(concurrency: ${profile.concurrency}):\n  ${urlsToExtract.join("\n  ")}`,
+    `[Stage0] Queue seeded with ${queue.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
   );
 
-  const extractionResults = await mapWithConcurrency(
-    urlsToExtract,
-    profile.concurrency,
-    async (pageUrl) => {
-      if (creditsExhausted) {
-        console.warn(`[Stage2] Skipping ${pageUrl} — credits exhausted`);
-        return null;
+  // ── Stage 1: BFS extraction ────────────────────────────────────────────────
+  //
+  // N workers share queue/visited/pages via closure.
+  // Single-threaded JS means queue.shift() and pages.push() are atomic between
+  // awaits — no locking needed.
+  //
+  // As each page is extracted, its internalLinks are enqueued immediately.
+  // This gives genuine multi-hop depth: root → /about → /about/team, etc.
+  // The page cap and path-pattern filter prevent link explosions.
+
+  const pages: CrawledPage[] = [];
+
+  async function extractionWorker(): Promise<void> {
+    while (true) {
+      // ── Cancellation check ─────────────────────────────────────────────
+      // Checked at the top of every iteration — BEFORE dequeuing the next URL
+      // and BEFORE any TinyFish call. This ensures that the moment
+      // cancelTestRunHandler aborts the signal, no further credits are spent.
+      if (abortSignal?.aborted) {
+        console.log(`[Stage1] Worker stopped — abort signal received`);
+        break;
       }
 
-      const result = await withTimeout(
-        runTinyFish({
-          url:             pageUrl,
-          goal:            buildExtractionGoal(pageUrl, allowedHostname),
-          browser_profile: "stealth",
-        }),
-        LIMITS.EXTRACTION_TIMEOUT_MS,
-        { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
-        `extract(${pageUrl})`,
-      );
+      if (pages.length >= budget.maxPages || ctx.creditsExhausted) break;
 
-      const rawData = result.resultJson ?? tryParseRawText(result.rawText);
-      if (!rawData) {
-        console.warn(`[Stage2] ✗ ${pageUrl}: ${result.error ?? "no data"}`);
-        return null;
+      const pageUrl = queue.shift();
+      if (!pageUrl) break;
+
+      let extracted: Omit<CrawledPage, "screenshots"> | null = null;
+
+      for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
+        // Check abort again before each retry attempt
+        if (abortSignal?.aborted || ctx.creditsExhausted) break;
+
+        if (attempt > 0) console.log(`[Stage1] Retry ${attempt}: ${pageUrl}`);
+
+        const result = await withTimeout(
+          runTinyFish(
+            {
+              url: pageUrl,
+              goal: buildExtractionGoal(pageUrl, allowedHostname),
+              browser_profile: "stealth",
+            },
+            ctx,
+          ),
+          TIMEOUTS.EXTRACTION_MS,
+          {
+            success: false,
+            resultJson: null,
+            rawText: null,
+            error: "timeout",
+            jobId: null,
+          },
+          `extract(${pageUrl})`,
+        );
+
+        // Don't process result if we were aborted while waiting
+        if (abortSignal?.aborted) break;
+
+        const raw = result.resultJson ?? tryParseRawText(result.rawText);
+        if (!raw) {
+          console.warn(
+            `[Stage1] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
+          );
+          continue;
+        }
+
+        extracted = extractPageData(pageUrl, raw, allowedHostname);
+        console.log(
+          `[Stage1] ✓ [${pages.length + 1}/${budget.maxPages}] "${extracted.title}" ${pageUrl} | ` +
+            `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
+            `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
+        );
+        break;
       }
 
-      const page = extractPage(pageUrl, rawData, allowedHostname);
-      console.log(
-        `[Stage2] ✓ "${page.title}" (${pageUrl}) | ` +
-        `elements: ${page.elements.length} | links: ${page.internalLinks.length} | ` +
-        `forms: ${page.forms.length} | api: ${page.apiEndpoints.length}`,
-      );
-      return page;
-    },
+      if (!extracted) continue;
+
+      pages.push({
+        ...extracted,
+        screenshots: { url375: null, url768: null, url1440: null },
+      });
+
+      // Enqueue newly discovered links immediately — multi-hop BFS depth
+      if (pages.length < budget.maxPages) {
+        const newLinks = filterByPathPattern(
+          extracted.internalLinks.filter((u) => !visited.has(u)),
+        );
+        let enqueued = 0;
+        for (const u of newLinks) {
+          // Stop enqueueing once the pipeline (pages + pending queue) is full
+          if (pages.length + queue.length >= budget.maxPages) break;
+          visited.add(u);
+          queue.push(u);
+          enqueued++;
+        }
+        if (enqueued > 0) {
+          console.log(
+            `[Stage1] +${enqueued} URLs enqueued from ${pageUrl} | queue: ${queue.length}`,
+          );
+        }
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: budget.concurrency }, extractionWorker),
   );
 
-  const pages: CrawledPage[] = extractionResults
-    .filter((p): p is Omit<CrawledPage, "screenshots"> => p !== null)
-    .map((p) => ({ ...p, screenshots: { url375: null, url768: null, url1440: null } }));
+  // If we were aborted, throw so the caller (runPipeline) handles it as cancellation
+  if (abortSignal?.aborted) {
+    throw new Error("AbortError: crawl cancelled");
+  }
 
   if (pages.length === 0) {
-    console.warn(`[Stage2] All extractions failed — creating empty root page`);
+    console.warn(`[Stage1] All extractions failed — inserting empty root page`);
     pages.push({
-      url: rootUrl, title: "", elements: [], internalLinks: [], externalLinks: [],
-      forms: [], apiEndpoints: [],
+      url: rootUrl,
+      title: "",
+      elements: [],
+      internalLinks: [],
+      externalLinks: [],
+      forms: [],
+      apiEndpoints: [],
       navStructure: { breadcrumbs: [], menus: [] },
       screenshots: { url375: null, url768: null, url1440: null },
+      complexityScore: 0,
     });
   }
+
+  // ── Stage 2: Test budget allocation ───────────────────────────────────────
+  const testBudget = allocateTestBudget(pages, budget.maxTests);
 
   const allLinks = [...new Set(pages.flatMap((p) => p.internalLinks))];
   const crawlTimeMs = Date.now() - startTime;
 
   console.log(
-    `[Stage2] ══ DONE: ${pages.length} pages | ${allLinks.length} links | ${(crawlTimeMs / 1000).toFixed(1)}s`,
+    `[Stage1] ══ DONE: ${pages.length} pages | ${allLinks.length} discovered links | ${(crawlTimeMs / 1000).toFixed(1)}s`,
   );
 
+  // ── Stage 3: Background screenshots + perf ────────────────────────────────
+  // Returned as an awaitable Promise. Caller can await it before writing to DB
+  // to ensure screenshot URLs are populated, or ignore it for fire-and-forget.
   const performanceMetrics: PagePerformanceMetrics[] = pages.map((p) => ({
-    pageUrl: p.url, lcpMs: null, fidMs: null, cls: null, ttfbMs: null, rawMetrics: {},
+    pageUrl: p.url,
+    lcpMs: null,
+    fidMs: null,
+    cls: null,
+    ttfbMs: null,
+    rawMetrics: {},
   }));
 
-  void (async () => {
+  const stage3Promise = (async () => {
     await Promise.allSettled(
       pages.flatMap((page, i) => [
         (async () => {
-          if (!testRunId || creditsExhausted) return;
-          const ssResult = await withTimeout(
-            runTinyFish({
-              url:             page.url,
-              goal:            buildScreenshotGoal(page.url),
-              browser_profile: "lite",
-            }),
-            LIMITS.SCREENSHOT_TIMEOUT_MS,
-            { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+          if (!testRunId || ctx.creditsExhausted) return;
+          const result = await withTimeout(
+            runTinyFish(
+              {
+                url: page.url,
+                goal: buildScreenshotGoal(page.url),
+                browser_profile: "lite",
+              },
+              ctx,
+            ),
+            TIMEOUTS.SCREENSHOT_MS,
+            {
+              success: false,
+              resultJson: null,
+              rawText: null,
+              error: "timeout",
+              jobId: null,
+            },
             `screenshot(${page.url})`,
           );
-          const ssData = ssResult.resultJson ?? tryParseRawText(ssResult.rawText);
-          if (!ssData) return;
-          const ss = (ssData as { screenshots?: { viewport375?: string | null; viewport768?: string | null; viewport1440?: string | null } }).screenshots;
+          const data = result.resultJson ?? tryParseRawText(result.rawText);
+          if (!data) return;
+          const ss = (
+            data as {
+              screenshots?: {
+                viewport375?: string | null;
+                viewport768?: string | null;
+                viewport1440?: string | null;
+              };
+            }
+          ).screenshots;
           if (!ss) return;
           const uploaded = await uploadPageScreenshots({
-            screenshots: { viewport375: ss.viewport375 ?? null, viewport768: ss.viewport768 ?? null, viewport1440: ss.viewport1440 ?? null },
+            screenshots: {
+              viewport375: ss.viewport375 ?? null,
+              viewport768: ss.viewport768 ?? null,
+              viewport1440: ss.viewport1440 ?? null,
+            },
             testRunId,
             pageSlug: urlToSlug(page.url),
           });
           pages[i]!.screenshots = uploaded;
-          console.log(`[Stage3] 📸 Screenshots: ${page.url}`);
+          console.log(`[Stage3] 📸 ${page.url}`);
         })(),
-
         (async () => {
-          if (creditsExhausted) return;
-          const perfResult = await withTimeout(
-            runTinyFish({
-              url:             page.url,
-              goal:            buildPerformanceGoal(page.url),
-              browser_profile: "lite",
-            }),
-            LIMITS.PERF_TIMEOUT_MS,
-            { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+          if (ctx.creditsExhausted) return;
+          const result = await withTimeout(
+            runTinyFish(
+              {
+                url: page.url,
+                goal: buildPerformanceGoal(page.url),
+                browser_profile: "lite",
+              },
+              ctx,
+            ),
+            TIMEOUTS.PERF_MS,
+            {
+              success: false,
+              resultJson: null,
+              rawText: null,
+              error: "timeout",
+              jobId: null,
+            },
             `perf(${page.url})`,
           );
-          const d = perfResult.resultJson ?? tryParseRawText(perfResult.rawText);
-          if (!d) return;
-          const pm = d as { lcpMs?: number | null; fidMs?: number | null; cls?: number | null; ttfbMs?: number | null };
+          const data = result.resultJson ?? tryParseRawText(result.rawText);
+          if (!data) return;
+          const pm = data as {
+            lcpMs?: number | null;
+            fidMs?: number | null;
+            cls?: number | null;
+            ttfbMs?: number | null;
+          };
           performanceMetrics[i] = {
-            pageUrl:    page.url,
-            lcpMs:      typeof pm.lcpMs  === "number" ? pm.lcpMs  : null,
-            fidMs:      typeof pm.fidMs  === "number" ? pm.fidMs  : null,
-            cls:        typeof pm.cls    === "number" ? pm.cls    : null,
-            ttfbMs:     typeof pm.ttfbMs === "number" ? pm.ttfbMs : null,
+            pageUrl: page.url,
+            lcpMs: typeof pm.lcpMs === "number" ? pm.lcpMs : null,
+            fidMs: typeof pm.fidMs === "number" ? pm.fidMs : null,
+            cls: typeof pm.cls === "number" ? pm.cls : null,
+            ttfbMs: typeof pm.ttfbMs === "number" ? pm.ttfbMs : null,
             rawMetrics: {},
           };
-          console.log(`[Stage3] ⚡ Perf: ${page.url} LCP=${performanceMetrics[i]!.lcpMs}ms`);
+          console.log(
+            `[Stage3] ⚡ ${page.url} LCP=${performanceMetrics[i]!.lcpMs}ms`,
+          );
         })(),
       ]),
     );
     console.log(`[Stage3] Background tasks complete`);
   })();
 
+  // ── Site feature detection ─────────────────────────────────────────────────
   const allElements = pages.flatMap((p) => p.elements);
 
-  const hasLogin = pages.some((p) =>
-    /login|signin|auth|oauth|sso/.test(p.url) ||
-    p.elements.some((e) => {
-      const t = e.text?.toLowerCase() ?? "";
-      return (
-        t.includes("sign in") || t.includes("log in") || t.includes("login") ||
-        t.includes("continue with google") || t.includes("sign in with google") ||
-        t.includes("continue with github") || t.includes("login with")
-      );
-    }),
+  const hasLogin = pages.some(
+    (p) =>
+      /login|signin|auth|oauth|sso/.test(p.url) ||
+      p.elements.some((e) => {
+        const t = e.text?.toLowerCase() ?? "";
+        return (
+          t.includes("sign in") ||
+          t.includes("log in") ||
+          t.includes("login") ||
+          t.includes("continue with google") ||
+          t.includes("sign in with google") ||
+          t.includes("continue with github") ||
+          t.includes("login with")
+        );
+      }),
   );
 
-  const hasSignup = pages.some((p) =>
-    /signup|register/.test(p.url) ||
-    p.elements.some((e) => {
-      const t = e.text?.toLowerCase() ?? "";
-      return t.includes("sign up") || t.includes("register") || t.includes("create account");
-    }),
+  const hasSignup = pages.some(
+    (p) =>
+      /signup|register/.test(p.url) ||
+      p.elements.some((e) => {
+        const t = e.text?.toLowerCase() ?? "";
+        return (
+          t.includes("sign up") ||
+          t.includes("register") ||
+          t.includes("create account")
+        );
+      }),
   );
 
-  const protectedRoutePatterns = /\/(dashboard|account|profile|settings|admin|portal|members?|private|secure|my-)/i;
-  const hasProtectedRoutes = pages.some((p) =>
-    protectedRoutePatterns.test(p.url) ||
-    p.internalLinks.some((l) => protectedRoutePatterns.test(l)),
+  const protectedRouteRE =
+    /\/(dashboard|account|profile|settings|admin|portal|members?|private|secure|my-)/i;
+  const hasProtectedRoutes = pages.some(
+    (p) =>
+      protectedRouteRE.test(p.url) ||
+      p.internalLinks.some((l) => protectedRouteRE.test(l)),
   );
 
-  const hasSearch = allElements.some((e) =>
-    (e.type === "input" && (e.text?.toLowerCase().includes("search") ?? false)) ||
-    e.text?.toLowerCase() === "search",
+  const hasSearch = allElements.some(
+    (e) =>
+      (e.type === "input" &&
+        (e.text?.toLowerCase().includes("search") ?? false)) ||
+      e.text?.toLowerCase() === "search",
   );
 
   console.log(
-    `[Crawler] ══ FINAL: ${pages.length} pages | ${allLinks.length} links | ` +
-    `hasLogin:${hasLogin} hasSignup:${hasSignup} hasSearch:${hasSearch} ` +
-    `hasProtectedRoutes:${hasProtectedRoutes} | ${((Date.now() - startTime) / 1000).toFixed(1)}s`,
+    `[Crawler] ══ FINAL: ${pages.length} pages | tests:${testBudget.totalTests} | ` +
+      `login:${hasLogin} signup:${hasSignup} search:${hasSearch} protected:${hasProtectedRoutes} | ` +
+      `${((Date.now() - startTime) / 1000).toFixed(1)}s`,
   );
 
-  return { pages, allLinks, crawlTimeMs, performanceMetrics, hasLogin, hasSignup, hasSearch, hasProtectedRoutes, siteProfile: profile };
+  return {
+    pages,
+    allLinks,
+    crawlTimeMs,
+    performanceMetrics,
+    testBudget,
+    hasLogin,
+    hasSignup,
+    hasSearch,
+    hasProtectedRoutes,
+    stage3Promise,
+  };
 }
+
+// ─── Single-page crawl ────────────────────────────────────────────────────────
 
 export async function crawlPage(
   url: string,
   allowedHostname: string,
-  _testRunId?: string,
 ): Promise<CrawledPage> {
+  const ctx = makeCrawlContext();
   const empty: CrawledPage = {
-    url, title: "", elements: [], internalLinks: [], externalLinks: [],
-    forms: [], apiEndpoints: [],
+    url,
+    title: "",
+    elements: [],
+    internalLinks: [],
+    externalLinks: [],
+    forms: [],
+    apiEndpoints: [],
     navStructure: { breadcrumbs: [], menus: [] },
     screenshots: { url375: null, url768: null, url1440: null },
+    complexityScore: 0,
   };
-  if (creditsExhausted) return empty;
-
   const result = await withTimeout(
-    runTinyFish({ url, goal: buildExtractionGoal(url, allowedHostname), browser_profile: "stealth" }),
-    LIMITS.EXTRACTION_TIMEOUT_MS,
-    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    runTinyFish(
+      {
+        url,
+        goal: buildExtractionGoal(url, allowedHostname),
+        browser_profile: "stealth",
+      },
+      ctx,
+    ),
+    TIMEOUTS.EXTRACTION_MS,
+    {
+      success: false,
+      resultJson: null,
+      rawText: null,
+      error: "timeout",
+      jobId: null,
+    },
     `crawlPage(${url})`,
   );
-  const rawData = result.resultJson ?? tryParseRawText(result.rawText);
-  if (!rawData) return empty;
-  return { ...extractPage(url, rawData, allowedHostname), screenshots: { url375: null, url768: null, url1440: null } };
+  const raw = result.resultJson ?? tryParseRawText(result.rawText);
+  if (!raw) return empty;
+  return {
+    ...extractPageData(url, raw, allowedHostname),
+    screenshots: { url375: null, url768: null, url1440: null },
+  };
 }
 
-export async function measurePagePerformance(url: string): Promise<PagePerformanceMetrics> {
-  const fallback: PagePerformanceMetrics = { pageUrl: url, lcpMs: null, fidMs: null, cls: null, ttfbMs: null, rawMetrics: {} };
+// ─── Performance measurement ──────────────────────────────────────────────────
+
+export async function measurePagePerformance(
+  url: string,
+): Promise<PagePerformanceMetrics> {
+  const ctx = makeCrawlContext();
+  const fallback: PagePerformanceMetrics = {
+    pageUrl: url,
+    lcpMs: null,
+    fidMs: null,
+    cls: null,
+    ttfbMs: null,
+    rawMetrics: {},
+  };
   const result = await withTimeout(
-    runTinyFish({ url, goal: buildPerformanceGoal(url), browser_profile: "lite" }),
-    LIMITS.PERF_TIMEOUT_MS,
-    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    runTinyFish(
+      { url, goal: buildPerformanceGoal(url), browser_profile: "lite" },
+      ctx,
+    ),
+    TIMEOUTS.PERF_MS,
+    {
+      success: false,
+      resultJson: null,
+      rawText: null,
+      error: "timeout",
+      jobId: null,
+    },
     `perf(${url})`,
   );
-  const d = result.resultJson ?? tryParseRawText(result.rawText);
-  if (!d) return fallback;
-  const pm = d as { lcpMs?: number | null; fidMs?: number | null; cls?: number | null; ttfbMs?: number | null };
+  const data = result.resultJson ?? tryParseRawText(result.rawText);
+  if (!data) return fallback;
+  const pm = data as {
+    lcpMs?: number | null;
+    fidMs?: number | null;
+    cls?: number | null;
+    ttfbMs?: number | null;
+  };
   return {
     pageUrl: url,
-    lcpMs:   typeof pm.lcpMs  === "number" ? pm.lcpMs  : null,
-    fidMs:   typeof pm.fidMs  === "number" ? pm.fidMs  : null,
-    cls:     typeof pm.cls    === "number" ? pm.cls    : null,
-    ttfbMs:  typeof pm.ttfbMs === "number" ? pm.ttfbMs : null,
+    lcpMs: typeof pm.lcpMs === "number" ? pm.lcpMs : null,
+    fidMs: typeof pm.fidMs === "number" ? pm.fidMs : null,
+    cls: typeof pm.cls === "number" ? pm.cls : null,
+    ttfbMs: typeof pm.ttfbMs === "number" ? pm.ttfbMs : null,
     rawMetrics: {},
   };
 }
+
+// ─── Test execution ───────────────────────────────────────────────────────────
 
 export async function executeTest(
   url: string,
   goal: string,
   stealth = false,
 ): Promise<TestExecutionResult> {
+  const ctx = makeCrawlContext();
   const startTime = Date.now();
 
-  const fullGoal =
-`You are a QA test automation agent. Execute these test steps in a real browser.
+  const fullGoal = `You are a QA test automation agent. Execute these test steps in a real browser.
 
 TEST URL: ${url}
 
@@ -1004,24 +1439,33 @@ EXECUTION RULES:
 3. Execute each step in strict order.
 4. "passed" = true ONLY if you EXPLICITLY confirmed the expected result in the browser.
 5. "passed" = false if any step failed, threw an error, or the expected result was NOT observed.
-6. If you are uncertain, set passed = false.
-7. Record 4xx/5xx network errors in networkLogs. Record JS console errors in consoleLogs.
+6. If uncertain, set passed = false.
+7. Record 4xx/5xx errors in networkLogs. Record JS console errors in consoleLogs.
 
-RESPONSE FORMAT — return ONLY this JSON, no markdown, start with { end with }:
-If PASSED: {"passed":true,"actualResult":"<one sentence: what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
-If FAILED: {"passed":false,"actualResult":"<one sentence: what you observed>","errorDetails":"<specific error or mismatch>","consoleLogs":[],"networkLogs":[]}`;
+Return ONLY this JSON, no markdown, start with { end with }:
+If PASSED: {"passed":true,"actualResult":"<what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
+If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"<specific error>","consoleLogs":[],"networkLogs":[]}`;
 
   const result = await withTimeout(
-    runTinyFish({ url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" }),
-    LIMITS.EXECUTE_TEST_TIMEOUT_MS,
-    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    runTinyFish(
+      { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
+      ctx,
+    ),
+    TIMEOUTS.EXECUTE_TEST_MS,
+    {
+      success: false,
+      resultJson: null,
+      rawText: null,
+      error: "timeout",
+      jobId: null,
+    },
     `executeTest(${url})`,
   );
 
   const durationMs = Date.now() - startTime;
-  const rawData    = result.resultJson ?? tryParseRawText(result.rawText);
+  const raw = result.resultJson ?? tryParseRawText(result.rawText);
 
-  if (!rawData) {
+  if (!raw) {
     return {
       passed: false,
       actualResult: "TinyFish execution failed or timed out",
@@ -1034,36 +1478,51 @@ If FAILED: {"passed":false,"actualResult":"<one sentence: what you observed>","e
     };
   }
 
-  const r = rawData as {
-    passed?: boolean; actualResult?: string; errorDetails?: string | null;
-    consoleLogs?: string[]; networkLogs?: NetworkLogEntry[];
+  const r = raw as {
+    passed?: boolean;
+    actualResult?: string;
+    errorDetails?: string | null;
+    consoleLogs?: string[];
+    networkLogs?: NetworkLogEntry[];
   };
-
   return {
-    passed:        r.passed === true,
-    actualResult:  r.actualResult  ?? "No result returned",
-    errorDetails:  r.errorDetails  ?? null,
+    passed: r.passed === true,
+    actualResult: r.actualResult ?? "No result returned",
+    errorDetails: r.errorDetails ?? null,
     screenshotUrl: null,
     durationMs,
-    consoleLogs:   r.consoleLogs   ?? [],
-    networkLogs:   r.networkLogs   ?? [],
-    jobId:         result.jobId,
+    consoleLogs: r.consoleLogs ?? [],
+    networkLogs: r.networkLogs ?? [],
+    jobId: result.jobId,
   };
 }
 
-export async function runTinyFishScreenshot(url: string): Promise<string | null> {
+// ─── Failure screenshot ───────────────────────────────────────────────────────
+
+export async function runTinyFishScreenshot(
+  url: string,
+): Promise<string | null> {
+  const ctx = makeCrawlContext();
   const result = await withTimeout(
-    runTinyFish({
-      url,
-      goal: `Navigate to: ${url}\nWait for full load including JS hydration.\nTake a full-page screenshot at 1440px desktop viewport.\nReturn ONLY: {"screenshot":"<base64 PNG string or null>"}`,
-      browser_profile: "lite",
-    }),
-    LIMITS.SCREENSHOT_CAPTURE_MS,
-    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    runTinyFish(
+      {
+        url,
+        goal: `Navigate to: ${url}\nWait for full load including JS hydration.\nTake a full-page screenshot at 1440px viewport.\nReturn ONLY: {"screenshot":"<base64 PNG or null>"}`,
+        browser_profile: "lite",
+      },
+      ctx,
+    ),
+    TIMEOUTS.SCREENSHOT_FAIL_MS,
+    {
+      success: false,
+      resultJson: null,
+      rawText: null,
+      error: "timeout",
+      jobId: null,
+    },
     `failureScreenshot(${url})`,
   );
-
-  const rawData = result.resultJson ?? tryParseRawText(result.rawText);
-  if (!rawData) return null;
-  return (rawData as { screenshot?: string | null }).screenshot ?? null;
+  const raw = result.resultJson ?? tryParseRawText(result.rawText);
+  if (!raw) return null;
+  return (raw as { screenshot?: string | null }).screenshot ?? null;
 }

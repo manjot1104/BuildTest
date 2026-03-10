@@ -46,6 +46,7 @@ import {
   streamTestRunHandler,
   getPublicReportHandler,
   getEmbedBadgeHandler,
+  cancelTestRunHandler,
 } from '@/server/api/controllers/testing.controller'
 import { getV0Client } from '@/lib/v0-client'
 import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
@@ -1072,6 +1073,21 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
     return result
   })
+
+  // DELETE /api/test/run/:id/cancel — cancel a running test, stops TinyFish calls
+  // IMPORTANT: must be declared BEFORE /test/run/:id to avoid Elysia matching
+  // "cancel" as the :id param on the GET route above.
+  .delete(
+    '/test/run/:id/cancel',
+    async ({ params, set }) => {
+      const result = await cancelTestRunHandler({ params })
+      if (isApiError(result)) set.status = (result as ApiErrorResponse).status ?? 500
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+    },
+  )
 
   // GET /api/test/run/:id — polling fallback for run status + live bug list
   .get(

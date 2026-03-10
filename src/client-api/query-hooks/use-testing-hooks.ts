@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 export interface TestRun {
   id: string
-  status: 'crawling' | 'generating' | 'executing' | 'reporting' | 'complete' | 'failed'
+  status: 'crawling' | 'generating' | 'executing' | 'reporting' | 'complete' | 'failed' | 'cancelled'
   percent: number
   targetUrl: string
   overallScore: number | null
@@ -193,7 +193,12 @@ export interface SSEState {
   pipelineStatus: string
   /** True once the 'complete' event is received */
   isComplete: boolean
-  /** Non-null if the stream emitted an 'error' event */
+  /**
+   * True when the server sends the "CANCELLED" sentinel via the error event.
+   * Distinct from isError — the UI shows a "cancelled" state, not a failure.
+   */
+  isCancelled: boolean
+  /** Non-null if the stream emitted an 'error' event that is NOT a cancellation */
   errorMessage: string | null
 }
 
@@ -204,6 +209,7 @@ const INITIAL_SSE_STATE: SSEState = {
   percent: 0,
   pipelineStatus: 'crawling',
   isComplete: false,
+  isCancelled: false,
   errorMessage: null,
 }
 
@@ -218,12 +224,16 @@ export const testingKeys = {
   badge: (token: string) => [...testingKeys.all, 'badge', token] as const,
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Terminal statuses that should never open an SSE connection */
+const TERMINAL_STATUSES = new Set(['complete', 'failed', 'cancelled'])
+
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
  * Polling fallback for test run status.
- * Prefer useTestRunSSE for real-time streaming — this is kept as a hydration
- * fallback and for non-SSE contexts (e.g. server components, CI integrations).
+ * Prefer useTestRunSSE for real-time streaming.
  */
 export function useTestRunStatus(testRunId: string | null) {
   return useQuery({
@@ -237,7 +247,7 @@ export function useTestRunStatus(testRunId: string | null) {
     refetchInterval: (query) => {
       const status = query.state.data?.status
       if (!status) return 2500
-      if (status === 'complete' || status === 'failed') return false
+      if (TERMINAL_STATUSES.has(status)) return false
       return 2500
     },
     staleTime: 0,
@@ -309,27 +319,44 @@ export function useEmbedBadge(token: string | null) {
  * useTestRunSSE
  *
  * Opens an SSE connection to GET /api/test/stream/:id and maintains local
- * state so the UI updates in real-time without any polling:
+ * state so the UI updates in real-time without any polling.
  *
- *   - Test cards flip Pending → Running → Passed / Failed / Flaky
- *   - Progress bar advances via 'status' events
- *   - Live counter (X passed / Y failed / Z running) updates after each batch
- *   - Failed bugs appear immediately with screenshot thumbnails
- *
- * On 'complete' or 'error' the hook automatically invalidates the TanStack
- * Query cache so the full report data loads without a manual refresh.
+ * KEY FIX: Takes `initialStatus` and skips opening the SSE connection entirely
+ * for terminal statuses (complete / failed / cancelled). This prevents the
+ * history panel from accidentally restarting a cancelled pipeline when a user
+ * clicks on a past run — the SSE stream would otherwise be opened, the server
+ * would see the run isn't "complete/failed" (old check missed "cancelled"), and
+ * would spin up a brand-new pipeline.
  *
  * Usage:
- *   const { sseState } = useTestRunSSE(testRunId)
+ *   const { sseState } = useTestRunSSE(testRunId, run?.status)
  */
-export function useTestRunSSE(testRunId: string | null) {
+export function useTestRunSSE(testRunId: string | null, initialStatus?: string) {
   const queryClient = useQueryClient()
   const [sseState, setSseState] = useState<SSEState>(INITIAL_SSE_STATE)
-  // Use a ref so the EventSource message handler never closes over stale state
   const sseStateRef = useRef<SSEState>(INITIAL_SSE_STATE)
 
   useEffect(() => {
     if (!testRunId) return
+
+    // ── CRITICAL FIX ──────────────────────────────────────────────────────
+    // Do NOT open SSE for terminal statuses. When the history panel selects
+    // a cancelled or complete run, we just want to display the stored data —
+    // not reconnect to the SSE endpoint which would restart the pipeline.
+    if (initialStatus && TERMINAL_STATUSES.has(initialStatus)) {
+      // Reflect the terminal status in local SSE state immediately so the
+      // UI renders the correct panel (cancelled / complete) without waiting.
+      const terminalState: SSEState = {
+        ...INITIAL_SSE_STATE,
+        isComplete: initialStatus === 'complete',
+        isCancelled: initialStatus === 'cancelled',
+        pipelineStatus: initialStatus,
+        percent: initialStatus === 'complete' ? 100 : 0,
+      }
+      sseStateRef.current = terminalState
+      setSseState(terminalState)
+      return
+    }
 
     // Reset state whenever testRunId changes (new test run started)
     sseStateRef.current = INITIAL_SSE_STATE
@@ -342,10 +369,9 @@ export function useTestRunSSE(testRunId: string | null) {
       try {
         event = JSON.parse(e.data) as PipelineSSEEvent
       } catch {
-        return // ignore malformed frames
+        return
       }
 
-      // Build the next state immutably from the ref (avoids stale closure)
       const prev = sseStateRef.current
       let next: SSEState = prev
 
@@ -392,6 +418,7 @@ export function useTestRunSSE(testRunId: string | null) {
             percent: 100,
             pipelineStatus: 'complete',
             isComplete: true,
+            isCancelled: false,
             counter: {
               passed: event.passed,
               failed: event.failed,
@@ -401,17 +428,26 @@ export function useTestRunSSE(testRunId: string | null) {
             },
           }
           es.close()
-          // Refresh run status, full report, and history list
           void queryClient.invalidateQueries({ queryKey: testingKeys.run(testRunId) })
           void queryClient.invalidateQueries({ queryKey: testingKeys.report(testRunId) })
           void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
           break
 
-        case 'error':
-          next = { ...prev, errorMessage: event.message, pipelineStatus: 'failed' }
+        case 'error': {
+          // The server sends message "CANCELLED" as a sentinel to distinguish
+          // a user-requested cancellation from a real pipeline failure.
+          const isCancelled = event.message === 'CANCELLED'
+          next = {
+            ...prev,
+            isCancelled,
+            errorMessage: isCancelled ? null : event.message,
+            pipelineStatus: isCancelled ? 'cancelled' : 'failed',
+          }
           es.close()
           void queryClient.invalidateQueries({ queryKey: testingKeys.run(testRunId) })
+          void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
           break
+        }
       }
 
       sseStateRef.current = next
@@ -419,15 +455,13 @@ export function useTestRunSSE(testRunId: string | null) {
     }
 
     es.onerror = () => {
-      // EventSource auto-reconnects on transient network errors.
-      // Only treat as fatal if the pipeline already completed.
-      if (sseStateRef.current.isComplete) es.close()
+      if (sseStateRef.current.isComplete || sseStateRef.current.isCancelled) es.close()
     }
 
     return () => {
       es.close()
     }
-  }, [testRunId, queryClient])
+  }, [testRunId, initialStatus, queryClient])
 
   return { sseState }
 }
@@ -449,6 +483,37 @@ export function useStartTestRun() {
       return { testRunId: data.testRunId }
     },
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
+    },
+  })
+}
+
+/**
+ * useCancelTestRun
+ *
+ * Sends DELETE /api/test/run/:id/cancel to stop a running pipeline.
+ * On success:
+ *   - Invalidates the run status query (so UI shows "cancelled")
+ *   - Invalidates history (so the history panel shows "Cancelled" badge)
+ *
+ * The server sets the DB status to "cancelled" immediately, then signals
+ * the in-memory pipeline to stop at its next checkpoint. TinyFish API calls
+ * mid-flight will complete (we can't abort them) but no new ones will start.
+ */
+export function useCancelTestRun() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (testRunId: string): Promise<{ cancelled: boolean }> => {
+      const res = await fetch(`/api/test/run/${testRunId}/cancel`, {
+        method: 'DELETE',
+      })
+      const data = await res.json() as { cancelled?: boolean; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Failed to cancel test run')
+      return { cancelled: data.cancelled ?? false }
+    },
+    onSuccess: (_, testRunId) => {
+      void queryClient.invalidateQueries({ queryKey: testingKeys.run(testRunId) })
       void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
     },
   })
