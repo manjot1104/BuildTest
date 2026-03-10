@@ -679,6 +679,7 @@ export const testRunStatusEnum = pgEnum("test_run_status", [
   "reporting",
   "complete",
   "failed",
+  "cancelled",  // I-01 / I-09: required by cancel handler + pipeline catch block
 ]);
 
 export const testPriorityEnum = pgEnum("test_priority", ["P0", "P1", "P2"]);

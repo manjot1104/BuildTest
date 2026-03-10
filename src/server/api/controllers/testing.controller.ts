@@ -14,6 +14,7 @@ import {
 import { eq, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { crawlSite, executeTest, MAX_TEST_RETRIES } from "@/server/services/tinyfish.service";
+import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import type { PagePerformanceMetrics, PipelineSSEEvent } from "@/server/services/tinyfish.service";
 import {
   generateTestCases,
@@ -59,17 +60,9 @@ async function updateRunStatus(
     .where(eq(test_runs.id, testRunId));
 }
 
-// Emit a single SSE event to the client.
-// The controller receives an `emit` callback from the SSE route handler.
 function buildSSELine(event: PipelineSSEEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
-
-// ---------------------------------------------------------------------------
-// Build the goal string passed to executeTest.
-// Returns ONLY human-readable steps — the service wraps these in its own
-// structured prompt so we must NOT add JSON schema instructions here.
-// ---------------------------------------------------------------------------
 
 function buildTestGoal(tc: TestCase): string {
   const numberedSteps = tc.steps
@@ -79,10 +72,36 @@ function buildTestGoal(tc: TestCase): string {
 }
 
 // ---------------------------------------------------------------------------
+// FIX 2: In-memory set to track which test runs have an active pipeline
+// This prevents the SSE handler from starting a SECOND pipeline when the
+// first one was already started by startTestRunHandler.
+//
+// Root cause of the double pipeline:
+//   1. POST /api/test/run → calls runPipeline() in background (void)
+//   2. Frontend immediately opens GET /api/test/stream/:id
+//   3. streamTestRunHandler sees status = "crawling" (not complete/failed)
+//      so it calls runPipeline() AGAIN — two full pipelines running in parallel
+//
+// Fix: track active pipeline IDs in memory. SSE handler only starts pipeline
+// if one isn't already running.
+// ---------------------------------------------------------------------------
+const activePipelines   = new Set<string>();
+
+// cancelledPipelines: IDs of runs the user has explicitly cancelled.
+// The pipeline checks this set at each major step and aborts if found.
+// Using an in-memory Set is sufficient — if the server restarts, the DB
+// status is already "cancelled" so the pipeline won't start again.
+const cancelledPipelines = new Set<string>();
+
+// Helper: check if this run has been cancelled. Throws if so.
+function checkCancelled(testRunId: string): void {
+  if (cancelledPipelines.has(testRunId)) {
+    throw new Error(`CANCELLED:${testRunId}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Background pipeline
-// Accepts an optional `emit` callback for SSE streaming.
-// When emit is provided every significant state change pushes an event.
-// When emit is null the pipeline runs silently (legacy non-SSE mode).
 // ---------------------------------------------------------------------------
 
 async function runPipeline(
@@ -93,19 +112,19 @@ async function runPipeline(
   const send = (event: PipelineSSEEvent) => emit?.(buildSSELine(event));
 
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
+  checkCancelled(testRunId);
   await updateRunStatus(testRunId, "crawling");
   send({ type: "status", status: "crawling", percent: 10 });
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
   try {
-    siteData = await crawlSite(targetUrl);
+    siteData = await crawlSite(targetUrl, { testRunId });
   } catch (err) {
     const msg = `Crawl failed: ${err instanceof Error ? err.message : String(err)}`;
     send({ type: "error", message: msg });
     throw new Error(msg);
   }
 
-  // Store crawl results + performance metrics concurrently
   await Promise.all([
     db.insert(crawl_results).values({
       id: nanoid(),
@@ -114,10 +133,12 @@ async function runPipeline(
       elements: siteData.pages.flatMap((p) => p.elements),
       forms: siteData.pages.flatMap((p) => p.forms),
       links: siteData.allLinks,
-      screenshots: [],
+      screenshots: siteData.pages.map((p) => ({
+        pageUrl: p.url,
+        ...p.screenshots,
+      })),
       crawl_time_ms: siteData.crawlTimeMs,
     }),
-    // Store one performance_metrics row per crawled page
     siteData.performanceMetrics.length > 0
       ? db.insert(performance_metrics).values(
           siteData.performanceMetrics.map((pm: PagePerformanceMetrics) => ({
@@ -135,13 +156,21 @@ async function runPipeline(
   ]);
 
   // ─── STEP 2: GENERATE ────────────────────────────────────────────────────
+  checkCancelled(testRunId);
   await updateRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
 
   const siteContext: SiteContext = {
-    rootUrl: targetUrl,
-    pages: siteData.pages,
-    allLinks: siteData.allLinks,
+    rootUrl:     targetUrl,
+    pages:       siteData.pages,
+    allLinks:    siteData.allLinks,
+    // Pass the SiteProfile so OpenRouter knows whether to generate
+    // 30 tests (small site) or 500 tests (large site).
+    siteProfile: siteData.siteProfile,
+    buildifyContext: {
+      hasAuth:      siteData.hasLogin || siteData.hasSignup || siteData.hasProtectedRoutes,
+      apiEndpoints: siteData.pages.flatMap((p) => p.apiEndpoints),
+    },
   };
 
   let generatedCases: Awaited<ReturnType<typeof generateTestCases>>;
@@ -172,13 +201,12 @@ async function runPipeline(
     .set({ total_tests: testCaseRecords.length })
     .where(eq(test_runs.id, testRunId));
 
-  // Emit initial "pending" state for each test card so the UI can render them
   for (let i = 0; i < generatedCases.length; i++) {
     const tc = generatedCases[i]!;
     const dbId = testCaseRecords[i]!.id;
     send({
       type: "test_update",
-      testResultId: "",       // not yet created
+      testResultId: "",
       testCaseId: dbId,
       title: tc.title,
       status: "pending",
@@ -186,6 +214,7 @@ async function runPipeline(
   }
 
   // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
+  checkCancelled(testRunId);
   await updateRunStatus(testRunId, "executing");
   send({ type: "status", status: "executing", percent: 50 });
 
@@ -205,7 +234,6 @@ async function runPipeline(
   for (const [batchIndex, batch] of chunk(pairs, 50).entries()) {
     console.log(`[Testing] Batch ${batchIndex + 1}: ${batch.length} tests`);
 
-    // Mark all tests in this batch as "running" before firing them
     totalRunning += batch.length;
     await db
       .update(test_runs)
@@ -221,14 +249,10 @@ async function runPipeline(
         const testUrl = tc.target_url ?? targetUrl;
         const goal = buildTestGoal(tc);
 
-        // Initial attempt
         let result = await executeTest(testUrl, goal);
         let retryCount = 0;
         let isFlaky = false;
 
-        // Retry logic — up to MAX_TEST_RETRIES (2) retries.
-        // If it passes on any retry it is marked "flaky" (not "passed"),
-        // which prevents false positives from destroying CI trust.
         if (!result.passed) {
           for (let retry = 1; retry <= MAX_TEST_RETRIES; retry++) {
             console.log(`[Testing] Retry ${retry}/${MAX_TEST_RETRIES} for "${tc.title}"`);
@@ -239,11 +263,36 @@ async function runPipeline(
               result = retryResult;
               break;
             }
+            // FIX 3: Keep the last retry result so we have the most recent
+            // actualResult and errorDetails for the bug report
+            result = retryResult;
           }
         }
 
         const status = isFlaky ? "flaky" : result.passed ? "passed" : "failed";
         const testResultId = nanoid();
+
+        // FIX 3: Upload screenshot for FAILED tests to S3
+        // Previously screenshotUrl was always null — now we capture a
+        // screenshot via a dedicated TinyFish screenshot call on failure
+        let screenshotUrl: string | null = null;
+        if (status === "failed" && testRunId) {
+          try {
+            const { runTinyFishScreenshot } = await import("@/server/services/tinyfish.service");
+            const ssBase64 = await runTinyFishScreenshot(testUrl);
+            if (ssBase64) {
+              screenshotUrl = await uploadScreenshot({
+                base64Png: ssBase64,
+                testRunId,
+                pageSlug: urlToSlug(testUrl),
+                viewport: "test",
+              });
+            }
+          } catch (err) {
+            // Non-fatal — continue without screenshot
+            console.warn(`[Testing] Failed to capture screenshot for "${tc.title}":`, err);
+          }
+        }
 
         await db.insert(test_results).values({
           id: testResultId,
@@ -252,17 +301,14 @@ async function runPipeline(
           status,
           actual_result: result.actualResult,
           duration_ms: result.durationMs,
-          screenshot_url: result.screenshotUrl,
+          screenshot_url: screenshotUrl,
           error_details: result.errorDetails,
           console_logs: result.consoleLogs,
-          // NEW: store network logs for Bug Detail Modal
           network_logs: result.networkLogs,
           retry_count: retryCount,
-          // NEW: store TinyFish job ID for traceability
           tinyfish_job_id: result.jobId ?? null,
         });
 
-        // Emit real-time status flip for this test card
         send({
           type: "test_update",
           testResultId,
@@ -272,14 +318,12 @@ async function runPipeline(
           durationMs: result.durationMs,
         });
 
-        // Accumulate category stats for ring charts
         const cat = tc.category;
         if (!categoryResults[cat]) categoryResults[cat] = { passed: 0, failed: 0, total: 0 };
         categoryResults[cat]!.total++;
         if (status === "passed" || status === "flaky") categoryResults[cat]!.passed++;
         else if (status === "failed") categoryResults[cat]!.failed++;
 
-        // Surface failed bugs immediately via SSE
         if (status === "failed") {
           const bugId = nanoid();
           bugsToInsert.push({
@@ -294,15 +338,13 @@ async function runPipeline(
             title: `${tc.title} — FAILED`,
             description: result.actualResult,
             reproduction_steps: tc.steps,
-            screenshot_url: result.screenshotUrl,
-            // annotation_box is null until a screenshot annotation step is added
+            screenshot_url: screenshotUrl,   // FIX 3: now populated
             annotation_box: null,
             ai_fix_suggestion: null,
             page_url: testUrl,
             status: "open",
           });
 
-          // Emit bug immediately so the dashboard surfaces it in real-time
           send({
             type: "bug_found",
             bug: {
@@ -311,7 +353,7 @@ async function runPipeline(
               severity: tc.priority === "P0" ? "critical" : tc.priority === "P1" ? "high" : "medium",
               category: tc.category,
               pageUrl: testUrl,
-              screenshotUrl: result.screenshotUrl,
+              screenshotUrl: screenshotUrl,   // FIX 3: now populated
             },
           });
         }
@@ -320,7 +362,6 @@ async function runPipeline(
       }),
     );
 
-    // Tally batch outcomes and update running count
     totalRunning -= batch.length;
     for (const outcome of batchResults) {
       if (outcome.status === "fulfilled") {
@@ -332,7 +373,6 @@ async function runPipeline(
       }
     }
 
-    // Persist running totals after each batch so polling clients also stay fresh
     await db
       .update(test_runs)
       .set({
@@ -343,7 +383,6 @@ async function runPipeline(
       })
       .where(eq(test_runs.id, testRunId));
 
-    // Emit live counter update
     send({
       type: "counter",
       passed: totalPassed,
@@ -359,6 +398,7 @@ async function runPipeline(
   }
 
   // ─── STEP 4: REPORT ──────────────────────────────────────────────────────
+  checkCancelled(testRunId);
   await updateRunStatus(testRunId, "reporting");
   send({ type: "status", status: "reporting", percent: 90 });
 
@@ -380,14 +420,12 @@ async function runPipeline(
       pageUrl: b.page_url ?? "",
       category: b.category ?? "",
     })),
-    // NEW: pass category results for richer AI summary
     categoryResults,
-    // NEW: pass performance data so AI can call out slow pages
-    performanceSummary: siteData.performanceMetrics.map((pm: PagePerformanceMetrics) => ({
+    performanceSummary: siteData.performanceMetrics.map((pm) => ({
       pageUrl: pm.pageUrl,
-      lcpMs: pm.lcpMs,
-      cls: pm.cls,
-      ttfbMs: pm.ttfbMs,
+      lcpMs:   pm.lcpMs,
+      cls:     pm.cls,
+      ttfbMs:  pm.ttfbMs,
     })),
   };
 
@@ -398,7 +436,6 @@ async function runPipeline(
     aiSummary = `Test run complete. Score: ${overallScore}/100. ${totalPassed} passed, ${totalFailed} failed.`;
   }
 
-  // Generate a unique token for the embed badge endpoint (/api/badge/[token])
   const embedBadgeToken = nanoid(32);
   const shareableSlug = nanoid(10);
 
@@ -426,7 +463,6 @@ async function runPipeline(
     })
     .where(eq(test_runs.id, testRunId));
 
-  // Final SSE event — client transitions to the report view
   send({
     type: "complete",
     overallScore,
@@ -440,9 +476,7 @@ async function runPipeline(
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/test/start
-// Creates the test_run row and fires the pipeline in the background.
-// Returns the testRunId immediately so the client can open the SSE stream.
+// POST /api/test/run
 // ---------------------------------------------------------------------------
 
 export async function startTestRunHandler({
@@ -473,9 +507,23 @@ export async function startTestRunHandler({
       running: 0,
     });
 
+    // FIX 2: Mark this pipeline as active BEFORE starting it
+    // so the SSE handler knows not to start a second one
+    activePipelines.add(testRunId);
+
     void runPipeline(testRunId, targetUrl).catch(async (err) => {
-      console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
-      await updateRunStatus(testRunId, "failed");
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.startsWith("CANCELLED:")) {
+        // User cancelled — update DB status, don't log as error
+        console.log(`[Testing] Pipeline cancelled: ${testRunId}`);
+        await updateRunStatus(testRunId, "cancelled" as typeof test_runs.$inferInsert.status);
+      } else {
+        console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
+        await updateRunStatus(testRunId, "failed");
+      }
+    }).finally(() => {
+      activePipelines.delete(testRunId);
+      cancelledPipelines.delete(testRunId); // clean up cancel marker
     });
 
     return { testRunId };
@@ -487,13 +535,6 @@ export async function startTestRunHandler({
 
 // ---------------------------------------------------------------------------
 // GET /api/test/stream/[id]  (Server-Sent Events)
-// The route handler sets up the SSE response and passes the emit callback
-// into the pipeline. This function is called by the Next.js route handler.
-//
-// Usage in route file:
-//   export async function GET(req: Request, { params }: { params: { id: string } }) {
-//     return streamTestRunHandler({ params });
-//   }
 // ---------------------------------------------------------------------------
 
 export async function streamTestRunHandler({
@@ -506,7 +547,6 @@ export async function streamTestRunHandler({
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
 
-  // Verify the run exists and belongs to this user before streaming
   const run = await db.query.test_runs.findFirst({
     where: eq(test_runs.id, params.id),
   });
@@ -514,7 +554,7 @@ export async function streamTestRunHandler({
   if (!run) return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
   if (run.user_id !== session.user.id) return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
-  // If the run is already complete/failed, stream a single synthetic event and close.
+  // Already complete or failed — send final event immediately
   if (run.status === "complete" || run.status === "failed") {
     const report = await db.query.report_exports.findFirst({
       where: eq(report_exports.test_run_id, params.id),
@@ -542,7 +582,6 @@ export async function streamTestRunHandler({
     });
   }
 
-  // Live run — pipe pipeline events to the client
   let emitToStream!: (line: string) => void;
   let closeStream!: () => void;
 
@@ -557,29 +596,98 @@ export async function streamTestRunHandler({
     },
   });
 
-  // Fire the pipeline; when done, close the SSE stream.
-  void runPipeline(params.id, run.target_url, emitToStream)
-    .catch((err) => {
-      console.error(`[Testing] SSE pipeline failed for ${params.id}:`, err);
-      emitToStream(buildSSELine({ type: "error", message: String(err) }));
-    })
-    .finally(() => {
-      closeStream();
-    });
+  // FIX 2: Only start a new pipeline if one isn't already running
+  // Previously this ALWAYS called runPipeline() causing double execution
+  if (!activePipelines.has(params.id)) {
+    console.log(`[Testing] SSE handler starting pipeline for ${params.id} (no active pipeline found)`);
+    activePipelines.add(params.id);
+
+    void runPipeline(params.id, run.target_url, emitToStream)
+      .catch((err) => {
+        console.error(`[Testing] SSE pipeline failed for ${params.id}:`, err);
+        emitToStream(buildSSELine({ type: "error", message: String(err) }));
+      })
+      .finally(() => {
+        activePipelines.delete(params.id);
+        closeStream();
+      });
+  } else {
+    // Pipeline already running from startTestRunHandler —
+    // we need to attach this SSE stream to receive its events.
+    // For now, poll the DB and forward status updates until complete.
+    console.log(`[Testing] SSE handler: pipeline already active for ${params.id} — attaching poll`);
+
+    void (async () => {
+      // Poll DB every 3s and forward status to SSE stream
+      const poll = setInterval(async () => {
+        try {
+          const current = await db.query.test_runs.findFirst({
+            where: eq(test_runs.id, params.id),
+          });
+
+          if (!current) { clearInterval(poll); closeStream(); return; }
+
+          // Forward counter updates
+          emitToStream(buildSSELine({
+            type: "counter",
+            passed: current.passed ?? 0,
+            failed: current.failed ?? 0,
+            running: current.running ?? 0,
+            skipped: current.skipped ?? 0,
+            total: current.total_tests ?? 0,
+          }));
+
+          // Forward status
+          emitToStream(buildSSELine({
+            type: "status",
+            status: current.status,
+            percent: { crawling: 10, generating: 30, executing: 70, reporting: 90, complete: 100, failed: 0 ,cancelled: 0}[current.status] ?? 0,
+          }));
+
+          if (current.status === "complete" || current.status === "failed") {
+            clearInterval(poll);
+
+            if (current.status === "complete") {
+              const report = await db.query.report_exports.findFirst({
+                where: eq(report_exports.test_run_id, params.id),
+              });
+              emitToStream(buildSSELine({
+                type: "complete",
+                overallScore: current.overall_score ?? 0,
+                passed: current.passed ?? 0,
+                failed: current.failed ?? 0,
+                skipped: current.skipped ?? 0,
+                total: current.total_tests ?? 0,
+                aiSummary: report?.ai_summary ?? "",
+                shareableSlug: report?.shareable_slug ?? null,
+              }));
+            } else {
+              emitToStream(buildSSELine({ type: "error", message: "Test run failed" }));
+            }
+
+            closeStream();
+          }
+        } catch (err) {
+          console.error(`[Testing] Poll error for ${params.id}:`, err);
+          clearInterval(poll);
+          closeStream();
+        }
+      }, 3000);
+    })();
+  }
 
   return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
-      "X-Accel-Buffering": "no", // disable Nginx buffering for SSE
+      "X-Accel-Buffering": "no",
     },
   });
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/test/[id]
-// Polling fallback — returns current run state (no SSE required).
 // ---------------------------------------------------------------------------
 
 export async function getTestRunHandler({
@@ -610,6 +718,7 @@ export async function getTestRunHandler({
     reporting: 90,
     complete: 100,
     failed: 0,
+    cancelled: 0,
   };
 
   return {
@@ -633,9 +742,66 @@ export async function getTestRunHandler({
 }
 
 // ---------------------------------------------------------------------------
+// DELETE /api/test/run/[id]  — Cancel a running test
+// ---------------------------------------------------------------------------
+//
+// Called when the user:
+//   1. Clicks "Stop" on an in-progress test run
+//   2. Navigates away from the test page (frontend fires this on unmount)
+//   3. Clicks a history item while a run is still active
+//
+// How it works:
+//   1. Mark the run as "cancelled" in DB immediately (stops future SSE polls
+//      from showing it as active in history)
+//   2. Add to cancelledPipelines Set (in-memory signal checked by pipeline
+//      at each major step — crawl, generate, execute, report)
+//   3. Remove from activePipelines (prevents SSE handler from re-attaching)
+//
+// The pipeline itself checks cancelledPipelines before each step and throws
+// "CANCELLED:<id>" which the catch handler converts to DB status "cancelled".
+// ---------------------------------------------------------------------------
+
+export async function cancelTestRunHandler({
+  params,
+}: {
+  params: { id: string };
+}): Promise<{ cancelled: boolean } | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+
+  // Already in a terminal state — nothing to cancel
+  if (run.status === "complete" || run.status === "failed" ||
+      (run.status as string) === "cancelled") {
+    return { cancelled: false };
+  }
+
+  // Signal the in-memory pipeline to stop at its next checkpoint
+  cancelledPipelines.add(params.id);
+
+  // Update DB immediately so history shows "cancelled" without waiting
+  // for the pipeline to reach its next checkpoint
+  await db
+    .update(test_runs)
+    .set({ status: "cancelled" as typeof test_runs.$inferInsert.status, completed_at: new Date() })
+    .where(eq(test_runs.id, params.id));
+
+  // Remove from active pipelines so SSE doesn't re-attach
+  activePipelines.delete(params.id);
+
+  console.log(`[Testing] Run ${params.id} cancelled by user ${session.user.id}`);
+  return { cancelled: true };
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/test/history
-// Returns past test runs for the authenticated user.
-// Includes a direct link to each run's full report for the history table.
 // ---------------------------------------------------------------------------
 
 export async function getTestHistoryHandler(): Promise<object | ApiErrorResponse> {
@@ -666,7 +832,6 @@ export async function getTestHistoryHandler(): Promise<object | ApiErrorResponse
       aiSummary: run.reportExports?.[0]?.ai_summary ?? null,
       shareableSlug: run.reportExports?.[0]?.shareable_slug ?? null,
       embedBadgeToken: run.reportExports?.[0]?.embed_badge_token ?? null,
-      // Direct URL to the full visual report for this run
       reportUrl: `/report/${run.id}`,
     })),
   };
@@ -674,7 +839,6 @@ export async function getTestHistoryHandler(): Promise<object | ApiErrorResponse
 
 // ---------------------------------------------------------------------------
 // GET /api/test/report/[id]
-// Full visual report data — all sections of the dashboard.
 // ---------------------------------------------------------------------------
 
 export async function getTestReportHandler({
@@ -694,7 +858,6 @@ export async function getTestReportHandler({
       bugReports: true,
       reportExports: true,
       crawlResult: true,
-      // NEW: include per-page Core Web Vitals for Performance Gauges section
       performanceMetrics: true,
     },
   });
@@ -702,8 +865,6 @@ export async function getTestReportHandler({
   if (!run) return { error: "Test run not found", status: 404 };
   if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
 
-  // ── Category ring chart data (6 donuts) ──────────────────────────────────
-  // Each category accumulates pass/fail counts from its test results.
   const resultsByCategory = run.testCases.reduce(
     (acc, tc) => {
       const cat = tc.category ?? "other";
@@ -719,7 +880,6 @@ export async function getTestReportHandler({
     {} as Record<string, { passed: number; failed: number; flaky: number; total: number }>,
   );
 
-  // ── Bug list data (sortable table) ───────────────────────────────────────
   const bugsByCategory = run.bugReports.reduce(
     (acc, bug) => {
       const cat = bug.category ?? "other";
@@ -729,8 +889,6 @@ export async function getTestReportHandler({
     {} as Record<string, number>,
   );
 
-  // ── Performance Gauges ───────────────────────────────────────────────────
-  // Map raw DB rows into the shape the frontend Performance Gauges component expects.
   type PerformanceMetricRow = {
     id: string;
     page_url: string;
@@ -747,7 +905,6 @@ export async function getTestReportHandler({
       fidMs: pm.fid_ms,
       cls: pm.cls,
       ttfbMs: pm.ttfb_ms,
-      // Threshold helpers — frontend uses these to colour the gauge
       lcpStatus: pm.lcp_ms === null ? "unknown" : pm.lcp_ms < 2500 ? "good" : pm.lcp_ms < 4000 ? "needs-improvement" : "poor",
       fidStatus: pm.fid_ms === null ? "unknown" : pm.fid_ms < 100 ? "good" : pm.fid_ms < 300 ? "needs-improvement" : "poor",
       clsStatus: pm.cls === null ? "unknown" : pm.cls < 0.1 ? "good" : pm.cls < 0.25 ? "needs-improvement" : "poor",
@@ -755,8 +912,6 @@ export async function getTestReportHandler({
     }),
   );
 
-  // ── Trend data ────────────────────────────────────────────────────────────
-  // Previous runs for the same target URL (up to 10) for the Trend Chart.
   const trendRuns = await db.query.test_runs.findMany({
     where: eq(test_runs.target_url, run.target_url),
     orderBy: [desc(test_runs.started_at)],
@@ -775,10 +930,9 @@ export async function getTestReportHandler({
       runId: r.id,
       score: r.overall_score,
       date: r.started_at,
-      // Mark the current run in the trend chart
       isCurrent: r.id === run.id,
     }))
-    .reverse(); // chronological order for the chart
+    .reverse();
 
   const export0 = run.reportExports?.[0];
 
@@ -786,7 +940,6 @@ export async function getTestReportHandler({
     id: run.id,
     targetUrl: run.target_url,
     status: run.status,
-    // Score Hero
     overallScore: run.overall_score,
     totalTests: run.total_tests,
     passed: run.passed,
@@ -794,34 +947,29 @@ export async function getTestReportHandler({
     skipped: run.skipped,
     startedAt: run.started_at,
     completedAt: run.completed_at,
-    // Report export meta
     aiSummary: export0?.ai_summary ?? null,
     shareableSlug: export0?.shareable_slug ?? null,
     isPublic: export0?.is_public ?? false,
     embedBadgeToken: export0?.embed_badge_token ?? null,
-    // Bug list table
     bugs: run.bugReports,
     bugsByCategory,
-    // Category ring charts
     resultsByCategory,
-    // Test cases (for drill-down)
     testCases: run.testCases,
-    // Crawl meta
     crawlSummary: {
       totalPages: (run.crawlResult?.pages as unknown[])?.length ?? 0,
       crawlTimeMs: run.crawlResult?.crawl_time_ms ?? 0,
+      screenshots: (run.crawlResult?.screenshots as { pageUrl: string; url375: string | null; url768: string | null; url1440: string | null }[] | null) ?? [],
+      apiEndpoints: (run.crawlResult?.pages as { apiEndpoints?: { url: string; method: string; status: number | null; responseType: string | null; durationMs: number | null }[] }[] | null)
+        ?.flatMap((p) => p.apiEndpoints ?? []) ?? [],
+      navStructure: (run.crawlResult?.pages as { navStructure?: { breadcrumbs: string[]; menus: { label: string; items: { text: string; href: string }[] }[] } }[] | null)?.[0]?.navStructure ?? null,
     },
-    // Performance Gauges section
     performanceGauges,
-    // Trend Chart section
     trendData,
   };
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/test/report/public/[slug]
-// Public read-only report — no auth required.
-// Only returns data if is_public = true on the report_export row.
 // ---------------------------------------------------------------------------
 
 export async function getPublicReportHandler({
@@ -836,15 +984,11 @@ export async function getPublicReportHandler({
   if (!exportRow) return { error: "Report not found", status: 404 };
   if (!exportRow.is_public) return { error: "This report is private", status: 403 };
 
-  // Delegate to the full report handler — reuse all the aggregation logic
   return getTestReportHandler({ params: { id: exportRow.test_run_id } });
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/badge/[token]
-// Returns SVG badge data for README/website embeds.
-// Shape: { score: number, label: "Tested by Buildify", color: string }
-// The SVG is rendered by the route handler, not here.
 // ---------------------------------------------------------------------------
 
 export async function getEmbedBadgeHandler({

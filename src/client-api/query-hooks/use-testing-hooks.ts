@@ -104,7 +104,30 @@ export interface TestReport extends TestRun {
   bugs: Bug[]
   bugsByCategory: Record<string, number>
   resultsByCategory: Record<string, CategoryResult>
-  crawlSummary: { totalPages: number; crawlTimeMs: number }
+  crawlSummary: {
+    totalPages: number
+    crawlTimeMs: number
+    screenshots: {
+      pageUrl: string
+      url375: string | null
+      url768: string | null
+      url1440: string | null
+    }[]
+    apiEndpoints: {
+      url: string
+      method: string
+      status: number | null
+      responseType: string | null
+      durationMs: number | null
+    }[]
+    navStructure: {
+      breadcrumbs: string[]
+      menus: {
+        label: string
+        items: { text: string; href: string }[]
+      }[]
+    } | null
+  }
   isPublic: boolean
   testCases: TestCase[]
   /** Per-page Core Web Vitals for Performance Gauges section */
