@@ -5,6 +5,7 @@ import {
     useScroll,
     useTransform,
     useMotionValueEvent,
+    useInView,
     type Variants,
 } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -212,6 +213,83 @@ function DynamicPlaceholder({ paused }: { paused: boolean }) {
 }
 
 // --- Main Page ---
+
+const FEATURE_DEMOS = [
+    {
+        title: 'Builder',
+        description: 'Describe any application in plain English and watch it come to life. Buildify generates production-ready, full-stack code from a single conversation.',
+        bullets: ['Natural language to working app', 'Full-stack code generation', 'Iterate through conversation'],
+        video: '/videos/builder-demo.mp4',
+    },
+    {
+        title: 'Buildify Studio',
+        description: 'A visual design tool for building pages, prototypes, and layouts with drag-and-drop precision. No code required — just design and publish.',
+        bullets: ['Drag-and-drop page builder', '14+ element types with animations', 'One-click publish to a live URL'],
+        video: '/videos/buildify-studio-demo.mp4',
+    },
+    {
+        title: 'AI Chat',
+        description: 'Chat with free open-source AI models to generate and preview apps instantly. Run code right in the browser with a single click.',
+        bullets: ['Multiple free AI models', 'Instant in-browser preview', 'No API key required'],
+        video: '/videos/ai-chat-demo.mp4',
+    },
+    {
+        title: 'AI Resume Builder',
+        description: 'Create professional, ATS-friendly resumes powered by AI. Pick a template, fill in your details, and export a polished PDF in minutes.',
+        bullets: ['AI-assisted content writing', 'Multiple professional templates', 'One-click PDF export'],
+        video: '/videos/resume-builder-demo.mp4',
+    },
+] as const
+
+function FeatureVideo({ src, index }: { src: string; index: number }) {
+    const ref = useRef<HTMLVideoElement>(null)
+    const containerRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(containerRef, { once: false, margin: '-100px' })
+
+    useEffect(() => {
+        const video = ref.current
+        if (!video) return
+        video.playbackRate = 1.35
+        if (isInView) {
+            video.play().catch(() => {})
+        } else {
+            video.pause()
+        }
+    }, [isInView])
+
+    return (
+        <div
+            ref={containerRef}
+            className="feature-video-outer relative"
+        >
+            <div
+                className="feature-video-glow-track"
+                style={{
+                    animationPlayState: isInView ? 'running' : 'paused',
+                    animationDelay: `${index * 0.4}s`,
+                }}
+            />
+            <motion.div
+                variants={maskReveal}
+                initial="hidden"
+                whileInView="visible"
+                viewport={{ once: true, margin: '-80px' }}
+                custom={0.15}
+                className="feature-video-inner relative rounded-[20px] overflow-hidden"
+            >
+                <video
+                    ref={ref}
+                    src={src}
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="w-full object-contain"
+                />
+            </motion.div>
+        </div>
+    )
+}
 
 export default function LandingPage() {
     const { session, isPending } = useStateMachine()
@@ -666,6 +744,91 @@ export default function LandingPage() {
                                 </div>
                             ))}
                         </motion.div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Feature Demos Section ── */}
+            <section className="relative py-32 md:py-40 px-6 border-t border-border/40">
+                <div className="max-w-6xl mx-auto">
+                    <div className="max-w-xl mb-20">
+                        <SectionLabel>Features</SectionLabel>
+                        <RevealText delay={0.1} className="mt-4">
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.1]">
+                                Everything you need to build.
+                            </h2>
+                        </RevealText>
+                        <motion.p
+                            variants={fadeIn}
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, margin: '-80px' }}
+                            custom={0.3}
+                            className="mt-5 text-sm text-muted-foreground leading-relaxed max-w-md"
+                        >
+                            Four powerful tools, one platform. From AI-powered code generation to visual design — see each feature in action.
+                        </motion.p>
+                    </div>
+
+                    <div className="space-y-24 md:space-y-32">
+                        {FEATURE_DEMOS.map((feature, index) => {
+                            const isReversed = index % 2 !== 0
+                            return (
+                                <div
+                                    key={feature.title}
+                                    className="grid md:grid-cols-2 gap-12 md:gap-16 items-center"
+                                >
+                                    {/* Text side */}
+                                    <div className={isReversed ? 'md:order-2' : ''}>
+                                        <motion.span
+                                            variants={fadeIn}
+                                            initial="hidden"
+                                            whileInView="visible"
+                                            viewport={{ once: true, margin: '-60px' }}
+                                            custom={0}
+                                            className="inline-block text-xs font-mono text-muted-foreground/50 mb-3"
+                                        >
+                                            {String(index + 1).padStart(2, '0')}
+                                        </motion.span>
+                                        <RevealText delay={0.05}>
+                                            <h3 className="text-2xl md:text-3xl font-bold tracking-tight">
+                                                {feature.title}
+                                            </h3>
+                                        </RevealText>
+                                        <motion.p
+                                            variants={fadeIn}
+                                            initial="hidden"
+                                            whileInView="visible"
+                                            viewport={{ once: true, margin: '-60px' }}
+                                            custom={0.15}
+                                            className="mt-4 text-sm text-muted-foreground leading-relaxed"
+                                        >
+                                            {feature.description}
+                                        </motion.p>
+                                        <motion.ul
+                                            variants={fadeIn}
+                                            initial="hidden"
+                                            whileInView="visible"
+                                            viewport={{ once: true, margin: '-60px' }}
+                                            custom={0.25}
+                                            className="mt-5 space-y-2.5"
+                                        >
+                                            {feature.bullets.map((bullet) => (
+                                                <li key={bullet} className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                                                    <span className="size-1 rounded-full bg-primary shrink-0" />
+                                                    {bullet}
+                                                </li>
+                                            ))}
+                                        </motion.ul>
+                                    </div>
+
+                                    {/* Video side */}
+                                    <div className={isReversed ? 'md:order-1' : ''}>
+                                        <FeatureVideo src={feature.video} index={index} />
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
                 </div>
             </section>
