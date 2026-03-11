@@ -16,6 +16,8 @@
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
+// currently using 'standard' as default for Budget_presets, but will change it in future.
+
 import { measurePagePerformanceWithPuppeteer } from "./puppeteer.service";
 
 const TINYFISH_API_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
@@ -36,7 +38,7 @@ export interface TestBudgetAllocation {
 
 export const BUDGET_PRESETS = {
   free: { maxPages: 3, maxTests: 5, concurrency: 3 } satisfies CrawlBudget,
-  standard: { maxPages: 2, maxTests: 3, concurrency: 3 } satisfies CrawlBudget,
+  standard: { maxPages: 5, maxTests: 10, concurrency: 5 } satisfies CrawlBudget,
   deep: { maxPages: 10, maxTests: 15, concurrency: 10 } satisfies CrawlBudget,
 } as const;
 

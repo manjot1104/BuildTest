@@ -716,6 +716,7 @@ export function ElementRenderer({
   onResizeEnd,
   onContentChange,
 }: ElementRendererProps) {
+
   const elementRef = useRef<HTMLDivElement>(null)
   const ghostRef = useRef<HTMLDivElement | null>(null)
 

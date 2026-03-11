@@ -3,11 +3,11 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/better-auth";
 import { db } from "@/server/db";
 import { user } from "@/server/db/schema";
-import { headers } from "next/dist/server/request/headers";
-
-
+import { headers } from "next/headers";
 import { eq } from "drizzle-orm";
 import { AdminSidebar } from "./admin-sidebar";
+
+export const dynamic = 'force-dynamic';
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
   const requestHeaders = await headers();
@@ -23,7 +23,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
     columns: { roles: true },
   });
 
-  if (!dbUser?.roles.includes("admin")) {
+  const roles = dbUser?.roles;
+  const isAdmin = Array.isArray(roles) && roles.some((r) => String(r) === "admin");
+
+  if (!isAdmin) {
     redirect("/");
   }
 

@@ -41,16 +41,6 @@ import {
   openRouterChatHandler,
   openRouterStreamHandler,
 } from "@/server/api/controllers/openrouter.controller";
-import {
-  startTestRunHandler,
-  getTestRunHandler,
-  getTestHistoryHandler,
-  getTestReportHandler,
-  streamTestRunHandler,
-  getPublicReportHandler,
-  getEmbedBadgeHandler,
-  cancelTestRunHandler,
-} from "@/server/api/controllers/testing.controller";
 import { getV0Client } from "@/lib/v0-client";
 import { enhanceFirstPrompt } from "@/lib/prompt-enhancer";
 import {
@@ -83,6 +73,16 @@ import {
   deleteDesignByIdHandler,
   getPublicDesignHandler,
 } from "@/server/api/controllers/studio.controller";
+import {
+  startTestRunHandler,
+  cancelTestRunHandler,
+  getTestHistoryHandler,
+  getTestRunHandler,
+  streamTestRunHandler,
+  getTestReportHandler,
+  getPublicReportHandler,
+  getEmbedBadgeHandler,
+} from "@/server/api/controllers/testing.controller";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
 
@@ -129,8 +129,23 @@ interface ChatRequestBody {
   attachments?: ChatAttachment[];
 }
 
-export const elysiaApp = new Elysia({ prefix: "/api" })
+export const elysiaApp = new Elysia({ prefix: '/api' })
+  .onError(({ code, error, set }) => {
+    console.error(`[Elysia Error] code=${code}`, error)
+    if (code === 'VALIDATION') {
+      set.status = 422
+      return { error: 'Validation failed', details: error.message }
+    }
+    if (code === 'NOT_FOUND') {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    set.status = 500
+    return { error: (error as Error)?.message ?? 'Internal server error' }
+  })
   // Chat endpoint - POST /api/chat
+  // Note: Streaming requests are handled inline (use fetch directly)
+  // Non-streaming requests use the controller
   .post(
     "/chat",
     async ({ body, request, set }) => {
@@ -139,10 +154,12 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
 
       const v0 = await getV0Client();
 
+      // Handle streaming requests inline (skip controller, use fetch directly)
       if (streaming) {
         try {
           const session = await getSession();
 
+          // Rate limiting for streaming
           if (session?.user?.id) {
             const chatCount = await getChatCountByUserId({
               userId: session.user.id,
@@ -158,6 +175,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
               } satisfies RateLimitErrorResponse;
             }
 
+            // Check credits for authenticated users
             const isNewChat = !chatId;
             const hasSub = await hasActiveSubscription(session.user.id);
 
@@ -189,6 +207,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
               } satisfies InsufficientCreditsResponse;
             }
 
+            // Deduct credits before making the API call
             const deductResult = await deductCreditsForPrompt(
               session.user.id,
               isNewChat,
@@ -226,6 +245,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
 
           if (chatId) {
             try {
+              // Continue existing chat with streaming
               stream = (await v0.chats.sendMessage({
                 chatId,
                 message,
@@ -233,6 +253,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
                 ...(attachments && attachments.length > 0 && { attachments }),
               })) as ReadableStream<Uint8Array>;
             } catch (error) {
+              // If chat doesn't exist (404), create a new chat instead
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               if (
@@ -240,16 +261,19 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
                 errorMessage.includes("not_found") ||
                 errorMessage.includes("Chat not found")
               ) {
+                // Chat not found on v0, create new chat instead
                 stream = (await v0.chats.create({
                   message: enhanceFirstPrompt(message),
                   responseMode: "experimental_stream",
                   ...(attachments && attachments.length > 0 && { attachments }),
                 })) as ReadableStream<Uint8Array>;
               } else {
+                // Re-throw other errors
                 throw error;
               }
             }
           } else {
+            // Create new chat with streaming (enhanced first prompt)
             stream = (await v0.chats.create({
               message: enhanceFirstPrompt(message),
               responseMode: "experimental_stream",
@@ -273,8 +297,10 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
         }
       }
 
+      // Non-streaming requests use the controller
       const result = await createChatHandler({ body, request });
 
+      // Handle error responses with status codes
       if (isApiError(result)) {
         if (result.error === "Message is required") {
           set.status = 400;
@@ -297,6 +323,8 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
   // App demo URL endpoint - GET /api/apps/:chatId (public, no auth)
+  // Used by the /apps/[chatId] page to get the demo URL for embedding
+
   .get(
     "/apps/:chatId",
     async ({ params, set }) => {
@@ -308,6 +336,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
           return { error: "App not found" };
         }
 
+        // Visit logging (non-critical, fire-and-forget)
         try {
           const { db } = await import("@/server/db");
           const { demo_visits, user_chats } =
@@ -316,6 +345,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
 
           const chatId = params.chatId;
 
+          // Look up the chat owner in a single lightweight query
           const [chatRecord] = await db
             .select({ user_id: user_chats.user_id })
             .from(user_chats)
@@ -381,6 +411,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     async ({ params, set }) => {
       const result = await getChatDetailsHandler({ params });
 
+      // Handle error responses with status codes
       if (isApiError(result)) {
         if (result.error === "Chat ID is required") {
           set.status = 400;
@@ -441,6 +472,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     return getStarredChats(session.user.id);
   })
   // Fork chat endpoint - POST /api/chat/fork
+  // Creates a copy of an existing chat for the current user
   .post(
     "/chat/fork",
     async ({ body, set }) => {
@@ -465,11 +497,13 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
   // Chat ownership endpoint - POST /api/chat/ownership
+  // Used to save chat metadata after streaming (prompt, demoUrl, etc.)
   .post(
     "/chat/ownership",
     async ({ body, set }) => {
       const result = await createChatOwnershipHandler({ body });
 
+      // Handle error responses with status codes
       if (isApiError(result)) {
         if (result.error === "Chat ID is required") {
           set.status = 400;
@@ -516,11 +550,13 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
       }),
     },
   )
+
   // Speech-to-text endpoint - POST /api/speech-to-text
   .post(
     "/speech-to-text",
     async ({ body, set }) => {
       try {
+        // Auth check
         const session = await getSession();
         if (!session?.user?.id) {
           set.status = 401;
@@ -532,6 +568,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
 
         const userId = session.user.id;
 
+        // Rate limiting (in-memory, 24h sliding window)
         const now = Date.now();
         const windowMs = 24 * 60 * 60 * 1000;
         const entry = sttRateLimitMap.get(userId);
@@ -566,6 +603,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
           };
         }
 
+        // Size validation (~15MB base64 ≈ ~10MB decoded)
         if (audioData.length > MAX_STT_BASE64_LENGTH) {
           set.status = 413;
           return {
@@ -574,15 +612,18 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
           };
         }
 
+        // Detect MIME type from data URL prefix, fallback to audio/webm
         const mimeMatch = /^data:(audio\/[\w.+-]+);base64,/.exec(audioData);
         const mimeType = mimeMatch?.[1] ?? "audio/webm";
 
+        // Convert base64 to buffer
         const base64Data = audioData.replace(
           /^data:audio\/[\w.+-]+;base64,/,
           "",
         );
         const audioBuffer = Buffer.from(base64Data, "base64");
 
+        // Build FormData using native API
         const modelId = body.modelId || "scribe_v2";
         const formData = new FormData();
         formData.append("model_id", modelId);
@@ -644,10 +685,12 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
   // Payment & Credits Endpoints
   // ============================================
 
+  // Get all available plans and credit packs - GET /api/payments/plans
   .get("/payments/plans", async () => {
     return await getPlansHandler();
   })
 
+  // Get localized plans with currency conversion - GET /api/payments/plans/localized
   .get(
     "/payments/plans/localized",
     async ({ query }) => {
@@ -661,19 +704,27 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Get user's credits and subscription status - GET /api/payments/credits
   .get("/payments/credits", async ({ set }) => {
     const result = await getUserCreditsHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // Create subscription order - POST /api/payments/subscribe
   .post(
     "/payments/subscribe",
     async ({ body, set }) => {
       const result = await createSubscriptionOrderHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -684,12 +735,16 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Create credit pack order - POST /api/payments/credits/buy
   .post(
     "/payments/credits/buy",
     async ({ body, set }) => {
       const result = await createCreditPackOrderHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -700,12 +755,16 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Verify payment - POST /api/payments/verify
   .post(
     "/payments/verify",
     async ({ body, set }) => {
       const result = await verifyPaymentHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -717,24 +776,36 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Get payment history - GET /api/payments/history
   .get("/payments/history", async ({ set }) => {
     const result = await getPaymentHistoryHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // Get credit usage history - GET /api/payments/usage
   .get("/payments/usage", async ({ set }) => {
     const result = await getCreditUsageHistoryHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // Cancel subscription - POST /api/payments/cancel
   .post("/payments/cancel", async ({ set }) => {
     const result = await cancelSubscriptionHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
@@ -742,39 +813,57 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
   // Admin Endpoints
   // ============================================
 
+  // Get admin dashboard stats - GET /api/admin/stats
   .get("/admin/stats", async ({ set }) => {
     const result = await getAdminStatsHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // List all users - GET /api/admin/users
   .get("/admin/users", async ({ set }) => {
     const result = await getAdminUsersHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // Get user details - GET /api/admin/users/:id
   .get(
     "/admin/users/:id",
     async ({ params, set }) => {
       const result = await getAdminUserDetailHandler({ params });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({
+        id: t.String(),
+      }),
     },
   )
 
+  // Assign subscription to user - POST /api/admin/subscription
   .post(
     "/admin/subscription",
     async ({ body, set }) => {
       const result = await assignSubscriptionHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -790,25 +879,35 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Cancel user subscription - POST /api/admin/subscription/cancel
   .post(
     "/admin/subscription/cancel",
     async ({ body, set }) => {
       const result = await cancelUserSubscriptionHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
-      body: t.Object({ userId: t.String() }),
+      body: t.Object({
+        userId: t.String(),
+      }),
     },
   )
 
+  // Add credits to user - POST /api/admin/credits
   .post(
     "/admin/credits",
     async ({ body, set }) => {
       const result = await addCreditsHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -820,12 +919,16 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Toggle user role - POST /api/admin/users/role
   .post(
     "/admin/users/role",
     async ({ body, set }) => {
       const result = await toggleUserRoleHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -837,12 +940,16 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Deduct credits from user - POST /api/admin/credits/deduct
   .post(
     "/admin/credits/deduct",
     async ({ body, set }) => {
       const result = await deductCreditsHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -853,19 +960,22 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
       }),
     },
   )
-
   // ============================================
   // Resume Builder Endpoints
   // ============================================
 
+  // Generate LaTeX resume - POST /api/resume/generate
   .post(
     "/resume/generate",
     async ({ body, set }) => {
       const { generateResumeLatexHandler } =
         await import("@/server/api/controllers/resume.controller");
       const result = await generateResumeLatexHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -942,14 +1052,18 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Generate PDF from LaTeX - POST /api/resume/pdf
   .post(
     "/resume/pdf",
     async ({ body, set }) => {
       const { generateResumePDFHandler } =
         await import("@/server/api/controllers/resume.controller");
       const result = await generateResumePDFHandler({ body });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
@@ -960,27 +1074,37 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Get user's resumes - GET /api/resume/list
   .get("/resume/list", async ({ set }) => {
     const { getUserResumesHandler } =
       await import("@/server/api/controllers/resume.controller");
     const result = await getUserResumesHandler();
-    if (isApiError(result))
+
+    if (isApiError(result)) {
       set.status = (result as ApiErrorResponse).status ?? 500;
+    }
+
     return result;
   })
 
+  // Get resume by ID - GET /api/resume/:id
   .get(
     "/resume/:id",
     async ({ params, set }) => {
       const { getResumeByIdHandler } =
         await import("@/server/api/controllers/resume.controller");
       const result = await getResumeByIdHandler({ params });
-      if (isApiError(result))
+
+      if (isApiError(result)) {
         set.status = (result as ApiErrorResponse).status ?? 500;
+      }
+
       return result;
     },
     {
-      params: t.Object({ id: t.String() }),
+      params: t.Object({
+        id: t.String(),
+      }),
     },
   )
 
@@ -1001,6 +1125,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
   // Buildify Studio Endpoints
   // ============================================
 
+  // List user's designs
   .get("/designs", async ({ set }) => {
     const result = await listDesignsHandler();
     if (!Array.isArray(result) && "status" in result) {
@@ -1010,6 +1135,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     return result;
   })
 
+  // Create a new draft
   .post(
     "/design",
     async ({ body, set }) => {
@@ -1030,6 +1156,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
   )
 
   // IMPORTANT: static paths must come before parameterized ones
+  // Get public design by slug (no auth)
   .get(
     "/design/public/:slug",
     async ({ params, set }) => {
@@ -1043,6 +1170,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     { params: t.Object({ slug: t.String() }) },
   )
 
+  // Get one design by id (auth required)
   .get(
     "/design/:id",
     async ({ params, set }) => {
@@ -1056,6 +1184,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     { params: t.Object({ id: t.String() }) },
   )
 
+  // Update/save draft
   .put(
     "/design/:id",
     async ({ params, body, set }) => {
@@ -1076,6 +1205,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Publish
   .post(
     "/design/:id/publish",
     async ({ params, body, set }) => {
@@ -1092,6 +1222,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     },
   )
 
+  // Unpublish
   .post(
     "/design/:id/unpublish",
     async ({ params, set }) => {
@@ -1105,6 +1236,7 @@ export const elysiaApp = new Elysia({ prefix: "/api" })
     { params: t.Object({ id: t.String() }) },
   )
 
+  // Delete
   .delete(
     "/design/:id",
     async ({ params, set }) => {
