@@ -134,6 +134,7 @@ const HOVER_ANIMATIONS: { value: HoverAnimation; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'scale', label: 'Scale Up' },
   { value: 'lift', label: 'Lift Shadow' },
+  { value: 'glow', label: 'Glow' },
 ]
 
 const FONT_WEIGHTS = ['100', '300', '400', '500', '600', '700', '800', '900']

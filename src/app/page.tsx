@@ -20,7 +20,6 @@ import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
 import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
-import { cn } from '@/lib/utils'
 
 // --- Animation Variants ---
 

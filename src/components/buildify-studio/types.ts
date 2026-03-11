@@ -24,7 +24,7 @@ export type EnterAnimation =
   | 'zoomIn'
   | 'bounce'
 
-export type HoverAnimation = 'none' | 'scale' | 'lift'
+export type HoverAnimation = 'none' | 'scale' | 'lift' | 'glow'
 
 /** @deprecated use EnterAnimation */
 export type AnimationType = EnterAnimation
