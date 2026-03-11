@@ -1,3 +1,9 @@
+// src/client-api/query-hooks/use-testing-hooks.ts
+// Key additions:
+//   - `tests_generated` SSE event: populates `generatedTestCases` so the UI
+//     can show all test cases as "pending" cards immediately after generation.
+//   - `SSEState.generatedTestCases`: ordered list of test cases with live status.
+
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
@@ -13,13 +19,11 @@ export interface TestRun {
   passed: number | null
   failed: number | null
   skipped: number | null
-  /** Live count of currently-executing tests (from SSE counter events) */
   running: number | null
   startedAt: string
   completedAt: string | null
   aiSummary: string | null
   shareableSlug: string | null
-  /** Opaque token used for the "Tested by Buildify" embed badge */
   embedBadgeToken: string | null
 }
 
@@ -31,7 +35,6 @@ export interface Bug {
   description: string
   page_url: string
   screenshot_url: string | null
-  /** Bounding box coordinates for the red annotation overlay in Bug Detail Modal */
   annotation_box: { x: number; y: number; width: number; height: number } | null
   ai_fix_suggestion: string | null
   reproduction_steps: string[]
@@ -54,7 +57,6 @@ export interface TestResult {
   duration_ms: number
   retry_count: number
   console_logs: string[]
-  /** Network errors captured during test execution — shown in Bug Detail Modal */
   network_logs: NetworkLogEntry[]
 }
 
@@ -71,7 +73,6 @@ export interface TestCase {
   results: TestResult[]
 }
 
-/** Per-page Core Web Vitals — powers the Performance Gauges dashboard section */
 export interface PerformanceGauge {
   pageUrl: string
   lcpMs: number | null
@@ -84,7 +85,6 @@ export interface PerformanceGauge {
   ttfbStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
 }
 
-/** One data point in the score Trend Chart */
 export interface TrendDataPoint {
   runId: string
   score: number | null
@@ -92,7 +92,6 @@ export interface TrendDataPoint {
   isCurrent: boolean
 }
 
-/** Per-category pass/fail counts — drives the 6 Category Ring Charts */
 export interface CategoryResult {
   passed: number
   failed: number
@@ -107,32 +106,13 @@ export interface TestReport extends TestRun {
   crawlSummary: {
     totalPages: number
     crawlTimeMs: number
-    screenshots: {
-      pageUrl: string
-      url375: string | null
-      url768: string | null
-      url1440: string | null
-    }[]
-    apiEndpoints: {
-      url: string
-      method: string
-      status: number | null
-      responseType: string | null
-      durationMs: number | null
-    }[]
-    navStructure: {
-      breadcrumbs: string[]
-      menus: {
-        label: string
-        items: { text: string; href: string }[]
-      }[]
-    } | null
+    screenshots: { pageUrl: string; url375: string | null; url768: string | null; url1440: string | null }[]
+    apiEndpoints: { url: string; method: string; status: number | null; responseType: string | null; durationMs: number | null }[]
+    navStructure: { breadcrumbs: string[]; menus: { label: string; items: { text: string; href: string }[] }[] } | null
   }
   isPublic: boolean
   testCases: TestCase[]
-  /** Per-page Core Web Vitals for Performance Gauges section */
   performanceGauges: PerformanceGauge[]
-  /** Score over time for the same target URL — Trend Chart */
   trendData: TrendDataPoint[]
 }
 
@@ -150,21 +130,41 @@ export interface TestHistoryItem {
   aiSummary: string | null
   shareableSlug: string | null
   embedBadgeToken: string | null
-  /** Direct link to the visual report page — /report/:id */
   reportUrl: string
 }
 
-// ─── SSE event shapes (mirror of PipelineSSEEvent in tinyfish.service.ts) ────
+// ─── Live test case from SSE tests_generated event ───────────────────────────
+
+/**
+ * A test case surfaced by the `tests_generated` SSE event.
+ * Shown as a live card during the executing phase before the full report loads.
+ */
+export interface LiveTestCase {
+  id: string
+  title: string
+  category: string
+  priority: string
+  steps: string[]
+  expected_result: string
+  target_url: string
+  /** Live execution status, updated by subsequent test_update events */
+  status: 'pending' | 'running' | 'passed' | 'failed' | 'flaky' | 'skipped'
+  durationMs?: number
+}
+
+// ─── SSE event shapes ─────────────────────────────────────────────────────────
 
 export type PipelineSSEEvent =
   | { type: 'status'; status: string; percent: number }
   | { type: 'test_update'; testResultId: string; testCaseId: string; title: string; status: TestResult['status']; durationMs?: number }
   | { type: 'counter'; passed: number; failed: number; running: number; skipped: number; total: number }
   | { type: 'bug_found'; bug: { id: string; title: string; severity: string; category: string; pageUrl: string; screenshotUrl: string | null } }
+  | {
+      type: 'tests_generated';
+      testCases: { id: string; title: string; category: string; priority: string; steps: string[]; expected_result: string; target_url: string }[]
+    }
   | { type: 'complete'; overallScore: number; passed: number; failed: number; skipped: number; total: number; aiSummary: string; shareableSlug: string | null }
   | { type: 'error'; message: string }
-
-// ─── Live bug type surfaced by SSE ───────────────────────────────────────────
 
 export interface LiveBug {
   id: string
@@ -178,33 +178,26 @@ export interface LiveBug {
 // ─── SSE hook state ───────────────────────────────────────────────────────────
 
 export interface SSEState {
-  /** Live counter shown in the header during test execution */
   counter: { passed: number; failed: number; running: number; skipped: number; total: number } | null
-  /**
-   * Per-test card states keyed by testCaseId.
-   * Cards start as 'pending', flip to 'running', then 'passed' / 'failed' / 'flaky' in real-time.
-   */
   testUpdates: Record<string, { testResultId: string; title: string; status: TestResult['status']; durationMs?: number }>
-  /** Bugs surfaced immediately as tests fail — shown as screenshot thumbnails */
-  liveBugs: LiveBug[]
-  /** 0–100 progress bar value */
-  percent: number
-  /** Human-readable pipeline phase label */
-  pipelineStatus: string
-  /** True once the 'complete' event is received */
-  isComplete: boolean
   /**
-   * True when the server sends the "CANCELLED" sentinel via the error event.
-   * Distinct from isError — the UI shows a "cancelled" state, not a failure.
+   * Full ordered list of test cases received via the `tests_generated` event.
+   * Each entry's `status` is updated in-place as `test_update` events arrive.
+   * Empty until the generating phase completes.
    */
+  generatedTestCases: LiveTestCase[]
+  liveBugs: LiveBug[]
+  percent: number
+  pipelineStatus: string
+  isComplete: boolean
   isCancelled: boolean
-  /** Non-null if the stream emitted an 'error' event that is NOT a cancellation */
   errorMessage: string | null
 }
 
 const INITIAL_SSE_STATE: SSEState = {
   counter: null,
   testUpdates: {},
+  generatedTestCases: [],
   liveBugs: [],
   percent: 0,
   pipelineStatus: 'crawling',
@@ -224,17 +217,10 @@ export const testingKeys = {
   badge: (token: string) => [...testingKeys.all, 'badge', token] as const,
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Terminal statuses that should never open an SSE connection */
 const TERMINAL_STATUSES = new Set(['complete', 'failed', 'cancelled'])
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
-/**
- * Polling fallback for test run status.
- * Prefer useTestRunSSE for real-time streaming.
- */
 export function useTestRunStatus(testRunId: string | null) {
   return useQuery({
     queryKey: testingKeys.run(testRunId ?? ''),
@@ -283,7 +269,6 @@ export function useTestHistory() {
   })
 }
 
-/** Public read-only report — no auth required, fetched by shareable slug */
 export function usePublicTestReport(slug: string | null) {
   return useQuery({
     queryKey: testingKeys.publicReport(slug ?? ''),
@@ -298,7 +283,6 @@ export function usePublicTestReport(slug: string | null) {
   })
 }
 
-/** Embed badge data — fetched by the opaque embedBadgeToken */
 export function useEmbedBadge(token: string | null) {
   return useQuery({
     queryKey: testingKeys.badge(token ?? ''),
@@ -315,22 +299,6 @@ export function useEmbedBadge(token: string | null) {
 
 // ─── SSE Hook ─────────────────────────────────────────────────────────────────
 
-/**
- * useTestRunSSE
- *
- * Opens an SSE connection to GET /api/test/stream/:id and maintains local
- * state so the UI updates in real-time without any polling.
- *
- * KEY FIX: Takes `initialStatus` and skips opening the SSE connection entirely
- * for terminal statuses (complete / failed / cancelled). This prevents the
- * history panel from accidentally restarting a cancelled pipeline when a user
- * clicks on a past run — the SSE stream would otherwise be opened, the server
- * would see the run isn't "complete/failed" (old check missed "cancelled"), and
- * would spin up a brand-new pipeline.
- *
- * Usage:
- *   const { sseState } = useTestRunSSE(testRunId, run?.status)
- */
 export function useTestRunSSE(testRunId: string | null, initialStatus?: string) {
   const queryClient = useQueryClient()
   const [sseState, setSseState] = useState<SSEState>(INITIAL_SSE_STATE)
@@ -339,13 +307,7 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
   useEffect(() => {
     if (!testRunId) return
 
-    // ── CRITICAL FIX ──────────────────────────────────────────────────────
-    // Do NOT open SSE for terminal statuses. When the history panel selects
-    // a cancelled or complete run, we just want to display the stored data —
-    // not reconnect to the SSE endpoint which would restart the pipeline.
     if (initialStatus && TERMINAL_STATUSES.has(initialStatus)) {
-      // Reflect the terminal status in local SSE state immediately so the
-      // UI renders the correct panel (cancelled / complete) without waiting.
       const terminalState: SSEState = {
         ...INITIAL_SSE_STATE,
         isComplete: initialStatus === 'complete',
@@ -358,7 +320,6 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
       return
     }
 
-    // Reset state whenever testRunId changes (new test run started)
     sseStateRef.current = INITIAL_SSE_STATE
     setSseState(INITIAL_SSE_STATE)
 
@@ -366,11 +327,8 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
 
     es.onmessage = (e: MessageEvent<string>) => {
       let event: PipelineSSEEvent
-      try {
-        event = JSON.parse(e.data) as PipelineSSEEvent
-      } catch {
-        return
-      }
+      try { event = JSON.parse(e.data) as PipelineSSEEvent }
+      catch { return }
 
       const prev = sseStateRef.current
       let next: SSEState = prev
@@ -380,31 +338,42 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
           next = { ...prev, percent: event.percent, pipelineStatus: event.status }
           break
 
-        case 'test_update':
-          next = {
-            ...prev,
-            testUpdates: {
-              ...prev.testUpdates,
-              [event.testCaseId]: {
-                testResultId: event.testResultId,
-                title: event.title,
-                status: event.status,
-                durationMs: event.durationMs,
-              },
+        case 'tests_generated': {
+          // Populate generatedTestCases with all test cases in "pending" state.
+          // This is the key event that makes test cards visible before execution.
+          const liveCases: LiveTestCase[] = event.testCases.map((tc) => ({
+            ...tc,
+            status: 'pending' as const,
+          }))
+          next = { ...prev, generatedTestCases: liveCases }
+          break
+        }
+
+        case 'test_update': {
+          // Update testUpdates map (backward compat)
+          const updatedUpdates = {
+            ...prev.testUpdates,
+            [event.testCaseId]: {
+              testResultId: event.testResultId,
+              title: event.title,
+              status: event.status,
+              durationMs: event.durationMs,
             },
           }
+          // Also update generatedTestCases in-place so live cards reflect new status
+          const updatedCases = prev.generatedTestCases.map((tc) =>
+            tc.id === event.testCaseId
+              ? { ...tc, status: event.status, durationMs: event.durationMs ?? tc.durationMs }
+              : tc,
+          )
+          next = { ...prev, testUpdates: updatedUpdates, generatedTestCases: updatedCases }
           break
+        }
 
         case 'counter':
           next = {
             ...prev,
-            counter: {
-              passed: event.passed,
-              failed: event.failed,
-              running: event.running,
-              skipped: event.skipped,
-              total: event.total,
-            },
+            counter: { passed: event.passed, failed: event.failed, running: event.running, skipped: event.skipped, total: event.total },
           }
           break
 
@@ -414,18 +383,8 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
 
         case 'complete':
           next = {
-            ...prev,
-            percent: 100,
-            pipelineStatus: 'complete',
-            isComplete: true,
-            isCancelled: false,
-            counter: {
-              passed: event.passed,
-              failed: event.failed,
-              running: 0,
-              skipped: event.skipped,
-              total: event.total,
-            },
+            ...prev, percent: 100, pipelineStatus: 'complete', isComplete: true, isCancelled: false,
+            counter: { passed: event.passed, failed: event.failed, running: 0, skipped: event.skipped, total: event.total },
           }
           es.close()
           void queryClient.invalidateQueries({ queryKey: testingKeys.run(testRunId) })
@@ -434,13 +393,9 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
           break
 
         case 'error': {
-          // The server sends message "CANCELLED" as a sentinel to distinguish
-          // a user-requested cancellation from a real pipeline failure.
           const isCancelled = event.message === 'CANCELLED'
           next = {
-            ...prev,
-            isCancelled,
-            errorMessage: isCancelled ? null : event.message,
+            ...prev, isCancelled, errorMessage: isCancelled ? null : event.message,
             pipelineStatus: isCancelled ? 'cancelled' : 'failed',
           }
           es.close()
@@ -458,9 +413,7 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
       if (sseStateRef.current.isComplete || sseStateRef.current.isCancelled) es.close()
     }
 
-    return () => {
-      es.close()
-    }
+    return () => { es.close() }
   }, [testRunId, initialStatus, queryClient])
 
   return { sseState }
@@ -470,44 +423,24 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
 
 export function useStartTestRun() {
   const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: async (input: { url: string; projectId?: string }): Promise<{ testRunId: string }> => {
       const res = await fetch('/api/test/run', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
       })
       const data = await res.json() as { testRunId?: string; error?: string }
       if (!res.ok || !data.testRunId) throw new Error(data.error ?? 'Failed to start test run')
       return { testRunId: data.testRunId }
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
-    },
+    onSuccess: () => { void queryClient.invalidateQueries({ queryKey: testingKeys.history() }) },
   })
 }
 
-/**
- * useCancelTestRun
- *
- * Sends DELETE /api/test/run/:id/cancel to stop a running pipeline.
- * On success:
- *   - Invalidates the run status query (so UI shows "cancelled")
- *   - Invalidates history (so the history panel shows "Cancelled" badge)
- *
- * The server sets the DB status to "cancelled" immediately, then signals
- * the in-memory pipeline to stop at its next checkpoint. TinyFish API calls
- * mid-flight will complete (we can't abort them) but no new ones will start.
- */
 export function useCancelTestRun() {
   const queryClient = useQueryClient()
-
   return useMutation({
     mutationFn: async (testRunId: string): Promise<{ cancelled: boolean }> => {
-      const res = await fetch(`/api/test/run/${testRunId}/cancel`, {
-        method: 'DELETE',
-      })
+      const res = await fetch(`/api/test/run/${testRunId}/cancel`, { method: 'DELETE' })
       const data = await res.json() as { cancelled?: boolean; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Failed to cancel test run')
       return { cancelled: data.cancelled ?? false }
@@ -515,6 +448,33 @@ export function useCancelTestRun() {
     onSuccess: (_, testRunId) => {
       void queryClient.invalidateQueries({ queryKey: testingKeys.run(testRunId) })
       void queryClient.invalidateQueries({ queryKey: testingKeys.history() })
+    },
+  })
+}
+
+/**
+ * useExportReportPdf
+ *
+ * Triggers a Puppeteer-based PDF export by hitting POST /api/test/run/:id/export-pdf.
+ * The browser receives the PDF as a Blob and triggers a file download automatically.
+ */
+export function useExportReportPdf() {
+  return useMutation({
+    mutationFn: async (testRunId: string): Promise<void> => {
+      const res = await fetch(`/api/test/run/${testRunId}/export-pdf`, { method: 'POST' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(data.error ?? 'PDF export failed')
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `buildify-report-${testRunId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     },
   })
 }
