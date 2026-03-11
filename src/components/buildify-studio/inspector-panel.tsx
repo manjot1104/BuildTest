@@ -134,7 +134,7 @@ const HOVER_ANIMATIONS: { value: HoverAnimation; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'scale', label: 'Scale Up' },
   { value: 'lift', label: 'Lift Shadow' },
-  { value: 'glow', label: 'Glow' },
+  { value: 'outline', label: 'Outline' },
 ]
 
 const FONT_WEIGHTS = ['100', '300', '400', '500', '600', '700', '800', '900']
@@ -279,8 +279,8 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
               ) : (
                 <>
                   <Row>
-                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#667eea'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
-                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#764ba2'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
+                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#f8fafc'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
+                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#f1f5f9'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
                   </Row>
                   {eff.styles.gradientType === 'linear' && (
                     <Field label="Angle" full>

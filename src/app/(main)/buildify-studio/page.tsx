@@ -27,14 +27,14 @@ interface DesignCard {
 }
 
 const THUMB_GRADIENTS = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
-  'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
+  'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', // Slate 50 -> 100
+  'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)', // Slate 100 -> 200
+  'linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%)', // Soft Beige
+  'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', // Sky 100 -> 200
+  'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', // Sky 50 -> 100
+  'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', // Violet 50 -> 100
+  'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)', // Stone 50 -> 100
+  'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', // Green 50 -> 100
 ]
 
 function formatDate(iso: string) {

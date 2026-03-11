@@ -233,8 +233,8 @@ const initialState: EditorState = {
   canvasBackground: {
     type: 'solid',
     color: '#ffffff',
-    gradientFrom: '#667eea',
-    gradientTo: '#764ba2',
+    gradientFrom: '#f8fafc',
+    gradientTo: '#f1f5f9',
     gradientAngle: 135,
     imageUrl: '',
   },

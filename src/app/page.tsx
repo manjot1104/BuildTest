@@ -20,6 +20,7 @@ import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
 import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 
 // --- Animation Variants ---
 
@@ -314,15 +315,15 @@ export default function LandingPage() {
                             </button>
                             {!isPending && (
                                 session?.user ? (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => router.push('/chat')}
-                                        className="rounded-full h-8 px-4 text-xs font-medium gap-1.5"
-                                    >
-                                        Open App
-                                        <ArrowRight className="size-3" />
-                                    </Button>
-                                ) : (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => router.push('/chat')}
+                                            className="rounded-full h-8 px-4 text-xs font-semibold gap-1.5 shadow-sm border-primary/20"
+                                        >
+                                            Open App
+                                            <ArrowRight className="size-3" />
+                                        </Button>
+                                    ) : (
                                     <Button
                                         size="sm"
                                         variant="ghost"
@@ -345,7 +346,7 @@ export default function LandingPage() {
                 className="relative min-h-[100svh] flex flex-col items-center justify-center px-6"
             >
                 {/* Subtle background grain */}
-                <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                <div className="absolute inset-0 opacity-[0.012] dark:opacity-[0.025] pointer-events-none"
                     style={{
                         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
                     }}
@@ -416,7 +417,7 @@ export default function LandingPage() {
                                 "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
                                 inputFocused
                                     ? "border-primary ring-2 ring-primary/20 shadow-md"
-                                    : "border-border shadow-sm hover:border-border/80"
+                                    : "border-border/60 dark:border-border/80 shadow-sm hover:border-border/80 dark:hover:border-border"
                             )}
                         >                            {/* Attachment preview strip */}
                             {attachments.length > 0 && (

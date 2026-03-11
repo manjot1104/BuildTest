@@ -65,13 +65,13 @@ function getEnterAnimClass(anim: EnterAnimation, isPreview: boolean): string {
 
 function getHoverAnimClass(anim: HoverAnimation, isPreview: boolean): string {
   if (!isPreview || anim === 'none') return ''
-  const map: Record<HoverAnimation, string> = {
+  const hoverMap: Record<HoverAnimation, string> = {
     none: '',
     scale: 'pb-hover-scale',
     lift: 'pb-hover-lift',
-    glow: 'pb-hover-glow',
+    outline: 'pb-hover-glow',
   }
-  return map[anim] ?? ''
+  return hoverMap[anim] ?? ''
 }
 
 // --- Background style helper ---

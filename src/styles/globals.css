@@ -199,12 +199,12 @@ body {
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  background: var(--border);
   border-radius: 999px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary));
+  background: var(--muted-foreground);
 }
 
 /* ─── Buildify Studio animations ─────────────────────────────────────────── */
@@ -229,8 +229,8 @@ body {
 .pb-hover-scale:hover { transform: scale(1.05); }
 .pb-hover-lift  { transition: transform 0.2s ease, box-shadow 0.2s ease; }
 .pb-hover-lift:hover  { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
-.pb-hover-glow  { transition: filter 0.2s ease; }
-.pb-hover-glow:hover  { filter: brightness(1.1); }
+.pb-hover-glow  { transition: box-shadow 0.2s ease, border-color 0.2s ease; }
+.pb-hover-glow:hover  { box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5); }
 
 /* Legacy aliases */
 .pb-anim-hoverscale { transition: transform 0.2s ease; }

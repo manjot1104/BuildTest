@@ -83,7 +83,7 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                             className={cn(
                                                 "rounded-none transition-colors border-l-2",
                                                 isActive 
-                                                    ? "bg-primary/5 text-primary border-primary" 
+                                                    ? "bg-accent/50 text-accent-foreground border-primary" 
                                                     : "border-transparent"
                                             )}
                                         >
@@ -115,7 +115,7 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                                 className={cn(
                                                     "rounded-none transition-colors border-l-2",
                                                     isParentActive 
-                                                        ? "bg-primary/5 text-primary border-primary" 
+                                                        ? "bg-accent/50 text-accent-foreground border-primary" 
                                                         : "border-transparent"
                                                 )}
                                             >
@@ -138,7 +138,7 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                                                 className={cn(
                                                                     "rounded-none transition-colors border-l-2",
                                                                     isSubActive 
-                                                                        ? "bg-primary/5 text-primary border-primary" 
+                                                                        ? "bg-accent/50 text-accent-foreground border-primary" 
                                                                         : "border-transparent"
                                                                 )}
                                                                 onClick={hasClickHandler ? (e: React.MouseEvent) => {

@@ -6,7 +6,7 @@ import {
     AlertDialog,
     AlertDialogContent,
 } from '@/components/ui/alert-dialog'
-import { X, Star, ExternalLink } from 'lucide-react'
+import { X, Star, ExternalLink, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
@@ -105,14 +105,14 @@ export function StarredChatsDialog({
                         )}
 
                         {!isLoading && !error && chats && chats.length > 0 && (
-                            <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto">
+                            <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                                 {chats.map((chat) => (
                                     <button
                                       key={chat.conversation_id || chat.v0_chat_id}
                                         onClick={() => handleChatClick(chat)}
                                         className={cn(
                                             "flex items-center gap-3 px-3 py-2.5 rounded-lg",
-                                            "hover:bg-muted transition-colors text-left group"
+                                            "hover:bg-accent/50 transition-colors text-left group"
                                         )}
                                     >
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
