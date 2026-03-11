@@ -56,7 +56,7 @@ export function ModeSelection({ onSelect }: Props) {
               {["Apps", "Dashboards", "Landing Pages"].map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-md bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                  className="rounded-md bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary border border-primary/20"
                 >
                   {tag}
                 </span>
@@ -92,7 +92,7 @@ export function ModeSelection({ onSelect }: Props) {
               {["Brainstorm", "Debug", "Explain"].map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-md bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                  className="rounded-md bg-violet-500/10 px-2 py-0.5 text-[11px] font-medium text-violet-500 border border-violet-500/20"
                 >
                   {tag}
                 </span>
