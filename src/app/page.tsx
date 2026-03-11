@@ -412,12 +412,12 @@ export default function LandingPage() {
 
                         {/* Main input card — no border, only neon shadow */}
                         <div
-                            className="relative rounded-2xl bg-background overflow-hidden transition-all duration-300"
-                            style={{
-                                boxShadow: inputFocused
-                                    ? '0 0 0 2px rgba(59,126,255,0.5), 0 0 0 5px rgba(59,126,255,0.10), 0 4px 32px rgba(59,126,255,0.22), 0 10px 40px rgba(0,0,0,0.10)'
-                                    : '0 0 0 1.5px rgba(59,126,255,0.28), 0 4px 24px rgba(59,126,255,0.15), 0 8px 36px rgba(0,0,0,0.08)',
-                            }}
+                            className={cn(
+                                "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
+                                inputFocused 
+                                    ? "border-primary ring-2 ring-primary/20 shadow-md" 
+                                    : "border-border shadow-sm hover:border-border/80"
+                            )}
                         >
                             {/* Attachment preview strip */}
                             {attachments.length > 0 && (
@@ -730,7 +730,7 @@ export default function LandingPage() {
                                 className="group relative bg-background p-8 md:p-10 transition-colors duration-300 hover:bg-muted/30"
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-primary/10">
+                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-muted">
                                         <feature.icon className="size-5 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
                                     </div>
                                     <div>

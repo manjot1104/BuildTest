@@ -247,7 +247,7 @@ export function CodeViewerDialog({
                   className={cn(
                     'w-[6px] shrink-0 cursor-col-resize touch-none select-none',
                     'relative group transition-colors',
-                    'bg-transparent hover:bg-primary/10',
+                    'bg-transparent hover:bg-muted',
                   )}
                 >
                   {/* Visible line */}

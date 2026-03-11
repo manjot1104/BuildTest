@@ -220,7 +220,7 @@ export const PromptInput = ({
     <form
       className={cn(
         'w-full divide-y overflow-hidden rounded-xl border bg-background shadow-sm transition-colors',
-        isDragOver && 'border-primary bg-primary/5',
+        isDragOver && 'border-primary bg-muted',
         className,
       )}
       onDragOver={handleDragOver}

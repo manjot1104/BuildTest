@@ -421,7 +421,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updStyle({ textAlign: a })}
                     className={`flex-1 rounded border py-1 text-xs capitalize transition-colors ${
                       eff.styles.textAlign === a
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -461,7 +461,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ enterAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.enterAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -479,7 +479,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ hoverAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.hoverAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >

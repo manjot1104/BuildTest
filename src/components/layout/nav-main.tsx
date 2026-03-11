@@ -42,7 +42,7 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
             {sections.map((section) => (
                 <SidebarGroup key={section.label}>
                     {!isCollapsed && (
-                        <SidebarGroupLabel className="hk-group-label">
+                        <SidebarGroupLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                             {section.label}
                         </SidebarGroupLabel>
                     )}
@@ -61,25 +61,35 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                         }
                                     }
                                     return (
-                                        <SidebarMenuItem key={item.title} className="hk-nav-item">
+                                        <SidebarMenuItem key={item.title}>
                                             <SidebarMenuButton
                                                 tooltip={item.title}
                                                 onClick={handleClick}
-                                                className="rounded-none"
+                                                className="rounded-md"
                                             >
-                                                {item.icon && <item.icon className="hk-neon-icon size-4 transition-all duration-300" />}
-                                                <HackerText text={item.title} />
+                                                {item.icon && <item.icon className="size-4" />}
+                                                <span>{item.title}</span>
                                             </SidebarMenuButton>
                                         </SidebarMenuItem>
                                     )
                                 }
 
                                 return (
-                                    <SidebarMenuItem key={item.title} className={cn("hk-nav-item", isActive && "hk-nav-active")}>
-                                        <SidebarMenuButton asChild tooltip={item.title} isActive={isActive} className="rounded-none">
+                                    <SidebarMenuItem key={item.title}>
+                                        <SidebarMenuButton 
+                                            asChild 
+                                            tooltip={item.title} 
+                                            isActive={isActive} 
+                                            className={cn(
+                                                "rounded-none transition-colors border-l-2",
+                                                isActive 
+                                                    ? "bg-primary/5 text-primary border-primary" 
+                                                    : "border-transparent"
+                                            )}
+                                        >
                                             <Link href={item.url ?? "#"}>
-                                                {item.icon && <item.icon className="hk-neon-icon size-4 transition-all duration-300" />}
-                                                <HackerText text={item.title} />
+                                                {item.icon && <item.icon className={cn("size-4", isActive ? "text-primary" : "")} />}
+                                                <span>{item.title}</span>
                                             </Link>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
@@ -97,11 +107,20 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                     defaultOpen={isParentActive}
                                     className="group/collapsible"
                                 >
-                                    <SidebarMenuItem className={cn("hk-nav-item", isParentActive && "hk-nav-active")}>
+                                    <SidebarMenuItem>
                                         <CollapsibleTrigger asChild>
-                                            <SidebarMenuButton tooltip={item.title} isActive={isParentActive} className="rounded-none">
-                                                {item.icon && <item.icon className="hk-neon-icon size-4 transition-all duration-300" />}
-                                                <HackerText text={item.title} />
+                                            <SidebarMenuButton 
+                                                tooltip={item.title} 
+                                                isActive={isParentActive} 
+                                                className={cn(
+                                                    "rounded-none transition-colors border-l-2",
+                                                    isParentActive 
+                                                        ? "bg-primary/5 text-primary border-primary" 
+                                                        : "border-transparent"
+                                                )}
+                                            >
+                                                {item.icon && <item.icon className={cn("size-4", isParentActive ? "text-primary" : "")} />}
+                                                <span>{item.title}</span>
                                                 <ChevronRight className="ml-auto size-3.5 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                                             </SidebarMenuButton>
                                         </CollapsibleTrigger>
@@ -112,21 +131,26 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
                                                     const isSubActive = subItem.url ? pathname === subItem.url : false
 
                                                     return (
-                                                        <SidebarMenuSubItem key={subItem.title} className="hk-nav-item">
+                                                        <SidebarMenuSubItem key={subItem.title}>
                                                             <SidebarMenuSubButton
                                                                 asChild={!hasClickHandler}
                                                                 isActive={isSubActive}
-                                                                className="rounded-none"
+                                                                className={cn(
+                                                                    "rounded-none transition-colors border-l-2",
+                                                                    isSubActive 
+                                                                        ? "bg-primary/5 text-primary border-primary" 
+                                                                        : "border-transparent"
+                                                                )}
                                                                 onClick={hasClickHandler ? (e: React.MouseEvent) => {
                                                                     e.preventDefault()
                                                                     subItem.onClick?.()
                                                                 } : undefined}
                                                             >
                                                                 {hasClickHandler ? (
-                                                                    <HackerText text={subItem.title} />
+                                                                    <span className={cn(isSubActive ? "text-primary" : "")}>{subItem.title}</span>
                                                                 ) : (
                                                                     <Link href={subItem.url ?? "#"}>
-                                                                        <HackerText text={subItem.title} />
+                                                                        <span className={cn(isSubActive ? "text-primary" : "")}>{subItem.title}</span>
                                                                     </Link>
                                                                 )}
                                                             </SidebarMenuSubButton>
@@ -146,18 +170,18 @@ export function NavMain({ sections }: { sections: NavSection[] }) {
             {/* Theme toggle at bottom */}
             <SidebarGroup className="mt-auto">
                 <SidebarMenu>
-                    <SidebarMenuItem className="hk-nav-item">
+                    <SidebarMenuItem>
                         <SidebarMenuButton
                             tooltip={theme === "dark" ? "Switch to light" : "Switch to dark"}
                             onClick={handleToggle}
                             className="rounded-none"
                         >
                             {theme === "dark" ? (
-                                <Moon className="hk-neon-icon size-4 transition-all duration-300" />
+                                <Moon className="size-4" />
                             ) : (
-                                <Sun className="hk-neon-icon size-4 transition-all duration-300" />
+                                <Sun className="size-4" />
                             )}
-                            <HackerText text={theme === "dark" ? "Dark Theme" : "Light Theme"} />
+                            <span>{theme === "dark" ? "Dark Theme" : "Light Theme"}</span>
                         </SidebarMenuButton>
                     </SidebarMenuItem>
                 </SidebarMenu>

@@ -44,7 +44,7 @@ function QuestionCard({
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:border-primary/50 hover:bg-accent/50 cursor-pointer',
                 isSelected
-                  ? 'border-primary bg-primary/10 ring-1 ring-primary/20'
+                  ? 'border-primary bg-muted shadow-sm'
                   : 'border-border bg-background',
               )}
             >

@@ -37,12 +37,11 @@ export function ModeSelection({ onSelect }: Props) {
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => onSelect("BUILDER")}
-          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-primary/50"
+          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card text-left transition-colors hover:border-primary/50"
         >
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
           <div className="relative flex flex-col gap-5 p-7">
             <div className="flex items-center justify-between">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
                 <Wrench className="size-5 text-primary" />
               </div>
               <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-primary" />
@@ -74,12 +73,11 @@ export function ModeSelection({ onSelect }: Props) {
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
           onClick={() => onSelect("AI_CHAT")}
-          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-violet-500/50"
+          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card text-left transition-colors hover:border-violet-500/50"
         >
-          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
           <div className="relative flex flex-col gap-5 p-7">
             <div className="flex items-center justify-between">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-muted">
                 <MessageSquareText className="size-5 text-violet-500" />
               </div>
               <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-500" />
