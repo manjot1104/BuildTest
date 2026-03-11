@@ -1,26 +1,28 @@
 // src/server/services/tinyfish.service.ts
 //
 // ═══════════════════════════════════════════════════════════════════════════
-// CRAWLER ARCHITECTURE
+// CRAWLER ARCHITECTURE (v3 — Discovery-first)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Design principles:
-//   1. No separate discovery stage. Discovery IS extraction.
-//   2. Hard budget caps enforced up front.
-//   3. Test budget allocated proportionally after crawl completes.
-//   4. Free seeding before any TinyFish call.
-//   5. Per-crawl context object, not module globals.
+// OLD (BFS): root → extract → find links → extract each → serial-ish, slow
 //
-// Pipeline:
-// ┌─────────────────────────────────────────────────────────────────────────┐
-// │ STAGE 0 │ Free URL seeding                                              │
-// ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 1 │ BFS extraction (unified crawl + discovery)                    │
-// ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 2 │ Test budget allocation                                        │
-// ├─────────────────────────────────────────────────────────────────────────┤
-// │ STAGE 3 │ Background: screenshots + perf via Puppeteer (non-blocking)  │
-// └─────────────────────────────────────────────────────────────────────────┘
+// NEW (Discovery-first):
+//   STAGE 0 │ Free URL seeding (sitemap + static HTML, no TinyFish)
+//   STAGE 1 │ ONE TinyFish "discoverer" call on the root URL
+//            │   Goal: navigate the site, click nav items, collect all URLs
+//            │   Returns: flat list of discovered page URLs
+//   STAGE 2 │ Parallel TinyFish extraction on all discovered URLs
+//            │   Each page gets its own call, all fire simultaneously
+//   STAGE 3 │ Test budget allocation
+//   STAGE 4 │ Background: screenshots + perf (non-blocking)
+//
+// Why this is faster:
+//   - Discovery call clicks nav once, gets all URLs in ~30-60s
+//   - All page extractions run in parallel (Promise.allSettled)
+//   - No page waits for another page to finish
+//   - Total time ≈ max(discovery, extraction) instead of sum(all pages)
+//
+// ═══════════════════════════════════════════════════════════════════════════
 
 import { uploadPageScreenshots, urlToSlug } from "./s3.service";
 import { capturePageScreenshots, measurePagePerformanceWithPuppeteer } from "./puppeteer.service";
@@ -42,9 +44,9 @@ export interface TestBudgetAllocation {
 }
 
 export const BUDGET_PRESETS = {
-  free:     { maxPages: 3,  maxTests: 5,  concurrency: 2 } satisfies CrawlBudget,
-  standard: { maxPages: 5,  maxTests: 10, concurrency: 3 } satisfies CrawlBudget,
-  deep:     { maxPages: 10, maxTests: 15, concurrency: 4 } satisfies CrawlBudget,
+  free:     { maxPages: 3,  maxTests: 5,  concurrency: 3  } satisfies CrawlBudget,
+  standard: { maxPages: 5,  maxTests: 10, concurrency: 5  } satisfies CrawlBudget,
+  deep:     { maxPages: 10, maxTests: 15, concurrency: 10 } satisfies CrawlBudget,
 } as const;
 
 const HARD_CAPS = {
@@ -55,15 +57,16 @@ const HARD_CAPS = {
 } as const;
 
 const TIMEOUTS = {
-  EXTRACTION_BASE_MS:          150_000,
-  EXTRACTION_RETRY_BONUS_MS:    60_000,
-  NAV_PROBE_MS:                 45_000,
-  EXECUTE_TEST_BASE_MS:        180_000,
-  EXECUTE_TEST_RETRY_BONUS_MS:  60_000,
-  SCREENSHOT_FAIL_MS:           90_000,
+  // Discovery: needs time to click nav + wait for URL changes
+  DISCOVERY_MS:                300_000,
+  EXTRACTION_MS:               300_000,
+  EXTRACTION_RETRY_MS:         60_000,
+  // Test execution
+  EXECUTE_TEST_BASE_MS:       300_000,
+  EXECUTE_TEST_RETRY_BONUS_MS: 60_000,
 } as const;
 
-export const MAX_EXTRACTION_RETRIES = 2;
+export const MAX_EXTRACTION_RETRIES = 1;
 export const MAX_TEST_RETRIES = 1;
 
 // ─── Per-crawl context ────────────────────────────────────────────────────────
@@ -290,18 +293,16 @@ function isAllowedUrl(candidate: string, allowedHostname: string): boolean {
   } catch { return false; }
 }
 
-const DEFAULT_MAX_PER_PATTERN = 2;
-
-function filterByPathPattern(urls: string[], maxPerPattern = DEFAULT_MAX_PER_PATTERN): string[] {
-  const counts = new Map<string, number>();
+function dedupeUrls(urls: string[], allowedHostname: string, max: number): string[] {
+  const seen = new Set<string>();
   const result: string[] = [];
-  for (const url of urls) {
-    try {
-      const segs = new URL(url).pathname.split("/").filter(Boolean);
-      const key = segs.slice(0, 2).join("/") || "root";
-      const n = counts.get(key) ?? 0;
-      if (n < maxPerPattern) { counts.set(key, n + 1); result.push(url); }
-    } catch { result.push(url); }
+  for (const raw of urls) {
+    const normalized = normalizeUrl(raw);
+    if (!isAllowedUrl(normalized, allowedHostname)) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+    if (result.length >= max) break;
   }
   return result;
 }
@@ -381,6 +382,9 @@ async function runTinyFish(request: TinyFishRequest, ctx: CrawlContext): Promise
           if (event.text) rawText += event.text;
           if (event.type === "COMPLETE") {
             console.log(`[TinyFish] ✓ ${jobId} → ${event.status} (${eventCount} events)`);
+            if (!event.resultJson) {
+              console.warn(`[TinyFish] ⚠ No resultJson in COMPLETE. rawText preview: ${rawText.slice(0, 300)}`);
+            }
             if (event.status === "COMPLETED") {
               return { success: true, resultJson: event.resultJson ?? null, rawText: rawText || null, error: null, jobId };
             }
@@ -399,6 +403,7 @@ async function runTinyFish(request: TinyFishRequest, ctx: CrawlContext): Promise
         console.log(`[TinyFish] Recovered JSON from rawText (${rawText.length} chars)`);
         return { success: true, resultJson: recovered, rawText, error: null, jobId };
       }
+      console.warn(`[TinyFish] rawText unparseable (${rawText.length} chars): ${rawText.slice(0, 300)}`);
     }
 
     return {
@@ -427,11 +432,20 @@ function tryParseRawText(raw: string | null): Record<string, unknown> | null {
     if (start !== -1 && end > start) {
       try { return JSON.parse(cleaned.slice(start, end + 1)) as Record<string, unknown>; } catch { /* continue */ }
     }
+    // Also try array recovery for discovery results
+    const arrStart = cleaned.indexOf("[");
+    const arrEnd = cleaned.lastIndexOf("]");
+    if (arrStart !== -1 && arrEnd > arrStart) {
+      try {
+        const arr = JSON.parse(cleaned.slice(arrStart, arrEnd + 1)) as unknown[];
+        return { urls: arr };
+      } catch { /* continue */ }
+    }
   } catch { /* give up */ }
   return null;
 }
 
-// ─── Stage 0: Free URL seeding ────────────────────────────────────────────────
+// ─── Stage 0: Free URL seeding (no TinyFish) ──────────────────────────────────
 
 async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promise<string[]> {
   const candidates = [
@@ -439,7 +453,6 @@ async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promi
     `${rootUrl.replace(/\/$/, "")}/sitemap_index.xml`,
     `${rootUrl.replace(/\/$/, "")}/robots.txt`,
   ];
-
   for (const candidateUrl of candidates) {
     try {
       const { signal, clear } = makeAbortSignal(8_000);
@@ -465,7 +478,7 @@ async function fetchSitemapUrls(rootUrl: string, allowedHostname: string): Promi
         console.log(`[Stage0] Sitemap: ${locs.length} URLs`);
         return locs;
       }
-    } catch { /* sitemap is always optional */ }
+    } catch { /* optional */ }
   }
   return [];
 }
@@ -494,122 +507,103 @@ async function fetchStaticHtmlLinks(rootUrl: string, allowedHostname: string): P
   } catch { return []; }
 }
 
-// ─── Prompt builders ──────────────────────────────────────────────────────────
+// ─── Stage 1: Discovery prompt ────────────────────────────────────────────────
+//
+// This is a SINGLE TinyFish call on the root URL.
+// Its only job: navigate the site (including clicking SPA nav items) and
+// return a flat JSON array of all page URLs it found.
+// It does NOT extract page content — that happens in parallel in Stage 2.
 
-const WAIT_PREAMBLE = `
-WAIT FOR FULL RENDER:
-1. Wait for the page to fully load (network idle).
-2. If you see <div id="root">, <div id="app">, __NEXT_DATA__, window.React, or window.__nuxt — JavaScript-rendered app. Wait an EXTRA 4 seconds for JS rendering to complete.
-3. Wait for loading spinners and skeleton screens to disappear.
-4. Dismiss or ignore login modals and cookie banners — do NOT interact with them.
-`.trim();
+function buildDiscoveryGoal(rootUrl: string, allowedHostname: string, maxPages: number): string {
+  return `You are a website URL discoverer. Your ONLY job is to find all unique page URLs on this website.
+
+START URL: ${rootUrl}
+
+STEP 1 — Navigate and wait:
+Go to the start URL. Wait for full page load.
+If you see <div id="root">, <div id="app">, or window.React exists — this is a JavaScript SPA. Wait an EXTRA 4 seconds for JS rendering.
+
+STEP 2 — Collect passive links (no clicking):
+- Every <a href="..."> tag — resolve relative URLs to absolute
+- data-href, data-to, data-url attributes on any element
+- Any route paths in window.__NEXT_DATA__ (Next.js) if it exists
+- Any route paths in window.__NUXT__ (Nuxt.js) if it exists
+
+STEP 3 — Click navigation items to discover SPA routes:
+Look for navigation elements in <nav>, <header>, role="navigation", or sidebar menus.
+For EACH clickable nav item (links, buttons, divs with cursor:pointer in nav areas):
+  a) Click it
+  b) Wait up to 3 seconds
+  c) Check window.location.href — if it changed AND hostname is still "${allowedHostname}", record the new URL
+  d) Click browser Back button, wait for page to reload
+  e) Continue to next nav item
+Stop when you have collected ${maxPages} URLs OR clicked 25 nav items, whichever comes first.
+
+STEP 4 — Return results:
+Return ONLY valid JSON as a single object. No markdown. No explanation. Start with { end with }.
+The "urls" field must be an array of absolute URL strings.
+
+{"urls":["https://${allowedHostname}/","https://${allowedHostname}/about","https://${allowedHostname}/games"]}`;
+}
+
+// ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
+//
+// Called in parallel for each discovered URL.
+// Passive only — no clicking. Just reads what's on the page.
 
 function buildExtractionGoal(url: string, allowedHostname: string): string {
   return `Navigate to this URL: ${url}
 
-${WAIT_PREAMBLE}
+Wait for the page to fully load. If SPA (has <div id="root"> or <div id="app">), wait 3 extra seconds.
+Dismiss cookie banners — do NOT interact with them.
 
-INTERCEPT NETWORK REQUESTS during page load:
-Record fetch/XHR calls where URL contains /api/, /v1/, /v2/, /graphql, or Content-Type is application/json.
-Fields: url, method, status (HTTP code), responseType, durationMs. Cap at 15.
-
-EXTRACT:
+EXTRACT the following WITHOUT clicking anything:
 
 1. PAGE TITLE: document.title
 
-2. INTERACTIVE ELEMENTS — capture ALL elements a user can click, type into, or select.
-   Include standard HTML elements AND framework-rendered equivalents:
+2. INTERACTIVE ELEMENTS visible to the user (cap at 40):
+   - <a href>     → type "link",        text = label, href = absolute URL
+   - <button>     → type "button",      text = label or aria-label
+   - <input>      → type "input",       text = placeholder or name
+   - <select>     → type "select",      text = aria-label or name
+   - <textarea>   → type "textarea",    text = placeholder
+   - role=button/link → type "interactive", text = inner text
+   Skip hidden elements. text max 60 chars.
 
-   a) <a href="...">             type "link",       text = visible label, href = resolved absolute URL
-   b) <button>                   type "button",     text = visible label or aria-label
-   c) <input>                    type "input",      text = placeholder or aria-label or name
-   d) <select>                   type "select",     text = aria-label or name
-   e) <textarea>                 type "textarea",   text = placeholder or aria-label
-   f) Any <div>, <span>, <li>, <img> or other element where ANY of these is true:
-        - has an onclick / onClick attribute or attached event listener
-        - has role="button" or role="link"
-        - has a data-href, data-url, data-to, or data-link attribute
-        - has cursor:pointer computed style AND contains visible text or an icon
-      type "interactive", text = visible inner text or aria-label,
-      href = data-href / data-url / data-to value if present, otherwise omit href
+3. FORMS (cap at 5):
+   action (absolute URL or null), method, fields: [{name, type, required, pattern}]
 
-   For each element record: type, text (trimmed, max 80 chars), href (if it navigates), isVisible.
-   Skip hidden elements (display:none, visibility:hidden, opacity:0, off-screen by >2 viewports).
-   Cap at 60 elements total.
+4. INTERNAL LINKS — all <a href> pointing to ${allowedHostname} (cap at 30):
+   Resolve relative to absolute, strip fragments, deduplicate.
 
-3. FORMS — for each <form> or element with role="form":
-   action (resolved absolute URL or null), method (default "get"),
-   fields: [{name, type, required, pattern}]
+5. API CALLS intercepted during load (cap at 10):
+   url, method, status, responseType, durationMs
+   Only record /api/, /v1/, /v2/, /graphql calls.
 
-4. NAVIGABLE LINKS — collect ALL URLs this page can navigate to.
+6. NAVIGATION STRUCTURE:
+   breadcrumbs: [], menus: [{label, items:[{text,href}]}]
 
-   STEP A — passive collection (no clicks):
-   - href on every <a> tag (resolve relative to absolute)
-   - data-href / data-url / data-to / data-link attributes on any element
-   - window.__NEXT_DATA__ or window.__NUXT__ route manifests if accessible
-   - <link rel="alternate|canonical"> href values
-
-   STEP B — active SPA discovery (click-and-record):
-   React/Vue/Angular SPAs frequently render ALL navigation as plain <div> or <li>
-   elements with onClick handlers and NO href.
-
-   HOW TO FIND CANDIDATES:
-   Look for any of the following patterns on the page:
-     1. Elements inside <nav>, <header>, or elements with role="navigation" that
-        have no href but appear to be links (cursor:pointer, or text that looks like a page name)
-     2. Repeating groups of similar containers where each item has similar
-        structure and appears clickable. Click UP TO 3 items to sample the URL pattern.
-     3. Any other visible element with cursor:pointer that has no href and
-        does not look like a form control or action button.
-
-   FOR EACH CANDIDATE:
-     1. Click it
-     2. Wait up to 3 seconds for navigation to settle
-     3. If window.location.href changed AND hostname is still "${allowedHostname}": record the new absolute URL
-     4. Press browser Back, wait for the original page to finish loading
-     5. Stop after collecting 20 URLs this way or clicking 30 candidates total.
-
-   Rules for ALL URLs from Step A and Step B:
-   - Include ONLY URLs whose hostname is exactly "${allowedHostname}"
-   - Strip URL fragments (#section)
-   - Deduplicate
-   - Cap total at 60 entries
-
-5. NAVIGATION STRUCTURE: breadcrumbs array, menus [{label:"top-nav"|"sidebar"|"footer", items:[{text,href}]}]
-
-Return ONLY valid JSON. No markdown. No explanation. Start with { and end with }.
+Return ONLY valid JSON. No markdown. Start with { end with }.
 {
   "title": "string",
-  "elements": [
-    {"type":"link","text":"About","href":"https://${allowedHostname}/about","isVisible":true},
-    {"type":"button","text":"Submit","isVisible":true},
-    {"type":"input","text":"Search","isVisible":true},
-    {"type":"interactive","text":"Dashboard","href":"https://${allowedHostname}/dashboard","isVisible":true}
-  ],
-  "internalLinks": ["https://${allowedHostname}/about","https://${allowedHostname}/dashboard"],
-  "forms": [{"action":"/search","method":"get","fields":[{"name":"q","type":"text","required":false,"pattern":null}]}],
-  "apiEndpoints": [{"url":"https://api.example.com/v1/data","method":"GET","status":200,"responseType":"json","durationMs":120}],
-  "navStructure": {
-    "breadcrumbs": ["Home","Products"],
-    "menus": [{"label":"top-nav","items":[{"text":"About","href":"/about"}]}]
-  }
+  "elements": [{"type":"link","text":"About","href":"https://${allowedHostname}/about","isVisible":true}],
+  "internalLinks": ["https://${allowedHostname}/about"],
+  "forms": [],
+  "apiEndpoints": [],
+  "navStructure": {"breadcrumbs":[],"menus":[]}
 }`;
 }
 
-// ─── Page data extraction ─────────────────────────────────────────────────────
+// ─── Page data helpers ────────────────────────────────────────────────────────
 
 function scorePageComplexity(page: Omit<CrawledPage, "complexityScore" | "screenshots">): number {
   const interactive = page.elements.filter(
-    (e) =>
-      e.type === "button" ||
-      e.type === "input" ||
-      e.type === "select" ||
-      e.type === "textarea" ||
-      e.type === "interactive",
+    (e) => e.type === "button" || e.type === "input" || e.type === "select" ||
+           e.type === "textarea" || e.type === "interactive",
   ).length;
   return (
     page.forms.length * 2 +
-    interactive * 1 +
+    interactive +
     page.internalLinks.length * 0.5 +
     (page.apiEndpoints.length > 0 ? 3 : 0)
   );
@@ -681,7 +675,7 @@ function extractPageData(
   return { ...partial, complexityScore: scorePageComplexity(partial) };
 }
 
-// ─── Stage 2: Test budget allocation ─────────────────────────────────────────
+// ─── Stage 3: Test budget allocation ──────────────────────────────────────────
 
 export function allocateTestBudget(pages: CrawledPage[], maxTests: number): TestBudgetAllocation {
   const cap = Math.min(maxTests, HARD_CAPS.MAX_TESTS);
@@ -737,162 +731,201 @@ export async function crawlSite(
   const ctx = makeCrawlContext();
 
   const budget: CrawlBudget = {
-    maxPages: Math.min(
-      options.budget?.maxPages ?? BUDGET_PRESETS.standard.maxPages,
-      HARD_CAPS.MAX_PAGES,
-    ),
-    maxTests: Math.min(
-      options.budget?.maxTests ?? BUDGET_PRESETS.standard.maxTests,
-      HARD_CAPS.MAX_TESTS,
-    ),
+    maxPages: Math.min(options.budget?.maxPages ?? BUDGET_PRESETS.standard.maxPages, HARD_CAPS.MAX_PAGES),
+    maxTests: Math.min(options.budget?.maxTests ?? BUDGET_PRESETS.standard.maxTests, HARD_CAPS.MAX_TESTS),
     concurrency: options.budget?.concurrency ?? BUDGET_PRESETS.standard.concurrency,
   };
 
-  console.log(
-    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests} concurrency=${budget.concurrency}`,
-  );
+  console.log(`[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests}`);
 
-  // ── Stage 0: Free seeding ──────────────────────────────────────────────────
+  // ── Stage 0: Free URL seeding (no TinyFish credits) ───────────────────────
   const [sitemapUrls, staticHtmlLinks] = await Promise.all([
     fetchSitemapUrls(rootUrl, allowedHostname),
     fetchStaticHtmlLinks(rootUrl, allowedHostname),
   ]);
 
-  const rootNorm = normalizeUrl(rootUrl);
-  const visited = new Set<string>([rootNorm]);
-  const queue: string[] = [rootNorm];
-  const seedLinks = filterByPathPattern([
-    ...new Set(
-      [...sitemapUrls, ...staticHtmlLinks]
-        .map(normalizeUrl)
-        .filter((u) => !visited.has(u) && isAllowedUrl(u, allowedHostname)),
-    ),
-  ]);
-  for (const u of seedLinks) { visited.add(u); queue.push(u); }
-
-  console.log(
-    `[Stage0] Queue seeded with ${queue.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
+  const freeUrls = dedupeUrls(
+    [normalizeUrl(rootUrl), ...sitemapUrls, ...staticHtmlLinks],
+    allowedHostname,
+    budget.maxPages * 3, // gather more than needed, will trim after discovery
   );
 
-  // ── Stage 1: BFS extraction ────────────────────────────────────────────────
-  const pages: CrawledPage[] = [];
+  console.log(`[Stage0] Free seed: ${freeUrls.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`);
 
-  async function extractionWorker(): Promise<void> {
-    while (true) {
-      if (abortSignal?.aborted) { console.log(`[Stage1] Worker stopped — abort signal received`); break; }
-      if (pages.length >= budget.maxPages || ctx.creditsExhausted) break;
-      const pageUrl = queue.shift();
-      if (!pageUrl) break;
-
-      let extracted: Omit<CrawledPage, "screenshots"> | null = null;
-
-      for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
-        if (abortSignal?.aborted || ctx.creditsExhausted) break;
-        if (attempt > 0) console.log(`[Stage1] Retry ${attempt}: ${pageUrl}`);
-
-        const extractTimeoutMs =
-          TIMEOUTS.EXTRACTION_BASE_MS + attempt * TIMEOUTS.EXTRACTION_RETRY_BONUS_MS;
-        const result = await withTimeout(
-          runTinyFish(
-            { url: pageUrl, goal: buildExtractionGoal(pageUrl, allowedHostname), browser_profile: "stealth" },
-            ctx,
-          ),
-          extractTimeoutMs,
-          { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
-          `extract(${pageUrl}) attempt=${attempt + 1} timeout=${extractTimeoutMs / 1000}s`,
-        );
-
-        if (abortSignal?.aborted) break;
-        const raw = result.resultJson ?? tryParseRawText(result.rawText);
-        if (!raw) {
-          console.warn(`[Stage1] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`);
-          continue;
-        }
-
-        extracted = extractPageData(pageUrl, raw, allowedHostname);
-        console.log(
-          `[Stage1] ✓ [${pages.length + 1}/${budget.maxPages}] "${extracted.title}" ${pageUrl} | ` +
-          `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
-          `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
-        );
-        break;
-      }
-
-      if (!extracted) continue;
-
-      pages.push({ ...extracted, screenshots: { url375: null, url768: null, url1440: null } });
-
-      if (pages.length < budget.maxPages) {
-        const newLinks = filterByPathPattern(
-          extracted.internalLinks.filter((u) => {
-            if (visited.has(u)) return false;
-            visited.add(u);
-            return true;
-          }),
-        );
-        let enqueued = 0;
-        for (const u of newLinks) {
-          if (pages.length + queue.length >= budget.maxPages) break;
-          queue.push(u);
-          enqueued++;
-        }
-        if (enqueued > 0) {
-          console.log(`[Stage1] +${enqueued} URLs enqueued from ${pageUrl} | queue: ${queue.length}`);
-        }
-      }
-    }
-  }
-
-  await Promise.all(Array.from({ length: budget.concurrency }, extractionWorker));
+  // ── Stage 1: Discovery via TinyFish ──────────────────────────────────────
+  // One call on the root URL — clicks nav items to find all SPA pages.
+  // Falls back gracefully to Stage 0 free URLs if discovery fails.
+  let discoveredUrls: string[] = [];
 
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
+  console.log(`[Stage1] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
+
+  const discoveryResult = await withTimeout(
+    runTinyFish(
+      {
+        url: rootUrl,
+        goal: buildDiscoveryGoal(rootUrl, allowedHostname, budget.maxPages),
+        browser_profile: "stealth", // stealth for nav clicking to avoid bot detection
+      },
+      ctx,
+    ),
+    TIMEOUTS.DISCOVERY_MS,
+    { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+    `discovery(${rootUrl})`,
+  );
+
+  // Extract URLs from discovery result — try every possible shape TinyFish might return
+  function extractUrlsFromDiscovery(result: TinyFishResult): string[] {
+    const candidates: string[] = [];
+
+    // Strategy 1: resultJson is present — try all known key names
+    if (result.resultJson) {
+      const raw = result.resultJson;
+      const urlList =
+        Array.isArray(raw) ? raw :
+        Array.isArray(raw.urls) ? raw.urls :
+        Array.isArray(raw.pages) ? raw.pages :
+        Array.isArray(raw.links) ? raw.links :
+        Array.isArray(raw.discovered) ? raw.discovered :
+        Array.isArray(raw.results) ? raw.results : [];
+      candidates.push(...(urlList as unknown[]).filter((u): u is string => typeof u === "string"));
+    }
+
+    // Strategy 2: rawText JSON parse
+    if (result.rawText && candidates.length === 0) {
+      const parsed = tryParseRawText(result.rawText);
+      if (parsed) {
+        const urlList =
+          Array.isArray(parsed) ? parsed :
+          Array.isArray(parsed.urls) ? parsed.urls :
+          Array.isArray(parsed.pages) ? parsed.pages :
+          Array.isArray(parsed.links) ? parsed.links : [];
+        candidates.push(...(urlList as unknown[]).filter((u): u is string => typeof u === "string"));
+      }
+    }
+
+    // Strategy 3: regex scan rawText for any URL matching allowedHostname
+    // This is the last-resort fallback when TinyFish writes prose instead of JSON
+    if (result.rawText && candidates.length === 0) {
+      const urlRegex = new RegExp(
+        `https?://${allowedHostname.replace(/\./g, "\\.")}[^\\s"'<>\\]},]*`,
+        "gi",
+      );
+      const found = [...result.rawText.matchAll(urlRegex)].map((m) => m[0].replace(/[.,;:!?)]+$/, ""));
+      candidates.push(...found);
+      if (found.length > 0) {
+        console.log(`[Stage1] Regex fallback extracted ${found.length} URLs from rawText`);
+      }
+    }
+
+    return candidates;
+  }
+
+  const rawDiscovered = extractUrlsFromDiscovery(discoveryResult);
+  discoveredUrls = dedupeUrls(rawDiscovered, allowedHostname, budget.maxPages * 2);
+
+  if (discoveredUrls.length > 0) {
+    console.log(`[Stage1] ✓ Discovery found ${discoveredUrls.length} pages`);
+  } else {
+    console.warn(`[Stage1] ⚠ Discovery returned 0 URLs. status=${discoveryResult.error ?? "ok"} rawText="${discoveryResult.rawText?.slice(0, 200)}"`);
+  }
+
+  // Always ensure root URL is included
+  const rootNorm = normalizeUrl(rootUrl);
+  if (!discoveredUrls.includes(rootNorm)) discoveredUrls.unshift(rootNorm);
+
+  // Merge with free URLs — discovery takes priority, free URLs fill gaps
+  const allCandidateUrls = dedupeUrls(
+    [...discoveredUrls, ...freeUrls],
+    allowedHostname,
+    budget.maxPages,
+  );
+
+  if (discoveredUrls.length <= 1) {
+    console.warn(`[Stage1] Discovery found ≤1 URL — filling from free seed (total candidates: ${allCandidateUrls.length})`);
+  }
+
+  console.log(`[Stage1] Final URL list (${allCandidateUrls.length}): ${allCandidateUrls.join(", ")}`);
+
+  // ── Stage 2: Parallel extraction ──────────────────────────────────────────
+  // ALL pages extracted simultaneously — no BFS, no waiting on each other.
+  if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
+
+  console.log(`[Stage2] ⚡ Extracting ${allCandidateUrls.length} pages in parallel`);
+
+  const extractionResults = await Promise.allSettled(
+    allCandidateUrls.map(async (pageUrl) => {
+      for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
+        if (abortSignal?.aborted || ctx.creditsExhausted) break;
+        if (attempt > 0) console.log(`[Stage2] Retry ${attempt}: ${pageUrl}`);
+
+        const timeoutMs = TIMEOUTS.EXTRACTION_MS + attempt * TIMEOUTS.EXTRACTION_RETRY_MS;
+        const result = await withTimeout(
+          runTinyFish(
+            { url: pageUrl, goal: buildExtractionGoal(pageUrl, allowedHostname), browser_profile: "lite" },
+            ctx,
+          ),
+          timeoutMs,
+          { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
+          `extract(${pageUrl}) attempt=${attempt + 1}`,
+        );
+
+        const raw = result.resultJson ?? tryParseRawText(result.rawText);
+        if (!raw) {
+          console.warn(`[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`);
+          continue;
+        }
+
+        const extracted = extractPageData(pageUrl, raw, allowedHostname);
+        console.log(
+          `[Stage2] ✓ "${extracted.title}" ${pageUrl} | ` +
+          `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
+          `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
+        );
+        return { ...extracted, screenshots: { url375: null, url768: null, url1440: null } } as CrawledPage;
+      }
+      return null; // extraction failed after retries
+    }),
+  );
+
+  if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
+
+  const pages: CrawledPage[] = extractionResults
+    .filter((r): r is PromiseFulfilledResult<CrawledPage | null> => r.status === "fulfilled")
+    .map((r) => r.value)
+    .filter((p): p is CrawledPage => p !== null);
+
   if (pages.length === 0) {
-    console.warn(`[Stage1] All extractions failed — inserting empty root page`);
+    console.warn(`[Stage2] All extractions failed — inserting empty root page`);
     pages.push({
-      url: rootUrl,
-      title: "",
-      elements: [],
-      internalLinks: [],
-      externalLinks: [],
-      forms: [],
-      apiEndpoints: [],
-      navStructure: { breadcrumbs: [], menus: [] },
-      screenshots: { url375: null, url768: null, url1440: null },
-      complexityScore: 0,
+      url: rootUrl, title: "", elements: [], internalLinks: [], externalLinks: [],
+      forms: [], apiEndpoints: [], navStructure: { breadcrumbs: [], menus: [] },
+      screenshots: { url375: null, url768: null, url1440: null }, complexityScore: 0,
     });
   }
 
-  // ── Stage 2: Test budget allocation ───────────────────────────────────────
+  console.log(`[Stage2] ══ DONE: ${pages.length}/${allCandidateUrls.length} pages extracted`);
+
+  // ── Stage 3: Test budget allocation ───────────────────────────────────────
   const testBudget = allocateTestBudget(pages, budget.maxTests);
   const allLinks = [...new Set(pages.flatMap((p) => p.internalLinks))];
   const crawlTimeMs = Date.now() - startTime;
 
-  console.log(
-    `[Stage1] ══ DONE: ${pages.length} pages | ${allLinks.length} discovered links | ${(crawlTimeMs / 1000).toFixed(1)}s`,
-  );
+  console.log(`[Crawler] ══ DONE: ${pages.length} pages | ${allLinks.length} links | ${(crawlTimeMs / 1000).toFixed(1)}s`);
 
-  // ── Stage 3: Background screenshots + perf via Puppeteer ──────────────────
-  // Returns a Promise<void> the caller MUST await before writing to DB.
-  // Mutates pages[i].screenshots with real S3 URLs in-place.
-  // Populates performanceMetrics with real CWV numbers.
+  // ── Stage 4: Background screenshots + perf ────────────────────────────────
   const performanceMetrics: PagePerformanceMetrics[] = pages.map((p) => ({
-    pageUrl: p.url,
-    lcpMs: null,
-    fidMs: null,
-    cls: null,
-    ttfbMs: null,
-    rawMetrics: {},
+    pageUrl: p.url, lcpMs: null, fidMs: null, cls: null, ttfbMs: null, rawMetrics: {},
   }));
 
   const stage3Promise = (async () => {
     await Promise.allSettled(
       pages.flatMap((page, i) => [
-        // Screenshot capture via Puppeteer
         (async () => {
           if (!testRunId) return;
           try {
-            console.log(`[Stage3] 📸 Capturing screenshots for ${page.url}`);
+            console.log(`[Stage4] 📸 Screenshots: ${page.url}`);
             const screenshots = await capturePageScreenshots(page.url);
             const uploaded = await uploadPageScreenshots({
               screenshots: {
@@ -903,27 +936,25 @@ export async function crawlSite(
               testRunId,
               pageSlug: urlToSlug(page.url),
             });
-            // Mutate in-place so the crawl_results DB insert picks up real URLs
             pages[i]!.screenshots = uploaded;
-            console.log(`[Stage3] ✓ Screenshots uploaded for ${page.url}`);
+            console.log(`[Stage4] ✓ Screenshots uploaded: ${page.url}`);
           } catch (err) {
-            console.warn(`[Stage3] Screenshot failed for ${page.url}:`, err);
+            console.warn(`[Stage4] Screenshot failed: ${page.url}:`, err);
           }
         })(),
-        // Performance metrics via Puppeteer
         (async () => {
           try {
-            console.log(`[Stage3] ⚡ Measuring performance for ${page.url}`);
+            console.log(`[Stage4] ⚡ Perf: ${page.url}`);
             const pm = await measurePagePerformanceWithPuppeteer(page.url);
             performanceMetrics[i] = pm;
-            console.log(`[Stage3] ✓ Perf ${page.url} LCP=${pm.lcpMs}ms TTFB=${pm.ttfbMs}ms`);
+            console.log(`[Stage4] ✓ Perf ${page.url} LCP=${pm.lcpMs}ms TTFB=${pm.ttfbMs}ms`);
           } catch (err) {
-            console.warn(`[Stage3] Perf failed for ${page.url}:`, err);
+            console.warn(`[Stage4] Perf failed: ${page.url}:`, err);
           }
         })(),
       ]),
     );
-    console.log(`[Stage3] Background tasks complete`);
+    console.log(`[Stage4] Background tasks complete`);
   })();
 
   // ── Site feature detection ─────────────────────────────────────────────────
@@ -934,11 +965,8 @@ export async function crawlSite(
       /login|signin|auth|oauth|sso/.test(p.url) ||
       p.elements.some((e) => {
         const t = e.text?.toLowerCase() ?? "";
-        return (
-          t.includes("sign in") || t.includes("log in") || t.includes("login") ||
-          t.includes("continue with google") || t.includes("sign in with google") ||
-          t.includes("continue with github") || t.includes("login with")
-        );
+        return t.includes("sign in") || t.includes("log in") || t.includes("login") ||
+               t.includes("continue with google") || t.includes("continue with github");
       }),
   );
 
@@ -953,9 +981,7 @@ export async function crawlSite(
 
   const protectedRouteRE = /\/(dashboard|account|profile|settings|admin|portal|members?|private|secure|my-)/i;
   const hasProtectedRoutes = pages.some(
-    (p) =>
-      protectedRouteRE.test(p.url) ||
-      p.internalLinks.some((l) => protectedRouteRE.test(l)),
+    (p) => protectedRouteRE.test(p.url) || p.internalLinks.some((l) => protectedRouteRE.test(l)),
   );
 
   const hasSearch = allElements.some(
@@ -971,16 +997,8 @@ export async function crawlSite(
   );
 
   return {
-    pages,
-    allLinks,
-    crawlTimeMs,
-    performanceMetrics,
-    testBudget,
-    hasLogin,
-    hasSignup,
-    hasSearch,
-    hasProtectedRoutes,
-    stage3Promise,
+    pages, allLinks, crawlTimeMs, performanceMetrics, testBudget,
+    hasLogin, hasSignup, hasSearch, hasProtectedRoutes, stage3Promise,
   };
 }
 
@@ -994,11 +1012,8 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
     screenshots: { url375: null, url768: null, url1440: null }, complexityScore: 0,
   };
   const result = await withTimeout(
-    runTinyFish(
-      { url, goal: buildExtractionGoal(url, allowedHostname), browser_profile: "stealth" },
-      ctx,
-    ),
-    TIMEOUTS.EXTRACTION_BASE_MS,
+    runTinyFish({ url, goal: buildExtractionGoal(url, allowedHostname), browser_profile: "lite" }, ctx),
+    TIMEOUTS.EXTRACTION_MS,
     { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
     `crawlPage(${url})`,
   );
@@ -1007,7 +1022,7 @@ export async function crawlPage(url: string, allowedHostname: string): Promise<C
   return { ...extractPageData(url, raw, allowedHostname), screenshots: { url375: null, url768: null, url1440: null } };
 }
 
-// ─── Performance measurement (via Puppeteer) ──────────────────────────────────
+// ─── Performance measurement ──────────────────────────────────────────────────
 
 export async function measurePagePerformance(url: string): Promise<PagePerformanceMetrics> {
   try {
@@ -1049,10 +1064,7 @@ If PASSED: {"passed":true,"actualResult":"<what you observed>","errorDetails":nu
 If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"<specific error>","consoleLogs":[],"networkLogs":[]}`;
 
   const result = await withTimeout(
-    runTinyFish(
-      { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
-      ctx,
-    ),
+    runTinyFish({ url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" }, ctx),
     TIMEOUTS.EXECUTE_TEST_BASE_MS + attempt * TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS,
     { success: false, resultJson: null, rawText: null, error: "timeout", jobId: null },
     `executeTest(${url}) attempt=${attempt + 1}`,
@@ -1094,7 +1106,7 @@ If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"
   };
 }
 
-// ─── Failure screenshot (via Puppeteer) ───────────────────────────────────────
+// ─── Failure screenshot ───────────────────────────────────────────────────────
 
 export async function runTinyFishScreenshot(url: string): Promise<string | null> {
   try {

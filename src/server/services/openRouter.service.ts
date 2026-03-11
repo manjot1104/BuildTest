@@ -17,10 +17,15 @@ const FALLBACK_TESTS_PER_PAGE = 3;
 const FALLBACK_MIN_TESTS = 5;
 
 const MODELS = [
-  "openrouter/auto",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "mistralai/mistral-small-3.1-24b-instruct:free",
-  "google/gemma-3-12b-it:free",
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'mistralai/mistral-small-3.1-24b-instruct:free',
+  'arcee-ai/trinity-large-preview:free',
+  'upstage/solar-pro-3:free',
+  'nvidia/nemotron-3-nano-30b-a3b:free',
+  'stepfun/step-3.5-flash:free',
+  'google/gemma-3-12b-it:free',
+  'qwen/qwen3-4b:free',
+  'openrouter/free',
 ];
 
 const RETRY_DELAY_MS = 2_000;
