@@ -45,7 +45,7 @@ export function ChatHistoryDialog({
     }, [chats])
 
     const handleChatClick = (chat: any) => {
-  if (chat.demoUrl) {
+  if (chat.type === 'builder') {
     router.push(`/chat?chatId=${chat.v0ChatId}`)
   } else {
     router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
@@ -173,7 +173,7 @@ export function ChatHistoryDialog({
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
-                                                    if (chat.demoUrl) {
+                                                    if (chat.type === 'builder') {
                                                         router.push(`/chat?chatId=${chat.v0ChatId}`)
                                                     } else {
                                                         router.push(`/ai-chat?chatId=${chat.v0ChatId}`)

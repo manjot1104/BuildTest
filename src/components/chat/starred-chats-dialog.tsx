@@ -13,12 +13,12 @@ import { useQuery } from '@tanstack/react-query'
 
 interface StarredChat {
     id: string
-    v0_chat_id: string
-    conversation_id?: string | null
+    v0ChatId: string
     title: string | null
-    last_message?: string | null
-    demo_url: string | null
-    created_at: string
+    prompt?: string | null
+    demoUrl: string | null
+    createdAt: string
+    type: 'builder' | 'openrouter'
 }
 
 async function fetchStarredChats(): Promise<StarredChat[]> {
@@ -42,11 +42,11 @@ export function StarredChatsDialog({
         enabled: open,
     })
 
-    const handleChatClick = (chat: any) => {
-    if (chat.chat_type === "OPENROUTER") {
-        router.push(`/ai-chat?chatId=${chat.conversation_id}`)
+    const handleChatClick = (chat: StarredChat) => {
+    if (chat.type === "openrouter") {
+        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
     } else {
-        router.push(`/chat?chatId=${chat.v0_chat_id}`)
+        router.push(`/chat?chatId=${chat.v0ChatId}`)
     }
 
     onOpenChange(false)
@@ -108,7 +108,7 @@ export function StarredChatsDialog({
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                                 {chats.map((chat) => (
                                     <button
-                                      key={chat.conversation_id || chat.v0_chat_id}
+                                      key={chat.v0ChatId}
                                         onClick={() => handleChatClick(chat)}
                                         className={cn(
                                             "flex items-center gap-3 px-3 py-2.5 rounded-lg",
@@ -118,17 +118,17 @@ export function StarredChatsDialog({
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">
-                                                {chat.title ?? chat.last_message ?? 'Untitled Chat'}
+                                                {chat.title ?? chat.prompt ?? 'Untitled Chat'}
                                             </p>
-                                            {chat.created_at && (
+                                            {chat.createdAt && (
                                                 <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                                    {formatDistanceToNow(new Date(chat.created_at), {
+                                                    {formatDistanceToNow(new Date(chat.createdAt), {
                                                         addSuffix: true,
                                                     })}
                                                 </p>
                                             )}
                                         </div>
-                                        {chat.demo_url && (
+                                        {chat.demoUrl && (
                                             <ExternalLink className="size-3.5 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
                                         )}
                                     </button>

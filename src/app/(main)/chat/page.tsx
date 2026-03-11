@@ -96,18 +96,20 @@ export default function ChatPage() {
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
     const [micError, setMicError] = useState<string | null>(null)
    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-  if (typeof window !== 'undefined') {
-    return new URLSearchParams(window.location.search).get('chatId')
-  }
-  return null
-})
+   if (typeof window !== 'undefined') {
+   return new URLSearchParams(window.location.search).get('chatId')
+   }
+   return null
+   })
 
-useEffect(() => {
-  if (urlChatId) {
-    setShowChatInterface(true)
-  }
-}, [urlChatId])
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    useEffect(() => {
+        if (urlChatId && !chatMode) {
+            setChatMode("BUILDER");
+            setShowChatInterface(true);
+        }
+    }, [urlChatId, chatMode]);
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const {
         currentChat: hookCurrentChat,
