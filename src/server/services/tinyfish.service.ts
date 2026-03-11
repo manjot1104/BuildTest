@@ -4,9 +4,7 @@
 // CRAWLER ARCHITECTURE (v3 — Discovery-first)
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// OLD (BFS): root → extract → find links → extract each → serial-ish, slow
-//
-// NEW (Discovery-first):
+// (Discovery-first):
 //   STAGE 0 │ Free URL seeding (sitemap + static HTML, no TinyFish)
 //   STAGE 1 │ ONE TinyFish "discoverer" call on the root URL
 //            │   Goal: navigate the site, click nav items, collect all URLs
@@ -14,13 +12,7 @@
 //   STAGE 2 │ Parallel TinyFish extraction on all discovered URLs
 //            │   Each page gets its own call, all fire simultaneously
 //   STAGE 3 │ Test budget allocation
-//   STAGE 4 │ Background: screenshots + perf (non-blocking)
-//
-// Why this is faster:
-//   - Discovery call clicks nav once, gets all URLs in ~30-60s
-//   - All page extractions run in parallel (Promise.allSettled)
-//   - No page waits for another page to finish
-//   - Total time ≈ max(discovery, extraction) instead of sum(all pages)
+//   STAGE 4 │ Background: screenshots for bugs + performance (non-blocking)
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -44,7 +36,7 @@ export interface TestBudgetAllocation {
 
 export const BUDGET_PRESETS = {
   free: { maxPages: 3, maxTests: 5, concurrency: 3 } satisfies CrawlBudget,
-  standard: { maxPages: 5, maxTests: 10, concurrency: 5 } satisfies CrawlBudget,
+  standard: { maxPages: 2, maxTests: 3, concurrency: 3 } satisfies CrawlBudget,
   deep: { maxPages: 10, maxTests: 15, concurrency: 10 } satisfies CrawlBudget,
 } as const;
 

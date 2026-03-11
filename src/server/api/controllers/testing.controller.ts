@@ -10,6 +10,7 @@ import { eq, desc } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import {
   crawlSite, executeTest,
+  MAX_TEST_RETRIES,
   type PagePerformanceMetrics, type PipelineSSEEvent,
 } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
@@ -18,8 +19,6 @@ import {
   type SiteContext, type TestRunSummaryInput, type TestCase, type BugContext,
 } from "@/server/services/openRouter.service";
 import type { ApiErrorResponse } from "@/types/api.types";
-
-const MAX_TEST_RETRIES = 2;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,12 +65,24 @@ const activePipelines = new Set<string>();
 const cancelledPipelines = new Set<string>();
 const crawlAbortControllers = new Map<string, AbortController>();
 
-function checkCancelled(testRunId: string): void {
-  if (cancelledPipelines.has(testRunId)) throw new Error(`CANCELLED:${testRunId}`);
+// Multiple SSE clients can connect to the same running pipeline.
+// We fan-out events to all of them.
+const pipelineEmitters = new Map<string, Set<(line: string) => void>>();
+
+function registerEmitter(testRunId: string, emit: (line: string) => void): () => void {
+  if (!pipelineEmitters.has(testRunId)) pipelineEmitters.set(testRunId, new Set());
+  pipelineEmitters.get(testRunId)!.add(emit);
+  return () => pipelineEmitters.get(testRunId)?.delete(emit);
 }
 
-function isCancelledRun(testRunId: string): boolean {
-  return cancelledPipelines.has(testRunId);
+function broadcastToRun(testRunId: string, line: string): void {
+  pipelineEmitters.get(testRunId)?.forEach((emit) => {
+    try { emit(line); } catch { /* stream already closed */ }
+  });
+}
+
+function checkCancelled(testRunId: string): void {
+  if (cancelledPipelines.has(testRunId)) throw new Error(`CANCELLED:${testRunId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,11 +92,13 @@ function isCancelledRun(testRunId: string): boolean {
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
-  emit?: (line: string) => void,
 ): Promise<void> {
-  const send = (event: PipelineSSEEvent) => emit?.(buildSSELine(event));
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
+
+  // Convenience: broadcast an event to all connected SSE clients for this run
+  const send = (event: PipelineSSEEvent) => broadcastToRun(testRunId, buildSSELine(event));
+
   try {
     await runPipelineStages(testRunId, targetUrl, send, abortController.signal);
   } finally {
@@ -108,13 +121,13 @@ async function runPipelineStages(
   try {
     siteData = await crawlSite(targetUrl, { testRunId, abortSignal });
   } catch (err) {
-    if (abortSignal.aborted || isCancelledRun(testRunId)) throw new Error(`CANCELLED:${testRunId}`);
+    if (abortSignal.aborted || cancelledPipelines.has(testRunId)) throw new Error(`CANCELLED:${testRunId}`);
     const msg = `Crawl failed: ${err instanceof Error ? err.message : String(err)}`;
     send({ type: "error", message: msg });
     throw new Error(msg);
   }
 
-  // ─── STEP 2: GENERATE (parallel with stage3 screenshots+perf) ────────────
+  // ─── STEP 2: GENERATE TEST CASES + persist crawl data (parallel) ─────────
   checkCancelled(testRunId);
   await updateRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
@@ -130,9 +143,9 @@ async function runPipelineStages(
     },
   };
 
-  let generatedCases: TestCase[];
-
-  const [generatedCasesResult] = await Promise.all([
+  // Run AI generation, crawl DB writes, and background screenshots all in parallel
+  const [generatedCases] = await Promise.all([
+    // AI test case generation
     (async (): Promise<TestCase[]> => {
       checkCancelled(testRunId);
       try {
@@ -143,15 +156,8 @@ async function runPipelineStages(
         throw new Error(msg);
       }
     })(),
-    siteData.stage3Promise.catch((err) => {
-      console.warn("[Pipeline] stage3 screenshots/perf failed (non-fatal):", err);
-    }),
-  ]);
 
-  generatedCases = generatedCasesResult;
-
-  // Write crawl data to DB — pages[i].screenshots now have real S3 URLs (stage3 done)
-  await Promise.all([
+    // Persist crawl results to DB
     db.insert(crawl_results).values({
       id: nanoid(),
       test_run_id: testRunId,
@@ -167,6 +173,8 @@ async function runPipelineStages(
       })),
       crawl_time_ms: siteData.crawlTimeMs,
     }),
+
+    // Persist performance metrics if available
     siteData.performanceMetrics.length > 0
       ? db.insert(performance_metrics).values(
           siteData.performanceMetrics.map((pm: PagePerformanceMetrics) => ({
@@ -181,6 +189,11 @@ async function runPipelineStages(
           })),
         )
       : Promise.resolve(),
+
+    // Background screenshots + perf — non-blocking, failures are swallowed
+    siteData.stage3Promise.catch((err) => {
+      console.warn("[Pipeline] stage3 screenshots/perf failed (non-fatal):", err);
+    }),
   ]);
 
   // Persist test cases
@@ -202,7 +215,7 @@ async function runPipelineStages(
     .set({ total_tests: testCaseRecords.length })
     .where(eq(test_runs.id, testRunId));
 
-  // Emit all test cases at once so UI shows pending cards immediately
+  // Emit all test cases at once so UI can render pending cards immediately
   send({
     type: "tests_generated",
     testCases: generatedCases.map((tc, i) => ({
@@ -216,7 +229,6 @@ async function runPipelineStages(
     })),
   } as PipelineSSEEvent);
 
-  // Backward-compat: emit individual pending events
   for (let i = 0; i < generatedCases.length; i++) {
     send({
       type: "test_update",
@@ -237,7 +249,17 @@ async function runPipelineStages(
     dbId: testCaseRecords[i]!.id,
   }));
 
-  let totalPassed = 0, totalFailed = 0, totalSkipped = 0, totalRunning = 0;
+  // Single source of truth for live counters
+  const counters = {
+    passed: 0,
+    failed: 0,
+    running: 0,
+    skipped: 0,
+    total: testCaseRecords.length,
+  };
+
+  const sendCounters = () =>
+    send({ type: "counter", ...counters });
 
   const failedTestsForSuggestions: { testResultId: string; ctx: BugContext }[] = [];
   const bugsToInsertBase: Omit<typeof bug_reports.$inferInsert, "ai_fix_suggestion">[] = [];
@@ -247,35 +269,41 @@ async function runPipelineStages(
     checkCancelled(testRunId);
     console.log(`[Testing] Batch ${batchIndex + 1}: ${batch.length} tests`);
 
-    totalRunning += batch.length;
-    await db.update(test_runs).set({ running: totalRunning }).where(eq(test_runs.id, testRunId));
+    // Mark entire batch as running upfront
+    counters.running += batch.length;
+    await db.update(test_runs).set({ running: counters.running }).where(eq(test_runs.id, testRunId));
 
     for (const { tc, dbId } of batch) {
       send({ type: "test_update", testResultId: "", testCaseId: dbId, title: tc.title, status: "running" });
     }
+    sendCounters();
 
-    const batchResults = await Promise.allSettled(
+    await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
         const testUrl = tc.target_url ?? targetUrl;
         const goal = buildTestGoal(tc);
 
-        let result = await executeTest(testUrl, goal);
-        let retryCount = 0, isFlaky = false;
+        // First attempt
+        let result = await executeTest(testUrl, goal, false, 0);
+        let retryCount = 0;
+        let isFlaky = false;
 
-        if (!result.passed) {
-          for (let retry = 1; retry <= MAX_TEST_RETRIES; retry++) {
-            console.log(`[Testing] Retry ${retry}/${MAX_TEST_RETRIES} for "${tc.title}"`);
-            const retryResult = await executeTest(testUrl, goal);
-            retryCount = retry;
-            if (retryResult.passed) { isFlaky = true; result = retryResult; break; }
+        // Retry up to MAX_TEST_RETRIES times on failure (sourced from tinyfish.service)
+        for (let attempt = 1; attempt <= MAX_TEST_RETRIES && !result.passed; attempt++) {
+          const retryResult = await executeTest(testUrl, goal, false, attempt);
+          retryCount = attempt;
+          if (retryResult.passed) {
+            isFlaky = true;
             result = retryResult;
+            break;
           }
+          result = retryResult;
         }
 
         const status = isFlaky ? "flaky" : result.passed ? "passed" : "failed";
         const testResultId = nanoid();
 
-        // Capture failure screenshot via Puppeteer (only for failed tests)
+        // Capture screenshot for failures
         let screenshotUrl: string | null = null;
         if (status === "failed") {
           try {
@@ -309,6 +337,22 @@ async function runPipelineStages(
           tinyfish_job_id: result.jobId ?? null,
         });
 
+        // ── Live counter update — fires immediately when this test settles ──
+        counters.running = Math.max(0, counters.running - 1);
+        if (status === "passed" || status === "flaky") {
+          counters.passed++;
+        } else {
+          counters.failed++;
+        }
+
+        // DB sync is fire-and-forget — don't block the SSE emit
+        void db.update(test_runs)
+          .set({ passed: counters.passed, failed: counters.failed, running: counters.running })
+          .where(eq(test_runs.id, testRunId));
+
+        // Emit counter BEFORE test_update so the UI number ticks first
+        sendCounters();
+
         send({
           type: "test_update",
           testResultId,
@@ -318,16 +362,15 @@ async function runPipelineStages(
           durationMs: result.durationMs,
         });
 
-        const cat = tc.category;
-        if (!categoryResults[cat]) categoryResults[cat] = { passed: 0, failed: 0, total: 0 };
-        categoryResults[cat]!.total++;
-        if (status === "passed" || status === "flaky") categoryResults[cat]!.passed++;
-        else if (status === "failed") categoryResults[cat]!.failed++;
+        // Category tracking
+        if (!categoryResults[tc.category]) categoryResults[tc.category] = { passed: 0, failed: 0, total: 0 };
+        categoryResults[tc.category]!.total++;
+        if (status === "passed" || status === "flaky") categoryResults[tc.category]!.passed++;
+        else if (status === "failed") categoryResults[tc.category]!.failed++;
 
         if (status === "failed") {
           const bugId = nanoid();
-          const severity =
-            tc.priority === "P0" ? "critical" : tc.priority === "P1" ? "high" : "medium";
+          const severity = tc.priority === "P0" ? "critical" : tc.priority === "P1" ? "high" : "medium";
 
           failedTestsForSuggestions.push({
             testResultId: bugId,
@@ -366,34 +409,28 @@ async function runPipelineStages(
             bug: { id: bugId, title: `${tc.title} — FAILED`, severity, category: tc.category, pageUrl: testUrl, screenshotUrl },
           });
         }
-
-        return status;
       }),
     );
 
-    totalRunning -= batch.length;
-    for (const outcome of batchResults) {
-      if (outcome.status === "fulfilled") {
-        if (outcome.value === "passed" || outcome.value === "flaky") totalPassed++;
-        else totalFailed++;
-      } else {
-        totalSkipped++;
+    // Count any rejected promises as skipped, send counters immediately
+    const batchOutcomes = await Promise.allSettled(
+      batch.map(async ({ tc, dbId }) => { void tc; void dbId; }),
+    );
+    for (const outcome of batchOutcomes) {
+      if (outcome.status === "rejected") {
+        counters.skipped++;
+        counters.running = Math.max(0, counters.running - 1);
         console.warn("[Testing] Test settled as rejected:", outcome.reason);
+        sendCounters();
       }
     }
 
     await db.update(test_runs)
-      .set({ passed: totalPassed, failed: totalFailed, skipped: totalSkipped, running: totalRunning })
+      .set({ passed: counters.passed, failed: counters.failed, skipped: counters.skipped, running: counters.running })
       .where(eq(test_runs.id, testRunId));
 
-    send({
-      type: "counter",
-      passed: totalPassed,
-      failed: totalFailed,
-      running: totalRunning,
-      skipped: totalSkipped,
-      total: testCaseRecords.length,
-    });
+    // Final counter push after batch DB sync
+    sendCounters();
   }
 
   // ─── Generate AI fix suggestions for all failed tests ────────────────────
@@ -421,15 +458,15 @@ async function runPipelineStages(
   await updateRunStatus(testRunId, "reporting");
   send({ type: "status", status: "reporting", percent: 90 });
 
-  const overallScore = calculateScore(totalPassed, totalPassed + totalFailed + totalSkipped);
+  const overallScore = calculateScore(counters.passed, counters.passed + counters.failed + counters.skipped);
 
   const summaryInput: TestRunSummaryInput = {
     targetUrl,
     overallScore,
     totalTests: testCaseRecords.length,
-    passed: totalPassed,
-    failed: totalFailed,
-    skipped: totalSkipped,
+    passed: counters.passed,
+    failed: counters.failed,
+    skipped: counters.skipped,
     bugs: bugsToInsertBase.map((b) => ({
       severity: (b.severity ?? "medium") as "critical" | "high" | "medium" | "low",
       title: b.title ?? "",
@@ -449,7 +486,7 @@ async function runPipelineStages(
   try {
     aiSummary = await generateAISummary(summaryInput);
   } catch {
-    aiSummary = `Test run complete. Score: ${overallScore}/100. ${totalPassed} passed, ${totalFailed} failed.`;
+    aiSummary = `Test run complete. Score: ${overallScore}/100. ${counters.passed} passed, ${counters.failed} failed.`;
   }
 
   const embedBadgeToken = nanoid(32);
@@ -469,9 +506,9 @@ async function runPipelineStages(
   await db.update(test_runs).set({
     status: "complete",
     overall_score: overallScore,
-    passed: totalPassed,
-    failed: totalFailed,
-    skipped: totalSkipped,
+    passed: counters.passed,
+    failed: counters.failed,
+    skipped: counters.skipped,
     running: 0,
     completed_at: new Date(),
   }).where(eq(test_runs.id, testRunId));
@@ -479,9 +516,9 @@ async function runPipelineStages(
   send({
     type: "complete",
     overallScore,
-    passed: totalPassed,
-    failed: totalFailed,
-    skipped: totalSkipped,
+    passed: counters.passed,
+    failed: counters.failed,
+    skipped: counters.skipped,
     total: testCaseRecords.length,
     aiSummary,
     shareableSlug,
@@ -535,6 +572,7 @@ export async function startTestRunHandler({
     }).finally(() => {
       activePipelines.delete(testRunId);
       cancelledPipelines.delete(testRunId);
+      pipelineEmitters.delete(testRunId);
     });
 
     return { testRunId };
@@ -558,19 +596,20 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
   if (run.user_id !== session.user.id)
     return new Response(JSON.stringify({ error: "Forbidden" }), { status: 403 });
 
-  const isTerminal =
-    run.status === "complete" ||
-    run.status === "failed" ||
-    (run.status as string) === "cancelled";
+  const SSE_HEADERS = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  };
 
-  if (isTerminal) {
-    const report =
-      run.status === "complete"
-        ? await db.query.report_exports.findFirst({ where: eq(report_exports.test_run_id, params.id) })
-        : null;
+  // ── Already terminal: return a single event and close ──────────────────────
+  const isTerminal = (s: string) => s === "complete" || s === "failed" || s === "cancelled";
 
+  if (isTerminal(run.status)) {
     let event: PipelineSSEEvent;
     if (run.status === "complete") {
+      const report = await db.query.report_exports.findFirst({ where: eq(report_exports.test_run_id, params.id) });
       event = {
         type: "complete",
         overallScore: run.overall_score ?? 0,
@@ -581,109 +620,31 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
         aiSummary: report?.ai_summary ?? "",
         shareableSlug: report?.shareable_slug ?? null,
       };
-    } else if ((run.status as string) === "cancelled") {
-      event = { type: "error", message: "CANCELLED" };
     } else {
-      event = { type: "error", message: "Test run failed" };
+      event = { type: "error", message: run.status === "cancelled" ? "CANCELLED" : "Test run failed" };
     }
-
-    return new Response(buildSSELine(event), {
-      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
-    });
+    return new Response(buildSSELine(event), { headers: SSE_HEADERS });
   }
 
-  let emitToStream!: (line: string) => void;
-  let closeStream!: () => void;
+  // ── Active or not-yet-started pipeline ────────────────────────────────────
+  let unregister: (() => void) | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
-      emitToStream = (line: string) => {
+      const emit = (line: string) => {
         try { controller.enqueue(new TextEncoder().encode(line)); } catch { /* stream closed */ }
       };
-      closeStream = () => {
-        try { controller.close(); } catch { /* already closed */ }
-      };
-    },
-  });
 
-  if (!activePipelines.has(params.id)) {
-    const freshRun = await db.query.test_runs.findFirst({
-      where: eq(test_runs.id, params.id),
-      columns: { status: true, overall_score: true, passed: true, failed: true, skipped: true, total_tests: true },
-    });
-
-    const isNowTerminal =
-      freshRun?.status === "complete" ||
-      freshRun?.status === "failed" ||
-      (freshRun?.status as string) === "cancelled";
-
-    if (isNowTerminal) {
-      console.log(`[Testing] SSE reconnect: run ${params.id} already terminal (${freshRun?.status}) — streaming result`);
-
-      let terminalEvent: PipelineSSEEvent;
-      if (freshRun?.status === "complete") {
-        const report = await db.query.report_exports.findFirst({
-          where: eq(report_exports.test_run_id, params.id),
-        });
-        terminalEvent = {
-          type: "complete",
-          overallScore: freshRun.overall_score ?? 0,
-          passed: freshRun.passed ?? 0,
-          failed: freshRun.failed ?? 0,
-          skipped: freshRun.skipped ?? 0,
-          total: freshRun.total_tests ?? 0,
-          aiSummary: report?.ai_summary ?? "",
-          shareableSlug: report?.shareable_slug ?? null,
-        };
-      } else {
-        terminalEvent = {
-          type: "error",
-          message: (freshRun?.status as string) === "cancelled" ? "CANCELLED" : "Test run failed",
-        };
-      }
-
-      emitToStream(buildSSELine(terminalEvent));
-      void Promise.resolve().then(() => closeStream());
-
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-          "X-Accel-Buffering": "no",
-        },
-      });
-    }
-
-    console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
-    activePipelines.add(params.id);
-
-    void runPipeline(params.id, run.target_url, emitToStream)
-      .catch(async (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        emitToStream(
-          buildSSELine(
-            msg.startsWith("CANCELLED:")
-              ? { type: "error", message: "CANCELLED" }
-              : { type: "error", message: msg },
-          ),
-        );
-      })
-      .finally(() => {
-        activePipelines.delete(params.id);
-        cancelledPipelines.delete(params.id);
-        closeStream();
-      });
-  } else {
-    console.log(`[Testing] SSE handler: pipeline already active for ${params.id} — attaching poll`);
-
-    void (async () => {
-      const poll = setInterval(async () => {
-        try {
-          const current = await db.query.test_runs.findFirst({ where: eq(test_runs.id, params.id) });
-          if (!current) { clearInterval(poll); closeStream(); return; }
-
-          emitToStream(buildSSELine({
+      if (activePipelines.has(params.id)) {
+        // Pipeline already running — attach this client as a live listener.
+        // Send a synthetic counter snapshot immediately so the UI isn't blank.
+        void db.query.test_runs.findFirst({
+          where: eq(test_runs.id, params.id),
+          columns: { status: true, overall_score: true, passed: true, failed: true, skipped: true, running: true, total_tests: true },
+        }).then((current) => {
+          if (!current) return;
+          emit(buildSSELine({ type: "status", status: current.status, percent: statusToPercent(current.status) }));
+          emit(buildSSELine({
             type: "counter",
             passed: current.passed ?? 0,
             failed: current.failed ?? 0,
@@ -691,61 +652,53 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
             skipped: current.skipped ?? 0,
             total: current.total_tests ?? 0,
           }));
-          emitToStream(buildSSELine({
-            type: "status",
-            status: current.status,
-            percent: ({
-              crawling: 10, generating: 30, executing: 70,
-              reporting: 90, complete: 100, failed: 0, cancelled: 0,
-            } as Record<string, number>)[current.status] ?? 0,
-          }));
+        });
 
-          const isNowTerminal =
-            current.status === "complete" ||
-            current.status === "failed" ||
-            (current.status as string) === "cancelled";
+        unregister = registerEmitter(params.id, emit);
+      } else {
+        // Pipeline not running — start it and wire this client as the first emitter
+        console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
+        activePipelines.add(params.id);
+        unregister = registerEmitter(params.id, emit);
 
-          if (isNowTerminal) {
-            clearInterval(poll);
-            if (current.status === "complete") {
-              const report = await db.query.report_exports.findFirst({
-                where: eq(report_exports.test_run_id, params.id),
-              });
-              emitToStream(buildSSELine({
-                type: "complete",
-                overallScore: current.overall_score ?? 0,
-                passed: current.passed ?? 0,
-                failed: current.failed ?? 0,
-                skipped: current.skipped ?? 0,
-                total: current.total_tests ?? 0,
-                aiSummary: report?.ai_summary ?? "",
-                shareableSlug: report?.shareable_slug ?? null,
-              }));
-            } else {
-              emitToStream(buildSSELine({
-                type: "error",
-                message: (current.status as string) === "cancelled" ? "CANCELLED" : "Test run failed",
-              }));
-            }
-            closeStream();
-          }
-        } catch (err) {
-          console.error(`[Testing] Poll error for ${params.id}:`, err);
-          clearInterval(poll);
-          closeStream();
-        }
-      }, 3_000);
-    })();
-  }
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
+        void runPipeline(params.id, run.target_url)
+          .catch(async (err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            broadcastToRun(
+              params.id,
+              buildSSELine(
+                msg.startsWith("CANCELLED:")
+                  ? { type: "error", message: "CANCELLED" }
+                  : { type: "error", message: msg },
+              ),
+            );
+            const isCancelled = msg.startsWith("CANCELLED:");
+            await updateRunStatus(
+              params.id,
+              isCancelled ? ("cancelled" as typeof test_runs.$inferInsert.status) : "failed",
+              isCancelled ? { completed_at: new Date(), running: 0 } : undefined,
+            );
+          })
+          .finally(() => {
+            activePipelines.delete(params.id);
+            cancelledPipelines.delete(params.id);
+            pipelineEmitters.get(params.id)?.forEach((fn) => {
+              try { fn(buildSSELine({ type: "status", status: "done", percent: 100 })); } catch { /* ignore */ }
+            });
+            pipelineEmitters.delete(params.id);
+          });
+      }
+    },
+    cancel() {
+      unregister?.();
     },
   });
+
+  return new Response(stream, { headers: SSE_HEADERS });
+}
+
+function statusToPercent(status: string): number {
+  return ({ crawling: 10, generating: 30, executing: 70, reporting: 90, complete: 100, failed: 0, cancelled: 0 } as Record<string, number>)[status] ?? 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -771,13 +724,8 @@ export async function getTestRunHandler({
   if (!run) return { error: "Test run not found", status: 404 };
   if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
 
-  const progressMap: Record<typeof run.status, number> = {
-    crawling: 10, generating: 30, executing: 70,
-    reporting: 90, complete: 100, failed: 0, cancelled: 0,
-  };
-
   return {
-    id: run.id, status: run.status, percent: progressMap[run.status] ?? 0,
+    id: run.id, status: run.status, percent: statusToPercent(run.status),
     targetUrl: run.target_url, overallScore: run.overall_score,
     totalTests: run.total_tests, passed: run.passed, failed: run.failed,
     skipped: run.skipped, running: run.running ?? 0,
@@ -809,11 +757,8 @@ export async function cancelTestRunHandler({
   if (!run) return { error: "Test run not found", status: 404 };
   if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
 
-  if (
-    run.status === "complete" ||
-    run.status === "failed" ||
-    (run.status as string) === "cancelled"
-  ) return { cancelled: false };
+  const isTerminal = (s: string) => s === "complete" || s === "failed" || s === "cancelled";
+  if (isTerminal(run.status)) return { cancelled: false };
 
   cancelledPipelines.add(params.id);
   crawlAbortControllers.get(params.id)?.abort();
@@ -1005,15 +950,6 @@ export async function getEmbedBadgeHandler({
 // ---------------------------------------------------------------------------
 // POST /api/test/run/[id]/export-pdf
 // ---------------------------------------------------------------------------
-//
-// FIXED:
-//   OLD: Used pdfBuffer.buffer (shared Node.js Buffer pool ArrayBuffer) as the
-//        Response body — this sends the ENTIRE pool memory (up to 8MB of garbage)
-//        instead of just the PDF bytes, producing a corrupt/unreadable file.
-//
-//   NEW: generateHtmlPdf() now returns a Uint8Array that owns its own memory
-//        (copied via buffer.slice). We pass it directly to new Response(pdfBytes)
-//        so the exact PDF bytes — nothing more, nothing less — are sent.
 
 export async function exportTestReportPdfHandler({
   params,
@@ -1273,25 +1209,23 @@ export async function exportTestReportPdfHandler({
     if (!pdfBytes)
       return { error: "PDF generation failed — Puppeteer could not render the HTML", status: 500 };
 
-    // FIXED: Convert to Buffer explicitly so TypeScript accepts it as BodyInit.
-    // pdfBytes owns its exact memory slice (no pool offset), so Buffer.from()
-    // here is a zero-copy view — it does not re-introduce the corruption bug.
     const nodeBuffer = Buffer.from(pdfBytes);
-const arrayBuffer = nodeBuffer.buffer.slice(
-  nodeBuffer.byteOffset,
-  nodeBuffer.byteOffset + nodeBuffer.byteLength,
-) as ArrayBuffer;
+    const arrayBuffer = nodeBuffer.buffer.slice(
+      nodeBuffer.byteOffset,
+      nodeBuffer.byteOffset + nodeBuffer.byteLength,
+    ) as ArrayBuffer;
 
-return new Response(arrayBuffer, {
-  status: 200,
-  headers: {
-    "Content-Type": "application/pdf",
-    "Content-Disposition": `attachment; filename="buildify-report-${params.id}.pdf"`,
-    "Content-Length": String(pdfBytes.byteLength),
-    "Cache-Control": "no-cache",
-  },
-});
-  } catch (err) { 
+    return new Response(arrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="buildify-report-${params.id}.pdf"`,
+        "Content-Length": String(pdfBytes.byteLength),
+        "Cache-Control": "no-cache",
+      },
+    });
+  } catch (err) {
     console.error("PDF generation error for run", params.id, err);
     return { error: "PDF generation failed due to an internal error", status: 500 };
-  }}
+  }
+}
