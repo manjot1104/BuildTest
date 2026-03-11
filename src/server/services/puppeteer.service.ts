@@ -9,7 +9,9 @@
 //     then closes the browser. Avoids the overhead of 3 separate browser launches.
 //   - captureFullPageScreenshot() is used for single failure screenshots.
 //   - measurePagePerformanceWithPuppeteer() is independent and opens its own browser.
-//   - generatePagePdf() is independent and opens its own browser.
+//   - generateHtmlPdf() renders an HTML string directly — no URL loading, no auth issues.
+//     Used by the PDF export endpoint instead of generatePagePdf.
+//   - generatePagePdf() kept for backwards compatibility but generateHtmlPdf() is preferred.
 //
 // Requirements: npm install puppeteer
 // For serverless/edge: npm install puppeteer-core @sparticuz/chromium
@@ -48,7 +50,7 @@ async function getBrowser() {
         args: c.args,
         defaultViewport: c.defaultViewport,
         executablePath,
-        headless: c.headless, // boolean — satisfies puppeteer-core's type
+        headless: c.headless,
       });
     }
   } catch {
@@ -57,7 +59,7 @@ async function getBrowser() {
 
   const puppeteer = await import("puppeteer");
   return puppeteer.launch({
-    headless: true, // FIX: "new" was removed in Puppeteer v22+; use `true`
+    headless: true,
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -147,7 +149,6 @@ export async function capturePageScreenshots(url: string): Promise<{
 
           // Block fonts and media to speed up loading — they don't affect layout screenshots
           await page.setRequestInterception(true);
-          // FIX: explicitly type `req` to avoid implicit `any`
           page.on("request", (req: { resourceType: () => string; abort: () => void; continue: () => void }) => {
             if (["font", "media"].includes(req.resourceType())) {
               req.abort();
@@ -274,7 +275,6 @@ export async function measurePagePerformanceWithPuppeteer(
 
       // Inject observers BEFORE navigation so they catch all events from the start
       await page.evaluateOnNewDocument(() => {
-        // FIX: use `window.__perfMetrics` directly now that the global interface is declared above
         window.__perfMetrics = {
           lcpMs: null,
           clsScore: 0,
@@ -378,7 +378,8 @@ export async function measurePagePerformanceWithPuppeteer(
 // generatePagePdf
 //
 // Renders a URL in a headless browser and returns PDF bytes.
-// Used by the PDF export endpoint to capture the full visual report.
+// NOTE: Prefer generateHtmlPdf() for authenticated pages — this function
+// requires the URL to be publicly accessible (no auth gate).
 // Returns a Buffer, or null on failure.
 // ---------------------------------------------------------------------------
 export async function generatePagePdf(url: string): Promise<Buffer | null> {
@@ -415,6 +416,62 @@ export async function generatePagePdf(url: string): Promise<Buffer | null> {
     }
   } catch (err) {
     console.error(`[Puppeteer] generatePagePdf failed for ${url}:`, err);
+    return null;
+  } finally {
+    if (browser) await browser.close().catch(() => { /* ignore */ });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// generateHtmlPdf
+//
+// Renders an HTML string directly via page.setContent() — NO URL loading,
+// NO auth dependency, works in any server environment.
+//
+// This is the PREFERRED method for PDF export of report data because:
+//   1. No session cookie needed — data is fetched server-side before calling this
+//   2. No dependency on NEXT_PUBLIC_APP_URL or localhost reachability
+//   3. waitUntil: "networkidle0" waits for S3 bug screenshots to load
+//
+// Returns a Buffer, or null on failure.
+// ---------------------------------------------------------------------------
+export async function generateHtmlPdf(html: string): Promise<Buffer | null> {
+  let browser = null;
+  try {
+    browser = await getBrowser();
+    const page = await browser.newPage();
+    try {
+      await page.setViewport({ width: 1200, height: 900 });
+
+      // Set content directly — no URL, no auth, no network dependency.
+      // networkidle0 waits for any inline images (e.g. S3 bug screenshots) to load.
+      await page.setContent(html, {
+        waitUntil: "networkidle0",
+        timeout: 30_000,
+      });
+
+      // Extra buffer for images that may still be rendering after networkidle0
+      await new Promise((r) => setTimeout(r, 2_000));
+
+      // Expand any details/summary elements so they print
+      await page.evaluate(() => {
+        document.querySelectorAll("details").forEach((d) => { d.open = true; });
+      }).catch(() => { /* ignore */ });
+
+      const pdf = await page.pdf({
+        format: "A4",
+        printBackground: true,
+        margin: { top: "14mm", bottom: "14mm", left: "12mm", right: "12mm" },
+        displayHeaderFooter: false,
+      });
+
+      console.log(`[Puppeteer] ✓ HTML→PDF generated (${Math.round(pdf.byteLength / 1024)}KB)`);
+      return Buffer.from(pdf);
+    } finally {
+      await page.close().catch(() => { /* ignore */ });
+    }
+  } catch (err) {
+    console.error(`[Puppeteer] generateHtmlPdf failed:`, err);
     return null;
   } finally {
     if (browser) await browser.close().catch(() => { /* ignore */ });

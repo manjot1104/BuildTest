@@ -115,8 +115,6 @@ async function runPipelineStages(
   }
 
   // ─── STEP 2: GENERATE (parallel with stage3 screenshots+perf) ────────────
-  // stage3Promise mutates pages[i].screenshots in-place with real S3 URLs.
-  // We await BOTH before writing to DB so crawl_results gets real screenshot URLs.
   checkCancelled(testRunId);
   await updateRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
@@ -135,7 +133,6 @@ async function runPipelineStages(
   let generatedCases: TestCase[];
 
   const [generatedCasesResult] = await Promise.all([
-    // Test generation
     (async (): Promise<TestCase[]> => {
       checkCancelled(testRunId);
       try {
@@ -146,7 +143,6 @@ async function runPipelineStages(
         throw new Error(msg);
       }
     })(),
-    // Screenshots + perf (stage3) — non-fatal if it fails
     siteData.stage3Promise.catch((err) => {
       console.warn("[Pipeline] stage3 screenshots/perf failed (non-fatal):", err);
     }),
@@ -163,7 +159,6 @@ async function runPipelineStages(
       elements: siteData.pages.flatMap((p) => p.elements),
       forms: siteData.pages.flatMap((p) => p.forms),
       links: siteData.allLinks,
-      // screenshots array: one entry per page with all three viewport URLs
       screenshots: siteData.pages.map((p) => ({
         pageUrl: p.url,
         url375: p.screenshots.url375,
@@ -244,12 +239,8 @@ async function runPipelineStages(
 
   let totalPassed = 0, totalFailed = 0, totalSkipped = 0, totalRunning = 0;
 
-  // Collect failed test contexts for AI suggestions (processed after all batches)
   const failedTestsForSuggestions: { testResultId: string; ctx: BugContext }[] = [];
-
-  // Collect bug base records (ai_fix_suggestion filled in after suggestions are generated)
   const bugsToInsertBase: Omit<typeof bug_reports.$inferInsert, "ai_fix_suggestion">[] = [];
-
   const categoryResults: Record<string, { passed: number; failed: number; total: number }> = {};
 
   for (const [batchIndex, batch] of chunk(pairs, 50).entries()) {
@@ -284,7 +275,7 @@ async function runPipelineStages(
         const status = isFlaky ? "flaky" : result.passed ? "passed" : "failed";
         const testResultId = nanoid();
 
-        // Capture failure screenshot via Puppeteer
+        // Capture failure screenshot via Puppeteer (only for failed tests)
         let screenshotUrl: string | null = null;
         if (status === "failed") {
           try {
@@ -338,9 +329,8 @@ async function runPipelineStages(
           const severity =
             tc.priority === "P0" ? "critical" : tc.priority === "P1" ? "high" : "medium";
 
-          // Collect context for AI suggestion — generated in batch after all tests finish
           failedTestsForSuggestions.push({
-            testResultId: bugId, // keyed by bugId so we can look it up
+            testResultId: bugId,
             ctx: {
               pageUrl: testUrl,
               testTitle: tc.title,
@@ -417,7 +407,6 @@ async function runPipelineStages(
     }
   }
 
-  // Insert bug reports with AI suggestions attached
   if (bugsToInsertBase.length > 0) {
     await db.insert(bug_reports).values(
       bugsToInsertBase.map((bug) => ({
@@ -618,11 +607,6 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
   });
 
   if (!activePipelines.has(params.id)) {
-    // FIX: Re-query DB status here to guard against the race condition where:
-    // 1. Pipeline completes and removes itself from activePipelines
-    // 2. SSE client reconnects (e.g. after long-running stream timeout)
-    // 3. We incorrectly see "not active" and start a SECOND pipeline from scratch
-    // By checking DB status again we catch runs that finished while the client was disconnected.
     const freshRun = await db.query.test_runs.findFirst({
       where: eq(test_runs.id, params.id),
       columns: { status: true, overall_score: true, passed: true, failed: true, skipped: true, total_tests: true },
@@ -634,8 +618,6 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
       (freshRun?.status as string) === "cancelled";
 
     if (isNowTerminal) {
-      // Pipeline already finished between the first DB read and this point —
-      // stream the terminal event immediately instead of re-launching.
       console.log(`[Testing] SSE reconnect: run ${params.id} already terminal (${freshRun?.status}) — streaming result`);
 
       let terminalEvent: PipelineSSEEvent;
@@ -660,9 +642,7 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
         };
       }
 
-      // Emit into the stream then close it
       emitToStream(buildSSELine(terminalEvent));
-      // Use a microtask so the stream has time to flush before closing
       void Promise.resolve().then(() => closeStream());
 
       return new Response(stream, {
@@ -675,8 +655,6 @@ export async function streamTestRunHandler({ params }: { params: { id: string } 
       });
     }
 
-    // Run is still genuinely in-progress but the Node.js process was restarted
-    // (activePipelines is in-memory and was wiped). Re-attach a pipeline.
     console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
     activePipelines.add(params.id);
 
@@ -971,10 +949,9 @@ export async function getTestReportHandler({
     crawlSummary: {
       totalPages: (run.crawlResult?.pages as unknown[])?.length ?? 0,
       crawlTimeMs: run.crawlResult?.crawl_time_ms ?? 0,
-      screenshots:
-        (run.crawlResult?.screenshots as {
-          pageUrl: string; url375: string | null; url768: string | null; url1440: string | null;
-        }[] | null) ?? [],
+      // Crawl page screenshots intentionally omitted from API response.
+      // Screenshots are only exposed via bug.screenshot_url on failed tests.
+      screenshots: [],
       apiEndpoints:
         (run.crawlResult?.pages as { apiEndpoints?: { url: string; method: string; status: number | null; responseType: string | null; durationMs: number | null }[] }[] | null)
           ?.flatMap((p) => p.apiEndpoints ?? []) ?? [],
@@ -1030,6 +1007,16 @@ export async function getEmbedBadgeHandler({
 // ---------------------------------------------------------------------------
 // POST /api/test/run/[id]/export-pdf
 // ---------------------------------------------------------------------------
+//
+// FIXED vs original:
+//   OLD: Puppeteer loaded the live report URL (e.g. http://localhost:3000/report/:id)
+//        → Failed because Puppeteer has no session cookie → auth-gated page = blank PDF
+//        → Also fails if NEXT_PUBLIC_APP_URL is unset or server can't reach localhost
+//
+//   NEW: Fetch report data here (already authenticated), build a self-contained HTML
+//        string from the data, pass it to generateHtmlPdf() via page.setContent().
+//        No URL loading. No auth dependency. Works in any server environment.
+//        Bug screenshots (S3 URLs) load fine because networkidle0 waits for them.
 
 export async function exportTestReportPdfHandler({
   params,
@@ -1041,7 +1028,11 @@ export async function exportTestReportPdfHandler({
 
   const run = await db.query.test_runs.findFirst({
     where: eq(test_runs.id, params.id),
-    columns: { id: true, user_id: true, status: true, target_url: true },
+    with: {
+      testCases: { with: { results: true } },
+      bugReports: true,
+      reportExports: true,
+    },
   });
 
   if (!run) return { error: "Test run not found", status: 404 };
@@ -1050,21 +1041,246 @@ export async function exportTestReportPdfHandler({
     return { error: "Report not ready — test run is not complete", status: 400 };
 
   try {
-    const { generatePagePdf } = await import("@/server/services/puppeteer.service");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    const reportUrl = `${appUrl}/report/${params.id}`;
+    const report = run.reportExports?.[0];
+    const aiSummary = report?.ai_summary ?? "";
+    const overallScore = run.overall_score ?? 0;
+    const scoreColor = overallScore >= 90 ? "#22c55e" : overallScore >= 70 ? "#eab308" : "#ef4444";
 
-    console.log(`[PDF] Generating PDF for report ${params.id} at ${reportUrl}`);
-    const pdfBuffer = await generatePagePdf(reportUrl);
+    // Build category breakdown
+    const resultsByCategory: Record<string, { passed: number; failed: number; total: number }> = {};
+    for (const tc of (run.testCases ?? [])) {
+      const cat = tc.category ?? "other";
+      if (!resultsByCategory[cat]) resultsByCategory[cat] = { passed: 0, failed: 0, total: 0 };
+      for (const r of (tc.results ?? [])) {
+        resultsByCategory[cat]!.total++;
+        if (r.status === "passed" || r.status === "flaky") resultsByCategory[cat]!.passed++;
+        else if (r.status === "failed") resultsByCategory[cat]!.failed++;
+      }
+    }
+
+    const bugs = (run.bugReports ?? []) as {
+      id: string; severity: string; category: string; title: string;
+      description: string; page_url: string; screenshot_url: string | null;
+      ai_fix_suggestion: string | null; reproduction_steps: string[];
+    }[];
+
+    const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    bugs.sort((a, b) => (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3));
+
+    const severityColors: Record<string, string> = {
+      critical: "#ef4444", high: "#f97316", medium: "#eab308", low: "#60a5fa",
+    };
+
+    function esc(s: string | null | undefined): string {
+      return (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    const durationSecs = run.completed_at
+      ? Math.round(
+          (new Date(run.completed_at).getTime() - new Date(run.started_at ?? run.completed_at).getTime()) / 1000,
+        )
+      : null;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Buildify Test Report — ${esc(run.target_url)}</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #09090b; color: #e4e4e7; font-size: 13px; line-height: 1.6; }
+  .page { max-width: 900px; margin: 0 auto; padding: 40px 32px; }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid #27272a; }
+  .brand-name { font-size: 17px; font-weight: 700; color: #f4f4f5; }
+  .brand-sub { font-size: 11px; color: #71717a; font-family: monospace; margin-top: 2px; }
+  .report-date { text-align: right; color: #52525b; font-size: 11px; font-family: monospace; line-height: 1.8; }
+  .score-hero { background: #18181b; border: 1px solid #27272a; border-radius: 16px; padding: 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 32px; }
+  .score-circle { width: 100px; height: 100px; border-radius: 50%; border: 6px solid ${scoreColor}33; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
+  .score-number { font-size: 32px; font-weight: 700; color: ${scoreColor}; line-height: 1; }
+  .score-label { font-size: 10px; color: #52525b; font-family: monospace; }
+  .score-details { flex: 1; min-width: 0; }
+  .score-url { font-family: monospace; font-size: 12px; color: #71717a; margin-bottom: 8px; overflow-wrap: break-word; word-break: break-all; }
+  .score-bar { height: 6px; background: #27272a; border-radius: 9999px; overflow: hidden; display: flex; margin-bottom: 8px; }
+  .score-bar-pass { background: #22c55e; height: 100%; }
+  .score-bar-fail { background: #ef4444; height: 100%; }
+  .score-bar-skip { background: #3f3f46; flex: 1; height: 100%; }
+  .score-stats { display: flex; gap: 16px; font-family: monospace; font-size: 12px; flex-wrap: wrap; }
+  .section { margin-bottom: 28px; }
+  .section-title { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; margin-bottom: 12px; }
+  .ai-summary { background: rgba(34,197,94,0.04); border: 1px solid rgba(34,197,94,0.15); border-radius: 12px; padding: 16px; }
+  .ai-label { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #4ade80; margin-bottom: 8px; }
+  .ai-text { color: #d4d4d8; font-size: 13px; line-height: 1.7; }
+  .category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .category-card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 14px; text-align: center; }
+  .category-pct { font-size: 20px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .category-name { font-size: 11px; color: #71717a; text-transform: capitalize; }
+  .category-sub { font-size: 10px; color: #3f3f46; font-family: monospace; margin-top: 2px; }
+  .bug-item { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; page-break-inside: avoid; }
+  .bug-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .bug-severity { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: monospace; padding: 2px 8px; border-radius: 9999px; border: 1px solid; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+  .bug-sev-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .bug-category { font-size: 10px; color: #52525b; background: #27272a; padding: 2px 7px; border-radius: 9999px; flex-shrink: 0; }
+  .bug-title { font-size: 13px; font-weight: 600; color: #f4f4f5; margin-top: 6px; }
+  .bug-url { font-size: 11px; color: #52525b; font-family: monospace; margin-bottom: 6px; overflow-wrap: break-word; word-break: break-all; }
+  .bug-desc { font-size: 12px; color: #a1a1aa; line-height: 1.5; margin-bottom: 8px; }
+  .bug-screenshot { margin: 10px 0; border-radius: 8px; overflow: hidden; border: 1px solid #27272a; }
+  .bug-screenshot img { width: 100%; display: block; max-height: 280px; object-fit: cover; object-position: top; }
+  .bug-steps-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; margin: 8px 0 5px; }
+  .bug-steps { list-style: none; }
+  .bug-step { display: flex; gap: 8px; font-size: 11px; color: #71717a; margin-bottom: 3px; }
+  .step-num { color: #3f3f46; font-family: monospace; flex-shrink: 0; min-width: 16px; }
+  .bug-fix { background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.15); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .bug-fix-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #4ade80; margin-bottom: 5px; }
+  .bug-fix-text { font-size: 11px; color: #a1a1aa; font-family: monospace; white-space: pre-wrap; line-height: 1.5; }
+  .test-table { background: #18181b; border: 1px solid #27272a; border-radius: 10px; overflow: hidden; }
+  .test-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #1f1f1f; }
+  .test-row:last-child { border-bottom: none; }
+  .test-status { font-size: 10px; font-family: monospace; padding: 2px 7px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; }
+  .ts-passed  { color: #4ade80; border-color: rgba(74,222,128,.25); background: rgba(74,222,128,.08); }
+  .ts-failed  { color: #f87171; border-color: rgba(248,113,113,.25); background: rgba(248,113,113,.08); }
+  .ts-flaky   { color: #facc15; border-color: rgba(250,204,21,.25); background: rgba(250,204,21,.08); }
+  .ts-skipped { color: #52525b; border-color: #27272a; background: #18181b; }
+  .test-priority { font-size: 10px; font-family: monospace; padding: 2px 6px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; }
+  .tp-P0 { color: #f87171; border-color: rgba(248,113,113,.25); background: rgba(248,113,113,.08); }
+  .tp-P1 { color: #facc15; border-color: rgba(250,204,21,.25); background: rgba(250,204,21,.08); }
+  .tp-P2 { color: #52525b; border-color: #27272a; background: #18181b; }
+  .test-title { font-size: 12px; color: #d4d4d8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .test-cat { font-size: 10px; color: #52525b; font-family: monospace; flex-shrink: 0; }
+  .test-dur { font-size: 10px; color: #3f3f46; font-family: monospace; flex-shrink: 0; }
+  .footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #27272a; display: flex; align-items: center; justify-content: space-between; color: #3f3f46; font-size: 11px; font-family: monospace; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .bug-item { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div>
+      <div class="brand-name">🐛 Buildify Testing Engine</div>
+      <div class="brand-sub">Automated QA Report</div>
+    </div>
+    <div class="report-date">
+      <div>${new Date(run.started_at ?? Date.now()).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
+      <div>Run ID: ${run.id}</div>
+      ${durationSecs !== null ? `<div>Duration: ${durationSecs}s</div>` : ""}
+    </div>
+  </div>
+
+  <div class="score-hero">
+    <div class="score-circle">
+      <div class="score-number">${overallScore}</div>
+      <div class="score-label">/100</div>
+    </div>
+    <div class="score-details">
+      <div class="score-url">${esc(run.target_url)}</div>
+      <div class="score-bar">
+        <div class="score-bar-pass" style="width:${((run.passed ?? 0) / Math.max(run.total_tests ?? 1, 1) * 100).toFixed(1)}%"></div>
+        <div class="score-bar-fail" style="width:${((run.failed ?? 0) / Math.max(run.total_tests ?? 1, 1) * 100).toFixed(1)}%"></div>
+        <div class="score-bar-skip"></div>
+      </div>
+      <div class="score-stats">
+        <span style="color:#22c55e;">✓ ${run.passed ?? 0} passed</span>
+        <span style="color:#ef4444;">✗ ${run.failed ?? 0} failed</span>
+        <span style="color:#52525b;">${run.skipped ?? 0} skipped</span>
+        <span style="color:#71717a;">${run.total_tests ?? 0} total</span>
+      </div>
+    </div>
+  </div>
+
+  ${aiSummary ? `
+  <div class="section">
+    <div class="ai-summary">
+      <div class="ai-label">✦ AI Analysis</div>
+      <div class="ai-text">${esc(aiSummary)}</div>
+    </div>
+  </div>` : ""}
+
+  ${Object.keys(resultsByCategory).length > 0 ? `
+  <div class="section">
+    <div class="section-title">Category Breakdown</div>
+    <div class="category-grid">
+      ${Object.entries(resultsByCategory).map(([cat, data]) => {
+        const pct = data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0;
+        const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
+        return `<div class="category-card">
+          <div class="category-pct" style="color:${col};">${pct}%</div>
+          <div class="category-name">${cat.replace(/_/g, " ")}</div>
+          <div class="category-sub">${data.passed}/${data.total}</div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <div class="section">
+    <div class="section-title">Bugs Found (${bugs.length})</div>
+    ${bugs.length === 0
+      ? `<div style="background:#18181b;border:1px solid #27272a;border-radius:10px;padding:20px;text-align:center;color:#52525b;font-family:monospace;font-size:12px;">✓ No bugs found</div>`
+      : bugs.map(bug => {
+          const col = severityColors[bug.severity] ?? "#71717a";
+          return `<div class="bug-item">
+            <div class="bug-header">
+              <span class="bug-severity" style="color:${col};border-color:${col}44;background:${col}15;">
+                <span class="bug-sev-dot" style="background:${col};"></span>${esc(bug.severity)}
+              </span>
+              <span class="bug-category">${esc(bug.category)}</span>
+            </div>
+            <div class="bug-title">${esc(bug.title)}</div>
+            <div class="bug-url">${esc(bug.page_url)}</div>
+            ${bug.description ? `<div class="bug-desc">${esc(bug.description)}</div>` : ""}
+            ${bug.screenshot_url
+              ? `<div class="bug-screenshot"><img src="${esc(bug.screenshot_url)}" alt="Bug screenshot" crossorigin="anonymous" onerror="this.parentElement.style.display='none'" /></div>`
+              : ""}
+            ${(bug.reproduction_steps?.length ?? 0) > 0
+              ? `<div class="bug-steps-label">Steps to Reproduce</div>
+                 <ol class="bug-steps">${bug.reproduction_steps.map((step, i) => `<li class="bug-step"><span class="step-num">${i + 1}.</span>${esc(step)}</li>`).join("")}</ol>`
+              : ""}
+            ${bug.ai_fix_suggestion
+              ? `<div class="bug-fix"><div class="bug-fix-label">✦ AI Fix Suggestion</div><div class="bug-fix-text">${esc(bug.ai_fix_suggestion)}</div></div>`
+              : ""}
+          </div>`;
+        }).join("")
+    }
+  </div>
+
+  ${(run.testCases?.length ?? 0) > 0 ? `
+  <div class="section">
+    <div class="section-title">All Test Cases (${run.testCases!.length})</div>
+    <div class="test-table">
+      ${run.testCases!.map(tc => {
+        const result = tc.results?.[0];
+        const status = result?.status ?? "skipped";
+        const priority = (tc.priority ?? "P2") as string;
+        return `<div class="test-row">
+          <span class="test-status ts-${status}">${status}</span>
+          <span class="test-priority tp-${priority}">${priority}</span>
+          <span class="test-title">${esc(tc.title)}</span>
+          <span class="test-cat">${esc(tc.category ?? "")}</span>
+          ${result?.duration_ms ? `<span class="test-dur">${(result.duration_ms / 1000).toFixed(1)}s</span>` : ""}
+        </div>`;
+      }).join("")}
+    </div>
+  </div>` : ""}
+
+  <div class="footer">
+    <span>Generated by Buildify Testing Engine</span>
+    <span>${new Date().toISOString()}</span>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+    const { generateHtmlPdf } = await import("@/server/services/puppeteer.service");
+    const pdfBuffer = await generateHtmlPdf(html);
 
     if (!pdfBuffer)
-      return { error: "PDF generation failed — Puppeteer could not render the page", status: 500 };
+      return { error: "PDF generation failed — Puppeteer could not render the HTML", status: 500 };
 
-    return new Response(pdfBuffer, {
+    return new Response(pdfBuffer.buffer as ArrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="buildify-report-${params.id}-${Date.now()}.pdf"`,
+        "Content-Disposition": `attachment; filename="buildify-report-${params.id}.pdf"`,
         "Content-Length": String(pdfBuffer.byteLength),
         "Cache-Control": "no-cache",
       },
