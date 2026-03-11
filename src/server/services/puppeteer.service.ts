@@ -1,24 +1,9 @@
 // src/server/services/puppeteer.service.ts
-//
-// Puppeteer-based screenshot and performance measurement service.
-// All screenshot and perf work goes through this file — TinyFish is a browser
-// automation AGENT, not a screenshot API. Puppeteer gives deterministic results.
-//
-// Key design decisions:
-//   - capturePageScreenshots() opens ONE browser, creates 3 pages (one per viewport),
-//     then closes the browser. Avoids the overhead of 3 separate browser launches.
-//   - captureFullPageScreenshot() is used for single failure screenshots.
-//   - measurePagePerformanceWithPuppeteer() is independent and opens its own browser.
-//   - generateHtmlPdf() renders an HTML string directly — no URL loading, no auth issues.
-//     Used by the PDF export endpoint instead of generatePagePdf.
-//   - generatePagePdf() kept for backwards compatibility but generateHtmlPdf() is preferred.
-//
-// Requirements: npm install puppeteer
-// For serverless/edge: npm install puppeteer-core @sparticuz/chromium
 
 import type { PagePerformanceMetrics } from "./tinyfish.service";
+import * as fs from "fs";
+import * as os from "os";
 
-// Extend window to allow arbitrary __perfMetrics key
 declare global {
   interface Window {
     __perfMetrics: {
@@ -29,62 +14,171 @@ declare global {
   }
 }
 
-// Use puppeteer-core + @sparticuz/chromium in production for smaller bundle.
-// Falls back to full puppeteer in local dev.
-async function getBrowser() {
-  try {
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore — optional peer dep, may not be installed
-    const chromium = await import("@sparticuz/chromium").then((m: { default: unknown }) => m.default).catch(() => null);
-    const puppeteer = await import("puppeteer-core");
+// ---------------------------------------------------------------------------
+// getBrowser
+//
+// Universal browser resolution — works on Windows, Mac, Linux, and serverless.
+//
+// Resolution order:
+//   1. PUPPETEER_EXECUTABLE_PATH env var  — explicit override, always wins
+//   2. @sparticuz/chromium                — serverless / Linux Lambda only
+//   3. System-installed browsers          — searches well-known install paths
+//      for Chrome, Edge, Brave, Chromium on Windows / Mac / Linux
+//   4. Puppeteer's bundled Chromium       — guaranteed fallback
+//      (run `npx puppeteer browsers install chrome` once after npm install)
+// ---------------------------------------------------------------------------
 
-    if (chromium) {
-      const c = chromium as {
-        args: string[];
-        defaultViewport: { width: number; height: number };
-        executablePath: () => Promise<string>;
-        headless: boolean;
-      };
-      const executablePath = await c.executablePath();
-      return puppeteer.launch({
-        args: c.args,
-        defaultViewport: c.defaultViewport,
-        executablePath,
-        headless: c.headless,
-      });
-    }
-  } catch {
-    // Fall through to full puppeteer
-  }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyBrowser = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPage = any;
 
-  const puppeteer = await import("puppeteer");
-  return puppeteer.launch({
-    headless: true,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-    ],
+/** Returns the first path from the list that exists on disk, or undefined. */
+function findFirstExisting(...candidates: string[]): string | undefined {
+  return candidates.find((p) => {
+    try { return fs.existsSync(p); } catch { return false; }
   });
 }
 
-const VIEWPORT_WIDTHS = [375, 768, 1440] as const;
+/** Platform-aware list of well-known Chromium-compatible browser install paths. */
+function getSystemBrowserCandidates(): string[] {
+  const platform = os.platform();
+
+  if (platform === "win32") {
+    const pf    = process.env["ProgramFiles"]        ?? "C:\\Program Files";
+    const pf86  = process.env["ProgramFiles(x86)"]   ?? "C:\\Program Files (x86)";
+    const local = process.env["LOCALAPPDATA"]         ?? "";
+    return [
+      // Google Chrome
+      `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+      `${local}\\Google\\Chrome Beta\\Application\\chrome.exe`,
+      `${local}\\Google\\Chrome SxS\\Application\\chrome.exe`,
+      // Microsoft Edge (ships with Windows 10/11 — reliable fallback)
+      `${pf}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${pf86}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      `${local}\\Microsoft\\Edge\\Application\\msedge.exe`,
+      // Brave
+      `${pf}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
+      `${pf86}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
+      // Chromium community builds
+      `${pf}\\Chromium\\Application\\chrome.exe`,
+      `${pf86}\\Chromium\\Application\\chrome.exe`,
+    ];
+  }
+
+  if (platform === "darwin") {
+    return [
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+      "/Applications/Google Chrome Beta.app/Contents/MacOS/Google Chrome Beta",
+      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
+      "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+      "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+      "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    ];
+  }
+
+  // Linux
+  return [
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/google-chrome-beta",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/usr/bin/microsoft-edge",
+    "/usr/bin/microsoft-edge-stable",
+    "/usr/bin/brave-browser",
+    "/snap/bin/chromium",
+    "/snap/bin/google-chrome",
+  ];
+}
+
+async function getBrowser(): Promise<AnyBrowser> {
+  const platform  = os.platform();
+  const isWindows = platform === "win32";
+  const isLinux   = platform === "linux";
+
+  // Args: Windows does not support --no-sandbox (causes immediate crash)
+  const args = isWindows
+    ? ["--disable-dev-shm-usage", "--disable-gpu", "--no-first-run", "--disable-extensions"]
+    : ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu", "--no-first-run", "--disable-extensions"];
+
+  // ── 1. Explicit env override ─────────────────────────────────────────────
+  const envPath = process.env["PUPPETEER_EXECUTABLE_PATH"];
+  if (envPath && fs.existsSync(envPath)) {
+    console.log(`[Puppeteer] Using PUPPETEER_EXECUTABLE_PATH: ${envPath}`);
+    const puppeteerCore = await import("puppeteer-core");
+    return puppeteerCore.launch({ executablePath: envPath, headless: true, args });
+  }
+
+  // ── 2. @sparticuz/chromium (Linux serverless / Lambda only) ─────────────
+  // Skipped on Windows and Mac — this package only ships a Linux binary and
+  // returns a nonexistent temp path on other platforms, causing ENOENT.
+  if (isLinux) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chromium = await import("@sparticuz/chromium").then((m: any) => m.default).catch(() => null) as {
+        args: string[];
+        defaultViewport: { width: number; height: number } | null;
+        executablePath: () => Promise<string>;
+        headless: boolean;
+      } | null;
+
+      if (chromium) {
+        const executablePath = await chromium.executablePath();
+        if (executablePath && fs.existsSync(executablePath)) {
+          const puppeteerCore = await import("puppeteer-core");
+          console.log(`[Puppeteer] Using @sparticuz/chromium: ${executablePath}`);
+          return puppeteerCore.launch({
+            args: [...chromium.args, ...args],
+            defaultViewport: chromium.defaultViewport,
+            executablePath,
+            headless: true,
+          });
+        }
+      }
+    } catch { /* fall through */ }
+  }
+
+  // ── 3. System-installed browser (Chrome, Edge, Brave, Chromium) ─────────
+  // No extra packages — checks well-known install paths per platform.
+  // On Windows, Edge is pre-installed on every Win10/11 machine, so this
+  // will almost always succeed without any manual setup.
+  const systemBrowser = findFirstExisting(...getSystemBrowserCandidates());
+  if (systemBrowser) {
+    console.log(`[Puppeteer] Using system browser: ${systemBrowser}`);
+    const puppeteerCore = await import("puppeteer-core");
+    return puppeteerCore.launch({ executablePath: systemBrowser, headless: true, args });
+  }
+
+  // ── 4. Puppeteer's own bundled Chromium ──────────────────────────────────
+  // Requires: npx puppeteer browsers install chrome  (once after npm install)
+  console.log(`[Puppeteer] Falling back to Puppeteer bundled Chromium`);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const puppeteer = await import("puppeteer") as any;
+  const p = puppeteer.default ?? puppeteer;
+  return p.launch({ headless: true, args });
+}
+
+// ---------------------------------------------------------------------------
+// safePdfBytes
+//
+// Converts whatever page.pdf() returns (Uint8Array or Buffer) into a plain
+// ArrayBuffer that owns its own memory — no Buffer pool offset issues,
+// and accepted by TypeScript's BodyInit without any casting.
+// ---------------------------------------------------------------------------
+function safePdfBytes(pdf: Uint8Array | ArrayBuffer): ArrayBuffer {
+  if (pdf instanceof ArrayBuffer) return pdf;
+  return pdf.buffer.slice(pdf.byteOffset, pdf.byteOffset + pdf.byteLength) as ArrayBuffer;
+}
+
 const PAGE_TIMEOUT_MS = 30_000;
 
 // ---------------------------------------------------------------------------
 // navigatePage
-// Shared navigation helper used by screenshot and perf functions.
-// Tries networkidle2 first, falls back to domcontentloaded + 3s wait.
 // ---------------------------------------------------------------------------
-async function navigatePage(
-  page: Awaited<ReturnType<Awaited<ReturnType<typeof getBrowser>>["newPage"]>>,
-  url: string,
-  timeoutMs = PAGE_TIMEOUT_MS,
-): Promise<void> {
+async function navigatePage(page: AnyPage, url: string, timeoutMs = PAGE_TIMEOUT_MS): Promise<void> {
   try {
     await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
   } catch {
@@ -95,11 +189,8 @@ async function navigatePage(
 
 // ---------------------------------------------------------------------------
 // dismissOverlays
-// Best-effort dismissal of cookie banners and modals before screenshotting.
 // ---------------------------------------------------------------------------
-async function dismissOverlays(
-  page: Awaited<ReturnType<Awaited<ReturnType<typeof getBrowser>>["newPage"]>>,
-): Promise<void> {
+async function dismissOverlays(page: AnyPage): Promise<void> {
   await page
     .evaluate(() => {
       const selectors = [
@@ -123,11 +214,9 @@ async function dismissOverlays(
 
 // ---------------------------------------------------------------------------
 // capturePageScreenshots
-//
-// Captures full-page screenshots at 375px, 768px, and 1440px viewport widths
-// using a SINGLE browser instance (3 tabs in parallel).
-// Returns base64-encoded PNG strings (no data: prefix), or null on failure.
 // ---------------------------------------------------------------------------
+const VIEWPORT_WIDTHS = [375, 768, 1440] as const;
+
 export async function capturePageScreenshots(url: string): Promise<{
   viewport375: string | null;
   viewport768: string | null;
@@ -136,64 +225,37 @@ export async function capturePageScreenshots(url: string): Promise<{
   let browser = null;
   try {
     browser = await getBrowser();
-
     const results = await Promise.allSettled(
       VIEWPORT_WIDTHS.map(async (width) => {
-        const page = await browser!.newPage();
+        const page: AnyPage = await browser!.newPage();
         try {
           await page.setViewport({ width, height: 900, deviceScaleFactor: 1 });
           await page.setUserAgent(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
             "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           );
-
-          // Block fonts and media to speed up loading — they don't affect layout screenshots
           await page.setRequestInterception(true);
           page.on("request", (req: { resourceType: () => string; abort: () => void; continue: () => void }) => {
-            if (["font", "media"].includes(req.resourceType())) {
-              req.abort();
-            } else {
-              req.continue();
-            }
+            if (["font", "media"].includes(req.resourceType())) req.abort();
+            else req.continue();
           });
-
           await navigatePage(page, url);
-
-          // Wait for lazy-loaded content to settle
           await new Promise((r) => setTimeout(r, 1_500));
-
           await dismissOverlays(page);
-
-          const screenshot = (await page.screenshot({
-            fullPage: true,
-            type: "png",
-            encoding: "base64",
-          })) as string;
-
-          console.log(
-            `[Puppeteer] ✓ Screenshot ${width}px for ${url} (${Math.round(screenshot.length / 1024)}KB)`,
-          );
+          const screenshot = await page.screenshot({ fullPage: true, type: "png", encoding: "base64" }) as string;
+          console.log(`[Puppeteer] ✓ Screenshot ${width}px for ${url} (${Math.round(screenshot.length / 1024)}KB)`);
           return { width, screenshot };
         } finally {
           await page.close().catch(() => { /* ignore */ });
         }
       }),
     );
-
     const map: Record<number, string | null> = { 375: null, 768: null, 1440: null };
     for (const result of results) {
-      if (result.status === "fulfilled") {
-        map[result.value.width] = result.value.screenshot;
-      } else {
-        console.warn(`[Puppeteer] A viewport screenshot failed for ${url}:`, result.reason);
-      }
+      if (result.status === "fulfilled") map[result.value.width] = result.value.screenshot;
+      else console.warn(`[Puppeteer] Viewport screenshot failed for ${url}:`, result.reason);
     }
-
-    return {
-      viewport375: map[375] ?? null,
-      viewport768: map[768] ?? null,
-      viewport1440: map[1440] ?? null,
-    };
+    return { viewport375: map[375] ?? null, viewport768: map[768] ?? null, viewport1440: map[1440] ?? null };
   } catch (err) {
     console.error(`[Puppeteer] Browser launch failed for ${url}:`, err);
     return { viewport375: null, viewport768: null, viewport1440: null };
@@ -204,38 +266,22 @@ export async function capturePageScreenshots(url: string): Promise<{
 
 // ---------------------------------------------------------------------------
 // captureFullPageScreenshot
-//
-// Captures a single full-page screenshot at the given viewport width.
-// Used for bug/failure screenshots during test execution.
-// Returns base64-encoded PNG string (no data: prefix), or null on failure.
 // ---------------------------------------------------------------------------
-export async function captureFullPageScreenshot(
-  url: string,
-  width = 1440,
-): Promise<string | null> {
+export async function captureFullPageScreenshot(url: string, width = 1440): Promise<string | null> {
   let browser = null;
   try {
     browser = await getBrowser();
-    const page = await browser.newPage();
+    const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width, height: 900, deviceScaleFactor: 1 });
       await page.setUserAgent(
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
         "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       );
-
       await navigatePage(page, url);
       await new Promise((r) => setTimeout(r, 1_000));
-
-      const screenshot = (await page.screenshot({
-        fullPage: true,
-        type: "png",
-        encoding: "base64",
-      })) as string;
-
-      console.log(
-        `[Puppeteer] ✓ Failure screenshot ${width}px for ${url} (${Math.round(screenshot.length / 1024)}KB)`,
-      );
+      const screenshot = await page.screenshot({ fullPage: true, type: "png", encoding: "base64" }) as string;
+      console.log(`[Puppeteer] ✓ Failure screenshot ${width}px for ${url} (${Math.round(screenshot.length / 1024)}KB)`);
       return screenshot;
     } finally {
       await page.close().catch(() => { /* ignore */ });
@@ -250,119 +296,57 @@ export async function captureFullPageScreenshot(
 
 // ---------------------------------------------------------------------------
 // measurePagePerformanceWithPuppeteer
-//
-// Measures Core Web Vitals (LCP, CLS, FID, TTFB) using PerformanceObserver
-// injected before navigation so observers are registered before any paint.
 // ---------------------------------------------------------------------------
-export async function measurePagePerformanceWithPuppeteer(
-  url: string,
-): Promise<PagePerformanceMetrics> {
-  const fallback: PagePerformanceMetrics = {
-    pageUrl: url,
-    lcpMs: null,
-    fidMs: null,
-    cls: null,
-    ttfbMs: null,
-    rawMetrics: {},
-  };
-
+export async function measurePagePerformanceWithPuppeteer(url: string): Promise<PagePerformanceMetrics> {
+  const fallback: PagePerformanceMetrics = { pageUrl: url, lcpMs: null, fidMs: null, cls: null, ttfbMs: null, rawMetrics: {} };
   let browser = null;
   try {
     browser = await getBrowser();
-    const page = await browser.newPage();
+    const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width: 1440, height: 900 });
-
-      // Inject observers BEFORE navigation so they catch all events from the start
       await page.evaluateOnNewDocument(() => {
-        window.__perfMetrics = {
-          lcpMs: null,
-          clsScore: 0,
-          fidMs: null,
-        };
-
+        window.__perfMetrics = { lcpMs: null, clsScore: 0, fidMs: null };
         try {
           new PerformanceObserver((list) => {
             const entries = list.getEntries();
             const last = entries[entries.length - 1] as PerformanceEntry & { startTime: number };
-            if (last) {
-              window.__perfMetrics = {
-                ...window.__perfMetrics,
-                lcpMs: Math.round(last.startTime),
-              };
-            }
+            if (last) window.__perfMetrics = { ...window.__perfMetrics, lcpMs: Math.round(last.startTime) };
           }).observe({ type: "largest-contentful-paint", buffered: true });
-        } catch { /* LCP not supported in this browser */ }
-
+        } catch { /* not supported */ }
         try {
           new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               const ls = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
-              if (!ls.hadRecentInput) {
-                window.__perfMetrics = {
-                  ...window.__perfMetrics,
-                  clsScore: (window.__perfMetrics.clsScore ?? 0) + ls.value,
-                };
-              }
+              if (!ls.hadRecentInput) window.__perfMetrics = { ...window.__perfMetrics, clsScore: (window.__perfMetrics.clsScore ?? 0) + ls.value };
             }
           }).observe({ type: "layout-shift", buffered: true });
-        } catch { /* CLS not supported */ }
-
+        } catch { /* not supported */ }
         try {
           new PerformanceObserver((list) => {
-            const entry = list.getEntries()[0] as PerformanceEntry & {
-              processingStart: number;
-              startTime: number;
-            };
-            if (entry) {
-              window.__perfMetrics = {
-                ...window.__perfMetrics,
-                fidMs: Math.round(entry.processingStart - entry.startTime),
-              };
-            }
+            const entry = list.getEntries()[0] as PerformanceEntry & { processingStart: number; startTime: number };
+            if (entry) window.__perfMetrics = { ...window.__perfMetrics, fidMs: Math.round(entry.processingStart - entry.startTime) };
           }).observe({ type: "first-input", buffered: true });
-        } catch { /* FID not supported */ }
+        } catch { /* not supported */ }
       });
-
       await navigatePage(page, url);
-
-      // Wait for observers to collect data
       await new Promise((r) => setTimeout(r, 3_000));
-
       const metrics = await page.evaluate(() => {
         const perf = window.__perfMetrics;
-
         let ttfbMs: number | null = null;
         try {
-          const nav = performance.getEntriesByType(
-            "navigation",
-          )[0] as PerformanceNavigationTiming | undefined;
+          const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
           if (nav) ttfbMs = Math.round(nav.responseStart - nav.requestStart);
         } catch { /* ignore */ }
-
         return {
           lcpMs: perf?.lcpMs ?? null,
-          cls:
-            perf?.clsScore != null
-              ? Math.round(perf.clsScore * 1000) / 1000
-              : null,
+          cls: perf?.clsScore != null ? Math.round(perf.clsScore * 1000) / 1000 : null,
           fidMs: perf?.fidMs ?? null,
           ttfbMs,
         };
       });
-
-      console.log(
-        `[Puppeteer] ⚡ Perf ${url}: LCP=${metrics.lcpMs}ms TTFB=${metrics.ttfbMs}ms CLS=${metrics.cls}`,
-      );
-
-      return {
-        pageUrl: url,
-        lcpMs: metrics.lcpMs,
-        fidMs: metrics.fidMs,
-        cls: metrics.cls,
-        ttfbMs: metrics.ttfbMs,
-        rawMetrics: metrics as Record<string, unknown>,
-      };
+      console.log(`[Puppeteer] ⚡ Perf ${url}: LCP=${metrics.lcpMs}ms TTFB=${metrics.ttfbMs}ms CLS=${metrics.cls}`);
+      return { pageUrl: url, lcpMs: metrics.lcpMs, fidMs: metrics.fidMs, cls: metrics.cls, ttfbMs: metrics.ttfbMs, rawMetrics: metrics as Record<string, unknown> };
     } finally {
       await page.close().catch(() => { /* ignore */ });
     }
@@ -376,41 +360,21 @@ export async function measurePagePerformanceWithPuppeteer(
 
 // ---------------------------------------------------------------------------
 // generatePagePdf
-//
-// Renders a URL in a headless browser and returns PDF bytes.
-// NOTE: Prefer generateHtmlPdf() for authenticated pages — this function
-// requires the URL to be publicly accessible (no auth gate).
-// Returns a Buffer, or null on failure.
 // ---------------------------------------------------------------------------
-export async function generatePagePdf(url: string): Promise<Buffer | null> {
+export async function generatePagePdf(url: string): Promise<ArrayBuffer | null> {
   let browser = null;
   try {
     browser = await getBrowser();
-    const page = await browser.newPage();
+    const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width: 1440, height: 900 });
-
       await navigatePage(page, url, 60_000);
-
-      // Wait for charts and lazy content to render
       await new Promise((r) => setTimeout(r, 3_000));
-
-      // Expand all collapsed sections so they appear in the PDF
-      await page
-        .evaluate(() => {
-          document.querySelectorAll("details").forEach((d) => {
-            d.open = true;
-          });
-        })
-        .catch(() => { /* ignore */ });
-
-      const pdf = await page.pdf({
-        format: "A4",
-        printBackground: true,
-        margin: { top: "12mm", bottom: "12mm", left: "10mm", right: "10mm" },
-      });
-
-      return Buffer.from(pdf);
+      await page.evaluate(() => {
+        document.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
+      }).catch(() => { /* ignore */ });
+      const pdf = await page.pdf({ format: "A4", printBackground: true, margin: { top: "12mm", bottom: "12mm", left: "10mm", right: "10mm" } });
+      return safePdfBytes(pdf);
     } finally {
       await page.close().catch(() => { /* ignore */ });
     }
@@ -425,48 +389,31 @@ export async function generatePagePdf(url: string): Promise<Buffer | null> {
 // ---------------------------------------------------------------------------
 // generateHtmlPdf
 //
-// Renders an HTML string directly via page.setContent() — NO URL loading,
-// NO auth dependency, works in any server environment.
-//
-// This is the PREFERRED method for PDF export of report data because:
-//   1. No session cookie needed — data is fetched server-side before calling this
-//   2. No dependency on NEXT_PUBLIC_APP_URL or localhost reachability
-//   3. waitUntil: "networkidle0" waits for S3 bug screenshots to load
-//
-// Returns a Buffer, or null on failure.
+// Renders an HTML string via page.setContent() — no URL, no auth required.
+// Returns a plain ArrayBuffer so it is always accepted as BodyInit by
+// TypeScript across all Next.js / Bun / Node targets without any casting.
 // ---------------------------------------------------------------------------
-export async function generateHtmlPdf(html: string): Promise<Buffer | null> {
+export async function generateHtmlPdf(html: string): Promise<ArrayBuffer | null> {
   let browser = null;
   try {
     browser = await getBrowser();
-    const page = await browser.newPage();
+    const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width: 1200, height: 900 });
-
-      // Set content directly — no URL, no auth, no network dependency.
-      // networkidle0 waits for any inline images (e.g. S3 bug screenshots) to load.
-      await page.setContent(html, {
-        waitUntil: "networkidle0",
-        timeout: 30_000,
-      });
-
-      // Extra buffer for images that may still be rendering after networkidle0
+      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30_000 });
       await new Promise((r) => setTimeout(r, 2_000));
-
-      // Expand any details/summary elements so they print
       await page.evaluate(() => {
-        document.querySelectorAll("details").forEach((d) => { d.open = true; });
+        document.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });
       }).catch(() => { /* ignore */ });
-
       const pdf = await page.pdf({
         format: "A4",
         printBackground: true,
         margin: { top: "14mm", bottom: "14mm", left: "12mm", right: "12mm" },
         displayHeaderFooter: false,
       });
-
-      console.log(`[Puppeteer] ✓ HTML→PDF generated (${Math.round(pdf.byteLength / 1024)}KB)`);
-      return Buffer.from(pdf);
+      const pdfBuffer = safePdfBytes(pdf);
+      console.log(`[Puppeteer] ✓ HTML→PDF generated (${Math.round(pdfBuffer.byteLength / 1024)}KB)`);
+      return pdfBuffer;
     } finally {
       await page.close().catch(() => { /* ignore */ });
     }

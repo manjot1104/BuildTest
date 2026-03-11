@@ -949,8 +949,6 @@ export async function getTestReportHandler({
     crawlSummary: {
       totalPages: (run.crawlResult?.pages as unknown[])?.length ?? 0,
       crawlTimeMs: run.crawlResult?.crawl_time_ms ?? 0,
-      // Crawl page screenshots intentionally omitted from API response.
-      // Screenshots are only exposed via bug.screenshot_url on failed tests.
       screenshots: [],
       apiEndpoints:
         (run.crawlResult?.pages as { apiEndpoints?: { url: string; method: string; status: number | null; responseType: string | null; durationMs: number | null }[] }[] | null)
@@ -1008,15 +1006,14 @@ export async function getEmbedBadgeHandler({
 // POST /api/test/run/[id]/export-pdf
 // ---------------------------------------------------------------------------
 //
-// FIXED vs original:
-//   OLD: Puppeteer loaded the live report URL (e.g. http://localhost:3000/report/:id)
-//        → Failed because Puppeteer has no session cookie → auth-gated page = blank PDF
-//        → Also fails if NEXT_PUBLIC_APP_URL is unset or server can't reach localhost
+// FIXED:
+//   OLD: Used pdfBuffer.buffer (shared Node.js Buffer pool ArrayBuffer) as the
+//        Response body — this sends the ENTIRE pool memory (up to 8MB of garbage)
+//        instead of just the PDF bytes, producing a corrupt/unreadable file.
 //
-//   NEW: Fetch report data here (already authenticated), build a self-contained HTML
-//        string from the data, pass it to generateHtmlPdf() via page.setContent().
-//        No URL loading. No auth dependency. Works in any server environment.
-//        Bug screenshots (S3 URLs) load fine because networkidle0 waits for them.
+//   NEW: generateHtmlPdf() now returns a Uint8Array that owns its own memory
+//        (copied via buffer.slice). We pass it directly to new Response(pdfBytes)
+//        so the exact PDF bytes — nothing more, nothing less — are sent.
 
 export async function exportTestReportPdfHandler({
   params,
@@ -1271,22 +1268,30 @@ export async function exportTestReportPdfHandler({
 </html>`;
 
     const { generateHtmlPdf } = await import("@/server/services/puppeteer.service");
-    const pdfBuffer = await generateHtmlPdf(html);
+    const pdfBytes = await generateHtmlPdf(html);
 
-    if (!pdfBuffer)
+    if (!pdfBytes)
       return { error: "PDF generation failed — Puppeteer could not render the HTML", status: 500 };
 
-    return new Response(pdfBuffer.buffer as ArrayBuffer, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="buildify-report-${params.id}.pdf"`,
-        "Content-Length": String(pdfBuffer.byteLength),
-        "Cache-Control": "no-cache",
-      },
-    });
-  } catch (err) {
-    console.error(`[PDF] Export failed for ${params.id}:`, err);
-    return { error: "PDF generation failed", status: 500 };
-  }
-}
+    // FIXED: Convert to Buffer explicitly so TypeScript accepts it as BodyInit.
+    // pdfBytes owns its exact memory slice (no pool offset), so Buffer.from()
+    // here is a zero-copy view — it does not re-introduce the corruption bug.
+    const nodeBuffer = Buffer.from(pdfBytes);
+const arrayBuffer = nodeBuffer.buffer.slice(
+  nodeBuffer.byteOffset,
+  nodeBuffer.byteOffset + nodeBuffer.byteLength,
+) as ArrayBuffer;
+
+return new Response(arrayBuffer, {
+  status: 200,
+  headers: {
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="buildify-report-${params.id}.pdf"`,
+    "Content-Length": String(pdfBytes.byteLength),
+    "Cache-Control": "no-cache",
+  },
+});
+  } catch (err) { 
+    console.error("PDF generation error for run", params.id, err);
+    return { error: "PDF generation failed due to an internal error", status: 500 };
+  }}
