@@ -81,14 +81,22 @@ const HARD_CAPS = {
 } as const;
 
 const TIMEOUTS = {
-  EXTRACTION_MS: 120_000, // I-05: bot-protected/geo-redirect sites need up to 100s
-  SCREENSHOT_MS: 60_000,
-  PERF_MS: 55_000,
-  EXECUTE_TEST_MS: 120_000, // I-02: cold-start hosts need full 2min
-  SCREENSHOT_FAIL_MS: 60_000, // I-08: failure screenshots on slow hosts
+  // Extraction: 150s base. Retry gets +60s per attempt — slow/bot-protected
+  // sites often succeed on a second attempt if given more headroom.
+  EXTRACTION_BASE_MS: 150_000,
+  EXTRACTION_RETRY_BONUS_MS: 60_000,
+  // Navigation probe: just a click + URL capture, not full extraction
+  NAV_PROBE_MS: 45_000,
+  SCREENSHOT_MS: 90_000,
+  PERF_MS: 75_000,
+  // Test execution: 180s base. Retry gets +60s for cold-start/complex flows.
+  EXECUTE_TEST_BASE_MS: 180_000,
+  EXECUTE_TEST_RETRY_BONUS_MS: 60_000,
+  SCREENSHOT_FAIL_MS: 90_000,
 } as const;
 
-export const MAX_EXTRACTION_RETRIES = 1;
+export const MAX_EXTRACTION_RETRIES = 2;
+export const MAX_TEST_RETRIES = 1;
 
 // ─── Per-crawl context (not module-global) ────────────────────────────────────
 
@@ -714,30 +722,92 @@ EXTRACT:
 
 1. PAGE TITLE: document.title
 
-2. INTERACTIVE ELEMENTS — for each, record type, text (or placeholder/aria-label), isVisible:
-   <a>        → type "link", include href attribute
-   <button>   → type "button"
-   <input>    → type "input", text = placeholder or aria-label
-   <select>   → type "select"
-   <textarea> → type "textarea"
+2. INTERACTIVE ELEMENTS — capture ALL elements a user can click, type into, or select.
+   Include standard HTML elements AND framework-rendered equivalents:
 
-3. FORMS — for each <form>:
-   action (or null), method (default "get"), fields: [{name, type, required, pattern}]
+   a) <a href="...">             type "link",       text = visible label, href = resolved absolute URL
+   b) <button>                   type "button",     text = visible label or aria-label
+   c) <input>                    type "input",      text = placeholder or aria-label or name
+   d) <select>                   type "select",     text = aria-label or name
+   e) <textarea>                 type "textarea",   text = placeholder or aria-label
+   f) Any <div>, <span>, <li>, <img> or other element where ANY of these is true:
+        - has an onclick / onClick attribute or attached event listener
+        - has role="button" or role="link"
+        - has a data-href, data-url, data-to, or data-link attribute
+        - has cursor:pointer computed style AND contains visible text or an icon
+      type "interactive", text = visible inner text or aria-label,
+      href = data-href / data-url / data-to value if present, otherwise omit href
 
-4. INTERNAL LINKS — absolute URLs on ${allowedHostname} only.
-   Decode HTML entities (&amp; → &). Resolve relative paths. Deduplicate. Max 30.
+   For each element record: type, text (trimmed, max 80 chars), href (if it navigates), isVisible.
+   Skip hidden elements (display:none, visibility:hidden, opacity:0, off-screen by >2 viewports).
+   Cap at 60 elements total.
 
-5. NAVIGATION: breadcrumbs array, menus [{label:"top-nav"|"sidebar"|"footer", items:[{text,href}]}]
+3. FORMS — for each <form> or element with role="form":
+   action (resolved absolute URL or null), method (default "get"),
+   fields: [{name, type, required, pattern}]
 
-Return ONLY valid JSON. No markdown. Start with { end with }.
+4. NAVIGABLE LINKS — collect ALL URLs this page can navigate to.
+
+   STEP A — passive collection (no clicks):
+   - href on every <a> tag (resolve relative to absolute)
+   - data-href / data-url / data-to / data-link attributes on any element
+   - window.__NEXT_DATA__ or window.__NUXT__ route manifests if accessible
+   - <link rel="alternate|canonical"> href values
+
+   STEP B — active SPA discovery (click-and-record):
+   React/Vue/Angular SPAs frequently render ALL navigation as plain <div> or <li>
+   elements with onClick handlers and NO href. This includes:
+     - Top nav and sidebar menu items
+     - Product cards, blog post cards, project tiles, team member cards
+     - Any repeating grid or list of items where each item is a clickable container
+   Standard link extraction misses ALL of these. You must click them to find the URLs.
+
+   HOW TO FIND CANDIDATES:
+   Look for any of the following patterns on the page:
+     1. Elements inside <nav>, <header>, or elements with role="navigation" that
+        have no href but appear to be links (cursor:pointer, or text that looks
+        like a page name)
+     2. Repeating groups of similar containers — e.g. a grid of <div> cards,
+        a list of <li> items, a row of tiles — where each item has similar
+        structure and appears clickable (cursor:pointer computed style, or
+        onClick handler). These are almost always product/content collections.
+        From each such group, click UP TO 3 items (first, middle, last) to
+        sample the URL pattern — you do not need to click every item.
+     3. Any other visible element with cursor:pointer that has no href and
+        does not look like a form control or action button.
+
+   FOR EACH CANDIDATE:
+     1. Click it
+     2. Wait up to 3 seconds for navigation to settle (URL change in address bar)
+     3. If window.location.href changed AND hostname is still "${allowedHostname}":
+          record the new absolute URL
+        If URL did NOT change (modal opened, page scrolled, nothing happened):
+          note it as non-navigating and skip
+     4. Press browser Back, wait for the original page to finish loading before
+        clicking the next candidate
+     5. Stop after collecting 20 URLs this way or clicking 30 candidates total.
+
+   Skip any click that: navigates off-domain, triggers a file download, or
+   causes an irreversible action (add to cart, delete, submit form).
+
+   Rules for ALL URLs from Step A and Step B:
+   - Include ONLY URLs whose hostname is exactly "${allowedHostname}"
+   - Strip URL fragments (#section)
+   - Deduplicate
+   - Cap total at 60 entries
+
+5. NAVIGATION STRUCTURE: breadcrumbs array, menus [{label:"top-nav"|"sidebar"|"footer", items:[{text,href}]}]
+
+Return ONLY valid JSON. No markdown. No explanation. Start with { and end with }.
 {
   "title": "string",
   "elements": [
-    {"type":"link","text":"About","href":"/about","isVisible":true},
+    {"type":"link","text":"About","href":"https://${allowedHostname}/about","isVisible":true},
     {"type":"button","text":"Submit","isVisible":true},
-    {"type":"input","text":"Search","isVisible":true}
+    {"type":"input","text":"Search","isVisible":true},
+    {"type":"interactive","text":"Dashboard","href":"https://${allowedHostname}/dashboard","isVisible":true}
   ],
-  "internalLinks": ["https://${allowedHostname}/about","https://${allowedHostname}/contact"],
+  "internalLinks": ["https://${allowedHostname}/about","https://${allowedHostname}/dashboard"],
   "forms": [{"action":"/search","method":"get","fields":[{"name":"q","type":"text","required":false,"pattern":null}]}],
   "apiEndpoints": [{"url":"https://api.example.com/v1/data","method":"GET","status":200,"responseType":"json","durationMs":120}],
   "navStructure": {
@@ -746,6 +816,7 @@ Return ONLY valid JSON. No markdown. Start with { end with }.
   }
 }`;
 }
+
 
 function buildScreenshotGoal(url: string): string {
   return `Navigate to: ${url}
@@ -786,7 +857,7 @@ Return ONLY this JSON. No markdown. Start with { end with }.
  *
  * Scoring rationale:
  *   Forms (+2 each)       — richest test surface: inputs, validation, submission
- *   Interactive els (+1)  — buttons/inputs worth testing for clicks and state
+ *   Interactive els (+1)  — buttons/inputs/click-handlers worth testing
  *   Internal links (+0.5) — navigation coverage, lower priority
  *   Has API calls (+3)    — integration-level tests are high value
  */
@@ -798,7 +869,8 @@ function scorePageComplexity(
       e.type === "button" ||
       e.type === "input" ||
       e.type === "select" ||
-      e.type === "textarea",
+      e.type === "textarea" ||
+      e.type === "interactive",
   ).length;
   return (
     page.forms.length * 2 +
@@ -837,15 +909,22 @@ function extractPageData(
     const resolved = resolveAbsolute(decoded, url);
     if (!resolved) return;
     const normalized = normalizeUrl(resolved);
+    // isAllowedUrl is the authoritative filter — don't trust the agent's judgment
+    // on what counts as "internal". Re-validate every URL here regardless of which
+    // field it came from.
     if (!isAllowedUrl(normalized, allowedHostname) || seen.has(normalized))
       return;
     seen.add(normalized);
     internalLinks.push(normalized);
   };
 
+  // Collect from both internalLinks array AND element hrefs.
+  // The agent is asked to populate both; merging here ensures we capture links
+  // the agent may have placed in one field but not the other.
   for (const raw of d.internalLinks ?? []) addLink(raw);
   for (const el of d.elements ?? []) {
-    if (el.type === "link" && el.href) addLink(el.href);
+    if ((el.type === "link" || el.type === "interactive") && el.href)
+      addLink(el.href);
   }
 
   const apiEndpoints: ApiEndpoint[] = ((d.apiEndpoints ?? []) as unknown[])
@@ -1018,6 +1097,10 @@ export async function crawlSite(
   // As each page is extracted, its internalLinks are enqueued immediately.
   // This gives genuine multi-hop depth: root → /about → /about/team, etc.
   // The page cap and path-pattern filter prevent link explosions.
+  //
+  // Dedup guarantee: visited.add() is called synchronously before the first await
+  // in the enqueue block, so two concurrent workers cannot both enqueue the same URL.
+  // queue.shift() is also synchronous — a URL can only be dequeued by one worker.
 
   const pages: CrawledPage[] = [];
 
@@ -1045,6 +1128,8 @@ export async function crawlSite(
 
         if (attempt > 0) console.log(`[Stage1] Retry ${attempt}: ${pageUrl}`);
 
+        const extractTimeoutMs =
+          TIMEOUTS.EXTRACTION_BASE_MS + attempt * TIMEOUTS.EXTRACTION_RETRY_BONUS_MS;
         const result = await withTimeout(
           runTinyFish(
             {
@@ -1054,7 +1139,7 @@ export async function crawlSite(
             },
             ctx,
           ),
-          TIMEOUTS.EXTRACTION_MS,
+          extractTimeoutMs,
           {
             success: false,
             resultJson: null,
@@ -1062,7 +1147,7 @@ export async function crawlSite(
             error: "timeout",
             jobId: null,
           },
-          `extract(${pageUrl})`,
+          `extract(${pageUrl}) attempt=${attempt + 1} timeout=${extractTimeoutMs / 1000}s`,
         );
 
         // Don't process result if we were aborted while waiting
@@ -1092,16 +1177,22 @@ export async function crawlSite(
         screenshots: { url375: null, url768: null, url1440: null },
       });
 
-      // Enqueue newly discovered links immediately — multi-hop BFS depth
+      // Enqueue newly discovered links immediately — multi-hop BFS depth.
+      // visited.add() happens synchronously inside the filter predicate (no await
+      // between check and mutation) so concurrent workers see consistent state.
       if (pages.length < budget.maxPages) {
         const newLinks = filterByPathPattern(
-          extracted.internalLinks.filter((u) => !visited.has(u)),
+          extracted.internalLinks.filter((u) => {
+            if (visited.has(u)) return false;
+            // Mark as visited immediately — before any await — so a concurrent
+            // worker processing a different page cannot also enqueue this URL.
+            visited.add(u);
+            return true;
+          }),
         );
         let enqueued = 0;
         for (const u of newLinks) {
-          // Stop enqueueing once the pipeline (pages + pending queue) is full
           if (pages.length + queue.length >= budget.maxPages) break;
-          visited.add(u);
           queue.push(u);
           enqueued++;
         }
@@ -1351,7 +1442,7 @@ export async function crawlPage(
       },
       ctx,
     ),
-    TIMEOUTS.EXTRACTION_MS,
+    TIMEOUTS.EXTRACTION_BASE_MS,
     {
       success: false,
       resultJson: null,
@@ -1422,6 +1513,7 @@ export async function executeTest(
   url: string,
   goal: string,
   stealth = false,
+  attempt = 0,
 ): Promise<TestExecutionResult> {
   const ctx = makeCrawlContext();
   const startTime = Date.now();
@@ -1451,7 +1543,7 @@ If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"
       { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
       ctx,
     ),
-    TIMEOUTS.EXECUTE_TEST_MS,
+    TIMEOUTS.EXECUTE_TEST_BASE_MS + attempt * TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS,
     {
       success: false,
       resultJson: null,
@@ -1459,7 +1551,7 @@ If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"
       error: "timeout",
       jobId: null,
     },
-    `executeTest(${url})`,
+    `executeTest(${url}) attempt=${attempt + 1}`,
   );
 
   const durationMs = Date.now() - startTime;
