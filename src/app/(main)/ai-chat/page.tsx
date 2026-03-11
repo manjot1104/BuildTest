@@ -208,9 +208,37 @@ type SegmentText = { type: "text"; content: string };
 type SegmentCode = { type: "code"; lang: string; code: string };
 type Segment = SegmentText | SegmentCode;
 
+/** Infer language from a filename extension */
+function langFromFilename(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    tsx: "tsx", ts: "typescript", jsx: "jsx", js: "javascript",
+    html: "html", htm: "html", css: "css", scss: "scss",
+    py: "python", json: "json", md: "markdown", svg: "svg",
+  };
+  return map[ext] ?? (ext || "text");
+}
+
 function splitCodeBlocks(raw: string): Segment[] {
   const segments: Segment[] = [];
-  const parts = raw.split(/(```(?:\w+)?\n?[\s\S]*?```)/g);
+
+  // First, unwrap <FILE> tags — extract code from inside them
+  // Handles both: <FILE filename="X.tsx">code</FILE>
+  // and nested: <FILE filename="X.tsx">\n```tsx\ncode\n```\n</FILE>
+  let unwrapped = raw.replace(
+    /<FILE\s+[^>]*?filename=["']([^"']+)["'][^>]*>([\s\S]*?)<\/FILE>/g,
+    (_match, filename: string, inner: string) => {
+      const trimmed = inner.trim();
+      // If the content already has code fences, unwrap them and re-wrap with the correct lang
+      const fenceMatch = /^```\w*\n?([\s\S]*?)```$/.exec(trimmed);
+      const code = fenceMatch ? fenceMatch[1]!.trimEnd() : trimmed;
+      const lang = langFromFilename(filename);
+      return `\n\`\`\`${lang}\n${code}\n\`\`\`\n`;
+    },
+  );
+
+  // Now split on standard code fences
+  const parts = unwrapped.split(/(```(?:\w+)?\n?[\s\S]*?```)/g);
   for (const part of parts) {
     const codeMatch = /^```(\w*)\n?([\s\S]*?)```$/.exec(part);
     if (codeMatch) {
@@ -219,7 +247,7 @@ function splitCodeBlocks(raw: string): Segment[] {
         lang: codeMatch[1] ?? "text",
         code: (codeMatch[2] ?? "").trimEnd(),
       });
-    } else if (part) {
+    } else if (part.trim()) {
       segments.push({ type: "text", content: part });
     }
   }
@@ -438,9 +466,15 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
  */
 function stripModuleSyntax(code: string): string {
   return code
+    // Remove all import statements (including type imports)
+    .replace(/^\s*import\s+type\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
+    // Remove export type statements
+    .replace(/^\s*export\s+type\s+/gm, "type ")
+    .replace(/^\s*export\s+interface\s+/gm, "interface ")
+    // Convert export declarations to local
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -475,6 +509,38 @@ const REACT_GLOBALS_SHIM = `<script>
   }
 })();
 </script>`;
+
+/**
+ * Builds a <script> that manually calls Babel.transform() with proper
+ * TypeScript + React preset config (isTSX: true) so generics like
+ * useState<T>() don't break. Optionally auto-mounts an App component.
+ */
+function buildBabelTransformScript(code: string, autoMount: boolean): string {
+  // Escape backticks and backslashes for embedding in a JS string literal
+  const escaped = code.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
+  const mountSnippet = autoMount
+    ? `\nif (typeof App !== 'undefined') { ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App)); }`
+    : "";
+  return `<script>
+(function(){
+  try {
+    var _code = \`${escaped}${mountSnippet.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$")}\`;
+    var _result = Babel.transform(_code, {
+      presets: [
+        ['react', { runtime: 'classic' }],
+        ['typescript', { isTSX: true, allExtensions: true }]
+      ],
+      filename: 'app.tsx'
+    });
+    var _s = document.createElement('script');
+    _s.textContent = _result.code;
+    document.body.appendChild(_s);
+  } catch(e) {
+    console.error(e.message || e);
+  }
+})();
+<\/script>`;
+}
 
 /** Combines all code blocks into a single runnable HTML document */
 function buildHtmlApp(blocks: SegmentCode[]): string {
@@ -520,7 +586,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
       }
     }
     if (needsReact && !doc.includes("react")) {
-      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}`;
+      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin><\/script>\n${REACT_GLOBALS_SHIM}`;
       if (doc.includes("</head>")) {
         doc = doc.replace("</head>", `${reactCdn}\n</head>`);
       } else if (doc.includes("<body")) {
@@ -536,7 +602,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
       }
     }
     if (jsxBlocks.length > 0) {
-      const jsxTag = `<script type="text/babel" data-presets="react">\n${jsxBlocks.join("\n")}\n<\/script>`;
+      const jsxTag = buildBabelTransformScript(jsxBlocks.join("\n"), false);
       if (doc.includes("</body>")) {
         doc = doc.replace("</body>", `${jsxTag}\n</body>`);
       } else {
@@ -550,7 +616,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
   const reactCdn = needsReact
     ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin><\/script>
 ${REACT_GLOBALS_SHIM}`
     : "";
 
@@ -566,14 +632,7 @@ ${reactCdn}
 ${CONSOLE_CAPTURE_SCRIPT}
 ${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
 ${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
-${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react">
-${jsxBlocks.join("\n\n")}
-${!mainHtml ? `
-// Auto-mount: render App component to #root
-if (typeof App !== 'undefined') {
-  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-}` : ""}
-<\/script>` : ""}
+${jsxBlocks.length > 0 ? buildBabelTransformScript(jsxBlocks.join("\n\n"), !mainHtml) : ""}
 </body>
 </html>`;
 }
@@ -762,7 +821,7 @@ function AppRunner({ content }: { content: string }) {
               </div>
               <iframe
                 srcDoc={execution.htmlPreview}
-                sandbox="allow-scripts allow-forms"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                 className={cn(
                   "w-full bg-white transition-all duration-300",
                   isExpanded ? "h-[500px]" : "h-72",
