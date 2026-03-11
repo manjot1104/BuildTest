@@ -257,43 +257,6 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                 <NumInput value={eff.styles.borderRadius} onChange={(v) => updStyle({ borderRadius: v })} min={0} max={999} />
               </Field>
             </Row>
-            {element.type === 'heading' && (
-              <Field label="Heading Level" full>
-                <Sel value={String(element.headingLevel ?? 1)}  onChange={(v) => {
-  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
-
-  const headingSizes = {
-    1: 64,
-    2: 48,
-    3: 36,
-    4: 28,
-    5: 22,
-    6: 18,
-  }
-
-  updBase({
-    headingLevel: level,
-    styles: {
-      ...element.styles,
-      fontSize: headingSizes[level],
-    },
-  })
-}}>
-                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
-                </Sel>
-              </Field>
-            )}
-            {(element.type === 'section' || element.type === 'container') && (
-              <Field label="Anchor ID" full>
-                <input
-                  type="text"
-                  value={element.anchorId ?? ''}
-                  onChange={(e) => updBase({ anchorId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') || undefined })}
-                  placeholder="e.g. about (links as #about)"
-                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none"
-                />
-              </Field>
-            )}
           </Section>
         )}
 
@@ -390,6 +353,20 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
         {/* ── TEXT / TYPOGRAPHY ── */}
         {activeTab === 'text' && hasText && (
           <Section title="Typography">
+            {element.type === 'heading' && (
+              <Field label="Heading Level" full>
+                <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => {
+                  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
+                  const headingSizes = { 1: 64, 2: 48, 3: 36, 4: 28, 5: 22, 6: 18 }
+                  updBase({
+                    headingLevel: level,
+                    styles: { ...element.styles, fontSize: headingSizes[level] }
+                  })
+                }}>
+                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
+                </Sel>
+              </Field>
+            )}
             <Row>
               <Field label="Size">
                 <NumInput value={eff.styles.fontSize} onChange={(v) => updStyle({ fontSize: v })} min={8} max={300} />

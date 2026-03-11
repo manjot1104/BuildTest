@@ -2,7 +2,10 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
+import { NavbarScrollHandler } from './navbar-scroll-handler'
 import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
+
+import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
 
 // ─── Device presets ───────────────────────────────────────────────────────────
 
@@ -67,20 +70,24 @@ function StaticEl({ el }: { el: CanvasElement }) {
     switch (el.type) {
       case 'heading': {
         const Tag = `h${el.headingLevel ?? 1}` as React.ElementType
+        const slugId = el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
         return (
-          <Tag style={{
-            width: '100%', height: '100%', margin: 0,
-            color: styles.color ?? '#1a1a1a',
-            fontSize: styles.fontSize ?? 48,
-            fontWeight: styles.fontWeight ?? '700',
-            fontFamily: styles.fontFamily,
-            textAlign: styles.textAlign,
-            letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-            lineHeight: styles.lineHeight ?? '1.2',
-            padding: styles.padding ?? 4,
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-            display: 'flex', alignItems: 'center',
-          } as React.CSSProperties}>{el.content}</Tag>
+          <Tag
+            id={slugId}
+            data-heading={el.content.toLowerCase()}
+            style={{
+              width: '100%', height: '100%', margin: 0,
+              color: styles.color ?? '#1a1a1a',
+              fontSize: styles.fontSize ?? 48,
+              fontWeight: styles.fontWeight ?? '700',
+              fontFamily: styles.fontFamily,
+              textAlign: styles.textAlign,
+              letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+              lineHeight: styles.lineHeight ?? '1.2',
+              padding: styles.padding ?? 4,
+              wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+              display: 'flex', alignItems: 'center',
+            } as React.CSSProperties}>{el.content}</Tag>
         )
       }
       case 'paragraph':
@@ -218,7 +225,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
     : inner
 
   return (
-    <div id={el.anchorId || undefined} className={animClass(el.enterAnimation)} style={wrapStyle}>
+    <div className={animClass(el.enterAnimation)} style={wrapStyle}>
       {content}
     </div>
   )
@@ -235,6 +242,8 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
   containerH: number
   deviceId: 'desktop' | 'tablet' | 'mobile'
 }) {
+  const innerContentRef = useRef<HTMLDivElement>(null)
+
   // Apply responsive reflow for tablet/mobile
   const responsiveDevice: ResponsiveDevice = deviceId
   const layout = computeResponsiveLayout(elements, responsiveDevice)
@@ -277,7 +286,11 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
           overflow: 'hidden',
         }}
       >
-        <div style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}>
+        <div 
+          ref={innerContentRef}
+          style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}
+        >
+          <NavbarScrollHandler scrollScope={innerContentRef.current} />
           {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
         </div>
       </div>
@@ -326,7 +339,7 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
     : 0
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#0d0d11' }}>
+    <div className="fixed inset-0 flex flex-col" style={{ background: '#0d0d11', zIndex: 9999 }}>
       {/* Browser chrome header */}
       <div
         className="flex h-12 shrink-0 items-center gap-3 border-b px-4"

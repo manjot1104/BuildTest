@@ -283,17 +283,18 @@ export function useEditor() {
             borderRadius: 8,
           },
         },
-        section: {
-          width: 600,
-          height: 200,
-          content: '',
-          styles: {
-            backgroundColor: '#f8fafc',
-            borderRadius: 12,
-            border: '2px dashed #e2e8f0',
-            padding: 24,
-          },
-        },
+     section: {
+  width: 600,
+  height: 200,
+  content: '',
+  sectionKey: 'section-' + Date.now(),
+  styles: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    border: '2px dashed #e2e8f0',
+    padding: 24,
+  },
+},
         container: {
           width: 400,
           height: 200,
@@ -375,11 +376,21 @@ export function useEditor() {
       }
 
       const def = defaults[type]!
+      let sectionKey: string | undefined
+
+if (type === 'section') {
+  const sectionCount = state.elements.filter(e => e.type === 'section').length
+
+  const defaultKeys = ['about', 'skills', 'projects', 'work', 'services', 'contact']
+
+  sectionKey = defaultKeys[sectionCount] ?? `section-${sectionCount + 1}`
+}
       dispatch({
         type: 'ADD_ELEMENT',
         element: {
           id: crypto.randomUUID(),
           type,
+          sectionKey: type === 'section' ? 'section-' + Date.now() : undefined,
           x: Math.round(offsetX),
           y: Math.round(offsetY),
           width: def.width ?? 200,
@@ -396,6 +407,7 @@ export function useEditor() {
           ...(def.socialLinks ? { socialLinks: def.socialLinks } : {}),
           ...(def.formFields ? { formFields: def.formFields } : {}),
           ...(def.iconName ? { iconName: def.iconName } : {}),
+          ...(sectionKey ? { sectionKey } : {}),
         },
       })
     },
