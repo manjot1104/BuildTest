@@ -76,13 +76,17 @@ export interface TestCase {
 export interface PerformanceGauge {
   pageUrl: string
   lcpMs: number | null
-  fidMs: number | null
+  fidMs: number | null          // kept for schema compat, always null in practice
   cls: number | null
   ttfbMs: number | null
+  domContentLoadedMs: number | null
+  loadEventMs: number | null
   lcpStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
-  fidStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
   clsStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
   ttfbStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
+  domContentLoadedStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
+  loadEventStatus: 'good' | 'needs-improvement' | 'poor' | 'unknown'
+  // fidStatus intentionally removed — FID can't be measured by Puppeteer
 }
 
 export interface TrendDataPoint {

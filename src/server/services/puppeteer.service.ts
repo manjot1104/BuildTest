@@ -305,48 +305,95 @@ export async function measurePagePerformanceWithPuppeteer(url: string): Promise<
     const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width: 1440, height: 900 });
+
+      // Inject observers BEFORE navigation so they catch all events
       await page.evaluateOnNewDocument(() => {
         window.__perfMetrics = { lcpMs: null, clsScore: 0, fidMs: null };
+
+        // LCP — fires on largest paint, buffered so we catch it after load too
         try {
           new PerformanceObserver((list) => {
             const entries = list.getEntries();
             const last = entries[entries.length - 1] as PerformanceEntry & { startTime: number };
-            if (last) window.__perfMetrics = { ...window.__perfMetrics, lcpMs: Math.round(last.startTime) };
+            if (last) window.__perfMetrics.lcpMs = Math.round(last.startTime);
           }).observe({ type: "largest-contentful-paint", buffered: true });
-        } catch { /* not supported */ }
+        } catch { /* browser doesn't support LCP */ }
+
+        // CLS — accumulate all layout shifts that weren't caused by user input
         try {
           new PerformanceObserver((list) => {
             for (const entry of list.getEntries()) {
               const ls = entry as PerformanceEntry & { hadRecentInput: boolean; value: number };
-              if (!ls.hadRecentInput) window.__perfMetrics = { ...window.__perfMetrics, clsScore: (window.__perfMetrics.clsScore ?? 0) + ls.value };
+              if (!ls.hadRecentInput) window.__perfMetrics.clsScore += ls.value;
             }
           }).observe({ type: "layout-shift", buffered: true });
-        } catch { /* not supported */ }
+        } catch { /* browser doesn't support CLS */ }
+
+        // Event Timing (INP-adjacent) — Puppeteer can't generate real user
+        // input, so this will only fire if the page itself dispatches events
+        // during load (e.g. auto-focus, programmatic clicks). We keep it
+        // because it's occasionally useful and never harmful.
         try {
           new PerformanceObserver((list) => {
             const entry = list.getEntries()[0] as PerformanceEntry & { processingStart: number; startTime: number };
-            if (entry) window.__perfMetrics = { ...window.__perfMetrics, fidMs: Math.round(entry.processingStart - entry.startTime) };
+            if (entry && window.__perfMetrics.fidMs === null) {
+              window.__perfMetrics.fidMs = Math.round(entry.processingStart - entry.startTime);
+            }
           }).observe({ type: "first-input", buffered: true });
         } catch { /* not supported */ }
       });
+
       await navigatePage(page, url);
-      await new Promise((r) => setTimeout(r, 3_000));
+
+      // Give LCP + CLS observers more breathing room
+      await new Promise((r) => setTimeout(r, 4_000));
+
       const metrics = await page.evaluate(() => {
         const perf = window.__perfMetrics;
+
+        // Navigation Timing — these are always present and reliable
         let ttfbMs: number | null = null;
+        let domContentLoadedMs: number | null = null;
+        let loadEventMs: number | null = null;
+
         try {
           const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
-          if (nav) ttfbMs = Math.round(nav.responseStart - nav.requestStart);
+          if (nav) {
+            ttfbMs = Math.round(nav.responseStart - nav.requestStart);
+            domContentLoadedMs = Math.round(nav.domContentLoadedEventEnd);
+            loadEventMs = Math.round(nav.loadEventEnd);
+          }
         } catch { /* ignore */ }
+
         return {
           lcpMs: perf?.lcpMs ?? null,
+          // Round CLS to 3 decimal places — the standard display precision
           cls: perf?.clsScore != null ? Math.round(perf.clsScore * 1000) / 1000 : null,
+          // FID/first-input: null unless page fired a programmatic event during load
           fidMs: perf?.fidMs ?? null,
           ttfbMs,
+          domContentLoadedMs,
+          loadEventMs,
         };
       });
-      console.log(`[Puppeteer] ⚡ Perf ${url}: LCP=${metrics.lcpMs}ms TTFB=${metrics.ttfbMs}ms CLS=${metrics.cls}`);
-      return { pageUrl: url, lcpMs: metrics.lcpMs, fidMs: metrics.fidMs, cls: metrics.cls, ttfbMs: metrics.ttfbMs, rawMetrics: metrics as Record<string, unknown> };
+
+      console.log(
+        `[Puppeteer] ⚡ Perf ${url}: LCP=${metrics.lcpMs}ms TTFB=${metrics.ttfbMs}ms ` +
+        `DCL=${metrics.domContentLoadedMs}ms Load=${metrics.loadEventMs}ms CLS=${metrics.cls}`
+      );
+
+      return {
+        pageUrl: url,
+        lcpMs: metrics.lcpMs,
+        fidMs: metrics.fidMs, // kept in type for schema compat, usually null
+        cls: metrics.cls,
+        ttfbMs: metrics.ttfbMs,
+        rawMetrics: {
+          domContentLoadedMs: metrics.domContentLoadedMs,
+          loadEventMs: metrics.loadEventMs,
+          ...metrics,
+        },
+      };
     } finally {
       await page.close().catch(() => { /* ignore */ });
     }

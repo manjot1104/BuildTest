@@ -185,16 +185,45 @@ function CategoryDonut({ passed, total, category, onClick, active }: { passed: n
 }
 
 // ─── Perf Gauge Row ───────────────────────────────────────────────────────────
-function PerfGaugeRow({ label, value, unit, status }: { label: string; value: number | null; unit: string; status: string }) {
-  const display = value === null ? "—" : unit === "ms" ? `${Math.round(value)}ms` : value.toFixed(3);
+// Max values for proportional bar scaling (at these values = 100% bar width)
+const PERF_MAX: Record<string, number> = {
+  LCP:  6000,   // 6s = full bar (> 4s is already "poor")
+  TTFB: 3000,   // 3s = full bar
+  DCL:  5000,   // 5s = full bar
+  Load: 6000,   // 6s = full bar
+  CLS:  0.5,    // 0.5 = full bar (> 0.25 is already "poor")
+};
+
+function PerfGaugeRow({
+  label, value, unit, status,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  status: string;
+}) {
+  const max = PERF_MAX[label] ?? 1000;
+  const pct = value === null ? 0 : Math.min(100, (value / max) * 100);
+
+  const display =
+    value === null ? "—"
+    : unit === "ms" ? `${Math.round(value).toLocaleString()}ms`
+    : value.toFixed(3);
+
   return (
     <div className="flex items-center gap-3">
       <div className="w-12 text-xs font-mono text-zinc-500 shrink-0">{label}</div>
       <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-        {value !== null && <div className={`h-full rounded-full ${statusBg(status)}`}
-          style={{ width: `${Math.min(100, status === "good" ? 90 : status === "needs-improvement" ? 55 : 100)}%`, opacity: 0.85 }} />}
+        {value !== null && (
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
+            style={{ width: `${pct}%`, opacity: 0.85 }}
+          />
+        )}
       </div>
-      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>{display}</div>
+      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>
+        {display}
+      </div>
       <div className={`h-2 w-2 rounded-full shrink-0 ${statusBg(status)}`} />
     </div>
   );
@@ -1004,26 +1033,75 @@ export default function TestingPage() {
             {activeTab === "performance" && (
               <div className="space-y-4">
                 {(!report.performanceGauges || report.performanceGauges.length === 0)
-                  ? (<div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
+                  ? (
+                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
                       <Activity className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
                       <p className="text-sm text-zinc-500">No performance data available</p>
-                    </div>)
+                    </div>
+                  )
                   : report.performanceGauges.map((pg: PerformanceGauge) => (
                     <div key={pg.pageUrl} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
                       <div className="flex items-center gap-2 mb-4">
                         <Globe className="h-4 w-4 text-zinc-500 shrink-0" />
                         <p className="text-xs font-mono text-zinc-400 truncate">{pg.pageUrl}</p>
                       </div>
-                      <div className="space-y-3">
+
+                      {/* Core Web Vitals */}
+                      <p className="text-xs font-mono text-zinc-600 uppercase tracking-wider mb-2">
+                        Core Web Vitals
+                      </p>
+                      <div className="space-y-3 mb-5">
                         <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
-                        <PerfGaugeRow label="FID"  value={pg.fidMs}  unit="ms" status={pg.fidStatus}  />
                         <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
                         <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
                       </div>
-                      <div className="flex gap-4 mt-4 pt-3 border-t border-zinc-800/60">
-                        {[{ label: "Good", color: "bg-emerald-500" }, { label: "Needs improvement", color: "bg-yellow-500" }, { label: "Poor", color: "bg-red-500" }].map(({ label, color }) => (
+
+                      {/* Load Timing — always available from Navigation Timing API */}
+                      <p className="text-xs font-mono text-zinc-600 uppercase tracking-wider mb-2">
+                        Load Timing
+                      </p>
+                      <div className="space-y-3">
+                        <PerfGaugeRow
+                          label="DCL"
+                          value={pg.domContentLoadedMs}
+                          unit="ms"
+                          status={pg.domContentLoadedStatus ?? "unknown"}
+                        />
+                        <PerfGaugeRow
+                          label="Load"
+                          value={pg.loadEventMs}
+                          unit="ms"
+                          status={pg.loadEventStatus ?? "unknown"}
+                        />
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex gap-4 mt-4 pt-3 border-t border-zinc-800/60 flex-wrap">
+                        {[
+                          { label: "Good",             color: "bg-emerald-500" },
+                          { label: "Needs improvement", color: "bg-yellow-500" },
+                          { label: "Poor",             color: "bg-red-500"     },
+                          { label: "Unknown",          color: "bg-zinc-600"    },
+                        ].map(({ label, color }) => (
                           <div key={label} className="flex items-center gap-1.5 text-xs text-zinc-500">
-                            <div className={`h-2 w-2 rounded-full ${color}`} />{label}
+                            <div className={`h-2 w-2 rounded-full ${color}`} />
+                            {label}
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Tooltip-style explainers */}
+                      <div className="mt-3 pt-3 border-t border-zinc-800/60 grid grid-cols-2 gap-x-6 gap-y-1">
+                        {[
+                          { label: "LCP",  desc: "Largest Contentful Paint — render time of largest element"  },
+                          { label: "CLS",  desc: "Cumulative Layout Shift — visual stability score"            },
+                          { label: "TTFB", desc: "Time to First Byte — server response speed"                 },
+                          { label: "DCL",  desc: "DOMContentLoaded — HTML parsed, scripts ready"              },
+                          { label: "Load", desc: "Page Load — all resources including images finished"        },
+                        ].map(({ label, desc }) => (
+                          <div key={label} className="flex gap-2 text-xs py-0.5">
+                            <span className="font-mono text-zinc-500 shrink-0 w-10">{label}</span>
+                            <span className="text-zinc-600">{desc}</span>
                           </div>
                         ))}
                       </div>
