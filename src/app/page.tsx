@@ -20,6 +20,7 @@ import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
 import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 
 // --- Animation Variants ---
 
@@ -410,16 +411,15 @@ export default function LandingPage() {
                             onChange={handleFileChange}
                         />
 
-                        {/* Main input card — no border, only neon shadow */}
+                        {/* Main input card */}
                         <div
                             className={cn(
                                 "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
-                                inputFocused 
-                                    ? "border-primary ring-2 ring-primary/20 shadow-md" 
+                                inputFocused
+                                    ? "border-primary ring-2 ring-primary/20 shadow-md"
                                     : "border-border shadow-sm hover:border-border/80"
                             )}
-                        >
-                            {/* Attachment preview strip */}
+                        >                            {/* Attachment preview strip */}
                             {attachments.length > 0 && (
                                 <div className="flex flex-wrap gap-2 px-4 pt-4">
                                     {attachments.map((att) => (
@@ -481,7 +481,7 @@ export default function LandingPage() {
                                         className={[
                                             'size-8 rounded-xl flex items-center justify-center transition-all duration-200',
                                             micState === 'recording'
-                                                ? 'bg-[#3B7EFF] text-white shadow-[0_2px_12px_rgba(59,126,255,0.55)]'
+                                                ? 'bg-[#3B7EFF] text-white shadow-md'
                                                 : micState === 'processing'
                                                 ? 'text-muted-foreground/50 cursor-wait'
                                                 : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
@@ -499,8 +499,7 @@ export default function LandingPage() {
                                 <Button
                                     size="sm"
                                     onClick={() => handlePromptSubmit(prompt)}
-                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200"
-                                    style={{ boxShadow: '0 2px 14px rgba(59,126,255,0.45)' }}
+                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200 shadow-md"
                                 >
                                     Build
                                     <SendHorizonal className="size-3.5" />

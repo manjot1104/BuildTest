@@ -68,7 +68,6 @@ function getHoverAnimClass(anim: HoverAnimation, isPreview: boolean): string {
     none: '',
     scale: 'pb-hover-scale',
     lift: 'pb-hover-lift',
-    glow: 'pb-hover-glow',
   }
   return map[anim] ?? ''
 }
