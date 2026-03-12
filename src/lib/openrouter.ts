@@ -370,17 +370,73 @@ STEP 1: Look at the "MANDATORY STRUCTURE (LaTeX)" code above
 STEP 2: Copy that ENTIRE code block EXACTLY - including \\documentclass, \\usepackage, \\begin{document}, \\end{document}
 STEP 3: Replace ONLY these placeholders:
    - "NAME" → ${data.fullName}
-   - "email" → ${data.email}
-   - "phone" → ${data.phone}
+   - "email — phone" or "email | phone" → For Minimal Clean template: ${data.email} — ${data.phone} (CRITICAL: Use em dash — NOT pipe |). For other templates: ${data.email} | ${data.phone} (use pipe separator |)
+   - Portfolio/Behance links: ONLY include if user provided them. Check if user data contains "portfolio.com", "behance.net", or similar portfolio links. If NOT provided, REMOVE the entire second contact line (the line with "behance.net/username — portfolio.com"). DO NOT add placeholder text or fake links.
    - Skills section: Parse ${data.skills} and create simple bullet points (\\item SkillName). DO NOT add categories like "Programming:" or "Frontend Development:". Just list skills as simple items.
+   - For Creative Designer template ONLY: Design Skills MUST be comma-separated list (Skill1, Skill2, Skill3). DO NOT add categories like "Frontend Development:", "Backend Development:", etc. DO NOT use bold for categories. Just list all skills as comma-separated text in one paragraph.
+   - For Minimal Clean template ONLY: CRITICAL - Header MUST include NAME: Replace "NAME" placeholder with ${data.fullName} (use \\Large\\textbf{} for LaTeX, or font-size: 20px; font-weight: bold for HTML). Skills MUST be comma-separated (can wrap across lines), NOT bullet points (\\item). DO NOT use categories. Format as plain text: React, TypeScript, Node.js, PostgreSQL, AWS. All text MUST be black - NO colors, NO \\textcolor commands. Header MUST be centered: Name (large, bold) on first line, then email — phone on second line (use em dash — NOT pipe |). MUST use two-column layout for ALL content: Left column (40% width: Skills, Education), Right column (60% width: Experience, Projects). For LaTeX: ALL sections MUST be inside \\begin{multicols}{2}...\\end{multicols} environment. Use \\columnbreak after Education section to separate left and right columns. For HTML: Use CSS Grid with grid-template-columns: 1fr 1.5fr and align-items: start for proper two-column layout. Experience format: Job Title (bold) on first line, then "Company — Location — Dates" on second line (use em dash — NOT pipe |), then bullet points. Education format: "Degree — Institution — Dates" (use em dash — NOT pipe |). Projects format: "Project Name — Technologies — Year" (use em dash — NOT pipe |). MUST include Projects section if user provided project data.
    - "Degree" → Extract degree from: ${data.education}
    - "Institution" → Extract institution from: ${data.education}
    - "Job Title" → Extract job titles from: ${data.experience}
    - "Company | Dates" → Extract from: ${data.experience}
    - "Description" → Use actual bullet points from: ${data.experience} and ${data.projects}
    - "Project Name" → Extract from: ${data.projects}
+   - For Creative Designer template ONLY: Project format is "Project Name — Description" on first line (bold, purple), then "Technologies — Year" on second line (regular, black), then bullet points below
 
-STEP 4: DO NOT CHANGE ANYTHING ELSE:
+STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
+   🚨 MANDATORY CONTENT REQUIREMENTS:
+   
+   1. NAME FORMATTING (HIGHEST PRIORITY):
+      - Name MUST be the LARGEST and MOST PROMINENT element in the entire resume
+      - For LaTeX: Use \\Huge\\textbf{} or at minimum \\LARGE\\textbf{} for the name (24-28pt font size)
+      - Name should stand out as the primary heading - make it visually dominant
+      - Name should be the first thing that catches the eye when viewing the resume
+   
+   2. BULLET POINT LENGTH REQUIREMENTS (MANDATORY FOR ALL SECTIONS):
+      - CRITICAL: Each bullet point in Experience, Projects, and Education sections MUST follow these line requirements:
+        * MINIMUM: 2 lines per bullet point (NEVER less than 2 lines - expand short descriptions)
+        * MAXIMUM: 5 lines per bullet point (NEVER more than 5 lines - condense if too long)
+        * IDEAL: 3 lines per bullet point (AIM for 3 lines when possible for optimal readability)
+      - DO NOT write single-line bullet points - they must be at least 2 lines
+      - DO NOT write bullet points longer than 5 lines - break them into multiple points if needed
+      - Expand brief descriptions: If user provided short descriptions, enhance them with relevant details, technologies used, impact, and outcomes
+      - Add context: Include information about scale, technologies, methodologies, and results
+      - Use action verbs: Start each bullet with strong action verbs (Developed, Implemented, Designed, Led, etc.)
+      - Quantify achievements: Add numbers, percentages, metrics, or scale when possible
+   
+   3. CONTENT ENHANCEMENT GUIDELINES:
+      - Add more descriptive content: Expand on user-provided information with professional details
+      - Include technical specifics: Mention specific technologies, frameworks, tools, and methodologies used
+      - Add impact and results: Describe the impact, outcomes, and value delivered
+      - Include scope and scale: Mention team size, project scale, user base, or data volume when relevant
+      - Professional language: Use professional, industry-standard terminology
+      - Avoid redundancy: Each bullet should provide unique information
+      - Make it compelling: Write descriptions that showcase skills, achievements, and value
+   
+   4. SECTION-SPECIFIC ENHANCEMENTS:
+      - Experience Section:
+        * Expand job descriptions with specific responsibilities and achievements
+        * Include technologies, tools, and methodologies used
+        * Mention collaboration, leadership, or problem-solving aspects
+        * Add quantifiable results and impact
+      - Projects Section:
+        * Provide detailed project descriptions
+        * Explain the problem solved or value delivered
+        * Include technical stack and implementation details
+        * Mention challenges overcome and solutions implemented
+      - Education Section:
+        * Add relevant coursework, honors, or achievements if space allows
+        * Include GPA if 3.5+ (format: GPA: 3.8/4.0)
+        * Mention relevant academic projects or research if applicable
+   
+   5. CONTENT QUALITY STANDARDS:
+      - Professional tone: Maintain professional, confident language throughout
+      - Clarity: Write clear, concise, and impactful descriptions
+      - Specificity: Be specific about technologies, tools, and achievements
+      - Relevance: Focus on information relevant to the role or industry
+      - ATS-friendly: Use standard terminology and keywords naturally
+
+STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change packages (\\usepackage commands)
    ❌ DO NOT change layout (minipage, center, multicol, etc.)
    ❌ DO NOT change colors or styling
@@ -423,17 +479,31 @@ CRITICAL REQUIREMENTS:
 1. Return ONLY raw LaTeX code - no markdown, no explanations, no code blocks
 2. Follow ALL design guidelines above strictly
 3. MANDATORY: Name must be LARGEST (24-28pt) and DARKEST blue (blue!90!black) - most prominent element
+   - Name MUST be the BIGGEST and MOST PROMINENT heading in the entire resume
+   - Use \\Huge\\textbf{} or at minimum \\LARGE\\textbf{} for the name
+   - Name should be the first thing that catches the eye when viewing the resume
 4. MANDATORY: Use DIFFERENT shades of blue for different heading levels to create clear hierarchy:
    - Section headers: blue!75!black (dark blue)
    - Subsection headers: blue!65!black (medium-dark blue)
    - Job/Project/Degree titles: blue!60!black (medium blue)
    - Company/Institution names: blue!50!black (lighter blue)
 5. MANDATORY: Each bullet point in Experience, Education, and Projects MUST be:
-   - MINIMUM: 2 lines (never less)
-   - MAXIMUM: 5 lines (never more)
-   - IDEAL: 3 lines (aim for this when possible)
-   - DO NOT write single-line bullet points
+   - MINIMUM: 2 lines (NEVER less - expand short descriptions with details, technologies, impact)
+   - MAXIMUM: 5 lines (NEVER more - condense if too long)
+   - IDEAL: 3 lines (AIM for 3 lines when possible for optimal readability)
+   - DO NOT write single-line bullet points - they must be at least 2 lines
    - DO NOT write bullet points longer than 5 lines
+   - Expand brief descriptions: Add relevant details, technologies used, impact, and outcomes
+   - Add context: Include information about scale, technologies, methodologies, and results
+   - Use action verbs: Start each bullet with strong action verbs (Developed, Implemented, Designed, Led, etc.)
+   - Quantify achievements: Add numbers, percentages, metrics, or scale when possible
+6. CONTENT ENHANCEMENT (MANDATORY):
+   - Add more descriptive content: Expand on user-provided information with professional details
+   - Include technical specifics: Mention specific technologies, frameworks, tools, and methodologies used
+   - Add impact and results: Describe the impact, outcomes, and value delivered
+   - Include scope and scale: Mention team size, project scale, user base, or data volume when relevant
+   - Professional language: Use professional, industry-standard terminology
+   - Make it compelling: Write descriptions that showcase skills, achievements, and value
 6. DO NOT use black headings - EVERY heading and subheading must be blue
 7. Use MINIMAL LaTeX packages: \\documentclass{article}, \\usepackage[margin=0.75in]{geometry}, \\usepackage{enumitem}, \\usepackage{xcolor}, \\usepackage{multicol}
 8. DO NOT use complex packages like tikz, fancyhdr, or graphics that require external files
@@ -861,17 +931,73 @@ STEP 1: Look at the "MANDATORY STRUCTURE (HTML)" code above
 STEP 2: Copy that ENTIRE code block EXACTLY - including <!DOCTYPE>, <html>, <head>, <style>, <body>, all CSS
 STEP 3: Replace ONLY these placeholders:
    - "NAME" → ${data.fullName}
-   - "email" → ${data.email}
-   - "phone" → ${data.phone}
+   - "email — phone" or "email | phone" → For Minimal Clean template: ${data.email} — ${data.phone} (CRITICAL: Use em dash — NOT pipe |). For other templates: ${data.email} | ${data.phone} (use pipe separator |)
+   - Portfolio/Behance links: ONLY include if user provided them. Check if user data contains "portfolio.com", "behance.net", or similar portfolio links. If NOT provided, REMOVE the entire second contact line (the line with "behance.net/username — portfolio.com"). DO NOT add placeholder text or fake links.
    - Skills section: Parse ${data.skills} and create simple bullet points (<li>SkillName</li>). DO NOT add categories like "Programming:" or "Frontend Development:". Just list skills as simple items.
+   - For Creative Designer template ONLY: Design Skills MUST be comma-separated list (Skill1, Skill2, Skill3). DO NOT add categories like "Frontend Development:", "Backend Development:", etc. DO NOT use bold for categories. Just list all skills as comma-separated text in one paragraph.
+   - For Minimal Clean template ONLY: CRITICAL - Header MUST include NAME: Replace "NAME" placeholder with ${data.fullName} (use font-size: 20px; font-weight: bold in inline style). Skills MUST be comma-separated (can wrap across lines), NOT bullet points (<li>). DO NOT use categories. Format as: <p>React, TypeScript, Node.js, PostgreSQL, AWS</p>. All text MUST be black (#000) - NO colors, NO blue headings. Header MUST be centered: Name (large, bold) on first line, then email — phone on second line (use em dash — NOT pipe |). MUST use two-column layout for ALL content: Left column (40% width: Skills, Education), Right column (60% width: Experience, Projects). Use CSS Grid with grid-template-columns: 1fr 1.5fr and align-items: start for proper two-column layout. Ensure columns are properly balanced with gap: 40px between them. Experience format: Job Title (bold) on first line, then "Company — Location — Dates" on second line (use em dash — NOT pipe |), then bullet points. Education format: "Degree — Institution — Dates" (use em dash — NOT pipe |). Projects format: "Project Name — Technologies — Year" (use em dash — NOT pipe |). MUST include Projects section if user provided project data.
    - "Degree" → Extract degree from: ${data.education}
    - "Institution" → Extract institution from: ${data.education}
    - "Job Title" → Extract job titles from: ${data.experience}
    - "Company | Dates" → Extract from: ${data.experience}
    - "Description" → Use actual bullet points from: ${data.experience} and ${data.projects}
    - "Project Name" → Extract from: ${data.projects}
+   - For Creative Designer template ONLY: Project format is "Project Name — Description" on first line (bold, purple), then "Technologies — Year" on second line (regular, black), then bullet points below
 
-STEP 4: DO NOT CHANGE ANYTHING ELSE:
+STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
+   🚨 MANDATORY CONTENT REQUIREMENTS:
+   
+   1. NAME FORMATTING (HIGHEST PRIORITY):
+      - Name MUST be the LARGEST and MOST PROMINENT element in the entire resume
+      - For HTML: Use font-size: 28-32px; font-weight: bold; for the name (largest font in the document)
+      - Name should stand out as the primary heading - make it visually dominant
+      - Name should be the first thing that catches the eye when viewing the resume
+   
+   2. BULLET POINT LENGTH REQUIREMENTS (MANDATORY FOR ALL SECTIONS):
+      - CRITICAL: Each bullet point in Experience, Projects, and Education sections MUST follow these line requirements:
+        * MINIMUM: 2 lines per bullet point (NEVER less than 2 lines - expand short descriptions)
+        * MAXIMUM: 5 lines per bullet point (NEVER more than 5 lines - condense if too long)
+        * IDEAL: 3 lines per bullet point (AIM for 3 lines when possible for optimal readability)
+      - DO NOT write single-line bullet points - they must be at least 2 lines
+      - DO NOT write bullet points longer than 5 lines - break them into multiple points if needed
+      - Expand brief descriptions: If user provided short descriptions, enhance them with relevant details, technologies used, impact, and outcomes
+      - Add context: Include information about scale, technologies, methodologies, and results
+      - Use action verbs: Start each bullet with strong action verbs (Developed, Implemented, Designed, Led, etc.)
+      - Quantify achievements: Add numbers, percentages, metrics, or scale when possible
+   
+   3. CONTENT ENHANCEMENT GUIDELINES:
+      - Add more descriptive content: Expand on user-provided information with professional details
+      - Include technical specifics: Mention specific technologies, frameworks, tools, and methodologies used
+      - Add impact and results: Describe the impact, outcomes, and value delivered
+      - Include scope and scale: Mention team size, project scale, user base, or data volume when relevant
+      - Professional language: Use professional, industry-standard terminology
+      - Avoid redundancy: Each bullet should provide unique information
+      - Make it compelling: Write descriptions that showcase skills, achievements, and value
+   
+   4. SECTION-SPECIFIC ENHANCEMENTS:
+      - Experience Section:
+        * Expand job descriptions with specific responsibilities and achievements
+        * Include technologies, tools, and methodologies used
+        * Mention collaboration, leadership, or problem-solving aspects
+        * Add quantifiable results and impact
+      - Projects Section:
+        * Provide detailed project descriptions
+        * Explain the problem solved or value delivered
+        * Include technical stack and implementation details
+        * Mention challenges overcome and solutions implemented
+      - Education Section:
+        * Add relevant coursework, honors, or achievements if space allows
+        * Include GPA if 3.5+ (format: GPA: 3.8/4.0)
+        * Mention relevant academic projects or research if applicable
+   
+   5. CONTENT QUALITY STANDARDS:
+      - Professional tone: Maintain professional, confident language throughout
+      - Clarity: Write clear, concise, and impactful descriptions
+      - Specificity: Be specific about technologies, tools, and achievements
+      - Relevance: Focus on information relevant to the role or industry
+      - ATS-friendly: Use standard terminology and keywords naturally
+
+STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change CSS styles or classes
    ❌ DO NOT change layout (flex, grid, center, etc.)
    ❌ DO NOT change colors or styling values
@@ -911,19 +1037,33 @@ CREATIVE ENHANCEMENTS (Apply your professional judgment):
 CRITICAL REQUIREMENTS:
 1. Return ONLY raw HTML code - no markdown, no explanations, no code blocks
 2. Follow ALL design guidelines above strictly
-3. MANDATORY: Name must be LARGEST (24-28px) and DARKEST blue (#002244) - most prominent element
+3. MANDATORY: Name must be LARGEST (28-32px) and DARKEST blue (#002244) - most prominent element
+   - Name MUST be the BIGGEST and MOST PROMINENT heading in the entire resume
+   - Use font-size: 28-32px; font-weight: bold; for the name (largest font in the document)
+   - Name should be the first thing that catches the eye when viewing the resume
 4. MANDATORY: Use DIFFERENT shades of blue for different heading levels to create clear hierarchy:
    - Section headers: #003366 (dark blue)
    - Subsection headers: #004488 (medium-dark blue)
    - Job/Project/Degree titles: #0066AA (medium blue)
    - Company/Institution names: #3388CC (lighter blue)
 5. MANDATORY: Each bullet point in Experience, Education, and Projects MUST be:
-   - MINIMUM: 2 lines (never less)
-   - MAXIMUM: 5 lines (never more)
-   - IDEAL: 3 lines (aim for this when possible)
-   - DO NOT write single-line bullet points
+   - MINIMUM: 2 lines (NEVER less - expand short descriptions with details, technologies, impact)
+   - MAXIMUM: 5 lines (NEVER more - condense if too long)
+   - IDEAL: 3 lines (AIM for 3 lines when possible for optimal readability)
+   - DO NOT write single-line bullet points - they must be at least 2 lines
    - DO NOT write bullet points longer than 5 lines
-6. DO NOT use black headings - EVERY heading and subheading must be blue
+   - Expand brief descriptions: Add relevant details, technologies used, impact, and outcomes
+   - Add context: Include information about scale, technologies, methodologies, and results
+   - Use action verbs: Start each bullet with strong action verbs (Developed, Implemented, Designed, Led, etc.)
+   - Quantify achievements: Add numbers, percentages, metrics, or scale when possible
+6. CONTENT ENHANCEMENT (MANDATORY):
+   - Add more descriptive content: Expand on user-provided information with professional details
+   - Include technical specifics: Mention specific technologies, frameworks, tools, and methodologies used
+   - Add impact and results: Describe the impact, outcomes, and value delivered
+   - Include scope and scale: Mention team size, project scale, user base, or data volume when relevant
+   - Professional language: Use professional, industry-standard terminology
+   - Make it compelling: Write descriptions that showcase skills, achievements, and value
+7. DO NOT use black headings - EVERY heading and subheading must be blue
 7. Use embedded <style> tag with all CSS (no external files)
 8. Use CSS Grid or Flexbox for two-column layout
 9. Keep the HTML code SIMPLE and CLEAN

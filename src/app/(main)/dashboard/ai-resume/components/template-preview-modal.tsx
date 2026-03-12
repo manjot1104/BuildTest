@@ -59,8 +59,7 @@ function generateSampleLatex(template: ResumeTemplate): string {
 % Two-column professional layout
 \\begin{minipage}[t]{0.35\\textwidth}
 {\\Huge\\textbf{\\textcolor{blue!90!black}{${SAMPLE_RESUME_DATA.fullName}}}}\\\\
-\\textcolor{blue!70!black}{${SAMPLE_RESUME_DATA.email}}\\\\
-\\textcolor{blue!70!black}{${SAMPLE_RESUME_DATA.phone}}
+\\textcolor{blue!70!black}{${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}}
 
 \\vspace{0.5cm}
 \\section*{\\textcolor{blue!75!black}{\\large Skills}}
@@ -258,35 +257,59 @@ ${SAMPLE_RESUME_DATA.skills}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{multicol}
+\\usepackage{tikz}
+
+\\definecolor{terminalgreen}{RGB}{0, 255, 0}
+\\definecolor{terminalbg}{RGB}{26, 26, 26}
+
+\\pagecolor{terminalbg}
+\\color{terminalgreen}
 
 \\begin{document}
+\\vspace*{-0.5cm}
 
-{\\Huge\\textbf{\\textcolor{blue!90!black}{${SAMPLE_RESUME_DATA.fullName}}}}\\\\
-\\textcolor{blue!70!black}{${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | github.com/johndoe}
+\\begin{minipage}[t]{0.6\\textwidth}
+{\\Huge\\textbf{\\textcolor{terminalgreen}{${SAMPLE_RESUME_DATA.fullName}}}}
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.35\\textwidth}
+\\raggedleft
+\\textcolor{terminalgreen!70!black}{${SAMPLE_RESUME_DATA.email} - ${SAMPLE_RESUME_DATA.phone}}
+\\end{minipage}
+
+\\textcolor{terminalgreen!70!black}{github.com/johndoe}
 
 \\vspace{0.3cm}
-\\hrule
+\\textcolor{terminalgreen}{\\rule{\\textwidth}{0.5pt}}
 \\vspace{0.3cm}
 
-\\section*{\\textcolor{blue!75!black}{\\large Technical Skills}}
+\\section*{\\textcolor{terminalgreen}{\\large Technical Skills}}
+\\textcolor{terminalgreen}{\\rule{\\textwidth}{0.5pt}}
+\\vspace{0.2cm}
 \\begin{multicols}{3}
 \\begin{itemize}[leftmargin=*]
 ${SAMPLE_RESUME_DATA.skills.split(', ').map(s => `  \\item ${s}`).join('\n')}
 \\end{itemize}
 \\end{multicols}
 
-\\section*{\\textcolor{blue!75!black}{\\large Professional Experience}}
-\\textbf{\\textcolor{blue!60!black}{Senior Software Engineer}} \\hfill \\textit{2021 - Present}\\\\
-\\textit{\\textcolor{blue!50!black}{Tech Corp}}
+\\vspace{0.3cm}
+\\section*{\\textcolor{terminalgreen}{\\large Professional Experience}}
+\\textcolor{terminalgreen}{\\rule{\\textwidth}{0.5pt}}
+\\vspace{0.2cm}
+\\textbf{\\textcolor{terminalgreen!80!black}{Senior Software Engineer}} \\hfill \\textit{\\textcolor{terminalgreen!60!black}{2021 - Present}}\\\\
+\\textit{\\textcolor{terminalgreen!70!black}{Tech Corp}}
 \\begin{itemize}[leftmargin=*]
 \\item Led development of microservices architecture serving 2M+ users
 \\item Improved application performance by 40% through optimization
 \\item Technologies: React, Node.js, PostgreSQL, AWS, Docker
 \\end{itemize}
 
-\\section*{\\textcolor{blue!75!black}{\\large Projects}}
-\\textbf{\\textcolor{blue!60!black}{E-Commerce Platform | 2023}}\\\\
-\\textit{github.com/johndoe/ecommerce}
+\\vspace{0.3cm}
+\\section*{\\textcolor{terminalgreen}{\\large Projects}}
+\\textcolor{terminalgreen}{\\rule{\\textwidth}{0.5pt}}
+\\vspace{0.2cm}
+\\textbf{\\textcolor{terminalgreen!80!black}{E-Commerce Platform | 2023}}\\\\
+\\textit{\\textcolor{terminalgreen!70!black}{github.com/johndoe/ecommerce}}
 \\begin{itemize}[leftmargin=*]
 \\item Full-stack application with React frontend and Node.js backend
 \\item Integrated payment gateway and inventory management
@@ -304,65 +327,91 @@ ${SAMPLE_RESUME_DATA.skills.split(', ').map(s => `  \\item ${s}`).join('\n')}
 \\definecolor{design}{RGB}{147, 51, 234}
 
 \\begin{document}
+\\vspace*{-0.5cm}
 
-\\begin{center}
-{\\Huge\\textbf{\\textcolor{design}{${SAMPLE_RESUME_DATA.fullName}}}}\\\\
-\\vspace{0.2cm}
-\\textcolor{design!70!black}{${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}}\\\\
-\\textcolor{design!60!black}{portfolio.com/johndoe | behance.net/johndoe}
-\\end{center}
+\\begin{minipage}[t]{0.6\\textwidth}
+{\\Huge\\textbf{\\textcolor{design}{${SAMPLE_RESUME_DATA.fullName}}}}
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.35\\textwidth}
+\\raggedleft
+\\textcolor{black}{${SAMPLE_RESUME_DATA.email} — ${SAMPLE_RESUME_DATA.phone}}
+\\end{minipage}
 
-\\vspace{0.4cm}
+\\vspace{0.3cm}
 \\hrule
 \\vspace{0.4cm}
 
 \\section*{\\textcolor{design}{\\Large Portfolio Highlights}}
-\\textbf{\\textcolor{design!80!black}{E-Commerce Platform Design | 2023}}\\\\
-Creative direction and UI/UX design for modern e-commerce platform
+\\begin{minipage}[t]{0.95\\textwidth}
+\\textbf{\\textcolor{design!80!black}{E-Commerce Platform Design — Creative direction and UI/UX design}}\\\\
+\\textcolor{black}{React, TypeScript, Node.js — 2023}
 \\begin{itemize}[leftmargin=*]
-\\item Designed intuitive user interface with focus on conversion optimization
-\\item Created comprehensive design system and component library
+\\item Designed intuitive user interface with focus on conversion optimization and user experience
+\\item Created comprehensive design system and component library for consistent branding
 \\end{itemize}
+\\vspace{0.3cm}
+\\end{minipage}
 
 \\section*{\\textcolor{design}{\\Large Design Skills}}
-${SAMPLE_RESUME_DATA.skills}
+\\textcolor{black}{${SAMPLE_RESUME_DATA.skills}}
 
 \\section*{\\textcolor{design}{\\Large Experience}}
-\\textbf{\\textcolor{design!80!black}{Senior Software Engineer}} \\hfill \\textit{2021 - Present}\\\\
-Tech Corp - Leading design and development initiatives
+\\textbf{\\textcolor{design!80!black}{Senior Software Engineer}}\\\\
+\\textcolor{black}{Tech Corp} \\hfill \\textcolor{black}{2021 - Present}
+\\begin{itemize}[leftmargin=*]
+\\item Leading design and development initiatives with focus on user experience
+\\end{itemize}
 
 \\end{document}`
 
     case 'minimal-clean':
       return `\\documentclass{article}
-\\usepackage[margin=1.2in]{geometry}
+\\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
+\\usepackage{multicol}
 
 \\begin{document}
+\\vspace*{-0.5cm}
 
 \\begin{center}
 {\\Large\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\
-\\vspace{0.1cm}
-${SAMPLE_RESUME_DATA.email} \\quad | \\quad ${SAMPLE_RESUME_DATA.phone}
+${SAMPLE_RESUME_DATA.email} — ${SAMPLE_RESUME_DATA.phone}
 \\end{center}
 
-\\vspace{0.5cm}
+\\vspace{0.4cm}
 
-\\textbf{Skills}\\\\
+\\begin{multicols}{2}
+
+\\textbf{SKILLS}\\\\
 ${SAMPLE_RESUME_DATA.skills}
 
-\\vspace{0.4cm}
+\\vspace{0.15cm}
 
-\\textbf{Experience}\\\\
-\\textbf{Senior Software Engineer} \\hfill 2021 - Present\\\\
-Tech Corp\\\\
-Led development of microservices architecture serving 2M+ users. Improved application performance by 40%.
+\\textbf{EDUCATION}\\\\
+\\textbf{Bachelor of Science in Computer Science — University of Technology — 2015 - 2019}\\\\
+Graduated Magna Cum Laude • Relevant coursework: Data Structures, Algorithms, Database Systems
 
-\\vspace{0.4cm}
+\\columnbreak
 
-\\textbf{Education}\\\\
-${SAMPLE_RESUME_DATA.education.split('\\n')[0]}\\\\
-${SAMPLE_RESUME_DATA.education.split('\\n')[1]}
+\\textbf{EXPERIENCE}\\\\
+\\textbf{Senior Software Engineer}\\\\
+Tech Corp — 2021 - Present\\\\
+\\begin{itemize}[leftmargin=*]
+\\item Led development of microservices architecture serving 2M+ users
+\\item Improved application performance by 40% through optimization
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{PROJECTS}\\\\
+\\textbf{E-Commerce Platform — React, Node.js — 2023}\\\\
+\\begin{itemize}[leftmargin=*]
+\\item Full-stack application with React frontend and Node.js backend
+\\item Implemented secure payment processing and user authentication
+\\end{itemize}
+
+\\end{multicols}
 
 \\end{document}`
 
@@ -438,7 +487,7 @@ function generateSampleHtml(template: ResumeTemplate): string {
   <div class="resume">
     <div class="left-column">
       <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
-      <div class="contact">${SAMPLE_RESUME_DATA.email}<br>${SAMPLE_RESUME_DATA.phone}</div>
+      <div class="contact">${SAMPLE_RESUME_DATA.email} ${SAMPLE_RESUME_DATA.phone}</div>
       <h2>Skills</h2>
       <ul>
         ${SAMPLE_RESUME_DATA.skills.split(', ').slice(0, 5).map(s => `<li>${s}</li>`).join('')}
@@ -676,9 +725,12 @@ function generateSampleHtml(template: ResumeTemplate): string {
 </head>
 <body>
   <div class="resume">
-    <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
-    <div class="contact">${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}</div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+      <h1 style="margin: 0;">${SAMPLE_RESUME_DATA.fullName}</h1>
+      <div class="contact" style="text-align: right; margin-top: 5px;">${SAMPLE_RESUME_DATA.email} - ${SAMPLE_RESUME_DATA.phone}</div>
+    </div>
     <div class="github">github.com/johndoe</div>
+    <hr style="border: none; border-top: 1px solid #00ff00; margin: 20px 0;">
     <h2>Technical Skills</h2>
     <div class="skills-grid">
       ${SAMPLE_RESUME_DATA.skills.split(', ').map(s => `<div class="skill">${s}</div>`).join('')}
@@ -712,37 +764,53 @@ function generateSampleHtml(template: ResumeTemplate): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Arial', sans-serif; line-height: 1.6; color: #1a1a1a; background: #faf5ff; padding: 20px; }
     .resume { max-width: 800px; margin: 0 auto; background: white; padding: 40px; box-shadow: 0 4px 20px rgba(147, 51, 234, 0.2); }
-    h1 { color: #9333ea; font-size: 36px; margin-bottom: 10px; text-align: center; }
-    .contact { text-align: center; color: #a855f7; margin-bottom: 30px; }
-    .portfolio { text-align: center; color: #c084fc; margin-bottom: 25px; }
-    h2 { color: #9333ea; font-size: 22px; margin-top: 30px; margin-bottom: 15px; }
-    .portfolio-item { background: #faf5ff; padding: 20px; margin: 15px 0; border-left: 4px solid #9333ea; }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    h1 { color: #9333ea; font-size: 36px; margin: 0; font-weight: bold; }
+    .contact-info { text-align: right; color: #000; font-size: 14px; margin-top: 5px; }
+    .contact-line { margin-bottom: 5px; }
+    hr { border: none; border-top: 1px solid #000; margin: 20px 0; }
+    h2 { color: #9333ea; font-size: 22px; margin-top: 30px; margin-bottom: 15px; font-weight: bold; }
+    .portfolio-section { margin-left: 0; }
+    .portfolio-item { margin-bottom: 20px; }
+    .project-title { font-weight: bold; color: #9333ea; margin-bottom: 8px; }
+    .project-description { color: #000; margin-bottom: 10px; }
+    ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
+    li { color: #000; margin-bottom: 8px; }
     .job-title { font-weight: bold; color: #9333ea; margin-top: 20px; }
-    .company { color: #a855f7; font-style: italic; }
-    ul { margin-left: 20px; margin-top: 10px; }
-    li { margin-bottom: 8px; }
+    .company { color: #000; font-style: italic; margin-bottom: 10px; }
   </style>
 </head>
 <body>
   <div class="resume">
-    <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
-    <div class="contact">${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}</div>
-    <div class="portfolio">portfolio.com/johndoe | behance.net/johndoe</div>
+    <div class="header-row">
+      <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
+      <div class="contact-info">
+        <div class="contact-line">${SAMPLE_RESUME_DATA.email} — ${SAMPLE_RESUME_DATA.phone}</div>
+      </div>
+    </div>
+    <hr>
     <h2>Portfolio Highlights</h2>
-    <div class="portfolio-item">
-      <div class="job-title">E-Commerce Platform Design | 2023</div>
-      <p>Creative direction and UI/UX design for modern e-commerce platform</p>
-      <ul>
-        <li>Designed intuitive user interface with focus on conversion optimization</li>
-        <li>Created comprehensive design system and component library</li>
-      </ul>
+    <div class="portfolio-section">
+      <div class="portfolio-item">
+        <div class="project-title">E-Commerce Platform Design — Creative direction and UI/UX design</div>
+        <div class="project-description">React, TypeScript, Node.js — 2023</div>
+        <ul>
+          <li>Designed intuitive user interface with focus on conversion optimization and user experience</li>
+          <li>Created comprehensive design system and component library for consistent branding</li>
+        </ul>
+      </div>
     </div>
     <h2>Design Skills</h2>
     <p>${SAMPLE_RESUME_DATA.skills}</p>
     <h2>Experience</h2>
     <div class="job-title">Senior Software Engineer</div>
-    <div class="company">Tech Corp | 2021 - Present</div>
-    <p>Leading design and development initiatives</p>
+    <div style="display: flex; justify-content: space-between; color: #000; margin-bottom: 10px;">
+      <span>Tech Corp</span>
+      <span>2021 - Present</span>
+    </div>
+    <ul>
+      <li>Leading design and development initiatives with focus on user experience</li>
+    </ul>
   </div>
 </body>
 </html>`
@@ -756,38 +824,50 @@ function generateSampleHtml(template: ResumeTemplate): string {
   <title>Resume Preview - ${template.name}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 2; color: #1a1a1a; background: #ffffff; padding: 80px 40px; }
-    .resume { max-width: 600px; margin: 0 auto; }
-    h1 { font-size: 24px; text-align: center; margin-bottom: 10px; font-weight: 400; letter-spacing: 1px; }
-    .contact { text-align: center; color: #666; margin-bottom: 60px; font-size: 13px; }
-    .section { margin-bottom: 40px; }
-    .section-title { font-size: 14px; font-weight: 600; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
-    .content { font-size: 14px; line-height: 1.8; }
-    .job-title { font-weight: 600; }
-    .company { color: #666; font-size: 13px; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #000; background: #ffffff; }
+    .resume { max-width: 900px; margin: 0 auto; padding: 40px; }
+    .contact { text-align: center; color: #000; margin-bottom: 20px; font-size: 14px; }
+    .two-column { display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; margin-bottom: 30px; }
+    .left-column { }
+    .right-column { }
+    h2 { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; color: #000; letter-spacing: 1px; }
+    .skills-content { color: #000; font-size: 14px; line-height: 1.6; }
+    .education-content { color: #000; font-size: 14px; line-height: 1.6; }
+    .education-degree { font-weight: bold; color: #000; margin-bottom: 5px; }
+    .education-details { color: #000; font-size: 14px; }
+    .experience-section { margin-top: 20px; }
+    .job-title { font-weight: bold; color: #000; margin-bottom: 5px; }
+    .company { color: #000; margin-bottom: 10px; }
+    ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
+    li { color: #000; margin-bottom: 8px; font-size: 14px; line-height: 1.6; }
   </style>
 </head>
 <body>
   <div class="resume">
-    <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
-    <div class="contact">${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}</div>
-    <div class="section">
-      <div class="section-title">Skills</div>
-      <div class="content">${SAMPLE_RESUME_DATA.skills}</div>
+    <div class="contact">
+      <div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">${SAMPLE_RESUME_DATA.fullName}</div>
+      <div>${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}</div>
     </div>
-    <div class="section">
-      <div class="section-title">Experience</div>
-      <div class="content">
-        <div class="job-title">Senior Software Engineer</div>
-        <div class="company">Tech Corp | 2021 - Present</div>
-        <p style="margin-top: 10px;">Led development of microservices architecture serving 2M+ users. Improved application performance by 40%.</p>
+    <div class="two-column">
+      <div class="left-column">
+        <h2>Skills</h2>
+        <div class="skills-content">${SAMPLE_RESUME_DATA.skills}</div>
+        <h2 style="margin-top: 15px;">Education</h2>
+        <div class="education-content">
+          <div class="education-degree">Bachelor of Science in Computer Science | University of Technology | 2015 - 2019</div>
+          <div class="education-details">Graduated Magna Cum Laude • Relevant coursework: Data Structures, Algorithms, Database Systems</div>
+        </div>
       </div>
-    </div>
-    <div class="section">
-      <div class="section-title">Education</div>
-      <div class="content">
-        <div class="job-title">${SAMPLE_RESUME_DATA.education.split('\\n')[0]}</div>
-        <div class="company">${SAMPLE_RESUME_DATA.education.split('\\n')[1]}</div>
+      <div class="right-column">
+        <h2>Experience</h2>
+        <div class="experience-section">
+          <div class="job-title">Senior Software Engineer</div>
+          <div class="company">Tech Corp | 2021 - Present</div>
+          <ul>
+            <li>Led development of microservices architecture serving 2M+ users</li>
+            <li>Improved application performance by 40% through optimization</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
@@ -821,7 +901,7 @@ function generateSampleHtml(template: ResumeTemplate): string {
   <div class="resume">
     <div class="left-column">
       <h1>${SAMPLE_RESUME_DATA.fullName}</h1>
-      <div class="contact">${SAMPLE_RESUME_DATA.email}<br>${SAMPLE_RESUME_DATA.phone}</div>
+      <div class="contact">${SAMPLE_RESUME_DATA.email} ${SAMPLE_RESUME_DATA.phone}</div>
       <h2>Skills</h2>
       <ul>
         ${SAMPLE_RESUME_DATA.skills.split(', ').map(s => `<li>${s}</li>`).join('')}

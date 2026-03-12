@@ -36,27 +36,28 @@ MANDATORY STRUCTURE (LaTeX):
 \\usepackage{xcolor}
 
 \\begin{document}
-\\vspace*{-0.5cm}
+\\vspace*{-1cm}
+\\setlength{\\parskip}{0pt}
+\\setlength{\\itemsep}{0pt}
 
 \\begin{minipage}[t]{0.35\\textwidth}
 {\\Huge\\textbf{\\textcolor{blue!90!black}{NAME}}}
-\\textcolor{blue!70!black}{email}
-\\textcolor{blue!70!black}{phone}
-\\vspace{0.5cm}
+\\textcolor{blue!70!black}{email | phone}
+\\vspace{0.4cm}
 \\section*{\\textcolor{blue!75!black}{\\large Skills}}
 \\textcolor{blue!75!black}{\\rule{0.9\\textwidth}{0.5pt}}
-\\vspace{0.2cm}
-\\begin{itemize}[leftmargin=*]
+\\vspace{0.15cm}
+\\begin{itemize}[leftmargin=*,itemsep=0.03cm,topsep=0.05cm]
 \\item React
 \\item TypeScript
 \\item Node.js
 \\item PostgreSQL
 \\item AWS
 \\end{itemize}
-\\vspace{0.3cm}
+\\vspace{0.25cm}
 \\section*{\\textcolor{blue!75!black}{\\large Education}}
 \\textcolor{blue!75!black}{\\rule{0.9\\textwidth}{0.5pt}}
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 \\textbf{\\textcolor{blue!60!black}{Bachelor of Science in Computer Science}}
 \\textit{\\textcolor{blue!50!black}{University of Technology | 2015 - 2019}}
 \\end{minipage}
@@ -64,32 +65,34 @@ MANDATORY STRUCTURE (LaTeX):
 \\begin{minipage}[t]{0.62\\textwidth}
 \\section*{\\textcolor{blue!75!black}{\\large Experience}}
 \\textcolor{blue!75!black}{\\rule{0.95\\textwidth}{0.5pt}}
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 \\textbf{\\textcolor{blue!60!black}{Senior Software Engineer}}
 \\textit{\\textcolor{blue!50!black}{Tech Corp | 2021 - Present}}
-\\begin{itemize}[leftmargin=*]
+\\begin{itemize}[leftmargin=*,itemsep=0.08cm,topsep=0.08cm]
 \\item Led development of microservices architecture serving 2M+ users
 \\item Improved application performance by 40% through optimization
 \\end{itemize}
-\\vspace{0.3cm}
+\\vspace{0.25cm}
 \\section*{\\textcolor{blue!75!black}{\\large Projects}}
 \\textcolor{blue!75!black}{\\rule{0.95\\textwidth}{0.5pt}}
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 \\textbf{\\textcolor{blue!60!black}{E-Commerce Platform | 2023}}
-\\begin{itemize}[leftmargin=*]
+\\begin{itemize}[leftmargin=*,itemsep=0.08cm,topsep=0.08cm]
 \\item Full-stack application with React frontend and Node.js backend
 \\end{itemize}
 \\end{minipage}
 
 \\end{document}
 
-CRITICAL SKILLS FORMAT RULES:
+CRITICAL FORMATTING RULES:
+- Contact info MUST be on ONE line: "email | phone" (use pipe separator |)
 - Skills MUST be simple bullet points: \\item SkillName
 - DO NOT add categories like "Programming:", "Frontend Development:", etc.
 - DO NOT group skills by category
 - DO NOT use bold text for skill categories
 - Just list skills as simple items: \\item React, \\item TypeScript, etc.
 - Maximum 5-7 skills in the list
+- Optimize spacing to prevent blank first page (use \\vspace*{-1cm} and tight itemsep)
 
 MANDATORY STRUCTURE (HTML):
 <!DOCTYPE html>
@@ -98,17 +101,20 @@ MANDATORY STRUCTURE (HTML):
 <meta charset="UTF-8">
 <style>
 body { margin: 0; padding: 0; }
-.resume { display: flex; gap: 30px; max-width: 900px; margin: 0 auto; padding: 20px; }
+.resume { display: flex; gap: 30px; max-width: 900px; margin: 0 auto; padding: 15px; }
 .left-column { width: 35%; border-right: 2px solid #3b82f6; padding-right: 20px; }
 .right-column { width: 65%; }
-h1 { color: #1e40af; font-size: 28px; margin-bottom: 10px; margin-top: 0; }
-.contact { color: #3b82f6; font-size: 14px; margin-bottom: 25px; }
-h2 { color: #1e40af; font-size: 18px; margin-top: 20px; margin-bottom: 10px; border-bottom: 2px solid #3b82f6; padding-bottom: 5px; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
-.section-content { margin-top: 10px; margin-bottom: 20px; }
+h1 { color: #1e40af; font-size: 28px; margin-bottom: 8px; margin-top: 0; }
+.contact { color: #3b82f6; font-size: 14px; margin-bottom: 20px; line-height: 1.4; }
+h2 { color: #1e40af; font-size: 18px; margin-top: 15px; margin-bottom: 8px; border-bottom: 2px solid #3b82f6; padding-bottom: 4px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.5; }
+li { margin-bottom: 4px; }
+.section-content { margin-top: 8px; margin-bottom: 15px; line-height: 1.5; }
 @media print {
   body { margin: 0; padding: 0; }
-  .resume { padding: 10px; }
+  .resume { padding: 8px; }
+  h2 { margin-top: 12px; margin-bottom: 6px; }
+  ul { margin-top: 6px; margin-bottom: 12px; }
 }
 </style>
 </head>
@@ -116,7 +122,7 @@ ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
 <div class="resume">
   <div class="left-column">
     <h1>NAME</h1>
-    <div class="contact">email<br>phone</div>
+    <div class="contact">email | phone</div>
     <h2>Skills</h2>
     <ul>
       <li>React</li>
@@ -145,13 +151,15 @@ ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
 </body>
 </html>
 
-CRITICAL SKILLS FORMAT RULES:
+CRITICAL FORMATTING RULES:
+- Contact info MUST be on ONE line: "email | phone" (use pipe separator |)
 - Skills MUST be simple bullet points: <li>SkillName</li>
 - DO NOT add categories like "Programming:", "Frontend Development:", etc.
 - DO NOT group skills by category
 - DO NOT use bold text for skill categories
 - Just list skills as simple items: <li>React</li>, <li>TypeScript</li>, etc.
 - Maximum 5-7 skills in the list
+- Optimize spacing to prevent blank pages and content overflow
 
 CRITICAL: Use EXACTLY this two-column structure with left sidebar (35%) and right content column (65%). DO NOT use multicol - use minipage for LaTeX.`,
   },
@@ -525,8 +533,15 @@ MANDATORY STRUCTURE (LaTeX):
 \\begin{document}
 \\vspace*{-0.5cm}
 
+\\begin{minipage}[t]{0.6\\textwidth}
 {\\Huge\\textbf{\\textcolor{terminalgreen}{NAME}}}
-\\textcolor{terminalgreen!70!black}{email | phone}\\\\
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.35\\textwidth}
+\\raggedleft
+\\textcolor{terminalgreen!70!black}{email - phone}
+\\end{minipage}
+
 \\textcolor{terminalgreen!70!black}{github.com/username}
 
 \\vspace{0.3cm}
@@ -601,8 +616,10 @@ li { color: #00ff00; margin-bottom: 5px; }
 </head>
 <body>
 <div class="resume">
-  <h1>NAME</h1>
-  <div class="contact">email | phone</div>
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+    <h1 style="margin: 0;">NAME</h1>
+    <div class="contact" style="text-align: right; margin-top: 5px;">email - phone</div>
+  </div>
   <div class="github">github.com/username</div>
   <hr>
   <h2>Technical Skills</h2>
@@ -662,35 +679,46 @@ MANDATORY STRUCTURE (LaTeX):
 \\usepackage[margin=0.6in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
+\\usepackage{tikz}
 
 \\definecolor{design}{RGB}{147, 51, 234}
 
 \\begin{document}
+\\vspace*{-0.5cm}
 
-\\begin{center}
+\\begin{minipage}[t]{0.6\\textwidth}
 {\\Huge\\textbf{\\textcolor{design}{NAME}}}
-\\vspace{0.2cm}
-\\textcolor{design!70!black}{email | phone}
-\\textcolor{design!60!black}{portfolio.com | behance.net/username}
-\\end{center}
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.35\\textwidth}
+\\raggedleft
+\\textcolor{black}{email — phone}
+\\end{minipage}
 
-\\vspace{0.4cm}
+\\vspace{0.3cm}
 \\hrule
 \\vspace{0.4cm}
 
 \\section*{\\textcolor{design}{\\Large Portfolio Highlights}}
-\\textbf{\\textcolor{design!80!black}{Project Name | Year}}
-Description with design focus
+\\begin{minipage}[t]{0.95\\textwidth}
+\\textbf{\\textcolor{design!80!black}{Project Name — Description}}\\\\
+\\textcolor{black}{Technologies — Year}
 \\begin{itemize}[leftmargin=*]
-\\item Design achievement
+\\item Design achievement with detailed description spanning multiple lines
+\\item Another design achievement with detailed description spanning multiple lines
 \\end{itemize}
+\\vspace{0.3cm}
+\\end{minipage}
 
 \\section*{\\textcolor{design}{\\Large Design Skills}}
-Skills list
+\\textcolor{black}{Skill1, Skill2, Skill3, Skill4, Skill5}
 
 \\section*{\\textcolor{design}{\\Large Experience}}
-\\textbf{\\textcolor{design!80!black}{Job Title}} \\hfill \\textit{Dates}
-Company - Leading design and development initiatives
+\\textbf{\\textcolor{design!80!black}{Job Title}}\\\\
+\\textcolor{black}{Company or Field} \\hfill \\textcolor{black}{Location — Dates}
+\\begin{itemize}[leftmargin=*]
+\\item Leading design and development initiatives with detailed description
+\\end{itemize}
 
 \\end{document}
 
@@ -700,38 +728,73 @@ MANDATORY STRUCTURE (HTML):
 <head>
 <meta charset="UTF-8">
 <style>
+body { margin: 0; padding: 0; }
 .resume { background: white; padding: 40px; max-width: 800px; margin: 0 auto; box-shadow: 0 4px 20px rgba(147, 51, 234, 0.2); }
-h1 { color: #9333ea; font-size: 36px; text-align: center; margin-bottom: 10px; }
-.contact { text-align: center; color: #a855f7; margin-bottom: 30px; }
-.portfolio { text-align: center; color: #c084fc; margin-bottom: 25px; }
-h2 { color: #9333ea; font-size: 22px; margin-top: 30px; margin-bottom: 15px; }
-.portfolio-item { background: #faf5ff; padding: 20px; margin: 15px 0; border-left: 4px solid #9333ea; }
+.header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+h1 { color: #9333ea; font-size: 36px; margin: 0; font-weight: bold; }
+.contact-info { text-align: right; color: #000; font-size: 14px; margin-top: 5px; }
+.contact-line { margin-bottom: 5px; }
+hr { border: none; border-top: 1px solid #000; margin: 20px 0; }
+h2 { color: #9333ea; font-size: 22px; margin-top: 30px; margin-bottom: 15px; font-weight: bold; }
+.portfolio-section { margin-left: 0; }
+.portfolio-item { margin-bottom: 20px; }
+.project-title { font-weight: bold; color: #9333ea; margin-bottom: 8px; }
+.project-description { color: #000; margin-bottom: 10px; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
+li { color: #000; margin-bottom: 8px; }
 .job-title { font-weight: bold; color: #9333ea; margin-top: 20px; }
-.company { color: #a855f7; font-style: italic; }
+.company { color: #000; font-style: italic; margin-bottom: 10px; }
+@media print {
+  body { margin: 0; padding: 0; }
+  .resume { padding: 20px; }
+}
 </style>
 </head>
 <body>
 <div class="resume">
-  <h1>NAME</h1>
-  <div class="contact">email | phone</div>
-  <div class="portfolio">portfolio.com | behance.net/username</div>
+  <div class="header-row">
+    <h1>NAME</h1>
+    <div class="contact-info">
+      <div class="contact-line">email — phone</div>
+    </div>
+  </div>
+  <hr>
   <h2>Portfolio Highlights</h2>
-  <div class="portfolio-item">
-    <div class="job-title">Project Name | Year</div>
-    <p>Description with design focus</p>
-    <ul><li>Design achievement</li></ul>
+  <div class="portfolio-section">
+    <div class="portfolio-item">
+      <div class="project-title">Project Name — Description</div>
+      <div class="project-description">Technologies — Year</div>
+      <ul>
+        <li>Design achievement with detailed description spanning multiple lines</li>
+        <li>Another design achievement with detailed description spanning multiple lines</li>
+      </ul>
+    </div>
   </div>
   <h2>Design Skills</h2>
-  <p>Skills list</p>
+  <p>Skill1, Skill2, Skill3, Skill4, Skill5</p>
   <h2>Experience</h2>
   <div class="job-title">Job Title</div>
-  <div class="company">Company | Dates</div>
-  <p>Leading design and development initiatives</p>
+  <div style="display: flex; justify-content: space-between; color: #000; margin-bottom: 10px;">
+    <span>Company or Field</span>
+    <span>Location — Dates</span>
+  </div>
+  <ul>
+    <li>Leading design and development initiatives with detailed description</li>
+  </ul>
 </div>
 </body>
 </html>
 
-CRITICAL: Portfolio Highlights section MUST be prominent with colored background boxes. Use purple/violet color scheme (#9333ea). Emphasize design work.`,
+CRITICAL FORMATTING RULES:
+- Header: Name on LEFT, email-phone on RIGHT (same line, use em dash —), portfolio/behance links on second line (RIGHT) ONLY if provided by user
+- Portfolio/Behance links: ONLY include if user provided them in their data. If user did NOT provide portfolio.com or behance.net links, DO NOT add them. Skip the second contact line entirely if no portfolio/behance links are provided.
+- Portfolio Highlights section: NO vertical bar or border - clean layout without decorative elements
+- Project format: "Project Name — Description" on first line (bold, purple), then "Technologies — Year" on second line (regular, black), then bullet points below
+- Design Skills section: MUST be simple comma-separated list (Skill1, Skill2, Skill3). DO NOT add categories like "Frontend Development:", "Backend Development:", etc. DO NOT use bold for categories. Just list all skills as comma-separated text.
+- Experience section: Job Title (bold, purple), then Company/Location — Dates on same line (regular, black, right-aligned)
+- Use purple/violet color scheme (#9333ea) for headings and accents
+- Portfolio section should have left border/bar in purple color
+- Emphasize design work and creative projects`,
   },
 
   // ── 8. Minimal Clean ────────────────────────────────────────────────────
@@ -747,34 +810,51 @@ CRITICAL: Portfolio Highlights section MUST be prominent with colored background
 
 MANDATORY STRUCTURE (LaTeX):
 \\documentclass{article}
-\\usepackage[margin=1.2in]{geometry}
+\\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
+\\usepackage{multicol}
 
 \\begin{document}
+\\vspace*{-0.5cm}
 
 \\begin{center}
-{\\Large\\textbf{NAME}}
-\\vspace{0.1cm}
-email \\quad | \\quad phone
+{\\Large\\textbf{NAME}}\\\\
+email — phone
 \\end{center}
 
-\\vspace{0.5cm}
-
-\\textbf{Skills}
-Content here
-
 \\vspace{0.4cm}
 
-\\textbf{Experience}
-\\textbf{Job Title} \\hfill Dates
-Company
-Description text here
+\\begin{multicols}{2}
 
-\\vspace{0.4cm}
+\\textbf{SKILLS}\\\\
+Skills list (comma-separated, no bullets)
 
-\\textbf{Education}
-Degree
-Institution
+\\vspace{0.15cm}
+
+\\textbf{EDUCATION}\\\\
+\\textbf{Degree — Institution — Dates}\\\\
+Additional details
+
+\\columnbreak
+
+\\textbf{EXPERIENCE}\\\\
+\\textbf{Job Title}\\\\
+Company — Location — Dates\\\\
+\\begin{itemize}[leftmargin=*]
+\\item Description with detailed information spanning multiple lines
+\\item Another achievement with detailed description spanning multiple lines
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{PROJECTS}\\\\
+\\textbf{Project Name — Technologies — Year}\\\\
+\\begin{itemize}[leftmargin=*]
+\\item Project description with detailed information spanning multiple lines
+\\item Another project achievement with detailed description spanning multiple lines
+\\end{itemize}
+
+\\end{multicols}
 
 \\end{document}
 
@@ -784,43 +864,88 @@ MANDATORY STRUCTURE (HTML):
 <head>
 <meta charset="UTF-8">
 <style>
-.resume { max-width: 600px; margin: 0 auto; padding: 80px 40px; }
-h1 { font-size: 24px; text-align: center; font-weight: 400; letter-spacing: 1px; margin-bottom: 10px; }
-.contact { text-align: center; color: #666; margin-bottom: 60px; font-size: 13px; }
-.section { margin-bottom: 40px; }
-.section-title { font-size: 14px; font-weight: 600; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 2px; }
-.content { font-size: 14px; line-height: 1.8; }
-.job-title { font-weight: 600; }
-.company { color: #666; font-size: 13px; }
+body { margin: 0; padding: 0; }
+.resume { max-width: 900px; margin: 0 auto; padding: 40px; }
+.contact { text-align: center; color: #000; margin-bottom: 20px; font-size: 14px; }
+.two-column { display: grid; grid-template-columns: 1fr 1.5fr; gap: 40px; margin-bottom: 30px; align-items: start; }
+.left-column { }
+.right-column { }
+h2 { font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 10px; color: #000; letter-spacing: 1px; }
+.skills-content { color: #000; font-size: 14px; line-height: 1.6; }
+.education-content { color: #000; font-size: 14px; line-height: 1.6; }
+.education-degree { font-weight: bold; color: #000; margin-bottom: 5px; }
+.education-details { color: #000; font-size: 14px; }
+.experience-section { margin-top: 20px; }
+.job-title { font-weight: bold; color: #000; margin-bottom: 5px; }
+.company { color: #000; margin-bottom: 10px; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; }
+li { color: #000; margin-bottom: 8px; font-size: 14px; line-height: 1.6; }
+@media print {
+  body { margin: 0; padding: 0; }
+  .resume { padding: 20px; }
+}
 </style>
 </head>
 <body>
 <div class="resume">
-  <h1>NAME</h1>
-  <div class="contact">email | phone</div>
-  <div class="section">
-    <div class="section-title">Skills</div>
-    <div class="content">Content here</div>
+    <div class="contact">
+    <div style="font-size: 20px; font-weight: bold; margin-bottom: 5px;">NAME</div>
+    <div>email — phone</div>
   </div>
-  <div class="section">
-    <div class="section-title">Experience</div>
-    <div class="content">
-      <div class="job-title">Job Title</div>
-      <div class="company">Company | Dates</div>
-      <p style="margin-top: 10px;">Description text here</p>
+  <div class="two-column">
+    <div class="left-column">
+      <h2>Skills</h2>
+      <div class="skills-content">Skills list (comma-separated, no bullets)</div>
+      <h2 style="margin-top: 15px;">Education</h2>
+      <div class="education-content">
+        <div class="education-degree">Degree — Institution — Dates</div>
+        <div class="education-details">Additional details</div>
+      </div>
     </div>
-  </div>
-  <div class="section">
-    <div class="section-title">Education</div>
-    <div class="content">
-      <div class="job-title">Degree</div>
-      <div class="company">Institution</div>
+    <div class="right-column">
+      <h2>Experience</h2>
+      <div class="experience-section">
+        <div class="job-title">Job Title</div>
+        <div class="company">Company — Location — Dates</div>
+        <ul>
+          <li>Description with detailed information spanning multiple lines</li>
+          <li>Another achievement with detailed description spanning multiple lines</li>
+        </ul>
+      </div>
+      <h2 style="margin-top: 30px;">Projects</h2>
+      <div class="experience-section">
+        <div class="job-title">Project Name — Technologies — Year</div>
+        <ul>
+          <li>Project description with detailed information spanning multiple lines</li>
+          <li>Another project achievement with detailed description spanning multiple lines</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
 </body>
 </html>
 
-CRITICAL: Use MAXIMUM whitespace (1.2in margins for LaTeX, 80px padding for HTML). NO colored headings - use plain black text. NO borders, NO dividers, NO hr - just spacing between sections.`,
+CRITICAL FORMATTING RULES:
+- Header MUST be centered at top: Name (large, bold) on first line, then email — phone on second line (use em dash — NOT pipe |)
+- MUST use two-column layout for ALL content: Left column (Skills, Education), Right column (Experience, Projects)
+- For LaTeX: ALL sections (Skills, Education, Experience, Projects) MUST be inside \\begin{multicols}{2}...\\end{multicols} environment
+- Use \\columnbreak to separate left and right columns in LaTeX (place \\columnbreak after Education section, before Experience section)
+- For HTML: Use CSS Grid with grid-template-columns: 1fr 1.5fr for proper two-column layout
+- Left column (40% width): Contains Skills and Education sections
+- Right column (60% width): Contains Experience and Projects sections
+- Columns should be properly balanced and aligned at the top (align-items: start)
+- Ensure proper spacing between columns (gap: 40px for HTML, automatic for LaTeX multicols)
+- Skills MUST be comma-separated text (can wrap across multiple lines), NOT bullet points (e.g., "React, TypeScript, Node.js, PostgreSQL, AWS")
+- Section titles MUST be bold, uppercase: "SKILLS", "EXPERIENCE", "EDUCATION", "PROJECTS"
+- All text MUST be black (#000) - NO colors, NO blue, NO colored headings - everything must be pure black
+- Simple, clean layout with no decorative elements
+- NO borders, dividers, or visual separators
+- Contact format: email — phone (use em dash — NOT pipe |)
+- Education format: "Degree — Institution — Dates" on first line (bold), then additional details on second line (regular text) - use em dash — NOT pipe |
+- Experience format: Job Title (bold) on first line, then "Company — Location — Dates" on second line (regular text), then bullet points below - use em dash — NOT pipe |
+- Projects format: "Project Name — Technologies — Year" on first line (bold), then bullet points below - use em dash — NOT pipe |
+- DO NOT use any colors - everything must be black text only
+- MUST include Projects section if user provided project data`,
   },
 ]
