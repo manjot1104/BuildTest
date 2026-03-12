@@ -52,7 +52,7 @@ type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
 const DEVICE_WIDTHS: Record<PreviewDevice, string> = {
   mobile: '375px',
   tablet: '768px',
-  desktop: '100%',
+  desktop: 'calc(100% - 2rem)',
 }
 
 /* -------------------- BUILDING LOADER -------------------- */
@@ -93,7 +93,7 @@ export function PreviewPanel({
   isBuilding = false,
 }: PreviewPanelProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
+  const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
@@ -103,13 +103,15 @@ export function PreviewPanel({
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
+  // Sync iframeSrc when currentChat.demo changes
   useEffect(() => {
     if (currentChat?.demo) {
       setIframeSrc(currentChat.demo)
     }
   }, [currentChat?.demo])
 
-  const showBuildingLoader = isBuilding && !currentChat?.demo
+  const effectiveSrc = iframeSrc || currentChat?.demo
+  const showBuildingLoader = isBuilding && !effectiveSrc
 
   // keyboard fullscreen toggle (ignore when typing in inputs)
   useEffect(() => {
@@ -240,7 +242,7 @@ export function PreviewPanel({
                     <WebPreviewBody
                       key={iframeSrc}
                       src={iframeSrc}
-                      className="h-full w-full"
+                      className="h-full w-full bg-white"
                       onLoad={() => setIsReloading(false)}
                     />
 

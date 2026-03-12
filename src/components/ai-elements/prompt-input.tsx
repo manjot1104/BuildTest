@@ -331,7 +331,7 @@ export const PromptInputButton = ({
   return (
     <Button
       className={cn(
-        'shrink-0 gap-1.5 rounded-lg',
+        'h-8 w-8 shrink-0 gap-1.5 rounded-lg',
         variant === 'ghost' && 'text-muted-foreground',
         newSize === 'default' && 'px-3',
         className,
@@ -368,7 +368,7 @@ export const PromptInputSubmit = ({
 
   return (
     <Button
-      className={cn('gap-1.5 rounded-lg', className)}
+      className={cn('h-8 w-8 shrink-0 rounded-lg', className)}
       size={size}
       type="submit"
       variant={variant}

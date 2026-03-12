@@ -159,6 +159,7 @@ export default function ChatPage() {
     const handleReset = () => {
         // Reset all chat-related state
         setShowChatInterface(false)
+        
         setMessage('')
         setAttachments([])
         setIsLoading(false)
@@ -183,6 +184,7 @@ export default function ChatPage() {
 
     const handleChatIdChange = (chatId: string | null) => {
         setUrlChatId(chatId)
+
     }
 
     // Auto-focus the textarea on page load and restore from sessionStorage
@@ -485,6 +487,7 @@ if (!chatMode) {
     }
 
     return (
+       <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
        <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
             <SubscriptionModal
                 open={showSubscriptionModal}
@@ -659,6 +662,7 @@ if (!chatMode) {
   </div>
 )}
         </div>
+        </ChatActionsProvider>
     )
 
 }

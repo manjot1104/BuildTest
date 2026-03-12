@@ -343,6 +343,47 @@ const SCRIPT_LANGUAGES = new Set([
 const JSX_LANGUAGES = new Set(["jsx", "tsx"]);
 const SERVER_ONLY_LANGUAGES = new Set(["py", "python", "sh", "bash", "shell"]);
 
+function parseAIResponse(raw: string): {
+  cleanedText: string;
+  files: { filename: string; language: string; code: string }[];
+} {
+  // More lenient regex: case-insensitive FILE tag, optional quotes for attributes
+  const fileRegex =
+    /<FILE\s+name=["']?([^"'\s>]+)["']?\s+language=["']?([^"'\s>]+)["']?\s*>([\s\S]*?)<\/FILE>/gi;
+
+  const files: { filename: string; language: string; code: string }[] = [];
+  let cleanedText = raw;
+
+  let match;
+  while ((match = fileRegex.exec(raw)) !== null) {
+    const filename = match[1]?.trim();
+    const language = match[2]?.trim();
+    const innerContent = match[3]?.trim();
+
+    if (!filename || !language || !innerContent) continue;
+
+    // Extract code inside fenced block if present
+    const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/;
+    const codeMatch = innerContent.match(codeBlockRegex);
+
+    const extracted = codeMatch?.[1];
+    const code = extracted ? extracted.trim() : innerContent;
+    
+    files.push({
+      filename,
+      language,
+      code,
+    });
+
+    cleanedText = cleanedText.replace(match[0], "").trim();
+  }
+
+  return {
+    cleanedText,
+    files,
+  };
+}
+
 /** Checks if code blocks can be rendered client-side in a browser */
 function isWebApp(blocks: SegmentCode[]): boolean {
   const langs = blocks.map((b) => b.lang.toLowerCase());
@@ -355,6 +396,10 @@ function isWebApp(blocks: SegmentCode[]): boolean {
   const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
   const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
   if ((hasScript || hasCss) && !hasServerOnly) return true;
+  
+  // Last resort: check if any block content looks like HTML
+  if (blocks.some(b => /<[a-z][\s\S]*>/i.test(b.code))) return true;
+
   return false;
 }
 
@@ -596,9 +641,39 @@ function buildBackendCode(blocks: SegmentCode[]): { code: string; language: stri
 
 // ─── App Runner Component ───────────────────────────────────────────────────
 
-function AppRunner({ content }: { content: string }) {
+function AppRunner({ 
+  content, 
+  files: propFiles 
+}: { 
+  content: string;
+  files?: { filename: string; language: string; code: string }[];
+}) {
   const segments = splitCodeBlocks(content);
-  const codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+  const markdownCodeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+  
+  // Combine markdown code blocks with structured files
+  const allCodeBlocks: SegmentCode[] = [...markdownCodeBlocks];
+  
+  // If files prop is missing (e.g. after refresh), try parsing from content tags
+  const files = propFiles || (content.includes("<FILE") ? parseAIResponse(content).files : []);
+
+  if (files) {
+    files.forEach(f => {
+      // Determine language from filename if language is generic or missing
+      let lang = f.language.toLowerCase();
+      if ((lang === "text" || lang === "markdown" || lang === "") && f.filename.includes(".")) {
+        lang = f.filename.split(".").pop()?.toLowerCase() || lang;
+      }
+
+      // Avoid duplicates if the same code is already in markdown
+      if (!allCodeBlocks.some(b => b.code === f.code)) {
+        allCodeBlocks.push({
+          lang: lang,
+          code: f.code
+        });
+      }
+    });
+  }
 
   const [execution, setExecution] = useState<AppExecution>({
     isRunning: false, htmlPreview: null, consoleOutput: null,
@@ -606,16 +681,16 @@ function AppRunner({ content }: { content: string }) {
   });
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (codeBlocks.length === 0) return null;
+  if (allCodeBlocks.length === 0) return null;
 
-  const webApp = isWebApp(codeBlocks);
+  const webApp = isWebApp(allCodeBlocks);
 
   const handleRun = async () => {
     if (execution.isRunning) return;
 
     if (webApp) {
       // Build and render client-side — instant, no server call
-      const html = buildHtmlApp(codeBlocks);
+      const html = buildHtmlApp(allCodeBlocks);
       setExecution({
         isRunning: false, htmlPreview: html, consoleOutput: null,
         error: null, exitCode: 0, executionTimeMs: 0, status: "completed",
@@ -625,7 +700,7 @@ function AppRunner({ content }: { content: string }) {
     }
 
     // Backend code — send to Daytona
-    const backend = buildBackendCode(codeBlocks);
+    const backend = buildBackendCode(allCodeBlocks);
     if (!backend) {
       toast.error("No executable code found in this message");
       return;
@@ -1041,7 +1116,7 @@ const toggleStar = async () => {
         )}>
           <MarkdownMessage content={message.content} />
         </div>
-        {!message.isError && <AppRunner content={message.content} />}
+        {!message.isError && <AppRunner content={message.content} files={message.files} />}
        <div className="flex items-center gap-1">
   <CopyMessageButton content={message.content} />
 
@@ -1410,6 +1485,49 @@ const searchParams = useSearchParams();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const [sidebarWidth, setSidebarWidth] = useState(420);
+  const [isResizing, setIsResizing] = useState(false);
+
+  const startResizing = useCallback(() => {
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback(
+    (mouseMoveEvent: MouseEvent) => {
+      if (isResizing) {
+        const newWidth = window.innerWidth - mouseMoveEvent.clientX;
+        if (newWidth > 250 && newWidth < window.innerWidth * 0.8) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    },
+    [isResizing]
+  );
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", resize);
+      window.addEventListener("mouseup", stopResizing);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    } else {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizing, resize, stopResizing]);
+
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
   useEffect(() => {
   const chatId = searchParams.get("chatId");
@@ -1535,6 +1653,7 @@ useEffect(() => {
         let usedModel: string | undefined;
         let isFallback = false;
         let rafId = 0;
+        let doneEvent: any = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1552,17 +1671,11 @@ useEffect(() => {
               const jsonStr = line.slice(6);
 
               try {
-                const event = JSON.parse(jsonStr) as
-                  | { type: "meta"; model: string; fallback: boolean }
-                  | { type: "delta"; content: string }
-              | { 
-    type: "done"; 
-    cleanedText?: string; 
-    files?: { filename: string; language: string; code: string }[]; 
-    usedModel?: string;
-    conversationId?: string;
-  }
-                  | { type: "error"; message: string };
+                const event = JSON.parse(jsonStr);
+                
+                if (event.type === "done") {
+                  doneEvent = event;
+                }
 
                 switch (event.type) {
                   case "meta":
@@ -1585,16 +1698,16 @@ useEffect(() => {
                     break;
                   case "error":
                     throw new Error(event.message);
-             case "done":
-  if (!activeConversationId && event.conversationId) {
-    setActiveConversationId(event.conversationId);
-  }
+                  case "done":
+                    if (!activeConversationId && event.conversationId) {
+                      setActiveConversationId(event.conversationId);
+                    }
 
-  if (event.files?.length) {
-    setActiveFiles(event.files);
-    setSelectedFileIndex(0);
-  }
-  break;
+                    if (event.files?.length) {
+                      setActiveFiles(event.files);
+                      setSelectedFileIndex(0);
+                    }
+                    break;
                 }
               } catch (e) {
                 if (e instanceof SyntaxError) continue;
@@ -1606,10 +1719,20 @@ useEffect(() => {
 
         // Cancel any pending rAF and do a final sync update
         cancelAnimationFrame(rafId);
+        
+        // Capture final files from the stream
+        const finalFiles = doneEvent?.files;
+
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: fullContent || "No response received.", modelId: usedModel, isFallback }
+              ? { 
+                  ...m, 
+                  content: fullContent || "No response received.", 
+                  modelId: usedModel, 
+                  isFallback,
+                  files: finalFiles || m.files 
+                }
               : m,
           ),
         );
@@ -1836,10 +1959,21 @@ useEffect(() => {
 {activeFiles.length > 0 && (
   <>
     {/* Resize Handle */}
-    <div className="w-1 cursor-col-resize bg-border hover:bg-muted transition-colors" />
+    <div 
+      className={cn(
+        "w-1 cursor-col-resize bg-border hover:bg-primary transition-colors relative z-50",
+        isResizing && "bg-primary"
+      )}
+      onMouseDown={startResizing}
+    >
+      <div className="absolute inset-y-0 -left-1 -right-1" />
+    </div>
 
     {/* Sidebar */}
-    <div className="w-[420px] border-l bg-background flex flex-col shadow-2xl">
+    <div 
+      className="border-l bg-background flex flex-col shadow-2xl overflow-hidden"
+      style={{ width: `${sidebarWidth}px` }}
+    >
 
       {/* Header */}
       <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
