@@ -343,69 +343,18 @@ const SCRIPT_LANGUAGES = new Set([
 const JSX_LANGUAGES = new Set(["jsx", "tsx"]);
 const SERVER_ONLY_LANGUAGES = new Set(["py", "python", "sh", "bash", "shell"]);
 
-function parseAIResponse(raw: string): {
-  cleanedText: string;
-  files: { filename: string; language: string; code: string }[];
-} {
-  // More lenient regex: case-insensitive FILE tag, optional quotes for attributes
-  const fileRegex =
-    /<FILE\s+name=["']?([^"'\s>]+)["']?\s+language=["']?([^"'\s>]+)["']?\s*>([\s\S]*?)<\/FILE>/gi;
-
-  const files: { filename: string; language: string; code: string }[] = [];
-  let cleanedText = raw;
-
-  let match;
-  while ((match = fileRegex.exec(raw)) !== null) {
-    const filename = match[1]?.trim();
-    const language = match[2]?.trim();
-    const innerContent = match[3]?.trim();
-
-    if (!filename || !language || !innerContent) continue;
-
-    // Extract code inside fenced block if present
-    const codeBlockRegex = /```[\w]*\n([\s\S]*?)```/;
-    const codeMatch = innerContent.match(codeBlockRegex);
-
-    const extracted = codeMatch?.[1];
-    const code = extracted ? extracted.trim() : innerContent;
-    
-    files.push({
-      filename,
-      language,
-      code,
-    });
-
-    cleanedText = cleanedText.replace(match[0], "").trim();
-  }
-
-  return {
-    cleanedText,
-    files,
-  };
-}
-
 /** Checks if code blocks can be rendered client-side in a browser */
 function isWebApp(blocks: SegmentCode[]): boolean {
-  const langs = blocks.map((b) => b.lang.trim().toLowerCase());
-  
-  // 1. Explicit web/framework languages (ignore server-only blocks if these exist)
-  if (langs.some((l) => ["html", "htm", "jsx", "tsx", "react"].includes(l) || JSX_LANGUAGES.has(l))) return true;
-  
-  // 2. JS/TS/CSS only (no server-only languages like Python/Bash)
+  const langs = blocks.map((b) => b.lang.toLowerCase());
+  // Has HTML → definitely a web app
+  if (langs.some((l) => ["html", "htm"].includes(l))) return true;
+  // Has JSX/TSX → React code, render client-side with React CDN
+  if (langs.some((l) => JSX_LANGUAGES.has(l))) return true;
+  // Has JS/TS/CSS only (no server-only languages) → can render in browser
   const hasScript = langs.some((l) => SCRIPT_LANGUAGES.has(l));
   const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
   const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
   if ((hasScript || hasCss) && !hasServerOnly) return true;
-  
-  // 3. Last resort: check if any block content looks like HTML/JSX or uses React patterns
-  if (blocks.some(b => 
-    /<[a-z][\s\S]*>/i.test(b.code) || 
-    b.code.includes("useState") || 
-    b.code.includes("useEffect") || 
-    b.code.includes("React.") ||
-    b.code.includes("export default")
-  )) return true;
-
   return false;
 }
 
@@ -450,7 +399,7 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
   console.warn=function(){_orig.warn.apply(console,arguments);if(!_isSuppressed(arguments))_log('warn',arguments);};
   console.error=function(){_orig.error.apply(console,arguments);if(!_isSuppressed(arguments))_log('error',arguments);};
   console.info=function(){_orig.info.apply(console,arguments);if(!_isSuppressed(arguments))_log('info',arguments);};
-  window.onerror=function(m,s,l,c,e){_log('error',[e?e.stack||e.message:m]);};
+ window.onerror=function(m,s,l,c,e){_log('error',['SCRIPT ERROR: '+m+' | file: '+s+' | line: '+l+' | col: '+c+' | '+(e?e.stack||e.message:'no stack')]);};
   window.onunhandledrejection=function(e){_log('error',['Unhandled Promise: '+(e.reason&&e.reason.stack||e.reason)]);};
 
   // After DOM loads, hide console panel if there's visible content in body
@@ -489,8 +438,11 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
  */
 function stripModuleSyntax(code: string): string {
   return code
-    .replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/gm, "")
-    .replace(/import\s+['"].*?['"];?/gm, "")
+    .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "") 
+    .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+\w/gm, "type ")
+    .replace(/^\s*export\s+interface\s/gm, "interface ")
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -498,6 +450,8 @@ function stripModuleSyntax(code: string): string {
     .replace(/export\s+let\s/g, "let ")
     .replace(/export\s+var\s/g, "var ")
     .replace(/^\s*export\s+default\s+/gm, "var _default = ")
+   .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
+  .replace(/<(?:[A-Za-z][a-zA-Z0-9]*(?:\[\])?(?:\s*\|\s*[A-Za-z][a-zA-Z0-9]*(?:\[\])?)*\s*)>/g, "")
     .trim();
 }
 
@@ -535,63 +489,25 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
 
   // Detect if code contains JSX syntax (even if tagged as js/ts)
   const looksLikeJsx = (code: string) =>
-    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || 
-    code.includes("React.") || 
-    code.includes("useState") ||
-    code.includes("useEffect") ||
-    /from\s+['"]react['"]/.test(code);
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || code.includes("React.createElement") || /from\s+['"]react['"]/.test(code);
 
   for (const block of blocks) {
     const lang = block.lang.toLowerCase();
-    if (["html", "htm"].includes(lang)) {
-      htmlBlocks.push(block.code);
-    } else if (["css", "scss", "less", "tailwind"].includes(lang)) {
-      cssBlocks.push(block.code);
-    } else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code))) {
+    if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
+    else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
+    else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
       jsxBlocks.push(stripModuleSyntax(block.code));
-    } else if (SCRIPT_LANGUAGES.has(lang)) {
-      jsBlocks.push(stripModuleSyntax(block.code));
-    }
+    else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
   }
 
   const needsReact = jsxBlocks.length > 0;
   const mainHtml = htmlBlocks.join("\n");
   const hasFullDocument = mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
 
-  const reactCdn = needsReact 
-    ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-<script src="https://unpkg.com/lucide@latest"><\/script>
-${REACT_GLOBALS_SHIM}`
-    : "";
-
-  const tailwindCdn = `<script src="https://cdn.tailwindcss.com"><\/script>`;
-
-  // Auto-mount logic script
-  const autoMountScript = `
-(function() {
-  function mount() {
-    var root = document.getElementById('root') || document.body;
-    if (typeof App !== 'undefined') {
-      ReactDOM.createRoot(root).render(React.createElement(App));
-    } else if (typeof _default !== 'undefined') {
-      ReactDOM.createRoot(root).render(React.createElement(_default));
-    } else {
-      // Find last capitalized function/class that isn't React or ReactDOM
-      var keys = Object.keys(window).filter(k => /^[A-Z]/.test(k) && typeof window[k] === 'function' && k !== 'React' && k !== 'ReactDOM');
-      if (keys.length > 0) {
-        ReactDOM.createRoot(root).render(React.createElement(window[keys[keys.length-1]]));
-      }
-    }
-  }
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }
-  setTimeout(mount, 500); // Robustness for async transpilation
-})();
-`;
-
+  // If the HTML already looks like a full document, inject CSS/JS/console into it
   if (hasFullDocument) {
     let doc = mainHtml;
+    // Inject console capture right after <body>
     if (doc.includes("<body")) {
       doc = doc.replace(/<body[^>]*>/, `$&\n${CONSOLE_CAPTURE_SCRIPT}`);
     } else {
@@ -599,40 +515,118 @@ ${REACT_GLOBALS_SHIM}`
     }
     if (cssBlocks.length > 0) {
       const cssTag = `<style>\n${cssBlocks.join("\n")}\n</style>`;
-      doc = doc.includes("</head>") ? doc.replace("</head>", `${cssTag}\n</head>`) : doc + `\n${cssTag}`;
+      if (doc.includes("</head>")) {
+        doc = doc.replace("</head>", `${cssTag}\n</head>`);
+      } else if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${cssTag}\n</body>`);
+      } else {
+        doc += `\n${cssTag}`;
+      }
     }
-    if (needsReact) {
-      doc = doc.includes("</head>") ? doc.replace("head>", `${reactCdn}\n</head>`) : doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
+    if (needsReact && !doc.includes("react")) {
+  const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>\n<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
+      if (doc.includes("</head>")) {
+        doc = doc.replace("</head>", `${reactCdn}\n</head>`);
+      } else if (doc.includes("<body")) {
+        doc = doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
+      }
     }
-    doc = doc.includes("</head>") ? doc.replace("head>", `head>\n${tailwindCdn}\n`) : doc + `\n${tailwindCdn}`;
-    
     if (jsBlocks.length > 0) {
       const jsTag = `<script>\n${jsBlocks.join("\n")}\n<\/script>`;
-      doc = doc.includes("</body>") ? doc.replace("</body>", `${jsTag}\n</body>`) : doc + `\n${jsTag}`;
+      if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${jsTag}\n</body>`);
+      } else {
+        doc += `\n${jsTag}`;
+      }
     }
+   // REPLACE WITH:
     if (jsxBlocks.length > 0) {
-      const jsxTag = `<script type="text/babel" data-presets="react,typescript">\n${jsxBlocks.join("\n")}\n${autoMountScript}\n<\/script>`;
-      doc = doc.includes("</body>") ? doc.replace("</body>", `${jsxTag}\n</body>`) : doc + `\n${jsxTag}`;
+      const mergedJsx = jsxBlocks.join("\n\n");
+      const autoMount = `
+(function() {
+  var _mounted = false;
+  function mount() {
+    if (_mounted) return;
+    var rootEl = document.getElementById('root');
+    if (!rootEl) { rootEl = document.createElement('div'); rootEl.id = 'root'; document.body.appendChild(rootEl); }
+    var component = typeof App !== 'undefined' ? App : typeof _default !== 'undefined' ? _default : (function(){ var keys = Object.keys(window).filter(function(k){ return /^[A-Z]/.test(k) && typeof window[k]==='function' && k!=='React' && k!=='ReactDOM' && k!=='Babel'; }); return keys.length > 0 ? window[keys[keys.length-1]] : null; })();
+    if (component) { _mounted = true; ReactDOM.createRoot(rootEl).render(React.createElement(component)); }
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }
+})();`;
+      const jsxTag = `<script type="text/babel" data-presets="react,typescript">\n${mergedJsx}\n${autoMount}\n<\/script>`;
+      if (doc.includes("</body>")) {
+        doc = doc.replace("</body>", `${jsxTag}\n</body>`);
+      } else {
+        doc += `\n${jsxTag}`;
+      }
     }
     return doc;
   }
+
+  // Build a minimal HTML document
+ // Build a minimal HTML document
+ const reactCdn = needsReact
+    ? `<script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+${REACT_GLOBALS_SHIM}
+<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>
+<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>
+<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`
+    : "";
+
+  // ALL jsx blocks merged into ONE single babel script
+  const mergedJsx = jsxBlocks.join("\n\n");
+
+  const autoMount = needsReact ? `
+(function() {
+  var _mounted = false;
+  function mount() {
+    if (_mounted) return;
+    var rootEl = document.getElementById('root');
+    if (!rootEl) {
+      rootEl = document.createElement('div');
+      rootEl.id = 'root';
+      document.body.appendChild(rootEl);
+    }
+    var component =
+      typeof App !== 'undefined' ? App :
+      typeof _default !== 'undefined' ? _default :
+      (function() {
+        var keys = Object.keys(window).filter(function(k) {
+          return /^[A-Z]/.test(k) && typeof window[k] === 'function'
+            && k !== 'React' && k !== 'ReactDOM' && k !== 'Babel';
+        });
+        return keys.length > 0 ? window[keys[keys.length - 1]] : null;
+      })();
+    if (component) {
+      _mounted = true;
+      ReactDOM.createRoot(rootEl).render(React.createElement(component));
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-${tailwindCdn}
 ${cssBlocks.length > 0 ? `<style>\n${cssBlocks.join("\n")}\n</style>` : ""}
 ${reactCdn}
 </head>
-<body class="bg-white text-slate-900">
+<body>
 ${CONSOLE_CAPTURE_SCRIPT}
 ${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
 ${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
-${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react,typescript">
-${jsxBlocks.join("\n\n")}
-${autoMountScript}
+${needsReact && mergedJsx ? `<script type="text/babel" data-presets="react,typescript">
+${mergedJsx}
+${autoMount}
 <\/script>` : ""}
 </body>
 </html>`;
@@ -656,39 +650,20 @@ function buildBackendCode(blocks: SegmentCode[]): { code: string; language: stri
 
 // ─── App Runner Component ───────────────────────────────────────────────────
 
-function AppRunner({ 
-  content, 
-  files: propFiles 
-}: { 
-  content: string;
-  files?: { filename: string; language: string; code: string }[];
-}) {
+function AppRunner({ content, files }: { content: string; files?: ChatMessage["files"] }) {
   const segments = splitCodeBlocks(content);
-  const markdownCodeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
-  
-  // Combine markdown code blocks with structured files
-  const allCodeBlocks: SegmentCode[] = [...markdownCodeBlocks];
-  
-  // If files prop is missing (e.g. after refresh), try parsing from content tags
-  const files = propFiles || (content.includes("<FILE") ? parseAIResponse(content).files : []);
+  let codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
 
-  if (files) {
-    files.forEach(f => {
-      // Determine language from filename if language is generic or missing
-      let lang = f.language.toLowerCase();
-      if ((lang === "text" || lang === "markdown" || lang === "") && f.filename.includes(".")) {
-        lang = f.filename.split(".").pop()?.toLowerCase() || lang;
-      }
-
-      // Avoid duplicates if the same code is already in markdown
-      if (!allCodeBlocks.some(b => b.code === f.code)) {
-        allCodeBlocks.push({
-          type: "code",
-          lang: lang,
-          code: f.code
-        });
-      }
-    });
+  // If we have explicit files (e.g. from structured output), prioritize them
+  if (files && files.length > 0) {
+    const fileBlocks: SegmentCode[] = files.map((f) => ({
+      type: "code",
+      lang: f.language,
+      code: f.code,
+    }));
+    if (fileBlocks.length > 0) {
+      codeBlocks = fileBlocks;
+    }
   }
 
   const [execution, setExecution] = useState<AppExecution>({
@@ -697,16 +672,16 @@ function AppRunner({
   });
   const [isExpanded, setIsExpanded] = useState(false);
 
-  if (allCodeBlocks.length === 0) return null;
+  if (codeBlocks.length === 0) return null;
 
-  const webApp = isWebApp(allCodeBlocks);
+  const webApp = isWebApp(codeBlocks);
 
   const handleRun = async () => {
     if (execution.isRunning) return;
 
     if (webApp) {
       // Build and render client-side — instant, no server call
-      const html = buildHtmlApp(allCodeBlocks);
+      const html = buildHtmlApp(codeBlocks);
       setExecution({
         isRunning: false, htmlPreview: html, consoleOutput: null,
         error: null, exitCode: 0, executionTimeMs: 0, status: "completed",
@@ -716,7 +691,7 @@ function AppRunner({
     }
 
     // Backend code — send to Daytona
-    const backend = buildBackendCode(allCodeBlocks);
+    const backend = buildBackendCode(codeBlocks);
     if (!backend) {
       toast.error("No executable code found in this message");
       return;
@@ -800,7 +775,7 @@ function AppRunner({
           size="sm"
           className={cn(
             "h-7 gap-1.5 text-xs",
-            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20",
+            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary",
           )}
           onClick={hasResult ? handleStop : handleRun}
           disabled={execution.isRunning}
@@ -851,15 +826,15 @@ function AppRunner({
                   </Button>
                 </div>
               </div>
-              <iframe
-                srcDoc={execution.htmlPreview}
-                sandbox="allow-scripts allow-forms"
-                className={cn(
-                  "w-full bg-white transition-all duration-300",
-                  isExpanded ? "h-[500px]" : "h-72",
-                )}
-                title="App Preview"
-              />
+             <iframe
+  srcDoc={execution.htmlPreview}
+  sandbox="allow-scripts allow-forms allow-popups"
+  className={cn(
+    "w-full bg-white transition-all duration-300",
+    isExpanded ? "h-[500px]" : "h-72",
+  )}
+  title="App Preview"
+/>
             </>
           )}
 
@@ -1110,7 +1085,7 @@ const toggleStar = async () => {
     <div className="group flex gap-3">
       <div className={cn(
         "mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg",
-        message.isError ? "bg-destructive/10 text-destructive" : "bg-muted text-primary",
+        message.isError ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary",
       )}>
         {message.isError ? <AlertTriangle className="size-3.5" /> : <Bot className="size-3.5" />}
       </div>
@@ -1165,7 +1140,7 @@ const toggleStar = async () => {
 function TypingIndicator({ modelName }: { modelName: string }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Bot className="size-3.5" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1218,9 +1193,10 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center">
-      {/* Logo without glow */}
+      {/* Logo with glow */}
       <div className="relative">
-        <div className="relative flex size-16 items-center justify-center rounded-2xl border bg-muted">
+        <div className="absolute inset-0 scale-150 rounded-full bg-primary/10 blur-2xl" />
+        <div className="relative flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/5">
           <BuildifyLogo size="lg" />
         </div>
       </div>
@@ -1239,9 +1215,9 @@ function EmptyState({
             <button
               key={s.label}
               onClick={() => onSuggestion(s.prompt)}
-              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-border hover:bg-muted hover:shadow-sm"
+              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm"
             >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-background">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-primary/10">
                 <s.icon className="size-4 text-muted-foreground transition-colors group-hover/card:text-primary" />
               </div>
               <div>
@@ -1301,8 +1277,8 @@ function GenerationSettings({
               size="icon-xs"
               disabled={disabled}
               className={cn(
-                "rounded-lg border-border/60 hover:border-border hover:bg-muted",
-                !isDefault && "border-primary/40 bg-muted text-primary",
+                "rounded-lg border-border/60 hover:border-primary/30",
+                !isDefault && "border-primary/40 bg-primary/5 text-primary",
               )}
             >
               <SlidersHorizontal className="size-3.5" />
@@ -1311,7 +1287,7 @@ function GenerationSettings({
         </TooltipTrigger>
         <TooltipContent>Generation settings</TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
+      <PopoverContent side="top" align="start" className="w-80">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">Generation Settings</h4>
           {!isDefault && (
@@ -1429,14 +1405,14 @@ function ModelSelector({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground"
         >
           <Sparkles className="size-3.5 text-primary" />
           <span className="max-w-[130px] truncate">{selected.name}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
+      <DropdownMenuContent side="top" align="start" className="w-80">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Select a model
         </DropdownMenuLabel>
@@ -1447,7 +1423,7 @@ function ModelSelector({
             onClick={() => onSelect(m.id)}
             className={cn(
               "flex cursor-pointer items-start gap-2.5 py-2.5",
-              m.id === modelId && "bg-muted",
+              m.id === modelId && "bg-primary/5",
             )}
           >
             <div className={cn(
@@ -1489,6 +1465,40 @@ export default function OpenRouterChatPage() {
 >([]);
 
 const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+const [panelWidth, setPanelWidth] = useState(420);
+const isResizing = useRef(false);
+
+const handleMouseMove = useCallback((e: MouseEvent) => {
+  if (!isResizing.current) return;
+  const newWidth = window.innerWidth - e.clientX;
+  if (newWidth > 320 && newWidth < 1000) {
+    setPanelWidth(newWidth);
+  }
+}, []);
+
+const handleMouseUp = useCallback(() => {
+  isResizing.current = false;
+  document.removeEventListener("mousemove", handleMouseMove);
+  document.removeEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "default";
+}, [handleMouseMove]);
+
+const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  e.preventDefault();
+  isResizing.current = true;
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "col-resize";
+}, [handleMouseMove, handleMouseUp]);
+
+// Clean up listeners on unmount
+useEffect(() => {
+  return () => {
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+}, [handleMouseMove, handleMouseUp]);
+
 const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1500,49 +1510,6 @@ const searchParams = useSearchParams();
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  const [sidebarWidth, setSidebarWidth] = useState(420);
-  const [isResizing, setIsResizing] = useState(false);
-
-  const startResizing = useCallback(() => {
-    setIsResizing(true);
-  }, []);
-
-  const stopResizing = useCallback(() => {
-    setIsResizing(false);
-  }, []);
-
-  const resize = useCallback(
-    (mouseMoveEvent: MouseEvent) => {
-      if (isResizing) {
-        const newWidth = window.innerWidth - mouseMoveEvent.clientX;
-        if (newWidth > 250 && newWidth < window.innerWidth * 0.8) {
-          setSidebarWidth(newWidth);
-        }
-      }
-    },
-    [isResizing]
-  );
-
-  useEffect(() => {
-    if (isResizing) {
-      window.addEventListener("mousemove", resize);
-      window.addEventListener("mouseup", stopResizing);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    } else {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    }
-    return () => {
-      window.removeEventListener("mousemove", resize);
-      window.removeEventListener("mouseup", stopResizing);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [isResizing, resize, stopResizing]);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
   useEffect(() => {
@@ -1562,7 +1529,8 @@ const searchParams = useSearchParams();
   timestamp: new Date(m.created_at),
   modelId: m.model,
   starred: m.starred || false,
-  conversationId: m.conversation_id  
+  conversationId: m.conversation_id,
+  files: m.files || []
 }));
        
 
@@ -1669,7 +1637,7 @@ useEffect(() => {
         let usedModel: string | undefined;
         let isFallback = false;
         let rafId = 0;
-        let doneEvent: any = null;
+        let assistantFiles: ChatMessage["files"] = [];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1687,11 +1655,17 @@ useEffect(() => {
               const jsonStr = line.slice(6);
 
               try {
-                const event = JSON.parse(jsonStr);
-                
-                if (event.type === "done") {
-                  doneEvent = event;
-                }
+                const event = JSON.parse(jsonStr) as
+                  | { type: "meta"; model: string; fallback: boolean }
+                  | { type: "delta"; content: string }
+              | { 
+    type: "done"; 
+    cleanedText?: string; 
+    files?: { filename: string; language: string; code: string }[]; 
+    usedModel?: string;
+    conversationId?: string;
+  }
+                  | { type: "error"; message: string };
 
                 switch (event.type) {
                   case "meta":
@@ -1714,16 +1688,17 @@ useEffect(() => {
                     break;
                   case "error":
                     throw new Error(event.message);
-                  case "done":
-                    if (!activeConversationId && event.conversationId) {
-                      setActiveConversationId(event.conversationId);
-                    }
+             case "done":
+  if (!activeConversationId && event.conversationId) {
+    setActiveConversationId(event.conversationId);
+  }
 
-                    if (event.files?.length) {
-                      setActiveFiles(event.files);
-                      setSelectedFileIndex(0);
-                    }
-                    break;
+  if (event.files?.length) {
+    assistantFiles = event.files;
+    setActiveFiles(event.files);
+    setSelectedFileIndex(0);
+  }
+  break;
                 }
               } catch (e) {
                 if (e instanceof SyntaxError) continue;
@@ -1735,10 +1710,6 @@ useEffect(() => {
 
         // Cancel any pending rAF and do a final sync update
         cancelAnimationFrame(rafId);
-        
-        // Capture final files from the stream
-        const finalFiles = doneEvent?.files;
-
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -1747,7 +1718,7 @@ useEffect(() => {
                   content: fullContent || "No response received.", 
                   modelId: usedModel, 
                   isFallback,
-                  files: finalFiles || m.files 
+                  files: assistantFiles
                 }
               : m,
           ),
@@ -1837,7 +1808,7 @@ useEffect(() => {
   <div className="flex-1 flex flex-col">
    <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-muted">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
             <BrainCircuit className="size-4 text-primary" />
           </div>
           <div className="flex flex-col">
@@ -1902,7 +1873,7 @@ useEffect(() => {
       {/* ── Input area ── */}
       <div className="shrink-0 border-t bg-background px-4 py-3">
         <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/30">
+          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
             {/* Textarea */}
             <Textarea
               ref={textareaRef}
@@ -1976,19 +1947,14 @@ useEffect(() => {
   <>
     {/* Resize Handle */}
     <div 
-      className={cn(
-        "w-1 cursor-col-resize bg-border hover:bg-primary transition-colors relative z-50",
-        isResizing && "bg-primary"
-      )}
-      onMouseDown={startResizing}
-    >
-      <div className="absolute inset-y-0 -left-1 -right-1" />
-    </div>
+      className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" 
+      onMouseDown={handleMouseDown}
+    />
 
     {/* Sidebar */}
     <div 
-      className="border-l bg-background flex flex-col shadow-2xl overflow-hidden"
-      style={{ width: `${sidebarWidth}px` }}
+      className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+      style={{ width: `${panelWidth}px` }}
     >
 
       {/* Header */}
@@ -2018,7 +1984,7 @@ useEffect(() => {
             className={cn(
               "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
               index === selectedFileIndex
-                ? "border-primary text-primary bg-muted"
+                ? "border-primary text-primary bg-primary/5"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >
