@@ -85,6 +85,7 @@ import {
   // ADDED: import the new SVG badge handler so the copied badge markdown
   // renders as an actual image in GitHub READMEs and websites
   getEmbedBadgeSvgHandler,
+  exportTestReportPdfHandler,
 } from "@/server/api/controllers/testing.controller";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
@@ -1342,15 +1343,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // POST /api/test/run/:id/export-pdf — generate PDF report, returns { pdfUrl }
-  .post(
-    "/test/run/:id/export-pdf",
-    async ({ params }) => {
-      const { exportTestReportPdfHandler } =
-        await import("@/server/api/controllers/testing.controller");
-      return exportTestReportPdfHandler({ params });
-    },
-    { params: t.Object({ id: t.String() }) },
-  )
+  // POST /api/test/run/:id/export-pdf — generate and stream PDF report directly
+.post(
+  "/test/run/:id/export-pdf",
+  async ({ params }) => {
+    return exportTestReportPdfHandler({ params });
+  },
+  { params: t.Object({ id: t.String() }) },
+)
 
   // GET /api/test/report/public/:slug — shareable read-only report, no auth required
   // IMPORTANT: declared before /test/run/:id/report to avoid Elysia matching "public" as an id
