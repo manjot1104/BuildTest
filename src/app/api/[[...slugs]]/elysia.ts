@@ -111,6 +111,19 @@ interface ChatRequestBody {
 }
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
+  .onError(({ code, error, set }) => {
+    console.error(`[Elysia Error] code=${code}`, error)
+    if (code === 'VALIDATION') {
+      set.status = 422
+      return { error: 'Validation failed', details: error.message }
+    }
+    if (code === 'NOT_FOUND') {
+      set.status = 404
+      return { error: 'Not found' }
+    }
+    set.status = 500
+    return { error: (error as Error)?.message ?? 'Internal server error' }
+  })
   // Chat endpoint - POST /api/chat
   // Note: Streaming requests are handled inline (use fetch directly)
   // Non-streaming requests use the controller
@@ -432,7 +445,18 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: 'Unauthorized' }
     }
 
-    return getStarredChats(session.user.id)
+    const chats = await getStarredChats(session.user.id)
+    return chats.map((chat) => ({
+      id: chat.id,
+      v0ChatId: chat.v0_chat_id || chat.conversation_id || chat.id,
+      title: chat.title,
+      prompt: chat.prompt,
+      demoUrl: chat.demo_url,
+      previewUrl: chat.preview_url,
+      createdAt: chat.created_at.toISOString(),
+      updatedAt: chat.updated_at.toISOString(),
+      type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
+    }))
   })
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user

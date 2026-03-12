@@ -9,6 +9,7 @@ import {
 } from "@/server/db/schema";
 import { eq, sql, and, or, ilike, inArray } from "drizzle-orm";
 import { requireAdmin } from "@/server/admin/require-admin";
+import crypto from "crypto";
 
 export async function GET(request: NextRequest) {
   try {
@@ -370,6 +371,66 @@ export async function GET(request: NextRequest) {
   } catch {
     return NextResponse.json(
       { error: "Failed to fetch credit analytics" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const authError = await requireAdmin();
+    if (authError) return authError;
+
+    const body = await request.json() as {
+      userId?: string;
+      subscriptionCredits?: number;
+      additionalCredits?: number;
+    };
+
+    const { userId, subscriptionCredits, additionalCredits } = body;
+
+    if (!userId) {
+      return NextResponse.json({ error: "userId is required" }, { status: 400 });
+    }
+
+    const subCredits = subscriptionCredits ?? 0;
+    const addCredits = additionalCredits ?? 0;
+
+    if (subCredits < 0 || addCredits < 0) {
+      return NextResponse.json({ error: "Credit amounts must be non-negative" }, { status: 400 });
+    }
+
+    if (subCredits > 100000 || addCredits > 100000) {
+      return NextResponse.json({ error: "Credit amounts cannot exceed 100,000" }, { status: 400 });
+    }
+
+    const existing = await db.query.user_credits.findFirst({
+      where: eq(user_credits.user_id, userId),
+    });
+
+    if (!existing) {
+      await db.insert(user_credits).values({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        subscription_credits: subCredits,
+        additional_credits: addCredits,
+      });
+    } else {
+      await db
+        .update(user_credits)
+        .set({
+          subscription_credits: existing.subscription_credits + subCredits,
+          additional_credits: existing.additional_credits + addCredits,
+          updated_at: new Date(),
+        })
+        .where(eq(user_credits.user_id, userId));
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    console.error("[POST /api/admin/credits] Error:", err);
+    return NextResponse.json(
+      { error: "Failed to add credits" },
       { status: 500 },
     );
   }

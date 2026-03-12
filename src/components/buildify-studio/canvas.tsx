@@ -4,6 +4,7 @@ import React, { useRef, useCallback, useMemo, useEffect } from 'react'
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import { ElementRenderer } from './element-renderer'
+import { computeResponsiveLayout } from './types'
 
 interface CanvasProps {
   editor: UseEditorReturn
@@ -33,16 +34,17 @@ const DEVICE_LABELS: Record<string, string> = {
 export function Canvas({ editor }: CanvasProps) {
   const {
     state,
+    activeDevice,
     selectElement,
     selectElements,
     toggleSelectElement,
     setZoom,
     setPan,
-    updateElement,
+    updateElementResponsive,
+    setDevice,
   } = editor
 
   const canvasWidth = state.device.width
-  const canvasHeight = state.device.height
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -52,11 +54,22 @@ export function Canvas({ editor }: CanvasProps) {
   const rubberBandStartRef = useRef({ vpX: 0, vpY: 0 })
   const isRubberBandRef = useRef(false)
 
-  // Sort elements by zIndex for rendering
-  const sortedElements = useMemo(
-    () => [...state.elements].sort((a, b) => a.zIndex - b.zIndex),
-    [state.elements],
-  )
+  // Compute responsive layout (auto-reflow for tablet/mobile) and sort by zIndex
+  const sortedElements = useMemo(() => {
+    const layout = computeResponsiveLayout(state.elements, activeDevice)
+    return [...layout].sort((a, b) => a.zIndex - b.zIndex)
+  }, [state.elements, activeDevice])
+
+  // Auto-extend canvas height when reflowed elements exceed the preset height
+  const canvasHeight = useMemo(() => {
+    const baseHeight = state.device.height
+    if (sortedElements.length === 0) return baseHeight
+    const maxBottom = sortedElements.reduce(
+      (max, el) => Math.max(max, el.y + el.height),
+      0,
+    )
+    return Math.max(baseHeight, maxBottom + 40)
+  }, [state.device.height, sortedElements])
 
   const handleCanvasMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -144,7 +157,7 @@ export function Canvas({ editor }: CanvasProps) {
             const canvasRight = (selRight - s.panX) / s.zoom
             const canvasBottom = (selBottom - s.panY) / s.zoom
 
-            const ids = s.elements
+            const ids = sortedRef.current
               .filter((el) => !el.hidden && !el.locked)
               .filter(
                 (el) =>
@@ -167,6 +180,10 @@ export function Canvas({ editor }: CanvasProps) {
     },
     [state.isPreview, state.panX, state.panY, selectElements, setPan],
   )
+
+  // Keep a ref to the computed layout for rubber-band selection
+  const sortedRef = useRef(sortedElements)
+  sortedRef.current = sortedElements
 
   // Refs for non-passive wheel handler
   const stateRef = useRef(state)
@@ -220,29 +237,29 @@ export function Canvas({ editor }: CanvasProps) {
   const handleDragEnd = useCallback(
     (id: string, x: number, y: number) => {
       const { snap, size } = state.grid
-      updateElement(id, { x: snapToGrid(x, size, snap), y: snapToGrid(y, size, snap) })
+      updateElementResponsive(id, { x: snapToGrid(x, size, snap), y: snapToGrid(y, size, snap) })
     },
-    [updateElement, state.grid],
+    [updateElementResponsive, state.grid],
   )
 
   const handleResizeEnd = useCallback(
     (id: string, x: number, y: number, width: number, height: number) => {
       const { snap, size } = state.grid
-      updateElement(id, {
+      updateElementResponsive(id, {
         x: snapToGrid(x, size, snap),
         y: snapToGrid(y, size, snap),
         width: snapToGrid(width, size, snap),
         height: snapToGrid(height, size, snap),
       })
     },
-    [updateElement, state.grid],
+    [updateElementResponsive, state.grid],
   )
 
   const handleContentChange = useCallback(
     (id: string, content: string) => {
-      updateElement(id, { content }, true)
+      updateElementResponsive(id, { content }, true)
     },
-    [updateElement],
+    [updateElementResponsive],
   )
 
   const handleElementSelect = useCallback(
@@ -256,14 +273,41 @@ export function Canvas({ editor }: CanvasProps) {
     [selectElement, toggleSelectElement],
   )
 
+  // Bottom-edge resize handle for canvas height
+  const handleHeightResize = useCallback(
+    (e: React.MouseEvent) => {
+      if (state.isPreview) return
+      e.preventDefault()
+      e.stopPropagation()
+      const startY = e.clientY
+      const startHeight = state.device.height
+      const zoom = state.zoom
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const delta = (ev.clientY - startY) / zoom
+        const newHeight = Math.max(200, Math.round(startHeight + delta))
+        setDevice({ ...state.device, preset: 'custom', height: newHeight })
+      }
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+      }
+      document.body.style.cursor = 'ns-resize'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [state.isPreview, state.device, state.zoom, setDevice],
+  )
+
   const canvasBgStyle = getCanvasBg(state.canvasBackground)
 
-  return (
-    <div className="relative flex flex-1 flex-col overflow-hidden bg-[#141416]">
+ return (
+  <div className="relative flex flex-1 flex-col overflow-auto bg-[#141416]">
       {/* Canvas viewport */}
       <div
         ref={viewportRef}
-        className="relative flex-1 overflow-hidden"
+       className="relative flex-1 overflow-auto"
         onMouseDown={handleCanvasMouseDown}
         style={{ cursor: 'default' }}
       >
@@ -289,7 +333,6 @@ export function Canvas({ editor }: CanvasProps) {
             transformOrigin: '0 0',
             ...canvasBgStyle,
             boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 20px 80px rgba(0,0,0,0.5)',
-            overflow: 'hidden',
           }}
         >
           {/* Grid overlay */}
@@ -347,6 +390,37 @@ export function Canvas({ editor }: CanvasProps) {
               </div>
             </div>
           )}
+
+          {/* Bottom resize handle */}
+          {!state.isPreview && (
+            <div
+              onMouseDown={handleHeightResize}
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                width: '100%',
+                height: 8,
+                cursor: 'ns-resize',
+                zIndex: 99999,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <div
+                style={{
+                  width: 48,
+                  height: 4,
+                  borderRadius: 2,
+                  background: 'rgba(99,102,241,0.5)',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={(e) => { (e.target as HTMLElement).style.background = 'rgba(99,102,241,0.9)' }}
+                onMouseLeave={(e) => { (e.target as HTMLElement).style.background = 'rgba(99,102,241,0.5)' }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Rubber-band selection rect */}
@@ -362,7 +436,7 @@ export function Canvas({ editor }: CanvasProps) {
 
         {/* Canvas size / device label */}
         <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 font-mono text-xs text-white/70">
-          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} — {canvasWidth}×{canvasHeight}
+          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} — {canvasWidth}×{Math.round(canvasHeight)}
         </div>
       </div>
 

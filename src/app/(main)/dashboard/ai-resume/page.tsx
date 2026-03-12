@@ -429,8 +429,8 @@ export default function AIResumeBuilderPage() {
             <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
               <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
-                    <FileText className="size-3 text-primary" />
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-secondary">
+                    <FileText className="size-3 text-foreground" />
                   </div>
                   <span className="truncate font-mono text-xs font-medium text-muted-foreground">resume.tex</span>
                 </div>

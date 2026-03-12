@@ -21,6 +21,7 @@ import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
 import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
+import { cn } from '@/lib/utils'
 
 // --- Animation Variants ---
 
@@ -524,15 +525,15 @@ export default function LandingPage() {
                             </button>
                             {!isPending && (
                                 session?.user ? (
-                                    <Button
-                                        size="sm"
-                                        onClick={() => router.push('/chat')}
-                                        className="rounded-full h-8 px-4 text-xs font-medium gap-1.5"
-                                    >
-                                        Open App
-                                        <ArrowRight className="size-3" />
-                                    </Button>
-                                ) : (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => router.push('/chat')}
+                                            className="rounded-full h-8 px-4 text-xs font-semibold gap-1.5 shadow-sm border-primary/20"
+                                        >
+                                            Open App
+                                            <ArrowRight className="size-3" />
+                                        </Button>
+                                    ) : (
                                     <Button
                                         size="sm"
                                         variant="ghost"
@@ -618,7 +619,7 @@ export default function LandingPage() {
                 ))}
 
                 {/* Subtle background grain */}
-                <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.03] pointer-events-none"
+                <div className="absolute inset-0 opacity-[0.012] dark:opacity-[0.025] pointer-events-none"
                     style={{
                         backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
                     }}
@@ -683,16 +684,15 @@ export default function LandingPage() {
                             onChange={handleFileChange}
                         />
 
-                        {/* Main input card — no border, only neon shadow */}
+                        {/* Main input card */}
                         <div
-                            className="relative rounded-2xl bg-background overflow-hidden transition-all duration-300"
-                            style={{
-                                boxShadow: inputFocused
-                                    ? '0 0 0 2px rgba(59,126,255,0.5), 0 0 0 5px rgba(59,126,255,0.10), 0 4px 32px rgba(59,126,255,0.22), 0 10px 40px rgba(0,0,0,0.10)'
-                                    : '0 0 0 1.5px rgba(59,126,255,0.28), 0 4px 24px rgba(59,126,255,0.15), 0 8px 36px rgba(0,0,0,0.08)',
-                            }}
-                        >
-                            {/* Attachment preview strip */}
+                            className={cn(
+                                "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
+                                inputFocused
+                                    ? "border-primary ring-2 ring-primary/20 shadow-md"
+                                    : "border-border/60 dark:border-border/80 shadow-sm hover:border-border/80 dark:hover:border-border"
+                            )}
+                        >                            {/* Attachment preview strip */}
                             {attachments.length > 0 && (
                                 <div className="flex flex-wrap gap-2 px-4 pt-4">
                                     {attachments.map((att) => (
@@ -754,7 +754,7 @@ export default function LandingPage() {
                                         className={[
                                             'size-8 rounded-xl flex items-center justify-center transition-all duration-200',
                                             micState === 'recording'
-                                                ? 'bg-[#3B7EFF] text-white shadow-[0_2px_12px_rgba(59,126,255,0.55)]'
+                                                ? 'bg-[#3B7EFF] text-white shadow-md'
                                                 : micState === 'processing'
                                                 ? 'text-muted-foreground/50 cursor-wait'
                                                 : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
@@ -772,8 +772,7 @@ export default function LandingPage() {
                                 <Button
                                     size="sm"
                                     onClick={() => handlePromptSubmit(prompt)}
-                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200"
-                                    style={{ boxShadow: '0 2px 14px rgba(59,126,255,0.45)' }}
+                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200 shadow-md"
                                 >
                                     Build
                                     <SendHorizonal className="size-3.5" />

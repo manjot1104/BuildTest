@@ -153,7 +153,7 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
       <button
         type="button"
         onClick={onStartBlank}
-        className="group flex items-center gap-3 rounded-xl border-2 border-dashed border-border p-3 text-left transition-all hover:border-primary/50 hover:bg-primary/5 hover:shadow-sm"
+        className="group flex items-center gap-3 rounded-xl border-2 border-dashed border-border p-3 text-left transition-all hover:border-primary/50 hover:bg-muted hover:shadow-sm"
       >
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted transition-all group-hover:bg-primary/10 group-hover:text-primary">
           <LayoutTemplate className="size-4 text-muted-foreground transition-colors group-hover:text-primary" />

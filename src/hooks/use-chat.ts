@@ -41,9 +41,19 @@ export function useChat(chatId?: string) {
     error: chatError,
   } = useChatDetails(chatId)
 
+  // Reset local state when chatId changes to ensure fresh data load
+  useEffect(() => {
+    if (chatId) {
+      setCurrentChat(null)
+      setChatHistory([])
+      setIsLoading(false)
+      setIsStreaming(false)
+    }
+  }, [chatId])
+
   // Update currentChat and chatHistory when chatData changes
   useEffect(() => {
-    if (chatData) {
+    if (chatData && chatData.id === chatId) {
       const demoUrl = chatData.demo ?? chatData.latestVersion?.demoUrl
       const files = chatData.latestVersion?.files?.map((f) => ({
         name: f.name,
