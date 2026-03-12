@@ -82,6 +82,9 @@ import {
   getTestReportHandler,
   getPublicReportHandler,
   getEmbedBadgeHandler,
+  // ADDED: import the new SVG badge handler so the copied badge markdown
+  // renders as an actual image in GitHub READMEs and websites
+  getEmbedBadgeSvgHandler,
 } from "@/server/api/controllers/testing.controller";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
@@ -1364,8 +1367,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // GET /api/badge/:token — embed badge data for "Tested by Buildify — Score: N"
-  // No auth required — token is opaque and non-guessable (nanoid(32))
+  // GET /api/badge/:token — returns badge score as JSON for programmatic use
+// (CI/CD pipelines, Slack bots, custom integrations).
+// NOT the image — for the SVG image used in READMEs see /badge/:token/svg below.
+// No auth required — token is opaque and non-guessable (nanoid(32))
   .get(
     "/badge/:token",
     async ({ params, set }) => {
@@ -1373,6 +1378,24 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       if (isApiError(result))
         set.status = (result as ApiErrorResponse).status ?? 500;
       return result;
+    },
+    {
+      params: t.Object({ token: t.String() }),
+    },
+  )
+
+  // ADDED: GET /api/badge/:token/svg — returns an actual SVG image (not JSON).
+  // This is what the "Copy Badge" button points to as the image src in the
+  // markdown string: [![Tested by Buildify](.../svg)](report-link).
+  // IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
+  // "svg" as the token param on the route above. Elysia matches more-specific
+  // (longer) static segments first, so /badge/:token/svg wins correctly.
+  // No auth required — token is a nanoid(32) opaque string.
+  .get(
+    "/badge/:token/svg",
+    async ({ params }) => {
+      // Returns a native Response with Content-Type: image/svg+xml
+      return getEmbedBadgeSvgHandler({ params });
     },
     {
       params: t.Object({ token: t.String() }),

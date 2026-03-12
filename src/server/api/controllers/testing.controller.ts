@@ -1213,6 +1213,70 @@ export async function getEmbedBadgeHandler({
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/badge/[token]/svg
+// ADDED: Returns an actual SVG image so the badge renders in GitHub READMEs,
+// websites, and any Markdown renderer. The copied badge markdown from the
+// report page points to this endpoint as the image src.
+// No auth required — token is a nanoid(32) opaque string.
+// ---------------------------------------------------------------------------
+
+export async function getEmbedBadgeSvgHandler({
+  params,
+}: {
+  params: { token: string };
+}): Promise<Response> {
+  const exportRow = await db.query.report_exports.findFirst({
+    where: eq(report_exports.embed_badge_token, params.token),
+    with: { testRun: true },
+  });
+
+  // ADDED: return plain-text 404 (not JSON) so broken image shows cleanly
+  if (!exportRow) {
+    return new Response("Badge not found", { status: 404 });
+  }
+
+  const score =
+    (exportRow as unknown as { testRun: { overall_score: number | null } })
+      .testRun?.overall_score ?? 0;
+
+  // ADDED: colour mirrors the score gauge thresholds used in the dashboard UI
+  const color =
+    score >= 90 ? "#22c55e" : score >= 70 ? "#eab308" : "#ef4444";
+
+  // UPDATED: single unified label as specified in the plan doc —
+  // "Tested by Buildify — Score: 94" as one cohesive badge, not two
+  // separate dark-label + colored-score sections.
+  const badgeText = `Tested by Buildify — Score: ${score}`;
+  const totalWidth = 220;
+
+  // ADDED: standard Shields.io-style SVG badge structure.
+  // Two text nodes (offset shadow + main) give the embossed look.
+  // Whole badge is one solid color (green/yellow/red) based on score.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
+  <linearGradient id="g" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <rect rx="3" width="${totalWidth}" height="20" fill="${color}"/>
+  <rect rx="3" width="${totalWidth}" height="20" fill="url(#g)"/>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${totalWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${badgeText}</text>
+    <text x="${totalWidth / 2}" y="14">${badgeText}</text>
+  </g>
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      "Content-Type": "image/svg+xml",
+      // ADDED: cache for 5 minutes so score stays fresh without hammering the DB
+      "Cache-Control": "public, max-age=300",
+      // ADDED: allow GitHub's image proxy (camo) to load the badge cross-origin
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/test/run/[id]/export-pdf
 // ---------------------------------------------------------------------------
 
