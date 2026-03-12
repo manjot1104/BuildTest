@@ -2,6 +2,7 @@ import React from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { env } from '@/env'
+import { NavbarScrollHandler } from '@/components/buildify-studio/navbar-scroll-handler'
 import {
   type CanvasElement,
   type CanvasBackground,
@@ -153,22 +154,26 @@ function StaticElement({ el }: { el: CanvasElement }) {
     switch (el.type) {
       case 'heading': {
         const Tag: React.ElementType = `h${el.headingLevel ?? 1}`
+        const slugId = el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
         return (
-          <Tag style={{
-            width: '100%', height: '100%', margin: 0,
-            color: styles.color ?? '#1a1a1a',
-            fontSize: styles.fontSize ?? 48,
-            fontWeight: styles.fontWeight ?? '700',
-            fontFamily: styles.fontFamily,
-            textAlign: styles.textAlign,
-            letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-            lineHeight: styles.lineHeight ?? '1.2',
-            padding: styles.padding ?? 4,
-            wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
-            display: 'flex',
-            alignItems: 'center',
-          } as React.CSSProperties}>{el.content}</Tag>
+          <Tag
+            id={slugId}
+            data-heading={el.content.toLowerCase()}
+            style={{
+              width: '100%', height: '100%', margin: 0,
+              color: styles.color ?? '#1a1a1a',
+              fontSize: styles.fontSize ?? 48,
+              fontWeight: styles.fontWeight ?? '700',
+              fontFamily: styles.fontFamily,
+              textAlign: styles.textAlign,
+              letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+              lineHeight: styles.lineHeight ?? '1.2',
+              padding: styles.padding ?? 4,
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              display: 'flex',
+              alignItems: 'center',
+            } as React.CSSProperties}>{el.content}</Tag>
         )
       }
       case 'paragraph':
@@ -295,7 +300,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
     </a>
   ) : inner
 
-  return <div id={el.anchorId || undefined} data-el-id={el.id} className={animClass} style={wrapStyle}>{content}</div>
+  return <div data-el-id={el.id} className={animClass} style={wrapStyle}>{content}</div>
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -366,6 +371,7 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         ${responsiveCss}
       `}</style>
       <main>
+        <NavbarScrollHandler />
         {sorted.map((el) => <StaticElement key={el.id} el={el} />)}
       </main>
     </>

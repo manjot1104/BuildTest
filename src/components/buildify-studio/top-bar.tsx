@@ -177,7 +177,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
                         onClick={() => updBg({ type: t })}
                         className={`flex-1 rounded-lg border py-1.5 text-[11px] font-medium capitalize transition-colors ${
                           bg.type === t
-                            ? 'border-primary bg-primary/10 text-primary'
+                            ? 'border-primary bg-muted text-primary'
                             : 'border-border text-muted-foreground hover:bg-accent'
                         }`}
                       >

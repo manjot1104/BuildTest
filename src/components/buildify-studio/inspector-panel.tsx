@@ -134,7 +134,7 @@ const HOVER_ANIMATIONS: { value: HoverAnimation; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'scale', label: 'Scale Up' },
   { value: 'lift', label: 'Lift Shadow' },
-  { value: 'glow', label: 'Glow' },
+  { value: 'outline', label: 'Outline' },
 ]
 
 const FONT_WEIGHTS = ['100', '300', '400', '500', '600', '700', '800', '900']
@@ -258,43 +258,6 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                 <NumInput value={eff.styles.borderRadius} onChange={(v) => updStyle({ borderRadius: v })} min={0} max={999} />
               </Field>
             </Row>
-            {element.type === 'heading' && (
-              <Field label="Heading Level" full>
-                <Sel value={String(element.headingLevel ?? 1)}  onChange={(v) => {
-  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
-
-  const headingSizes = {
-    1: 64,
-    2: 48,
-    3: 36,
-    4: 28,
-    5: 22,
-    6: 18,
-  }
-
-  updBase({
-    headingLevel: level,
-    styles: {
-      ...element.styles,
-      fontSize: headingSizes[level],
-    },
-  })
-}}>
-                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
-                </Sel>
-              </Field>
-            )}
-            {(element.type === 'section' || element.type === 'container') && (
-              <Field label="Anchor ID" full>
-                <input
-                  type="text"
-                  value={element.anchorId ?? ''}
-                  onChange={(e) => updBase({ anchorId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') || undefined })}
-                  placeholder="e.g. about (links as #about)"
-                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none"
-                />
-              </Field>
-            )}
           </Section>
         )}
 
@@ -316,8 +279,8 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
               ) : (
                 <>
                   <Row>
-                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#667eea'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
-                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#764ba2'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
+                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#f8fafc'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
+                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#f1f5f9'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
                   </Row>
                   {eff.styles.gradientType === 'linear' && (
                     <Field label="Angle" full>
@@ -391,6 +354,20 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
         {/* ── TEXT / TYPOGRAPHY ── */}
         {activeTab === 'text' && hasText && (
           <Section title="Typography">
+            {element.type === 'heading' && (
+              <Field label="Heading Level" full>
+                <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => {
+                  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
+                  const headingSizes = { 1: 64, 2: 48, 3: 36, 4: 28, 5: 22, 6: 18 }
+                  updBase({
+                    headingLevel: level,
+                    styles: { ...element.styles, fontSize: headingSizes[level] }
+                  })
+                }}>
+                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
+                </Sel>
+              </Field>
+            )}
             <Row>
               <Field label="Size">
                 <NumInput value={eff.styles.fontSize} onChange={(v) => updStyle({ fontSize: v })} min={8} max={300} />
@@ -421,7 +398,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updStyle({ textAlign: a })}
                     className={`flex-1 rounded border py-1 text-xs capitalize transition-colors ${
                       eff.styles.textAlign === a
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -461,7 +438,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ enterAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.enterAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -479,7 +456,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ hoverAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.hoverAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >

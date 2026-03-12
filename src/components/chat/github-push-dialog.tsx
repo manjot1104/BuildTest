@@ -759,7 +759,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                       className={cn(
                         'flex flex-col items-start gap-0.5 rounded-lg border px-3.5 py-2.5 text-left transition-all duration-150',
                         visibility === value
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary/20 shadow-sm'
+                          ? 'border-primary bg-muted shadow-sm'
                           : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30',
                       )}
                     >

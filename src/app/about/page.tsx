@@ -261,7 +261,7 @@ export default function AboutPage() {
                                 className="group bg-background p-8 md:p-10 transition-colors duration-300 hover:bg-muted/30"
                             >
                                 <div className="flex items-start gap-4">
-                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-primary/10">
+                                    <div className="size-10 rounded-xl bg-muted/50 flex items-center justify-center shrink-0 transition-colors duration-300 group-hover:bg-muted">
                                         <value.icon className="size-5 text-muted-foreground transition-colors duration-300 group-hover:text-primary" />
                                     </div>
                                     <div>

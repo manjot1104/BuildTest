@@ -130,7 +130,7 @@ export function ResizableLayout({
           'relative shrink-0 cursor-col-resize select-none',
           'w-1 bg-border dark:bg-input',
           'transition-colors duration-150',
-          'hover:bg-primary/50 dark:hover:bg-primary/40',
+          'hover:bg-muted-foreground/30 dark:hover:bg-muted-foreground/20',
           isDragging && 'bg-primary dark:bg-primary',
         )}
         onMouseDown={handleMouseDown}
