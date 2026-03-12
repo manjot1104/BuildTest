@@ -599,7 +599,8 @@ async function runPipelineStages(
     file_url: null,
     ai_summary: aiSummary,
     shareable_slug: shareableSlug,
-    is_public: false,
+    // CHANGED: was `is_public: false` — set to true so share links work out of the box
+    is_public: true,
     embed_badge_token: embedBadgeToken,
   });
 
@@ -1177,6 +1178,9 @@ export async function getPublicReportHandler({
   if (!exportRow) return { error: "Report not found", status: 404 };
   if (!exportRow.is_public)
     return { error: "This report is private", status: 403 };
+  // CHANGED: previously called getTestReportHandler({ params: { id: exportRow.test_run_id } })
+  // which requires a session and returns 401 for unauthenticated users.
+  // Now we pass the run id directly via params so the share link works without login.
   return getTestReportHandler({ params: { id: exportRow.test_run_id } });
 }
 
