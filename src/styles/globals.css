@@ -235,3 +235,104 @@ body {
 /* Legacy aliases */
 .pb-anim-hoverscale { transition: transform 0.2s ease; }
 .pb-anim-hoverscale:hover { transform: scale(1.05); }
+
+/* ─── Feature demo — soft moving light around video ──────────────────────── */
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glowSpin {
+  to { --glow-angle: 360deg; }
+}
+
+/* Outer wrapper — same radius as inner, just adds space for glow */
+.feature-video-outer {
+  padding: 2px;
+  border-radius: 20px;
+  position: relative;
+}
+
+/* Soft rotating light — two streaks on opposite sides */
+.feature-video-glow-track {
+  position: absolute;
+  inset: -3px;
+  border-radius: 22px;
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(59,130,246,0.05) 0%,
+    rgba(59,130,246,0.3) 10%,
+    rgba(59,130,246,0.35) 25%,
+    rgba(59,130,246,0.05) 38%,
+    rgba(59,130,246,0.05) 50%,
+    rgba(59,130,246,0.3) 60%,
+    rgba(59,130,246,0.35) 75%,
+    rgba(59,130,246,0.05) 88%,
+    rgba(59,130,246,0.05) 100%
+  );
+  filter: blur(20px);
+  animation: glowSpin 12s linear infinite;
+  will-change: filter;
+  pointer-events: none;
+  transition: all 0.5s ease;
+}
+
+/* Inner video container — identical radius, clips everything */
+.feature-video-inner {
+  position: relative;
+  z-index: 1;
+  background: hsl(var(--background));
+}
+
+/* Hover — gently brighter */
+.feature-video-outer:hover .feature-video-glow-track {
+  inset: -4px;
+  border-radius: 23px;
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(59,130,246,0.08) 0%,
+    rgba(59,130,246,0.4) 10%,
+    rgba(59,130,246,0.45) 25%,
+    rgba(59,130,246,0.08) 38%,
+    rgba(59,130,246,0.08) 50%,
+    rgba(59,130,246,0.4) 60%,
+    rgba(59,130,246,0.45) 75%,
+    rgba(59,130,246,0.08) 88%,
+    rgba(59,130,246,0.08) 100%
+  );
+  filter: blur(24px);
+}
+
+/* Light theme — boost glow visibility */
+:root:not(.dark) .feature-video-glow-track {
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(37,99,235,0.1) 0%,
+    rgba(37,99,235,0.55) 10%,
+    rgba(37,99,235,0.65) 25%,
+    rgba(37,99,235,0.1) 38%,
+    rgba(37,99,235,0.1) 50%,
+    rgba(37,99,235,0.55) 60%,
+    rgba(37,99,235,0.65) 75%,
+    rgba(37,99,235,0.1) 88%,
+    rgba(37,99,235,0.1) 100%
+  );
+  filter: blur(18px);
+}
+
+:root:not(.dark) .feature-video-outer:hover .feature-video-glow-track {
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(37,99,235,0.15) 0%,
+    rgba(37,99,235,0.65) 10%,
+    rgba(37,99,235,0.75) 25%,
+    rgba(37,99,235,0.15) 38%,
+    rgba(37,99,235,0.15) 50%,
+    rgba(37,99,235,0.65) 60%,
+    rgba(37,99,235,0.75) 75%,
+    rgba(37,99,235,0.15) 88%,
+    rgba(37,99,235,0.15) 100%
+  );
+  filter: blur(22px);
+}
