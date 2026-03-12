@@ -43,29 +43,49 @@ export function useChat(chatId?: string) {
 
   // Reset local state when chatId changes to ensure fresh data load
   useEffect(() => {
-    if (chatId) {
+    if (chatId && chatId !== currentChat?.id) {
       setCurrentChat(null)
       setChatHistory([])
       setIsLoading(false)
       setIsStreaming(false)
     }
-  }, [chatId])
+  }, [chatId]); // Removed currentChat?.id, isStreaming, isLoading from deps to force reset on chatId change
 
   // Update currentChat and chatHistory when chatData changes
   useEffect(() => {
     if (chatData && chatData.id === chatId) {
-      const demoUrl = chatData.demo ?? chatData.latestVersion?.demoUrl
+
+      console.log('🔍 chatData received:', {
+      id: chatData.id,
+      demo: chatData.demo,
+      latestVersionDemoUrl: chatData.latestVersion?.demoUrl,
+    })
+
+      const demoUrl =
+  chatData.latestVersion?.demoUrl ??
+  (chatData as any).demoUrl ??
+  chatData.demo
+
+  console.log('🔍 demoUrl resolved to:', demoUrl)
       const files = chatData.latestVersion?.files?.map((f) => ({
         name: f.name,
         content: f.content,
       }))
-      setCurrentChat({
-        id: chatData.id,
-        demo: demoUrl,
-        url: chatData.url,
-        isOwner: (chatData as { isOwner?: boolean }).isOwner ?? true,
-        files,
-      })
+      setCurrentChat((prev) => {
+  const base = prev ?? { id: chatData.id }
+
+  return {
+    ...base,
+    id: chatData.id,
+    demo: demoUrl ?? base.demo,
+    url: chatData.url ?? base.url,
+    isOwner:
+      (chatData as { isOwner?: boolean }).isOwner ??
+      base.isOwner ??
+      true,
+    files: files ?? base.files,
+  }
+})
 
       // Only update chat history if it's empty (initial load)
       if (chatData.messages && chatHistory.length === 0) {
@@ -77,7 +97,7 @@ export function useChat(chatId?: string) {
         )
       }
     }
-  }, [chatData, chatHistory.length])
+  }, [chatData, chatId, chatHistory.length])
 
   // Log chat loading errors (page handles the UI)
   useEffect(() => {
@@ -196,15 +216,18 @@ if (Array.isArray(finalContent)) {
     (item: any) => item?.type === "file"
   )
 
-  if (fileBlocks.length > 0) {
-    setCurrentChat((prev) => ({
-      ...prev!,
-      files: fileBlocks.map((f: any) => ({
-        name: f.name,
-        content: f.content,
-      })),
-    }))
-  }
+    if (fileBlocks.length > 0) {
+      setCurrentChat((prev) => {
+        const base = prev ?? { id: chatId || '' }
+        return {
+          ...base,
+          files: fileBlocks.map((f: any) => ({
+            name: f.name,
+            content: f.content,
+          })),
+        }
+      })
+    }
 }
 
     setIsStreaming(false)
@@ -275,7 +298,10 @@ if (Array.isArray(finalContent)) {
     // Update URL if we found a new chat ID and URL doesn't have one
     if (extractedChatId && !urlChatId) {
       updateUrlWithChatId(extractedChatId)
-      setCurrentChat({ id: extractedChatId })
+     setCurrentChat((prev) => ({
+  ...(prev ?? { id: extractedChatId! }),
+  id: extractedChatId!,
+}))
     }
 
     // Determine which chatId to use for fetching - URL is most reliable
@@ -296,14 +322,31 @@ if (Array.isArray(finalContent)) {
           staleTime: 0, // Force fresh fetch
         })
 
-        const data = result as { demo?: string; latestVersion?: { demoUrl?: string } } | undefined
-        const demoUrl = data?.demo ?? data?.latestVersion?.demoUrl
+       const data = result as {
+  demo?: string
+  demoUrl?: string
+  latestVersion?: { demoUrl?: string }
+} | undefined
 
-        if (!demoUrl && attempt < 5) {
-          // Retry with exponential backoff (1s, 2s, 3s, 4s, 5s)
+const demoUrl =
+  data?.latestVersion?.demoUrl ??
+  data?.demoUrl ??
+  data?.demo
+
+        if (demoUrl) {
+          setCurrentChat((prev) => {
+            const base = prev ?? { id: chatIdToFetch! }
+            return {
+              ...base,
+              demo: demoUrl,
+            }
+          })
+        } else if (attempt < 15) {
+          // Retry with exponential backoff (1s, 2s, 3s, 4s, 5s...)
+          // Increased attempts to 15 for complex apps that take longer to deploy
           setTimeout(() => {
             void fetchChatDetails(attempt + 1)
-          }, 1000 * attempt)
+          }, 1000 * Math.min(attempt, 5))
         }
       }
 
@@ -332,10 +375,11 @@ if (Array.isArray(finalContent)) {
 
         // Update currentChat with basic info
         // The query hook will update it with full details including demo URL
-        setCurrentChat({
-          id: chatData.id,
+        setCurrentChat((prev) => ({
+          ...(prev ?? { id: chatData.id! }),
+          id: chatData.id!,
           url: chatData.webUrl ?? chatData.url,
-        })
+        }))
       }
     }
   }

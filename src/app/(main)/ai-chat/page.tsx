@@ -399,7 +399,7 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
   console.warn=function(){_orig.warn.apply(console,arguments);if(!_isSuppressed(arguments))_log('warn',arguments);};
   console.error=function(){_orig.error.apply(console,arguments);if(!_isSuppressed(arguments))_log('error',arguments);};
   console.info=function(){_orig.info.apply(console,arguments);if(!_isSuppressed(arguments))_log('info',arguments);};
-  window.onerror=function(m,s,l,c,e){_log('error',[e?e.stack||e.message:m]);};
+ window.onerror=function(m,s,l,c,e){_log('error',['SCRIPT ERROR: '+m+' | file: '+s+' | line: '+l+' | col: '+c+' | '+(e?e.stack||e.message:'no stack')]);};
   window.onunhandledrejection=function(e){_log('error',['Unhandled Promise: '+(e.reason&&e.reason.stack||e.reason)]);};
 
   // After DOM loads, hide console panel if there's visible content in body
@@ -438,9 +438,11 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
  */
 function stripModuleSyntax(code: string): string {
   return code
-    .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "") 
     .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
-    .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+\w/gm, "type ")
+    .replace(/^\s*export\s+interface\s/gm, "interface ")
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -448,6 +450,8 @@ function stripModuleSyntax(code: string): string {
     .replace(/export\s+let\s/g, "let ")
     .replace(/export\s+var\s/g, "var ")
     .replace(/^\s*export\s+default\s+/gm, "var _default = ")
+   .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
+  .replace(/<(?:[A-Za-z][a-zA-Z0-9]*(?:\[\])?(?:\s*\|\s*[A-Za-z][a-zA-Z0-9]*(?:\[\])?)*\s*)>/g, "")
     .trim();
 }
 
@@ -520,7 +524,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
       }
     }
     if (needsReact && !doc.includes("react")) {
-      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}`;
+  const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>\n<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
       if (doc.includes("</head>")) {
         doc = doc.replace("</head>", `${reactCdn}\n</head>`);
       } else if (doc.includes("<body")) {
@@ -535,8 +539,22 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
         doc += `\n${jsTag}`;
       }
     }
+   // REPLACE WITH:
     if (jsxBlocks.length > 0) {
-      const jsxTag = `<script type="text/babel" data-presets="react">\n${jsxBlocks.join("\n")}\n<\/script>`;
+      const mergedJsx = jsxBlocks.join("\n\n");
+      const autoMount = `
+(function() {
+  var _mounted = false;
+  function mount() {
+    if (_mounted) return;
+    var rootEl = document.getElementById('root');
+    if (!rootEl) { rootEl = document.createElement('div'); rootEl.id = 'root'; document.body.appendChild(rootEl); }
+    var component = typeof App !== 'undefined' ? App : typeof _default !== 'undefined' ? _default : (function(){ var keys = Object.keys(window).filter(function(k){ return /^[A-Z]/.test(k) && typeof window[k]==='function' && k!=='React' && k!=='ReactDOM' && k!=='Babel'; }); return keys.length > 0 ? window[keys[keys.length-1]] : null; })();
+    if (component) { _mounted = true; ReactDOM.createRoot(rootEl).render(React.createElement(component)); }
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }
+})();`;
+      const jsxTag = `<script type="text/babel" data-presets="react,typescript">\n${mergedJsx}\n${autoMount}\n<\/script>`;
       if (doc.includes("</body>")) {
         doc = doc.replace("</body>", `${jsxTag}\n</body>`);
       } else {
@@ -547,12 +565,52 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
   }
 
   // Build a minimal HTML document
-  const reactCdn = needsReact
-    ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
+ // Build a minimal HTML document
+ const reactCdn = needsReact
+    ? `<script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-${REACT_GLOBALS_SHIM}`
+${REACT_GLOBALS_SHIM}
+<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>
+<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>
+<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`
     : "";
+
+  // ALL jsx blocks merged into ONE single babel script
+  const mergedJsx = jsxBlocks.join("\n\n");
+
+  const autoMount = needsReact ? `
+(function() {
+  var _mounted = false;
+  function mount() {
+    if (_mounted) return;
+    var rootEl = document.getElementById('root');
+    if (!rootEl) {
+      rootEl = document.createElement('div');
+      rootEl.id = 'root';
+      document.body.appendChild(rootEl);
+    }
+    var component =
+      typeof App !== 'undefined' ? App :
+      typeof _default !== 'undefined' ? _default :
+      (function() {
+        var keys = Object.keys(window).filter(function(k) {
+          return /^[A-Z]/.test(k) && typeof window[k] === 'function'
+            && k !== 'React' && k !== 'ReactDOM' && k !== 'Babel';
+        });
+        return keys.length > 0 ? window[keys[keys.length - 1]] : null;
+      })();
+    if (component) {
+      _mounted = true;
+      ReactDOM.createRoot(rootEl).render(React.createElement(component));
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -566,13 +624,9 @@ ${reactCdn}
 ${CONSOLE_CAPTURE_SCRIPT}
 ${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
 ${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
-${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react">
-${jsxBlocks.join("\n\n")}
-${!mainHtml ? `
-// Auto-mount: render App component to #root
-if (typeof App !== 'undefined') {
-  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-}` : ""}
+${needsReact && mergedJsx ? `<script type="text/babel" data-presets="react,typescript">
+${mergedJsx}
+${autoMount}
 <\/script>` : ""}
 </body>
 </html>`;
@@ -596,9 +650,21 @@ function buildBackendCode(blocks: SegmentCode[]): { code: string; language: stri
 
 // ─── App Runner Component ───────────────────────────────────────────────────
 
-function AppRunner({ content }: { content: string }) {
+function AppRunner({ content, files }: { content: string; files?: ChatMessage["files"] }) {
   const segments = splitCodeBlocks(content);
-  const codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+  let codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+
+  // If we have explicit files (e.g. from structured output), prioritize them
+  if (files && files.length > 0) {
+    const fileBlocks: SegmentCode[] = files.map((f) => ({
+      type: "code",
+      lang: f.language,
+      code: f.code,
+    }));
+    if (fileBlocks.length > 0) {
+      codeBlocks = fileBlocks;
+    }
+  }
 
   const [execution, setExecution] = useState<AppExecution>({
     isRunning: false, htmlPreview: null, consoleOutput: null,
@@ -709,7 +775,7 @@ function AppRunner({ content }: { content: string }) {
           size="sm"
           className={cn(
             "h-7 gap-1.5 text-xs",
-            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20",
+            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary",
           )}
           onClick={hasResult ? handleStop : handleRun}
           disabled={execution.isRunning}
@@ -760,15 +826,15 @@ function AppRunner({ content }: { content: string }) {
                   </Button>
                 </div>
               </div>
-              <iframe
-                srcDoc={execution.htmlPreview}
-                sandbox="allow-scripts allow-forms"
-                className={cn(
-                  "w-full bg-white transition-all duration-300",
-                  isExpanded ? "h-[500px]" : "h-72",
-                )}
-                title="App Preview"
-              />
+             <iframe
+  srcDoc={execution.htmlPreview}
+  sandbox="allow-scripts allow-forms allow-popups"
+  className={cn(
+    "w-full bg-white transition-all duration-300",
+    isExpanded ? "h-[500px]" : "h-72",
+  )}
+  title="App Preview"
+/>
             </>
           )}
 
@@ -1019,7 +1085,7 @@ const toggleStar = async () => {
     <div className="group flex gap-3">
       <div className={cn(
         "mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg",
-        message.isError ? "bg-destructive/10 text-destructive" : "bg-muted text-primary",
+        message.isError ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary",
       )}>
         {message.isError ? <AlertTriangle className="size-3.5" /> : <Bot className="size-3.5" />}
       </div>
@@ -1041,7 +1107,7 @@ const toggleStar = async () => {
         )}>
           <MarkdownMessage content={message.content} />
         </div>
-        {!message.isError && <AppRunner content={message.content} />}
+        {!message.isError && <AppRunner content={message.content} files={message.files} />}
        <div className="flex items-center gap-1">
   <CopyMessageButton content={message.content} />
 
@@ -1074,7 +1140,7 @@ const toggleStar = async () => {
 function TypingIndicator({ modelName }: { modelName: string }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <Bot className="size-3.5" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1127,9 +1193,10 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center">
-      {/* Logo without glow */}
+      {/* Logo with glow */}
       <div className="relative">
-        <div className="relative flex size-16 items-center justify-center rounded-2xl border bg-muted">
+        <div className="absolute inset-0 scale-150 rounded-full bg-primary/10 blur-2xl" />
+        <div className="relative flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/5">
           <BuildifyLogo size="lg" />
         </div>
       </div>
@@ -1148,9 +1215,9 @@ function EmptyState({
             <button
               key={s.label}
               onClick={() => onSuggestion(s.prompt)}
-              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-border hover:bg-muted hover:shadow-sm"
+              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm"
             >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-background">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-primary/10">
                 <s.icon className="size-4 text-muted-foreground transition-colors group-hover/card:text-primary" />
               </div>
               <div>
@@ -1210,8 +1277,8 @@ function GenerationSettings({
               size="icon-xs"
               disabled={disabled}
               className={cn(
-                "rounded-lg border-border/60 hover:border-border hover:bg-muted",
-                !isDefault && "border-primary/40 bg-muted text-primary",
+                "rounded-lg border-border/60 hover:border-primary/30",
+                !isDefault && "border-primary/40 bg-primary/5 text-primary",
               )}
             >
               <SlidersHorizontal className="size-3.5" />
@@ -1220,7 +1287,7 @@ function GenerationSettings({
         </TooltipTrigger>
         <TooltipContent>Generation settings</TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
+      <PopoverContent side="top" align="start" className="w-80">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">Generation Settings</h4>
           {!isDefault && (
@@ -1338,14 +1405,14 @@ function ModelSelector({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
+          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground"
         >
           <Sparkles className="size-3.5 text-primary" />
           <span className="max-w-[130px] truncate">{selected.name}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
+      <DropdownMenuContent side="top" align="start" className="w-80">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Select a model
         </DropdownMenuLabel>
@@ -1356,7 +1423,7 @@ function ModelSelector({
             onClick={() => onSelect(m.id)}
             className={cn(
               "flex cursor-pointer items-start gap-2.5 py-2.5",
-              m.id === modelId && "bg-muted",
+              m.id === modelId && "bg-primary/5",
             )}
           >
             <div className={cn(
@@ -1398,6 +1465,40 @@ export default function OpenRouterChatPage() {
 >([]);
 
 const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+const [panelWidth, setPanelWidth] = useState(420);
+const isResizing = useRef(false);
+
+const handleMouseMove = useCallback((e: MouseEvent) => {
+  if (!isResizing.current) return;
+  const newWidth = window.innerWidth - e.clientX;
+  if (newWidth > 320 && newWidth < 1000) {
+    setPanelWidth(newWidth);
+  }
+}, []);
+
+const handleMouseUp = useCallback(() => {
+  isResizing.current = false;
+  document.removeEventListener("mousemove", handleMouseMove);
+  document.removeEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "default";
+}, [handleMouseMove]);
+
+const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  e.preventDefault();
+  isResizing.current = true;
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "col-resize";
+}, [handleMouseMove, handleMouseUp]);
+
+// Clean up listeners on unmount
+useEffect(() => {
+  return () => {
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+}, [handleMouseMove, handleMouseUp]);
+
 const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1428,7 +1529,8 @@ const searchParams = useSearchParams();
   timestamp: new Date(m.created_at),
   modelId: m.model,
   starred: m.starred || false,
-  conversationId: m.conversation_id  
+  conversationId: m.conversation_id,
+  files: m.files || []
 }));
        
 
@@ -1535,6 +1637,7 @@ useEffect(() => {
         let usedModel: string | undefined;
         let isFallback = false;
         let rafId = 0;
+        let assistantFiles: ChatMessage["files"] = [];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1591,6 +1694,7 @@ useEffect(() => {
   }
 
   if (event.files?.length) {
+    assistantFiles = event.files;
     setActiveFiles(event.files);
     setSelectedFileIndex(0);
   }
@@ -1609,7 +1713,13 @@ useEffect(() => {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: fullContent || "No response received.", modelId: usedModel, isFallback }
+              ? { 
+                  ...m, 
+                  content: fullContent || "No response received.", 
+                  modelId: usedModel, 
+                  isFallback,
+                  files: assistantFiles
+                }
               : m,
           ),
         );
@@ -1698,7 +1808,7 @@ useEffect(() => {
   <div className="flex-1 flex flex-col">
    <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-muted">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
             <BrainCircuit className="size-4 text-primary" />
           </div>
           <div className="flex flex-col">
@@ -1763,7 +1873,7 @@ useEffect(() => {
       {/* ── Input area ── */}
       <div className="shrink-0 border-t bg-background px-4 py-3">
         <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/30">
+          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
             {/* Textarea */}
             <Textarea
               ref={textareaRef}
@@ -1836,10 +1946,16 @@ useEffect(() => {
 {activeFiles.length > 0 && (
   <>
     {/* Resize Handle */}
-    <div className="w-1 cursor-col-resize bg-border hover:bg-muted transition-colors" />
+    <div 
+      className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" 
+      onMouseDown={handleMouseDown}
+    />
 
     {/* Sidebar */}
-    <div className="w-[420px] border-l bg-background flex flex-col shadow-2xl">
+    <div 
+      className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+      style={{ width: `${panelWidth}px` }}
+    >
 
       {/* Header */}
       <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
@@ -1868,7 +1984,7 @@ useEffect(() => {
             className={cn(
               "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
               index === selectedFileIndex
-                ? "border-primary text-primary bg-muted"
+                ? "border-primary text-primary bg-primary/5"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >

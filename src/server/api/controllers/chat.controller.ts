@@ -429,7 +429,9 @@ export async function getChatDetailsHandler({
       throw error
     }
 
-    return { ...chatDetails, isOwner }
+    const localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+const resolvedDemo = chatDetails.demo ?? localChat?.demo_url ?? undefined
+return { ...chatDetails, demo: resolvedDemo, isOwner }
   } catch {
     return {
       error: 'Failed to fetch chat details',

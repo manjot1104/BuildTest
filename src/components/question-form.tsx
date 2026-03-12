@@ -39,7 +39,7 @@ function QuestionCard({
               onClick={() => !disabled && onSelect(option.id)}
               disabled={disabled}
               className={cn(
-                'w-full text-left p-3 rounded-lg border transition-all',
+                'w-full text-left p-2.5 rounded-lg border transition-all',
                 disabled
                   ? 'opacity-50 cursor-not-allowed'
                   : 'hover:border-primary/50 hover:bg-accent/50 cursor-pointer',
@@ -167,20 +167,20 @@ export function QuestionForm({ questions, className }: QuestionFormProps) {
         />
       ))}
 
-      <div className="pt-2">
+      <div className="pt-2 flex justify-end">
         <Button
           onClick={handleSubmit}
           disabled={!allQuestionsAnswered || submitted || isAnswering}
-          className="w-full"
+          className="w-fit min-w-[100px] h-8 px-6 py-1.5 text-sm"
         >
           {isAnswering ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />
               Sending...
             </>
           ) : submitted ? (
             <>
-              <Check className="w-4 h-4 mr-2" />
+              <Check className="w-3.5 h-3.5 mr-2" />
               Sent
             </>
           ) : (

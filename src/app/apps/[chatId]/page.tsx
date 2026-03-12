@@ -94,7 +94,6 @@ export default function AppPage() {
               onClick={() => window.location.reload()}
               className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
-              <RotateCw className="h-3.5 w-3.5" />
               Retry
             </button>
             <Link
@@ -147,10 +146,11 @@ export default function AppPage() {
           </div>
         )}
         <iframe
+          key={data.demoUrl}
           src={data.demoUrl}
           title={title}
-          className="h-full w-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+          className="h-full w-full border-0 bg-white"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-modals allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-downloads"
           onLoad={() => setIframeLoading(false)}
           onError={() => {
             setIframeLoading(false)

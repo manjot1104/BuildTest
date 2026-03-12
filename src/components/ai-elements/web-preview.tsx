@@ -162,14 +162,16 @@ export const WebPreviewBody = ({
   loading,
   ...props
 }: WebPreviewBodyProps) => {
-  const { url } = useWebPreview()
+  const context = useContext(WebPreviewContext)
+  const finalUrl = src || context?.url || ""
 
   return (
     <div className="flex-1 h-full min-h-0">
       <iframe
+        key={finalUrl}
         className={cn('size-full', className)}
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
-        src={(src ?? url) || undefined}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-modals allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-downloads"
+        src={finalUrl || undefined}
         title="Preview"
         {...props}
       />
