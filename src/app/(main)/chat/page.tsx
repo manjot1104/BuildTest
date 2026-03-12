@@ -95,19 +95,28 @@ export default function ChatPage() {
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
     const [micError, setMicError] = useState<string | null>(null)
-   const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-   if (typeof window !== 'undefined') {
-   return new URLSearchParams(window.location.search).get('chatId')
-   }
-   return null
-   })
+    const searchParams = useSearchParams()
+    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+        if (typeof window !== 'undefined') {
+            return new URLSearchParams(window.location.search).get('chatId')
+        }
+        return null
+    })
+
+    // Update urlChatId whenever searchParams change
+    useEffect(() => {
+        const chatId = searchParams.get('chatId')
+        if (chatId !== urlChatId) {
+            setUrlChatId(chatId)
+        }
+    }, [searchParams, urlChatId])
 
     useEffect(() => {
-        if (urlChatId && !chatMode) {
+        if (urlChatId) {
             setChatMode("BUILDER");
             setShowChatInterface(true);
         }
-    }, [urlChatId, chatMode]);
+    }, [urlChatId]);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -149,7 +158,7 @@ export default function ChatPage() {
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
     !isStreaming
-
+console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrentChat?.demo, '| isStreaming:', isStreaming)
 
     // Sync loading state
     useEffect(() => {
@@ -159,6 +168,7 @@ export default function ChatPage() {
     const handleReset = () => {
         // Reset all chat-related state
         setShowChatInterface(false)
+        setChatMode(null)
         
         setMessage('')
         setAttachments([])

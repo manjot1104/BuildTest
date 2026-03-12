@@ -386,19 +386,25 @@ function parseAIResponse(raw: string): {
 
 /** Checks if code blocks can be rendered client-side in a browser */
 function isWebApp(blocks: SegmentCode[]): boolean {
-  const langs = blocks.map((b) => b.lang.toLowerCase());
-  // Has HTML → definitely a web app
-  if (langs.some((l) => ["html", "htm"].includes(l))) return true;
-  // Has JSX/TSX → React code, render client-side with React CDN
-  if (langs.some((l) => JSX_LANGUAGES.has(l))) return true;
-  // Has JS/TS/CSS only (no server-only languages) → can render in browser
+  const langs = blocks.map((b) => b.lang.trim().toLowerCase());
+  
+  // 1. Explicit web/framework languages (ignore server-only blocks if these exist)
+  if (langs.some((l) => ["html", "htm", "jsx", "tsx", "react"].includes(l) || JSX_LANGUAGES.has(l))) return true;
+  
+  // 2. JS/TS/CSS only (no server-only languages like Python/Bash)
   const hasScript = langs.some((l) => SCRIPT_LANGUAGES.has(l));
   const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
   const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
   if ((hasScript || hasCss) && !hasServerOnly) return true;
   
-  // Last resort: check if any block content looks like HTML
-  if (blocks.some(b => /<[a-z][\s\S]*>/i.test(b.code))) return true;
+  // 3. Last resort: check if any block content looks like HTML/JSX or uses React patterns
+  if (blocks.some(b => 
+    /<[a-z][\s\S]*>/i.test(b.code) || 
+    b.code.includes("useState") || 
+    b.code.includes("useEffect") || 
+    b.code.includes("React.") ||
+    b.code.includes("export default")
+  )) return true;
 
   return false;
 }
@@ -483,9 +489,8 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
  */
 function stripModuleSyntax(code: string): string {
   return code
-    .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
-    .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
-    .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
+    .replace(/import\s+[\s\S]*?from\s+['"].*?['"];?/gm, "")
+    .replace(/import\s+['"].*?['"];?/gm, "")
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -530,25 +535,63 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
 
   // Detect if code contains JSX syntax (even if tagged as js/ts)
   const looksLikeJsx = (code: string) =>
-    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || code.includes("React.createElement") || /from\s+['"]react['"]/.test(code);
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || 
+    code.includes("React.") || 
+    code.includes("useState") ||
+    code.includes("useEffect") ||
+    /from\s+['"]react['"]/.test(code);
 
   for (const block of blocks) {
     const lang = block.lang.toLowerCase();
-    if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
-    else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
-    else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
+    if (["html", "htm"].includes(lang)) {
+      htmlBlocks.push(block.code);
+    } else if (["css", "scss", "less", "tailwind"].includes(lang)) {
+      cssBlocks.push(block.code);
+    } else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code))) {
       jsxBlocks.push(stripModuleSyntax(block.code));
-    else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
+    } else if (SCRIPT_LANGUAGES.has(lang)) {
+      jsBlocks.push(stripModuleSyntax(block.code));
+    }
   }
 
   const needsReact = jsxBlocks.length > 0;
   const mainHtml = htmlBlocks.join("\n");
   const hasFullDocument = mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
 
-  // If the HTML already looks like a full document, inject CSS/JS/console into it
+  const reactCdn = needsReact 
+    ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<script src="https://unpkg.com/lucide@latest"><\/script>
+${REACT_GLOBALS_SHIM}`
+    : "";
+
+  const tailwindCdn = `<script src="https://cdn.tailwindcss.com"><\/script>`;
+
+  // Auto-mount logic script
+  const autoMountScript = `
+(function() {
+  function mount() {
+    var root = document.getElementById('root') || document.body;
+    if (typeof App !== 'undefined') {
+      ReactDOM.createRoot(root).render(React.createElement(App));
+    } else if (typeof _default !== 'undefined') {
+      ReactDOM.createRoot(root).render(React.createElement(_default));
+    } else {
+      // Find last capitalized function/class that isn't React or ReactDOM
+      var keys = Object.keys(window).filter(k => /^[A-Z]/.test(k) && typeof window[k] === 'function' && k !== 'React' && k !== 'ReactDOM');
+      if (keys.length > 0) {
+        ReactDOM.createRoot(root).render(React.createElement(window[keys[keys.length-1]]));
+      }
+    }
+  }
+  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }
+  setTimeout(mount, 500); // Robustness for async transpilation
+})();
+`;
+
   if (hasFullDocument) {
     let doc = mainHtml;
-    // Inject console capture right after <body>
     if (doc.includes("<body")) {
       doc = doc.replace(/<body[^>]*>/, `$&\n${CONSOLE_CAPTURE_SCRIPT}`);
     } else {
@@ -556,68 +599,40 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
     }
     if (cssBlocks.length > 0) {
       const cssTag = `<style>\n${cssBlocks.join("\n")}\n</style>`;
-      if (doc.includes("</head>")) {
-        doc = doc.replace("</head>", `${cssTag}\n</head>`);
-      } else if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${cssTag}\n</body>`);
-      } else {
-        doc += `\n${cssTag}`;
-      }
+      doc = doc.includes("</head>") ? doc.replace("</head>", `${cssTag}\n</head>`) : doc + `\n${cssTag}`;
     }
-    if (needsReact && !doc.includes("react")) {
-      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}`;
-      if (doc.includes("</head>")) {
-        doc = doc.replace("</head>", `${reactCdn}\n</head>`);
-      } else if (doc.includes("<body")) {
-        doc = doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
-      }
+    if (needsReact) {
+      doc = doc.includes("</head>") ? doc.replace("head>", `${reactCdn}\n</head>`) : doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
     }
+    doc = doc.includes("</head>") ? doc.replace("head>", `head>\n${tailwindCdn}\n`) : doc + `\n${tailwindCdn}`;
+    
     if (jsBlocks.length > 0) {
       const jsTag = `<script>\n${jsBlocks.join("\n")}\n<\/script>`;
-      if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${jsTag}\n</body>`);
-      } else {
-        doc += `\n${jsTag}`;
-      }
+      doc = doc.includes("</body>") ? doc.replace("</body>", `${jsTag}\n</body>`) : doc + `\n${jsTag}`;
     }
     if (jsxBlocks.length > 0) {
-      const jsxTag = `<script type="text/babel" data-presets="react">\n${jsxBlocks.join("\n")}\n<\/script>`;
-      if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${jsxTag}\n</body>`);
-      } else {
-        doc += `\n${jsxTag}`;
-      }
+      const jsxTag = `<script type="text/babel" data-presets="react,typescript">\n${jsxBlocks.join("\n")}\n${autoMountScript}\n<\/script>`;
+      doc = doc.includes("</body>") ? doc.replace("</body>", `${jsxTag}\n</body>`) : doc + `\n${jsxTag}`;
     }
     return doc;
   }
-
-  // Build a minimal HTML document
-  const reactCdn = needsReact
-    ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-${REACT_GLOBALS_SHIM}`
-    : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+${tailwindCdn}
 ${cssBlocks.length > 0 ? `<style>\n${cssBlocks.join("\n")}\n</style>` : ""}
 ${reactCdn}
 </head>
-<body>
+<body class="bg-white text-slate-900">
 ${CONSOLE_CAPTURE_SCRIPT}
 ${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
 ${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
-${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react">
+${jsxBlocks.length > 0 ? `<script type="text/babel" data-presets="react,typescript">
 ${jsxBlocks.join("\n\n")}
-${!mainHtml ? `
-// Auto-mount: render App component to #root
-if (typeof App !== 'undefined') {
-  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-}` : ""}
+${autoMountScript}
 <\/script>` : ""}
 </body>
 </html>`;
@@ -668,6 +683,7 @@ function AppRunner({
       // Avoid duplicates if the same code is already in markdown
       if (!allCodeBlocks.some(b => b.code === f.code)) {
         allCodeBlocks.push({
+          type: "code",
           lang: lang,
           code: f.code
         });

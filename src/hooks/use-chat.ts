@@ -42,25 +42,31 @@ export function useChat(chatId?: string) {
   } = useChatDetails(chatId)
 
   // Reset local state when chatId changes to ensure fresh data load
-  // BUT: Don't reset if we're currently streaming or if it's the same chat
   useEffect(() => {
     if (chatId && chatId !== currentChat?.id) {
-      if (!isStreaming && !isLoading) {
-        setCurrentChat(null)
-        setChatHistory([])
-        setIsLoading(false)
-        setIsStreaming(false)
-      }
+      setCurrentChat(null)
+      setChatHistory([])
+      setIsLoading(false)
+      setIsStreaming(false)
     }
-  }, [chatId, currentChat?.id, isStreaming, isLoading])
+  }, [chatId]); // Removed currentChat?.id, isStreaming, isLoading from deps to force reset on chatId change
 
   // Update currentChat and chatHistory when chatData changes
   useEffect(() => {
     if (chatData && chatData.id === chatId) {
+
+      console.log('🔍 chatData received:', {
+      id: chatData.id,
+      demo: chatData.demo,
+      latestVersionDemoUrl: chatData.latestVersion?.demoUrl,
+    })
+
       const demoUrl =
   chatData.latestVersion?.demoUrl ??
   (chatData as any).demoUrl ??
   chatData.demo
+
+  console.log('🔍 demoUrl resolved to:', demoUrl)
       const files = chatData.latestVersion?.files?.map((f) => ({
         name: f.name,
         content: f.content,
