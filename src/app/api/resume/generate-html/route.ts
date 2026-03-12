@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { generateLaTeXResume } from '@/lib/openrouter'
+import { generateHtmlResume } from '@/lib/openrouter'
 import { env } from '@/env'
 
 const resumeRequestSchema = z.object({
@@ -18,8 +18,8 @@ const resumeRequestSchema = z.object({
 })
 
 /**
- * Generate LaTeX code only (without compiling to PDF)
- * POST /api/resume/generate-latex
+ * Generate HTML code only (without compiling to PDF)
+ * POST /api/resume/generate-html
  */
 export async function POST(request: NextRequest) {
   try {
@@ -33,24 +33,24 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await generateLaTeXResume(validatedData)
+    const result = await generateHtmlResume(validatedData)
 
     if (!result?.cleaned?.trim()) {
       return NextResponse.json(
-        { error: 'Failed to generate LaTeX code from AI' },
+        { error: 'Failed to generate HTML code from AI' },
         { status: 500 }
       )
     }
 
     return NextResponse.json({
-      latex: result.cleaned,
+      html: result.cleaned,
       rawResponse: result.raw,
       model: result.model,
       isFallback: result.isFallback,
       success: true,
     })
   } catch (error) {
-    console.error('Error generating LaTeX:', error)
+    console.error('Error generating HTML:', error)
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Error) {
       return NextResponse.json(
-        { error: error.message || 'Failed to generate LaTeX code' },
+        { error: error.message || 'Failed to generate HTML code' },
         { status: 500 }
       )
     }

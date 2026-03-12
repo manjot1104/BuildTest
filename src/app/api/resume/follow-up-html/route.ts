@@ -1,30 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { generateLaTeXResume } from '@/lib/openrouter'
+import { followUpHtml } from '@/lib/openrouter'
 import { env } from '@/env'
 
-const resumeRequestSchema = z.object({
-  fullName: z.string().min(1).max(100),
-  email: z.string().email(),
-  phone: z.string().min(1).max(20),
-  skills: z.string().min(1),
-  experience: z.string().min(1),
-  education: z.string().min(1),
-  projects: z.string().min(1),
-  additionalInstructions: z.string().optional(),
+const followUpRequestSchema = z.object({
+  currentHtml: z.string().min(1, 'HTML code is required'),
+  prompt: z.string().min(1, 'Prompt is required'),
   model: z.string().optional(),
-  templateId: z.string().optional(),
-  templateStyleGuide: z.string().optional(),
 })
 
 /**
- * Generate LaTeX code only (without compiling to PDF)
- * POST /api/resume/generate-latex
+ * Process follow-up prompt to modify existing HTML code
+ * POST /api/resume/follow-up-html
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const validatedData = resumeRequestSchema.parse(body)
+    const { currentHtml, prompt, model } = followUpRequestSchema.parse(body)
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
@@ -33,24 +25,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await generateLaTeXResume(validatedData)
-
-    if (!result?.cleaned?.trim()) {
-      return NextResponse.json(
-        { error: 'Failed to generate LaTeX code from AI' },
-        { status: 500 }
-      )
-    }
+    const result = await followUpHtml(currentHtml, prompt, model)
 
     return NextResponse.json({
-      latex: result.cleaned,
+      html: result.cleaned,
       rawResponse: result.raw,
       model: result.model,
       isFallback: result.isFallback,
       success: true,
     })
   } catch (error) {
-    console.error('Error generating LaTeX:', error)
+    console.error('Error processing follow-up:', error)
 
     if (error instanceof z.ZodError) {
       return NextResponse.json(
@@ -61,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     if (error instanceof Error) {
       return NextResponse.json(
-        { error: error.message || 'Failed to generate LaTeX code' },
+        { error: error.message || 'Failed to process follow-up prompt' },
         { status: 500 }
       )
     }
