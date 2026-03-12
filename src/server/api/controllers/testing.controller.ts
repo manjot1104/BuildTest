@@ -1604,13 +1604,13 @@ export async function exportTestReportPdfHandler({
         status: 500,
       };
 
-    const nodeBuffer = Buffer.from(pdfBytes);
-    const arrayBuffer = nodeBuffer.buffer.slice(
-      nodeBuffer.byteOffset,
-      nodeBuffer.byteOffset + nodeBuffer.byteLength,
-    ) as ArrayBuffer;
-
-    return new Response(arrayBuffer, {
+    // FIXED: pdfBytes is already a clean ArrayBuffer returned by safePdfBytes()
+    // inside generateHtmlPdf() in puppeteer.service.ts — it owns its own memory
+    // slice with no pool offset. Wrapping it in Buffer.from() then reading
+    // .buffer re-attaches it to Node's shared pool, which causes the byteOffset
+    // to be non-zero and sends garbage bytes before the PDF header, corrupting
+    // the file. Pass pdfBytes directly so exactly the right bytes are sent.
+    return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
