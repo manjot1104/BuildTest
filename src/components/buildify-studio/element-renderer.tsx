@@ -109,6 +109,12 @@ const ICON_MAP: Record<string, React.FC<{ size?: number; color?: string; classNa
 /** All available icon names for the picker UI */
 export const ICON_NAMES = Object.keys(ICON_MAP)
 
+/** Render an icon by name — used by the icon picker in the inspector */
+export function RenderIcon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {
+  const IconComponent = ICON_MAP[name] ?? Star
+  return <IconComponent size={size} className={className} />
+}
+
 // --- Social icons ---
 const SOCIAL_ICON_MAP: Record<SocialPlatform, React.FC<{ size?: number; className?: string }>> = {
   github: Github,
@@ -330,13 +336,12 @@ function ButtonRenderer({ element, isPreview }: { element: CanvasElement; isPrev
   )
 }
 
-function SectionRenderer({ element }: { element: CanvasElement }) {
+function SectionRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
   const { styles } = element
   const bgStyle = getBackgroundStyle(styles)
+  const sectionName = element.sectionKey || 'Unnamed Section'
   return (
     <div
-   
-
       style={{
         width: '100%',
         height: '100%',
@@ -346,8 +351,32 @@ function SectionRenderer({ element }: { element: CanvasElement }) {
         padding: styles.padding ?? 24,
         boxShadow: styles.boxShadow,
         overflow: 'hidden',
+        position: 'relative',
       }}
-    />
+    >
+      {/* Section name label (visible only in editor, not preview) */}
+      {!isPreview && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 10,
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            background: 'rgba(255,255,255,0.85)',
+            padding: '2px 8px',
+            borderRadius: 4,
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        >
+          {sectionName}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -532,17 +561,74 @@ function IconRenderer({ element }: { element: CanvasElement }) {
   )
 }
 
-function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
+function NavbarRenderer({ element, isSelected, isPreview, onContentChange }: {
+  element: CanvasElement
+  isSelected: boolean
+  isPreview: boolean
+  onContentChange: (id: string, content: string) => void
+}) {
   const { styles, content } = element
   const rawItems = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
+  const editable = isSelected && !isPreview
+
   // Parse "Label::href" format — backward compatible with plain "Label"
-  const navItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
+  const parsedItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
     .map((item) => {
       const sepIdx = item.indexOf('::')
-      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2) }
-      return { label: item, href: '#' }
+      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2), raw: item }
+      return { label: item, href: '', raw: item }
     })
+
+  // Rebuild pipe-separated content from edited parts
+  const rebuildContent = (brandText: string | null, itemIdx: number | null, newLabel: string | null) => {
+    const parts = [...rawItems]
+    if (brandText !== null) {
+      parts[0] = brandText
+    }
+    if (itemIdx !== null && newLabel !== null) {
+      // Index in parts is itemIdx + 1 (first part is brand)
+      const partIdx = rawItems.length > 1 ? itemIdx + 1 : itemIdx
+      const existing = parts[partIdx]
+      if (existing) {
+        const sepIdx = existing.indexOf('::')
+        parts[partIdx] = sepIdx > -1 ? `${newLabel}::${existing.slice(sepIdx + 2)}` : newLabel
+      }
+    }
+    onContentChange(element.id, parts.join('|'))
+  }
+
+  const handleNavClick = (e: React.MouseEvent, item: { label: string; href: string }) => {
+    if (editable) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (!isPreview) return
+
+    // External URLs (http/https) — let the browser handle naturally
+    if (item.href.startsWith('http://') || item.href.startsWith('https://')) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    // #anchor links — find by ID first, then by heading text
+    if (item.href.startsWith('#') && item.href.length > 1) {
+      const anchorId = item.href.slice(1)
+      const target = document.getElementById(anchorId)
+      if (target) {
+        smoothScrollToElement(target)
+        return
+      }
+    }
+
+    // Fallback: find section heading by label name (fuzzy matching)
+    const targetHeading = findSectionHeading(item.label)
+    if (targetHeading) {
+      smoothScrollToElement(targetHeading)
+    }
+  }
+
   return (
     <nav
       style={{
@@ -561,32 +647,38 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
       }}
     >
       <span
+        contentEditable={editable}
+        suppressContentEditableWarning
+        onMouseDown={editable ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+        onBlur={(e) => {
+          if (editable) rebuildContent((e.currentTarget as HTMLElement).textContent ?? '', null, null)
+        }}
         style={{
           fontWeight: '700',
           fontSize: (styles.fontSize ?? 14) + 2,
           color: styles.color ?? '#ffffff',
           fontFamily: styles.fontFamily,
           flexShrink: 0,
+          cursor: editable ? 'text' : 'inherit',
+          outline: editable ? '1px dashed rgba(147,197,253,0.4)' : 'none',
+          borderRadius: 3,
+          padding: '0 2px',
+          minWidth: 20,
         }}
       >
         {rawItems[0] ?? 'Brand'}
       </span>
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        {navItems.map((item, i) => (
-          <a
+        {parsedItems.map((item, i) => (
+          <span
             key={i}
-            href={item.href || '#'}
-            onClick={(e) => {
-              if (item.href && item.href !== '#') return
-              e.preventDefault()
-              e.stopPropagation()
-              if (!isPreview) return
-
-              const targetHeading = findSectionHeading(item.label)
-              if (targetHeading) {
-                smoothScrollToElement(targetHeading)
-              }
+            contentEditable={editable}
+            suppressContentEditableWarning
+            onMouseDown={editable ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+            onBlur={(e) => {
+              if (editable) rebuildContent(null, i, (e.currentTarget as HTMLElement).textContent ?? '')
             }}
+            onClick={(e) => handleNavClick(e, item)}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -594,12 +686,16 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
               fontFamily: styles.fontFamily,
               textDecoration: 'none',
               opacity: 0.85,
-              cursor: isPreview ? 'pointer' : 'inherit',
+              cursor: editable ? 'text' : isPreview ? 'pointer' : 'inherit',
               whiteSpace: 'nowrap',
+              outline: editable ? '1px dashed rgba(147,197,253,0.3)' : 'none',
+              borderRadius: 3,
+              padding: '0 2px',
+              minWidth: 20,
             }}
           >
             {item.label}
-          </a>
+          </span>
         ))}
       </div>
     </nav>
@@ -643,7 +739,7 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
           {content}
         </h3>
       )}
-      {formFields.slice(0, 3).map((field) => (
+      {formFields.map((field) => (
         <div key={field.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, fontWeight: '500', color: '#374151' }}>
             {field.label}
@@ -666,11 +762,6 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
           )}
         </div>
       ))}
-      {formFields.length > 3 && (
-        <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
-          +{formFields.length - 3} more fields
-        </p>
-      )}
       <button
         type={isPreview ? 'submit' : 'button'}
         style={{
@@ -693,8 +784,14 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
   )
 }
 
-function CodeBlockRenderer({ element }: { element: CanvasElement }) {
+function CodeBlockRenderer({ element, isSelected, isPreview, onContentChange }: {
+  element: CanvasElement
+  isSelected: boolean
+  isPreview: boolean
+  onContentChange: (id: string, content: string) => void
+}) {
   const { styles, content } = element
+  const editable = !isPreview && isSelected
   return (
     <div
       style={{
@@ -705,29 +802,57 @@ function CodeBlockRenderer({ element }: { element: CanvasElement }) {
         overflow: 'hidden',
         border: styles.border ?? '1px solid #313244',
         boxShadow: styles.boxShadow,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Window chrome */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderBottom: '1px solid #313244' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ff5f57', display: 'block' }} />
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#febc2e', display: 'block' }} />
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#28c840', display: 'block' }} />
       </div>
-      <pre
-        style={{
-          margin: 0,
-          padding: styles.padding ?? 20,
-          fontSize: styles.fontSize ?? 13,
-          fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
-          color: styles.color ?? '#cdd6f4',
-          lineHeight: styles.lineHeight ?? 1.6,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
-        <code>{content}</code>
-      </pre>
+      {editable ? (
+        <textarea
+          defaultValue={content}
+          onBlur={(e) => onContentChange(element.id, e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          spellCheck={false}
+          style={{
+            flex: 1,
+            margin: 0,
+            padding: styles.padding ?? 20,
+            fontSize: styles.fontSize ?? 13,
+            fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
+            color: styles.color ?? '#cdd6f4',
+            lineHeight: styles.lineHeight ?? 1.6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            background: 'transparent',
+            border: 'none',
+            outline: '1px dashed rgba(147,197,253,0.4)',
+            resize: 'none',
+            cursor: 'text',
+          }}
+        />
+      ) : (
+        <pre
+          style={{
+            flex: 1,
+            margin: 0,
+            padding: styles.padding ?? 20,
+            fontSize: styles.fontSize ?? 13,
+            fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
+            color: styles.color ?? '#cdd6f4',
+            lineHeight: styles.lineHeight ?? 1.6,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          <code>{content}</code>
+        </pre>
+      )}
     </div>
   )
 }
@@ -749,7 +874,7 @@ function renderContent(
     case 'button':
       return <ButtonRenderer element={element} isPreview={isPreview} />
     case 'section':
-      return <SectionRenderer element={element} />
+      return <SectionRenderer element={element} isPreview={isPreview} />
     case 'container':
       return <ContainerRenderer element={element} />
     case 'divider':
@@ -763,11 +888,11 @@ function renderContent(
     case 'icon':
       return <IconRenderer element={element} />
     case 'navbar':
-      return <NavbarRenderer element={element} isPreview={isPreview} />
+      return <NavbarRenderer element={element} isSelected={isSelected} isPreview={isPreview} onContentChange={onContentChange} />
     case 'form':
       return <FormRenderer element={element} isPreview={isPreview} />
     case 'code-block':
-      return <CodeBlockRenderer element={element} />
+      return <CodeBlockRenderer element={element} isSelected={isSelected} isPreview={isPreview} onContentChange={onContentChange} />
     default:
       return null
   }
@@ -1048,6 +1173,7 @@ export function ElementRenderer({
     <div
       ref={elementRef}
       data-element-id={element.id}
+      id={element.type === 'section' && element.sectionKey ? element.sectionKey : undefined}
       data-section={
         element.type === 'section' || element.type === 'container'
           ? element.id

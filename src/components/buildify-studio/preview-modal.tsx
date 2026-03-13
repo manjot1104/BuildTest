@@ -3,6 +3,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
 import { NavbarScrollHandler } from './navbar-scroll-handler'
+import { RenderIcon } from './element-renderer'
 import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
 
 import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
@@ -14,15 +15,6 @@ const DEVICES = [
   { id: 'tablet'  as const, label: 'Tablet',  Icon: Tablet,     width: 768,  height: 1024 },
   { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 375,  height: 844  },
 ]
-
-// ─── Icon characters ──────────────────────────────────────────────────────────
-
-const ICON_CHARS: Record<string, string> = {
-  star: '★', heart: '♥', zap: '⚡', check: '✓', home: '⌂', user: '👤',
-  mail: '✉', phone: '☎', globe: '🌐', camera: '📷', code: '</>',
-  music: '♪', coffee: '☕', shield: '🛡', rocket: '🚀', smile: '☺',
-  diamond: '◆', flame: '🔥', leaf: '🌿', crown: '♛',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -190,9 +182,16 @@ function StaticEl({ el }: { el: CanvasElement }) {
               {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
                 <a key={i} href={item.href || '#'}
                   onClick={(e) => {
-                    if (item.href && item.href !== '#') return
+                    // External URLs — let browser handle
+                    if (item.href.startsWith('http://') || item.href.startsWith('https://')) return
                     e.preventDefault()
                     e.stopPropagation()
+                    // #anchor links — find element by ID first
+                    if (item.href.startsWith('#') && item.href.length > 1) {
+                      const target = document.getElementById(item.href.slice(1))
+                      if (target) { smoothScrollToElement(target); return }
+                    }
+                    // Fallback: fuzzy match by label name
                     const heading = findSectionHeading(item.label)
                     if (heading) smoothScrollToElement(heading)
                   }}
@@ -235,8 +234,8 @@ function StaticEl({ el }: { el: CanvasElement }) {
         )
       case 'icon':
         return (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.iconColor ?? '#3b82f6', fontSize: styles.iconSize ?? 48 }}>
-            {ICON_CHARS[el.content] ?? ICON_CHARS[el.iconName ?? ''] ?? '★'}
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.iconColor ?? '#3b82f6' }}>
+            <RenderIcon name={el.content || el.iconName || 'star'} size={styles.iconSize ?? 48} />
           </div>
         )
       default:
@@ -249,7 +248,11 @@ function StaticEl({ el }: { el: CanvasElement }) {
     : inner
 
   return (
-    <div className={animClass(el.enterAnimation)} style={wrapStyle}>
+    <div
+      id={el.type === 'section' && el.sectionKey ? el.sectionKey : undefined}
+      className={animClass(el.enterAnimation)}
+      style={wrapStyle}
+    >
       {content}
     </div>
   )

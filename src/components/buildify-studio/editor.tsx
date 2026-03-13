@@ -150,12 +150,12 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
     }
   }, [state.elements, state.canvasBackground, editor])
 
-  // Auto-save every 30s when dirty
+  // Auto-save: debounce 2s after any change
   useEffect(() => {
     if (!state.isDirty) return
-    const timer = setTimeout(() => { void handleSaveDraft() }, 30_000)
+    const timer = setTimeout(() => { void handleSaveDraft() }, 2_000)
     return () => clearTimeout(timer)
-  }, [state.isDirty, handleSaveDraft])
+  }, [state.isDirty, state.elements, state.canvasBackground, handleSaveDraft])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
