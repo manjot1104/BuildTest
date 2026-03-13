@@ -1087,7 +1087,6 @@ export async function getTestReportHandler({
     const raw = pm.raw_metrics as Record<string, unknown> | null;
     const domContentLoadedMs = typeof raw?.domContentLoadedMs === "number" ? raw.domContentLoadedMs : null;
     const loadEventMs        = typeof raw?.loadEventMs        === "number" ? raw.loadEventMs        : null;
-    console.log("in controller: lcp_ms:", pm.lcp_ms);
 
     return {
       pageUrl: pm.page_url,

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useUserCredits } from "@/hooks/use-user-credits";
 import {
   Globe, Play, Loader2, CheckCircle2, XCircle, AlertTriangle,
   ChevronDown, ChevronUp, RotateCcw, ExternalLink, Shield, Zap,
   Eye, Navigation, FileText, Lock, Bug, ArrowRight, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
-  Code2, X, StopCircle, ImageOff, Minus, Plus,
+  Code2, X, Network, StopCircle, ImageOff, Minus, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,9 +62,23 @@ const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, executing: 2, reporting: 3, complete: 4,
 };
 
-// Server-side limits (must match elysia route schema)
-const MAX_PAGES_LIMIT = 20;
-const MAX_TESTS_LIMIT = 30;
+// ─── Plan-aware budget limits ─────────────────────────────────────────────────
+// Plan IDs match subscriptions.plan_id in schema.ts: "starter" | "pro" | "enterprise"
+// No subscription row (unauthenticated or free) → null → FREE_LIMITS.
+interface PlanLimits { maxPages: number; maxTests: number; label: string }
+
+const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, label: "Free" };
+
+const PLAN_LIMITS: Record<string, PlanLimits> = {
+  starter:    { maxPages:  5, maxTests: 10, label: "Starter"    },
+  pro:        { maxPages: 10, maxTests: 20, label: "Pro"         },
+  enterprise: { maxPages: 20, maxTests: 30, label: "Enterprise"  },
+};
+
+function getPlanLimits(planId: string | null | undefined): PlanLimits {
+  if (!planId) return FREE_LIMITS;
+  return PLAN_LIMITS[planId.toLowerCase()] ?? FREE_LIMITS;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -631,9 +646,25 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TestingPage() {
+  const { subscription, hasActiveSubscription } = useUserCredits();
+
+  // Derive per-plan limits — re-computed whenever subscription changes.
+  const planLimits = useMemo(
+    () => getPlanLimits(subscription?.plan_id),
+    [subscription?.plan_id],
+  );
+
   const [url, setUrl] = useState("");
   const [maxPages, setMaxPages] = useState(5);
   const [maxTests, setMaxTests] = useState(10);
+
+  // Clamp stored values whenever planLimits resolves or changes (e.g. after
+  // the subscription query loads, or the user upgrades mid-session).
+  useEffect(() => {
+    setMaxPages((p) => Math.min(p, planLimits.maxPages));
+    setMaxTests((t) => Math.min(Math.max(t, 1), planLimits.maxTests));
+  }, [planLimits]);
+
   const [testRunId, setTestRunId] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -690,16 +721,16 @@ export default function TestingPage() {
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
 
   // ── Budget constraint handlers ─────────────────────────────────────────────
-  // Invariant: maxPages >= 1, maxTests >= maxPages, both within server limits.
+  // Invariant: maxPages >= 1, maxTests >= maxPages, both within plan limits.
   const handleMaxPagesChange = (next: number) => {
-    const pages = Math.max(1, Math.min(next, MAX_PAGES_LIMIT));
+    const pages = Math.max(1, Math.min(next, planLimits.maxPages));
     setMaxPages(pages);
     // If pages would exceed tests, bump tests up to match
     if (pages > maxTests) setMaxTests(pages);
   };
 
   const handleMaxTestsChange = (next: number) => {
-    const tests = Math.max(maxPages, Math.min(next, MAX_TESTS_LIMIT));
+    const tests = Math.max(maxPages, Math.min(next, planLimits.maxTests));
     setMaxTests(tests);
   };
 
@@ -783,25 +814,32 @@ export default function TestingPage() {
 
               {/* Test budget controls */}
               <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Test Budget</p>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Test Budget</p>
+                  {!hasActiveSubscription && (
+                    <span className="text-[10px] font-mono text-muted-foreground/50 border border-border/40 rounded-full px-2 py-0.5">
+                      Free plan · <a href="/pricing" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">Upgrade</a> for more
+                    </span>
+                  )}
+                </div>
                 <div className="flex gap-4">
                   <BudgetStepper
                     label="Pages to crawl"
-                    hint={`max ${MAX_PAGES_LIMIT}`}
+                    hint={`max ${planLimits.maxPages}`}
                     value={maxPages}
                     min={1}
                     // pages can't exceed tests (each page needs at least one test)
-                    max={Math.min(MAX_PAGES_LIMIT, maxTests)}
+                    max={Math.min(planLimits.maxPages, maxTests)}
                     onChange={handleMaxPagesChange}
                   />
                   <div className="w-px bg-border shrink-0" />
                   <BudgetStepper
                     label="Tests to generate"
-                    hint={`max ${MAX_TESTS_LIMIT}`}
+                    hint={`max ${planLimits.maxTests}`}
                     value={maxTests}
                     // tests can never drop below pages
                     min={maxPages}
-                    max={MAX_TESTS_LIMIT}
+                    max={planLimits.maxTests}
                     onChange={handleMaxTestsChange}
                   />
                 </div>
