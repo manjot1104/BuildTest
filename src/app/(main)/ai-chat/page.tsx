@@ -427,7 +427,7 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
   console.warn=function(){_orig.warn.apply(console,arguments);if(!_isSuppressed(arguments))_log('warn',arguments);};
   console.error=function(){_orig.error.apply(console,arguments);if(!_isSuppressed(arguments))_log('error',arguments);};
   console.info=function(){_orig.info.apply(console,arguments);if(!_isSuppressed(arguments))_log('info',arguments);};
-  window.onerror=function(m,s,l,c,e){_log('error',[e?e.stack||e.message:m]);};
+ window.onerror=function(m,s,l,c,e){_log('error',['SCRIPT ERROR: '+m+' | file: '+s+' | line: '+l+' | col: '+c+' | '+(e?e.stack||e.message:'no stack')]);};
   window.onunhandledrejection=function(e){_log('error',['Unhandled Promise: '+(e.reason&&e.reason.stack||e.reason)]);};
 
   // After DOM loads, hide console panel if there's visible content in body
@@ -471,7 +471,9 @@ function stripModuleSyntax(code: string): string {
     .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
-    // Remove export type statements
+    // Remove export type re-exports like `export type { Foo };`
+    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
+    // Convert export type/interface declarations to local
     .replace(/^\s*export\s+type\s+/gm, "type ")
     .replace(/^\s*export\s+interface\s+/gm, "interface ")
     // Convert export declarations to local
@@ -482,6 +484,8 @@ function stripModuleSyntax(code: string): string {
     .replace(/export\s+let\s/g, "let ")
     .replace(/export\s+var\s/g, "var ")
     .replace(/^\s*export\s+default\s+/gm, "var _default = ")
+   .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
+  .replace(/<(?:[A-Za-z][a-zA-Z0-9]*(?:\[\])?(?:\s*\|\s*[A-Za-z][a-zA-Z0-9]*(?:\[\])?)*\s*)>/g, "")
     .trim();
 }
 
@@ -586,7 +590,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
       }
     }
     if (needsReact && !doc.includes("react")) {
-      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin><\/script>\n${REACT_GLOBALS_SHIM}`;
+      const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>\n<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
       if (doc.includes("</head>")) {
         doc = doc.replace("</head>", `${reactCdn}\n</head>`);
       } else if (doc.includes("<body")) {
@@ -601,6 +605,7 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
         doc += `\n${jsTag}`;
       }
     }
+   // REPLACE WITH:
     if (jsxBlocks.length > 0) {
       const jsxTag = buildBabelTransformScript(jsxBlocks.join("\n"), false);
       if (doc.includes("</body>")) {
@@ -617,8 +622,47 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
     ? `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin><\/script>
-${REACT_GLOBALS_SHIM}`
+${REACT_GLOBALS_SHIM}
+<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>
+<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>
+<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`
     : "";
+
+  // ALL jsx blocks merged into ONE single babel script
+  const mergedJsx = jsxBlocks.join("\n\n");
+
+  const autoMount = needsReact ? `
+(function() {
+  var _mounted = false;
+  function mount() {
+    if (_mounted) return;
+    var rootEl = document.getElementById('root');
+    if (!rootEl) {
+      rootEl = document.createElement('div');
+      rootEl.id = 'root';
+      document.body.appendChild(rootEl);
+    }
+    var component =
+      typeof App !== 'undefined' ? App :
+      typeof _default !== 'undefined' ? _default :
+      (function() {
+        var keys = Object.keys(window).filter(function(k) {
+          return /^[A-Z]/.test(k) && typeof window[k] === 'function'
+            && k !== 'React' && k !== 'ReactDOM' && k !== 'Babel';
+        });
+        return keys.length > 0 ? window[keys[keys.length - 1]] : null;
+      })();
+    if (component) {
+      _mounted = true;
+      ReactDOM.createRoot(rootEl).render(React.createElement(component));
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', mount);
+  } else {
+    mount();
+  }
+})();` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -655,9 +699,21 @@ function buildBackendCode(blocks: SegmentCode[]): { code: string; language: stri
 
 // ─── App Runner Component ───────────────────────────────────────────────────
 
-function AppRunner({ content }: { content: string }) {
+function AppRunner({ content, files }: { content: string; files?: ChatMessage["files"] }) {
   const segments = splitCodeBlocks(content);
-  const codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+  let codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
+
+  // If we have explicit files (e.g. from structured output), prioritize them
+  if (files && files.length > 0) {
+    const fileBlocks: SegmentCode[] = files.map((f) => ({
+      type: "code",
+      lang: f.language,
+      code: f.code,
+    }));
+    if (fileBlocks.length > 0) {
+      codeBlocks = fileBlocks;
+    }
+  }
 
   const [execution, setExecution] = useState<AppExecution>({
     isRunning: false, htmlPreview: null, consoleOutput: null,
@@ -1100,7 +1156,7 @@ const toggleStar = async () => {
         )}>
           <MarkdownMessage content={message.content} />
         </div>
-        {!message.isError && <AppRunner content={message.content} />}
+        {!message.isError && <AppRunner content={message.content} files={message.files} />}
        <div className="flex items-center gap-1">
   <CopyMessageButton content={message.content} />
 
@@ -1458,6 +1514,40 @@ export default function OpenRouterChatPage() {
 >([]);
 
 const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+const [panelWidth, setPanelWidth] = useState(420);
+const isResizing = useRef(false);
+
+const handleMouseMove = useCallback((e: MouseEvent) => {
+  if (!isResizing.current) return;
+  const newWidth = window.innerWidth - e.clientX;
+  if (newWidth > 320 && newWidth < 1000) {
+    setPanelWidth(newWidth);
+  }
+}, []);
+
+const handleMouseUp = useCallback(() => {
+  isResizing.current = false;
+  document.removeEventListener("mousemove", handleMouseMove);
+  document.removeEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "default";
+}, [handleMouseMove]);
+
+const handleMouseDown = useCallback((e: React.MouseEvent) => {
+  e.preventDefault();
+  isResizing.current = true;
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+  document.body.style.cursor = "col-resize";
+}, [handleMouseMove, handleMouseUp]);
+
+// Clean up listeners on unmount
+useEffect(() => {
+  return () => {
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+}, [handleMouseMove, handleMouseUp]);
+
 const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -1488,7 +1578,8 @@ const searchParams = useSearchParams();
   timestamp: new Date(m.created_at),
   modelId: m.model,
   starred: m.starred || false,
-  conversationId: m.conversation_id  
+  conversationId: m.conversation_id,
+  files: m.files || []
 }));
        
 
@@ -1595,6 +1686,7 @@ useEffect(() => {
         let usedModel: string | undefined;
         let isFallback = false;
         let rafId = 0;
+        let assistantFiles: ChatMessage["files"] = [];
 
         while (true) {
           const { done, value } = await reader.read();
@@ -1651,6 +1743,7 @@ useEffect(() => {
   }
 
   if (event.files?.length) {
+    assistantFiles = event.files;
     setActiveFiles(event.files);
     setSelectedFileIndex(0);
   }
@@ -1669,7 +1762,13 @@ useEffect(() => {
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { ...m, content: fullContent || "No response received.", modelId: usedModel, isFallback }
+              ? { 
+                  ...m, 
+                  content: fullContent || "No response received.", 
+                  modelId: usedModel, 
+                  isFallback,
+                  files: assistantFiles
+                }
               : m,
           ),
         );
@@ -1896,10 +1995,16 @@ useEffect(() => {
 {activeFiles.length > 0 && (
   <>
     {/* Resize Handle */}
-    <div className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" />
+    <div 
+      className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" 
+      onMouseDown={handleMouseDown}
+    />
 
     {/* Sidebar */}
-    <div className="w-[420px] border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl">
+    <div 
+      className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+      style={{ width: `${panelWidth}px` }}
+    >
 
       {/* Header */}
       <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">

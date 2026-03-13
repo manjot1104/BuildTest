@@ -429,7 +429,9 @@ export async function getChatDetailsHandler({
       throw error
     }
 
-    return { ...chatDetails, isOwner }
+    const localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+const resolvedDemo = chatDetails.demo ?? localChat?.demo_url ?? undefined
+return { ...chatDetails, demo: resolvedDemo, isOwner }
   } catch {
     return {
       error: 'Failed to fetch chat details',
@@ -614,6 +616,7 @@ if (type === "openrouter" || type === "all") {
         previewUrl: chat.preview_url,
         createdAt: chat.created_at.toISOString(),
         updatedAt: chat.updated_at.toISOString(),
+        type: chat.chat_type?.toLowerCase() === 'openrouter' || !chat.demo_url && chat.v0_chat_id && chat.v0_chat_id === chat.id ? 'openrouter' : 'builder',
       }))
 
     return { data: chatHistory }

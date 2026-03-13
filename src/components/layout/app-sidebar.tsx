@@ -56,7 +56,7 @@ const buildNavSections = (
         items: [
             {
                 title: "New Chat",
-                url: "/chat",
+                url: "/chat?reset=true",
                 icon: MessageSquare,
             },
             {

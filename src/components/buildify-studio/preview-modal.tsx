@@ -2,7 +2,10 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
+import { NavbarScrollHandler } from './navbar-scroll-handler'
 import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
+
+import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
 
 // ─── Device presets ───────────────────────────────────────────────────────────
 
@@ -67,26 +70,30 @@ function StaticEl({ el }: { el: CanvasElement }) {
     switch (el.type) {
       case 'heading': {
         const Tag = `h${el.headingLevel ?? 1}` as React.ElementType
+        const slugId = el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
         return (
-          <Tag style={{
-            width: '100%', height: '100%', margin: 0,
-            color: styles.color ?? '#1a1a1a',
-            fontSize: styles.fontSize ?? 48,
-            fontWeight: styles.fontWeight ?? '700',
-            fontFamily: styles.fontFamily,
-            textAlign: styles.textAlign,
-            letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-            lineHeight: styles.lineHeight ?? '1.2',
-            padding: styles.padding ?? 4,
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-            display: 'flex', alignItems: 'center',
-          } as React.CSSProperties}>{el.content}</Tag>
+          <Tag
+            id={slugId}
+            data-heading={el.content.toLowerCase()}
+            style={{
+              width: '100%', height: '100%', margin: 0,
+              color: styles.color ?? '#1a1a1a',
+              fontSize: styles.fontSize ?? 48,
+              fontWeight: styles.fontWeight ?? '700',
+              fontFamily: styles.fontFamily,
+              textAlign: styles.textAlign,
+              letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+              lineHeight: styles.lineHeight ?? '1.2',
+              padding: styles.padding ?? 4,
+              wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+              display: 'flex', alignItems: 'center',
+            } as React.CSSProperties}>{el.content}</Tag>
         )
       }
       case 'paragraph':
         return (
           <p style={{
-            width: '100%', height: '100%', margin: 0,
+            width: '100%', minHeight: '100%', margin: 0,
             color: styles.color ?? '#374151',
             fontSize: styles.fontSize ?? 16,
             fontWeight: styles.fontWeight ?? '400',
@@ -96,13 +103,15 @@ function StaticEl({ el }: { el: CanvasElement }) {
             lineHeight: styles.lineHeight ?? '1.6',
             padding: styles.padding ?? 4,
             background: getBg(),
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap', overflow: 'auto',
+            wordBreak: 'break-word', whiteSpace: 'pre-wrap', overflow: 'visible',
           }}>{el.content}</p>
         )
       case 'image':
-        // eslint-disable-next-line @next/next/no-img-element
-        return <img src={el.content || 'https://placehold.co/320x220/e2e8f0/94a3b8?text=Image'} alt=""
-          style={{ width: '100%', height: '100%', objectFit: (styles.objectFit as React.CSSProperties['objectFit']) ?? 'cover', borderRadius: styles.borderRadius ?? 0, border: styles.border, boxShadow: styles.boxShadow, display: 'block' }} />
+        return <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: styles.borderRadius ?? 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={el.content || 'https://placehold.co/320x220/e2e8f0/94a3b8?text=Image'} alt=""
+            style={{ width: '100%', height: '100%', objectFit: (styles.objectFit as React.CSSProperties['objectFit']) ?? 'cover', border: styles.border, boxShadow: styles.boxShadow, display: 'block' }} />
+        </div>
       case 'button': {
         const btn = (
           <button type="button" style={{
@@ -133,21 +142,36 @@ function StaticEl({ el }: { el: CanvasElement }) {
         return <div style={{ width: '100%', height: '100%' }} />
       case 'social-links': {
         const links = el.socialLinks ?? []
+        const socialIcons: Record<string, string> = {
+          github: 'GH', twitter: '𝕏', linkedin: 'in', instagram: 'IG',
+          youtube: '▶', tiktok: '♪', facebook: 'fb', discord: 'DC',
+          website: '🌐', email: '✉',
+        }
         return (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', gap: styles.gap ?? 16, padding: styles.padding ?? 0, flexWrap: 'wrap' }}>
             {links.filter((l) => l.url).map((link, i) => (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-                style={{ color: styles.iconColor ?? '#374151', fontSize: (styles.iconSize ?? 28) * 0.6, fontWeight: '700', textDecoration: 'none' }}
+                style={{
+                  color: styles.iconColor ?? '#374151',
+                  fontSize: (styles.iconSize ?? 28) * 0.65,
+                  fontWeight: '700',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: styles.iconSize ?? 28,
+                  height: styles.iconSize ?? 28,
+                }}
                 title={link.platform}
               >
-                {link.platform.slice(0, 2).toUpperCase()}
+                {socialIcons[link.platform] ?? link.platform.slice(0, 2).toUpperCase()}
               </a>
             ))}
           </div>
         )
       }
       case 'video-embed': {
-        const ytMatch = el.content.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
+        const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(el.content)
         const ytId = ytMatch?.[1]
         return ytId
           ? <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
@@ -164,8 +188,15 @@ function StaticEl({ el }: { el: CanvasElement }) {
             <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{rawItems[0] ?? 'Brand'}</span>
             <div style={{ display: 'flex', gap: 24 }}>
               {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
-                <a key={i} href={item.href}
-                  style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>
+                <a key={i} href={item.href || '#'}
+                  onClick={(e) => {
+                    if (item.href && item.href !== '#') return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const heading = findSectionHeading(item.label)
+                    if (heading) smoothScrollToElement(heading)
+                  }}
+                  style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85, cursor: 'pointer' }}>
                   {item.label}
                 </a>
               ))}
@@ -176,7 +207,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
       case 'form': {
         const formFields = el.formFields ?? []
         return (
-          <div style={{ width: '100%', height: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ width: '100%', minHeight: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {el.content && <h3 style={{ margin: 0, fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>{el.content}</h3>}
             {formFields.map((f) => (
               <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -218,7 +249,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
     : inner
 
   return (
-    <div id={el.anchorId || undefined} className={animClass(el.enterAnimation)} style={wrapStyle}>
+    <div className={animClass(el.enterAnimation)} style={wrapStyle}>
       {content}
     </div>
   )
@@ -226,7 +257,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
 
 // ─── Scaled preview canvas ────────────────────────────────────────────────────
 
-function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH, deviceId }: {
+function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH: _containerH, deviceId }: {
   elements: CanvasElement[]
   background: CanvasBackground
   deviceWidth: number
@@ -235,6 +266,8 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
   containerH: number
   deviceId: 'desktop' | 'tablet' | 'mobile'
 }) {
+  const innerContentRef = useRef<HTMLDivElement>(null)
+
   // Apply responsive reflow for tablet/mobile
   const responsiveDevice: ResponsiveDevice = deviceId
   const layout = computeResponsiveLayout(elements, responsiveDevice)
@@ -277,7 +310,11 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
           overflow: 'hidden',
         }}
       >
-        <div style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}>
+        <div 
+          ref={innerContentRef}
+          style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}
+        >
+          <NavbarScrollHandler scrollScope={innerContentRef.current} />
           {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
         </div>
       </div>
@@ -326,7 +363,7 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
     : 0
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#0d0d11' }}>
+    <div className="fixed inset-0 flex flex-col" style={{ background: '#0d0d11', zIndex: 9999 }}>
       {/* Browser chrome header */}
       <div
         className="flex h-12 shrink-0 items-center gap-3 border-b px-4"

@@ -589,7 +589,7 @@ function UserDetailDialog({
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
               {/* Subscription status */}
               {hasSubscription ? (
-                <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-muted p-3">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="size-4 text-primary" />
                     <div>
@@ -638,7 +638,7 @@ function UserDetailDialog({
                   </div>
                   <p className="mt-1 text-xl font-semibold">{addCreds}</p>
                 </div>
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+                <div className="rounded-lg border border-primary/30 bg-muted p-3">
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Coins className="size-3" />
                     Total
