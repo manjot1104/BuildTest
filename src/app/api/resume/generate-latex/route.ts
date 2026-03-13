@@ -13,8 +13,6 @@ const resumeRequestSchema = z.object({
   projects: z.string().min(1),
   additionalInstructions: z.string().optional(),
   model: z.string().optional(),
-  templateId: z.string().optional(),
-  templateStyleGuide: z.string().optional(),
 })
 
 /**

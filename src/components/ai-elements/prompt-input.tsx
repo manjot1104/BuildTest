@@ -220,7 +220,7 @@ export const PromptInput = ({
     <form
       className={cn(
         'w-full divide-y overflow-hidden rounded-xl border bg-background shadow-sm transition-colors',
-        isDragOver && 'border-primary bg-primary/5',
+        isDragOver && 'border-primary bg-muted',
         className,
       )}
       onDragOver={handleDragOver}
@@ -571,7 +571,7 @@ export const PromptInputMicButton = ({
       {isListening ? (
         <>
           <MicIcon className="size-4 text-green-600 dark:text-green-400 relative z-10" />
-          <span className="absolute inset-0 rounded-lg bg-green-500/20 animate-pulse" />
+          <span className="absolute inset-0 rounded-lg bg-green-500/10" />
         </>
       ) : (
         <MicIcon className="size-4" />

@@ -614,6 +614,7 @@ if (type === "openrouter" || type === "all") {
         previewUrl: chat.preview_url,
         createdAt: chat.created_at.toISOString(),
         updatedAt: chat.updated_at.toISOString(),
+        type: chat.chat_type?.toLowerCase() === 'openrouter' || !chat.demo_url && chat.v0_chat_id && chat.v0_chat_id === chat.id ? 'openrouter' : 'builder',
       }))
 
     return { data: chatHistory }

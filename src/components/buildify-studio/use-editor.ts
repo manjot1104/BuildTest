@@ -10,6 +10,8 @@ import {
   type GridSettings,
   type FormField,
   type SocialLinkItem,
+  type ResponsiveOverride,
+  type ResponsiveDevice,
 } from './types'
 
 const MAX_HISTORY = 50
@@ -231,8 +233,8 @@ const initialState: EditorState = {
   canvasBackground: {
     type: 'solid',
     color: '#ffffff',
-    gradientFrom: '#667eea',
-    gradientTo: '#764ba2',
+    gradientFrom: '#f8fafc',
+    gradientTo: '#f1f5f9',
     gradientAngle: 135,
     imageUrl: '',
   },
@@ -281,17 +283,18 @@ export function useEditor() {
             borderRadius: 8,
           },
         },
-        section: {
-          width: 600,
-          height: 200,
-          content: '',
-          styles: {
-            backgroundColor: '#f8fafc',
-            borderRadius: 12,
-            border: '2px dashed #e2e8f0',
-            padding: 24,
-          },
-        },
+     section: {
+  width: 600,
+  height: 200,
+  content: '',
+  sectionKey: 'section-' + Date.now(),
+  styles: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    border: '2px dashed #e2e8f0',
+    padding: 24,
+  },
+},
         container: {
           width: 400,
           height: 200,
@@ -373,11 +376,21 @@ export function useEditor() {
       }
 
       const def = defaults[type]!
+      let sectionKey: string | undefined
+
+if (type === 'section') {
+  const sectionCount = state.elements.filter(e => e.type === 'section').length
+
+  const defaultKeys = ['about', 'skills', 'projects', 'work', 'services', 'contact']
+
+  sectionKey = defaultKeys[sectionCount] ?? `section-${sectionCount + 1}`
+}
       dispatch({
         type: 'ADD_ELEMENT',
         element: {
           id: crypto.randomUUID(),
           type,
+          sectionKey: type === 'section' ? 'section-' + Date.now() : undefined,
           x: Math.round(offsetX),
           y: Math.round(offsetY),
           width: def.width ?? 200,
@@ -394,6 +407,7 @@ export function useEditor() {
           ...(def.socialLinks ? { socialLinks: def.socialLinks } : {}),
           ...(def.formFields ? { formFields: def.formFields } : {}),
           ...(def.iconName ? { iconName: def.iconName } : {}),
+          ...(sectionKey ? { sectionKey } : {}),
         },
       })
     },
@@ -409,6 +423,59 @@ export function useEditor() {
       })
     },
     [],
+  )
+
+  /** Returns 'desktop' | 'tablet' | 'mobile' based on current device preset */
+  const activeDevice: ResponsiveDevice =
+    state.device.preset === 'tablet' ? 'tablet'
+    : state.device.preset === 'mobile' ? 'mobile'
+    : 'desktop'
+
+  /**
+   * Device-aware update: on desktop writes to base element,
+   * on tablet/mobile writes to responsiveStyles overrides.
+   */
+  const updateElementResponsive = useCallback(
+    (id: string, updates: Partial<CanvasElement>, skipHistory = false) => {
+      const device = state.device.preset === 'tablet' ? 'tablet'
+        : state.device.preset === 'mobile' ? 'mobile'
+        : 'desktop'
+
+      if (device === 'desktop') {
+        dispatch({
+          type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
+          id,
+          updates,
+        })
+        return
+      }
+
+      // Build responsive override from the updates
+      const el = state.elements.find((e) => e.id === id)
+      if (!el) return
+
+      const override: ResponsiveOverride = {}
+      if (updates.x !== undefined) override.x = updates.x
+      if (updates.y !== undefined) override.y = updates.y
+      if (updates.width !== undefined) override.width = updates.width
+      if (updates.height !== undefined) override.height = updates.height
+      if (updates.hidden !== undefined) override.hidden = updates.hidden
+      if (updates.styles) {
+        override.styles = { ...(el.responsiveStyles?.[device]?.styles ?? {}), ...updates.styles }
+      }
+
+      const newResponsive = {
+        ...el.responsiveStyles,
+        [device]: { ...(el.responsiveStyles?.[device] ?? {}), ...override },
+      }
+
+      dispatch({
+        type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
+        id,
+        updates: { responsiveStyles: newResponsive },
+      })
+    },
+    [state.device.preset, state.elements],
   )
 
   const deleteElement = useCallback((id: string) => {
@@ -491,12 +558,14 @@ export function useEditor() {
 
   return {
     state,
+    activeDevice,
     selectedElement,
     selectedElements,
     canUndo,
     canRedo,
     addElement,
     updateElement,
+    updateElementResponsive,
     deleteElement,
     deleteSelected,
     selectElement,

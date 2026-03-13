@@ -274,6 +274,7 @@ export interface ChatHistoryItem {
   previewUrl?: string | null
   createdAt: string
   updatedAt: string
+  type: 'builder' | 'openrouter'
 }
 
 /** Community build item - for discovery grid */

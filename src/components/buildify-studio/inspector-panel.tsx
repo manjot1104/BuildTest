@@ -11,6 +11,7 @@ import {
   type SocialLinkItem,
   type SocialPlatform,
   type FormField,
+  getResponsiveElement,
 } from './types'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -133,7 +134,7 @@ const HOVER_ANIMATIONS: { value: HoverAnimation; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'scale', label: 'Scale Up' },
   { value: 'lift', label: 'Lift Shadow' },
-  { value: 'glow', label: 'Glow' },
+  { value: 'outline', label: 'Outline' },
 ]
 
 const FONT_WEIGHTS = ['100', '300', '400', '500', '600', '700', '800', '900']
@@ -151,7 +152,7 @@ interface InspectorPanelProps {
 }
 
 export function InspectorPanel({ element, editor }: InspectorPanelProps) {
-  const { updateElement } = editor
+  const { updateElement, updateElementResponsive, activeDevice } = editor
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [tab, setTab] = useState<Tab>('layout')
 
@@ -176,9 +177,15 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
     )
   }
 
-  const upd = (updates: Partial<CanvasElement>) => updateElement(element.id, updates)
+  // Resolve effective values for the current device (merges overrides)
+  const eff = getResponsiveElement(element, activeDevice)
+
+  // upd writes device-aware: on desktop→base, on tablet/mobile→responsive overrides
+  const upd = (updates: Partial<CanvasElement>) => updateElementResponsive(element.id, updates)
   const updStyle = (styles: Partial<ElementStyles>) =>
-    upd({ styles: { ...element.styles, ...styles } })
+    upd({ styles: { ...eff.styles, ...styles } })
+  // updBase always writes to the base element (for content, animations, links, etc.)
+  const updBase = (updates: Partial<CanvasElement>) => updateElement(element.id, updates)
 
   const hasText = TEXT_TYPES.has(element.type)
 
@@ -213,70 +220,44 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
         ))}
       </div>
 
+      {activeDevice !== 'desktop' && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-md border border-blue-500/30 bg-blue-500/10 px-2.5 py-1.5">
+          <span className="text-[10px] font-semibold uppercase text-blue-400">
+            {activeDevice}
+          </span>
+          <span className="text-[10px] text-blue-400/70">
+            — edits apply to {activeDevice} only
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-1 flex-col gap-4 overflow-y-auto pb-4">
         {/* ── LAYOUT ── */}
         {activeTab === 'layout' && (
           <Section title="Position & Size">
             <Row>
-              <Field label="X"><NumInput value={element.x} onChange={(v) => upd({ x: v })} /></Field>
-              <Field label="Y"><NumInput value={element.y} onChange={(v) => upd({ y: v })} /></Field>
+              <Field label="X"><NumInput value={eff.x} onChange={(v) => upd({ x: v })} /></Field>
+              <Field label="Y"><NumInput value={eff.y} onChange={(v) => upd({ y: v })} /></Field>
             </Row>
             <Row>
-              <Field label="W"><NumInput value={element.width} onChange={(v) => upd({ width: Math.max(1, v) })} min={1} /></Field>
-              <Field label="H"><NumInput value={element.height} onChange={(v) => upd({ height: Math.max(1, v) })} min={1} /></Field>
+              <Field label="W"><NumInput value={eff.width} onChange={(v) => upd({ width: Math.max(1, v) })} min={1} /></Field>
+              <Field label="H"><NumInput value={eff.height} onChange={(v) => upd({ height: Math.max(1, v) })} min={1} /></Field>
             </Row>
-            <Field label={`Opacity: ${element.styles.opacity ?? 100}%`} full>
+            <Field label={`Opacity: ${eff.styles.opacity ?? 100}%`} full>
               <Slider
                 min={0} max={100} step={1}
-                value={[element.styles.opacity ?? 100]}
+                value={[eff.styles.opacity ?? 100]}
                 onValueChange={([v]) => updStyle({ opacity: v })}
               />
             </Field>
             <Row>
               <Field label="Z-Index">
-                <NumInput value={element.zIndex} onChange={(v) => upd({ zIndex: v })} min={0} />
+                <NumInput value={element.zIndex} onChange={(v) => updBase({ zIndex: v })} min={0} />
               </Field>
               <Field label="Radius">
-                <NumInput value={element.styles.borderRadius} onChange={(v) => updStyle({ borderRadius: v })} min={0} max={999} />
+                <NumInput value={eff.styles.borderRadius} onChange={(v) => updStyle({ borderRadius: v })} min={0} max={999} />
               </Field>
             </Row>
-            {element.type === 'heading' && (
-              <Field label="Heading Level" full>
-                <Sel value={String(element.headingLevel ?? 1)}  onChange={(v) => {
-  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
-
-  const headingSizes = {
-    1: 64,
-    2: 48,
-    3: 36,
-    4: 28,
-    5: 22,
-    6: 18,
-  }
-
-  upd({
-    headingLevel: level,
-    styles: {
-      ...element.styles,
-      fontSize: headingSizes[level],
-    },
-  })
-}}>
-                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
-                </Sel>
-              </Field>
-            )}
-            {(element.type === 'section' || element.type === 'container') && (
-              <Field label="Anchor ID" full>
-                <input
-                  type="text"
-                  value={element.anchorId ?? ''}
-                  onChange={(e) => upd({ anchorId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') || undefined })}
-                  placeholder="e.g. about (links as #about)"
-                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none"
-                />
-              </Field>
-            )}
           </Section>
         )}
 
@@ -285,25 +266,25 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
           <>
             <Section title="Background">
               <Field label="Type" full>
-                <Sel value={element.styles.gradientType ?? 'none'} onChange={(v) => updStyle({ gradientType: v as ElementStyles['gradientType'] })}>
+                <Sel value={eff.styles.gradientType ?? 'none'} onChange={(v) => updStyle({ gradientType: v as ElementStyles['gradientType'] })}>
                   <option value="none">Solid</option>
                   <option value="linear">Linear Gradient</option>
                   <option value="radial">Radial Gradient</option>
                 </Sel>
               </Field>
-              {(!element.styles.gradientType || element.styles.gradientType === 'none') ? (
+              {(!eff.styles.gradientType || eff.styles.gradientType === 'none') ? (
                 <Field label="Color" full>
-                  <ColorInput value={element.styles.backgroundColor} onChange={(v) => updStyle({ backgroundColor: v })} />
+                  <ColorInput value={eff.styles.backgroundColor} onChange={(v) => updStyle({ backgroundColor: v })} />
                 </Field>
               ) : (
                 <>
                   <Row>
-                    <Field label="From"><ColorInput value={element.styles.gradientFrom ?? '#667eea'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
-                    <Field label="To"><ColorInput value={element.styles.gradientTo ?? '#764ba2'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
+                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#f8fafc'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
+                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#f1f5f9'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
                   </Row>
-                  {element.styles.gradientType === 'linear' && (
+                  {eff.styles.gradientType === 'linear' && (
                     <Field label="Angle" full>
-                      <NumInput value={element.styles.gradientAngle ?? 135} onChange={(v) => updStyle({ gradientAngle: v })} min={0} max={360} />
+                      <NumInput value={eff.styles.gradientAngle ?? 135} onChange={(v) => updStyle({ gradientAngle: v })} min={0} max={360} />
                     </Field>
                   )}
                 </>
@@ -313,7 +294,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
             <Section title="Border & Shadow">
               <Field label="Border" full>
                 <Input
-                  value={element.styles.border ?? ''}
+                  value={eff.styles.border ?? ''}
                   onChange={(e) => updStyle({ border: e.target.value })}
                   className="h-7 text-xs"
                   placeholder="1px solid #e2e8f0"
@@ -321,7 +302,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
               </Field>
               <Field label="Box Shadow" full>
                 <Input
-                  value={element.styles.boxShadow ?? ''}
+                  value={eff.styles.boxShadow ?? ''}
                   onChange={(e) => updStyle({ boxShadow: e.target.value })}
                   className="h-7 text-xs"
                   placeholder="0 4px 12px rgba(0,0,0,0.1)"
@@ -332,10 +313,10 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
             <Section title="Spacing">
               <Row>
                 <Field label="Padding">
-                  <NumInput value={element.styles.padding} onChange={(v) => updStyle({ padding: v })} min={0} />
+                  <NumInput value={eff.styles.padding} onChange={(v) => updStyle({ padding: v })} min={0} />
                 </Field>
                 <Field label="Gap">
-                  <NumInput value={element.styles.gap} onChange={(v) => updStyle({ gap: v })} min={0} />
+                  <NumInput value={eff.styles.gap} onChange={(v) => updStyle({ gap: v })} min={0} />
                 </Field>
               </Row>
             </Section>
@@ -359,7 +340,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                   />
                 </Field>
                 <Field label="Object Fit" full>
-                  <Sel value={element.styles.objectFit ?? 'cover'} onChange={(v) => updStyle({ objectFit: v as ElementStyles['objectFit'] })}>
+                  <Sel value={eff.styles.objectFit ?? 'cover'} onChange={(v) => updStyle({ objectFit: v as ElementStyles['objectFit'] })}>
                     <option value="cover">Cover</option>
                     <option value="contain">Contain</option>
                     <option value="fill">Fill</option>
@@ -373,26 +354,40 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
         {/* ── TEXT / TYPOGRAPHY ── */}
         {activeTab === 'text' && hasText && (
           <Section title="Typography">
+            {element.type === 'heading' && (
+              <Field label="Heading Level" full>
+                <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => {
+                  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
+                  const headingSizes = { 1: 64, 2: 48, 3: 36, 4: 28, 5: 22, 6: 18 }
+                  updBase({
+                    headingLevel: level,
+                    styles: { ...element.styles, fontSize: headingSizes[level] }
+                  })
+                }}>
+                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
+                </Sel>
+              </Field>
+            )}
             <Row>
               <Field label="Size">
-                <NumInput value={element.styles.fontSize} onChange={(v) => updStyle({ fontSize: v })} min={8} max={300} />
+                <NumInput value={eff.styles.fontSize} onChange={(v) => updStyle({ fontSize: v })} min={8} max={300} />
               </Field>
               <Field label="Weight">
-                <Sel value={element.styles.fontWeight ?? '400'} onChange={(v) => updStyle({ fontWeight: v })}>
+                <Sel value={eff.styles.fontWeight ?? '400'} onChange={(v) => updStyle({ fontWeight: v })}>
                   {FONT_WEIGHTS.map((w) => <option key={w} value={w}>{w}</option>)}
                 </Sel>
               </Field>
             </Row>
             <Field label="Font Family" full>
               <Input
-                value={element.styles.fontFamily ?? ''}
+                value={eff.styles.fontFamily ?? ''}
                 onChange={(e) => updStyle({ fontFamily: e.target.value })}
                 className="h-7 text-xs"
                 placeholder="Inter, Georgia, monospace…"
               />
             </Field>
             <Field label="Text Color" full>
-              <ColorInput value={element.styles.color} onChange={(v) => updStyle({ color: v })} />
+              <ColorInput value={eff.styles.color} onChange={(v) => updStyle({ color: v })} />
             </Field>
             <Field label="Align" full>
               <div className="flex gap-1">
@@ -402,8 +397,8 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     type="button"
                     onClick={() => updStyle({ textAlign: a })}
                     className={`flex-1 rounded border py-1 text-xs capitalize transition-colors ${
-                      element.styles.textAlign === a
-                        ? 'border-primary bg-primary/10 text-primary'
+                      eff.styles.textAlign === a
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -414,14 +409,14 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
             </Field>
             <Row>
               <Field label="Letter Sp.">
-                <NumInput value={element.styles.letterSpacing} onChange={(v) => updStyle({ letterSpacing: v })} min={-10} max={50} step={0.5} />
+                <NumInput value={eff.styles.letterSpacing} onChange={(v) => updStyle({ letterSpacing: v })} min={-10} max={50} step={0.5} />
               </Field>
               <Field label="Line Ht.">
-                <NumInput value={element.styles.lineHeight} onChange={(v) => updStyle({ lineHeight: v })} min={0.5} max={5} step={0.1} />
+                <NumInput value={eff.styles.lineHeight} onChange={(v) => updStyle({ lineHeight: v })} min={0.5} max={5} step={0.1} />
               </Field>
             </Row>
             <Field label="Decoration" full>
-              <Sel value={element.styles.textDecoration ?? 'none'} onChange={(v) => updStyle({ textDecoration: v })}>
+              <Sel value={eff.styles.textDecoration ?? 'none'} onChange={(v) => updStyle({ textDecoration: v })}>
                 <option value="none">None</option>
                 <option value="underline">Underline</option>
                 <option value="line-through">Strikethrough</option>
@@ -440,10 +435,10 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => upd({ enterAnimation: value })}
+                    onClick={() => updBase({ enterAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.enterAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -458,10 +453,10 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                   <button
                     key={value}
                     type="button"
-                    onClick={() => upd({ hoverAnimation: value })}
+                    onClick={() => updBase({ hoverAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.hoverAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -480,7 +475,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
               <input
                 type="checkbox"
                 checked={element.link.enabled}
-                onChange={(e) => upd({ link: { ...element.link, enabled: e.target.checked } })}
+                onChange={(e) => updBase({ link: { ...element.link, enabled: e.target.checked } })}
                 className="rounded"
               />
               <span className="text-xs">Enable link on this element</span>
@@ -491,7 +486,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                   <div className="flex gap-1">
                     <Input
                       value={element.link.href}
-                      onChange={(e) => upd({ link: { ...element.link, href: e.target.value } })}
+                      onChange={(e) => updBase({ link: { ...element.link, href: e.target.value } })}
                       className="h-7 flex-1 text-xs"
                       placeholder="https://..."
                     />
@@ -505,7 +500,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                   </div>
                 </Field>
                 <Field label="Target" full>
-                  <Sel value={element.link.target} onChange={(v) => upd({ link: { ...element.link, target: v as '_blank' | '_self' } })}>
+                  <Sel value={element.link.target} onChange={(v) => updBase({ link: { ...element.link, target: v as '_blank' | '_self' } })}>
                     <option value="_blank">New tab</option>
                     <option value="_self">Same tab</option>
                   </Sel>
@@ -517,7 +512,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
 
         {/* ── CONTENT ── */}
         {activeTab === 'content' && (
-          <ContentTab element={element} upd={upd} />
+          <ContentTab element={element} upd={updBase} />
         )}
       </div>
     </div>

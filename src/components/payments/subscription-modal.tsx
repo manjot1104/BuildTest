@@ -230,52 +230,52 @@ export function SubscriptionModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="hk-neon-dialog sm:max-w-[680px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto rounded-none" showCloseButton={false}>
+      <DialogContent className="sm:max-w-[680px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto rounded-xl border shadow-lg" showCloseButton={false}>
         {/* Header */}
-        <div className="hk-neon-dialog-header relative overflow-hidden bg-gradient-to-br from-primary/5 via-background to-background px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
+        <div className="relative overflow-hidden bg-muted/50 px-5 pt-5 pb-4 sm:px-6 sm:pt-6 border-b">
           <DialogHeader>
-            <DialogTitle className="hk-neon-dialog-title text-lg font-bold tracking-tight sm:text-xl">
+            <DialogTitle className="text-lg font-bold tracking-tight sm:text-xl">
               Credits & Plans
             </DialogTitle>
-            <DialogDescription className="font-mono text-[11px] text-muted-foreground">
-              // manage your subscription and credits
+            <DialogDescription className="text-[11px] text-muted-foreground">
+              Manage your subscription and credits
             </DialogDescription>
           </DialogHeader>
 
           {/* Balance card */}
           <div className={cn(
-            "hk-neon-card mt-4 flex flex-col gap-3 border p-4 sm:flex-row sm:items-center sm:justify-between",
+            "mt-4 flex flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between",
             isEmptyCredits
-              ? "border-red-500/20 bg-red-500/5"
+              ? "border-destructive/20 bg-destructive/5"
               : isLowCredits
                 ? "border-amber-500/20 bg-amber-500/5"
                 : "",
           )}>
             <div className="flex items-center gap-3">
               <div className={cn(
-                "hk-neon-empty-icon flex size-10 shrink-0 items-center justify-center sm:size-12",
+                "flex size-10 shrink-0 items-center justify-center rounded-lg sm:size-12",
                 isEmptyCredits
-                  ? "bg-red-500/10"
+                  ? "bg-destructive/10"
                   : isLowCredits
                     ? "bg-amber-500/10"
                     : "bg-primary/10",
               )}>
                 <Zap className={cn(
                   "size-5 sm:size-6",
-                  isEmptyCredits ? "text-red-500" : isLowCredits ? "text-amber-500" : "text-primary",
+                  isEmptyCredits ? "text-destructive" : isLowCredits ? "text-amber-500" : "text-primary",
                 )} />
               </div>
               <div>
-                <p className="hk-neon-label">Balance</p>
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Balance</p>
                 <div className="flex items-baseline gap-1.5">
-                  <p className="hk-neon-stat text-2xl font-bold tabular-nums sm:text-3xl">{currentCredits}</p>
-                  <p className="font-mono text-[10px] text-muted-foreground">credits</p>
+                  <p className="text-2xl font-bold tabular-nums sm:text-3xl text-primary">{currentCredits}</p>
+                  <p className="text-[10px] text-muted-foreground">credits</p>
                 </div>
                 {isEmptyCredits && (
-                  <p className="font-mono text-[10px] font-medium text-red-500 dark:text-red-400">// no credits remaining</p>
+                  <p className="text-[10px] font-medium text-destructive">// no credits remaining</p>
                 )}
                 {isLowCredits && !isEmptyCredits && (
-                  <p className="font-mono text-[10px] font-medium text-amber-500 dark:text-amber-400">// running low</p>
+                  <p className="text-[10px] font-medium text-amber-500">// running low</p>
                 )}
               </div>
             </div>
@@ -283,21 +283,21 @@ export function SubscriptionModal({
               <div className="flex items-center gap-1.5">
                 <Globe className="size-3 text-muted-foreground/50" />
                 <Select value={currency} onValueChange={handleCurrencyChange}>
-                  <SelectTrigger className="hk-neon-select w-[100px] h-7 text-xs sm:w-[110px]">
+                  <SelectTrigger className="w-[100px] h-7 text-xs sm:w-[110px] bg-background">
                     <SelectValue placeholder="Currency" />
                   </SelectTrigger>
-                  <SelectContent className="hk-neon-dropdown">
+                  <SelectContent>
                     {availableCurrencies.map((curr) => (
-                      <SelectItem key={curr.code} value={curr.code} className="hk-neon-dropdown-item font-mono text-xs">
+                      <SelectItem key={curr.code} value={curr.code} className="text-xs">
                         {curr.symbol} {curr.code}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex gap-3 font-mono text-[10px] text-muted-foreground/60 sm:flex-col sm:gap-0 sm:text-right">
-                <p>new_chat: <span className="hk-neon-stat font-medium">{CREDIT_COSTS.NEW_PROMPT}</span> cr</p>
-                <p>follow_up: <span className="hk-neon-stat font-medium">{CREDIT_COSTS.FOLLOW_UP_PROMPT}</span> cr</p>
+              <div className="flex gap-3 text-[10px] text-muted-foreground/60 sm:flex-col sm:gap-0 sm:text-right">
+                <p>New chat: <span className="font-medium text-foreground">{CREDIT_COSTS.NEW_PROMPT}</span> cr</p>
+                <p>Follow up: <span className="font-medium text-foreground">{CREDIT_COSTS.FOLLOW_UP_PROMPT}</span> cr</p>
               </div>
             </div>
           </div>
@@ -307,28 +307,26 @@ export function SubscriptionModal({
           defaultValue={hasActiveSubscription && currentPlanId !== "free" ? "credits" : "subscription"}
           className="w-full"
         >
-          <div className="hk-neon-divider" />
-          <div className="px-5 sm:px-6">
-            <TabsList className="h-10 w-full justify-start bg-transparent p-0 gap-1">
+          <div className="px-5 sm:px-6 border-b">
+            <TabsList className="h-10 w-full justify-start bg-transparent p-0 gap-4">
               <TabsTrigger
                 value="subscription"
-                className="hk-neon-tab h-10 rounded-none border-b-2 border-transparent px-3 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="h-10 rounded-none border-b-2 border-transparent px-1 pb-2 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none text-xs font-medium"
               >
                 Plans
               </TabsTrigger>
               <TabsTrigger
                 value="credits"
                 disabled={!hasActiveSubscription || currentPlanId === "free"}
-                className="hk-neon-tab h-10 rounded-none border-b-2 border-transparent px-3 pb-2.5 pt-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="h-10 rounded-none border-b-2 border-transparent px-1 pb-2 pt-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none text-xs font-medium"
               >
                 Buy Credits
                 {(!hasActiveSubscription || currentPlanId === "free") && (
-                  <span className="hk-neon-status-active ml-1.5 px-1 py-0.5">PRO</span>
+                  <span className="ml-1.5 px-1 py-0.5 bg-muted rounded text-[9px] font-bold">PRO</span>
                 )}
               </TabsTrigger>
             </TabsList>
           </div>
-          <div className="hk-neon-divider" />
 
           <div className="px-5 py-5 min-h-[280px] sm:px-6">
             <TabsContent value="subscription" className="mt-0">
@@ -369,52 +367,52 @@ export function SubscriptionModal({
                       <div
                         key={plan.id}
                         className={cn(
-                          "hk-neon-card group relative border p-4 transition-all",
+                          "group relative rounded-lg border p-4 transition-all shadow-sm hover:shadow-md",
                           isCurrentPlan
-                            ? "border-primary/30 bg-primary/[0.03]"
+                            ? "border-primary/50 bg-primary/5"
                             : isPopular
-                              ? "border-foreground/15 bg-muted/20"
-                              : ""
+                              ? "border-primary/20 bg-muted/20"
+                              : "bg-card"
                         )}
                       >
                         <div className="relative flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="font-mono text-sm font-semibold">{plan.name}</h3>
+                              <h3 className="text-sm font-semibold">{plan.name}</h3>
                               {isCurrentPlan && (
-                                <span className="hk-neon-status-active inline-flex items-center gap-1 px-2 py-0.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
                                   <Check className="size-2.5" />
                                   Active
                                 </span>
                               )}
                               {isPopular && !isCurrentPlan && (
-                                <span className="hk-neon-status-active px-2 py-0.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 text-[10px] font-medium">
                                   Popular
                                 </span>
                               )}
                             </div>
-                            <p className="mt-0.5 font-mono text-[10px] text-muted-foreground leading-relaxed">{plan.description}</p>
+                            <p className="mt-0.5 text-[10px] text-muted-foreground leading-relaxed">{plan.description}</p>
                             <div className="mt-2 flex items-baseline gap-1">
-                              <span className="hk-neon-stat text-xl font-bold tabular-nums">{plan.formattedPrice}</span>
-                              <span className="font-mono text-[10px] text-muted-foreground">/month</span>
+                              <span className="text-xl font-bold tabular-nums">{plan.formattedPrice}</span>
+                              <span className="text-[10px] text-muted-foreground">/month</span>
                             </div>
                             <div className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1.5">
-                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <div className="flex size-4 items-center justify-center rounded-full bg-emerald-500/10">
                                   <Check className="size-2.5 text-emerald-500" />
-                                </span>
+                                </div>
                                 {plan.credits} credits/mo
                               </span>
-                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <div className="flex size-4 items-center justify-center rounded-full bg-emerald-500/10">
                                   <Check className="size-2.5 text-emerald-500" />
-                                </span>
+                                </div>
                                 {Math.floor(plan.credits / CREDIT_COSTS.NEW_PROMPT)} new chats
                               </span>
-                              <span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground">
-                                <span className="hk-neon-empty-icon flex size-4 items-center justify-center bg-emerald-500/10">
+                              <span className="inline-flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <div className="flex size-4 items-center justify-center rounded-full bg-emerald-500/10">
                                   <Check className="size-2.5 text-emerald-500" />
-                                </span>
+                                </div>
                                 buy extra credits
                               </span>
                             </div>
@@ -426,8 +424,7 @@ export function SubscriptionModal({
                                   size="sm"
                                   variant={isCurrentPlan ? "secondary" : isPopular ? "default" : "outline"}
                                   className={cn(
-                                    isPopular ? "hk-neon-btn-primary" : "hk-neon-btn",
-                                    "h-8 w-full px-5 sm:w-auto",
+                                    "h-8 w-full px-5 sm:w-auto rounded-md",
                                     isCurrentPlan && "pointer-events-none opacity-60",
                                   )}
                                   onClick={() => handleSubscribe(plan)}
@@ -441,7 +438,7 @@ export function SubscriptionModal({
                               </span>
                             </TooltipTrigger>
                             {tooltipText && (
-                              <TooltipContent className="font-mono text-xs max-w-[200px]">
+                              <TooltipContent className="text-xs max-w-[200px]">
                                 {tooltipText}
                               </TooltipContent>
                             )}
@@ -461,46 +458,46 @@ export function SubscriptionModal({
                 </div>
               ) : !hasActiveSubscription || currentPlanId === "free" ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <div className="hk-neon-empty-icon size-12 flex items-center justify-center bg-muted/50">
+                  <div className="size-12 flex items-center justify-center rounded-full bg-muted">
                     <Zap className="size-6 text-muted-foreground" />
                   </div>
-                  <h3 className="font-mono text-sm font-semibold">Paid Plan Required</h3>
-                  <p className="font-mono text-[10px] text-muted-foreground text-center max-w-xs leading-relaxed">
+                  <h3 className="text-sm font-semibold">Paid Plan Required</h3>
+                  <p className="text-[10px] text-muted-foreground text-center max-w-xs leading-relaxed">
                     {currentPlanId === "free"
-                      ? "// upgrade to a paid plan to purchase additional credits"
-                      : "// you need an active subscription to purchase additional credits"}
+                      ? "Upgrade to a paid plan to purchase additional credits"
+                      : "You need an active subscription to purchase additional credits"}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div className="hk-neon-card flex items-center gap-2 border px-3 py-2">
-                    <div className="size-1.5 bg-emerald-500 shadow-[0_0_4px] shadow-emerald-500" />
-                    <p className="font-mono text-[10px] text-muted-foreground">
-                      additional credits <span className="hk-neon-stat font-medium">never expire</span> and persist after subscription ends
+                  <div className="flex items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2">
+                    <div className="size-1.5 rounded-full bg-emerald-500 shadow-sm" />
+                    <p className="text-[10px] text-muted-foreground">
+                      Additional credits <span className="font-medium text-foreground">never expire</span> and persist after subscription ends
                     </p>
                   </div>
                   <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
                     {creditPacks.map((pack) => (
                       <div
                         key={pack.id}
-                        className="hk-neon-card group relative flex flex-col border bg-card p-4 transition-all"
+                        className="group relative flex flex-col rounded-lg border bg-card p-4 transition-all shadow-sm hover:shadow-md"
                       >
                         <div className="flex items-start justify-between">
-                          <p className="font-mono text-sm font-semibold">{pack.name}</p>
-                          <span className="hk-neon-status-active px-1.5 py-0.5">
+                          <p className="text-sm font-semibold">{pack.name}</p>
+                          <span className="bg-primary/10 text-primary text-[10px] font-medium px-1.5 py-0.5 rounded">
                             {pack.credits} cr
                           </span>
                         </div>
                         <div className="mt-2 flex items-baseline gap-1">
-                          <span className="hk-neon-stat text-xl font-bold tabular-nums">{pack.formattedPrice}</span>
+                          <span className="text-xl font-bold tabular-nums">{pack.formattedPrice}</span>
                         </div>
-                        <p className="mt-1 font-mono text-[10px] text-muted-foreground">
+                        <p className="mt-1 text-[10px] text-muted-foreground">
                           ~{Math.floor(pack.credits / CREDIT_COSTS.NEW_PROMPT)} new chats
                         </p>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="hk-neon-btn mt-3 h-8 w-full"
+                          className="mt-3 h-8 w-full rounded-md"
                           onClick={() => handleBuyCredits(pack)}
                           disabled={isLoading}
                         >

@@ -2,14 +2,17 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
-import { type CanvasElement, type CanvasBackground, type EnterAnimation } from './types'
+import { NavbarScrollHandler } from './navbar-scroll-handler'
+import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
+
+import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
 
 // ─── Device presets ───────────────────────────────────────────────────────────
 
 const DEVICES = [
   { id: 'desktop' as const, label: 'Desktop', Icon: Monitor,    width: 1440, height: 960  },
   { id: 'tablet'  as const, label: 'Tablet',  Icon: Tablet,     width: 768,  height: 1024 },
-  { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 390,  height: 844  },
+  { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 375,  height: 844  },
 ]
 
 // ─── Icon characters ──────────────────────────────────────────────────────────
@@ -67,20 +70,24 @@ function StaticEl({ el }: { el: CanvasElement }) {
     switch (el.type) {
       case 'heading': {
         const Tag = `h${el.headingLevel ?? 1}` as React.ElementType
+        const slugId = el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
         return (
-          <Tag style={{
-            width: '100%', height: '100%', margin: 0,
-            color: styles.color ?? '#1a1a1a',
-            fontSize: styles.fontSize ?? 48,
-            fontWeight: styles.fontWeight ?? '700',
-            fontFamily: styles.fontFamily,
-            textAlign: styles.textAlign,
-            letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-            lineHeight: styles.lineHeight ?? '1.2',
-            padding: styles.padding ?? 4,
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap',
-            display: 'flex', alignItems: 'center',
-          } as React.CSSProperties}>{el.content}</Tag>
+          <Tag
+            id={slugId}
+            data-heading={el.content.toLowerCase()}
+            style={{
+              width: '100%', height: '100%', margin: 0,
+              color: styles.color ?? '#1a1a1a',
+              fontSize: styles.fontSize ?? 48,
+              fontWeight: styles.fontWeight ?? '700',
+              fontFamily: styles.fontFamily,
+              textAlign: styles.textAlign,
+              letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+              lineHeight: styles.lineHeight ?? '1.2',
+              padding: styles.padding ?? 4,
+              wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+              display: 'flex', alignItems: 'center',
+            } as React.CSSProperties}>{el.content}</Tag>
         )
       }
       case 'paragraph':
@@ -218,7 +225,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
     : inner
 
   return (
-    <div id={el.anchorId || undefined} className={animClass(el.enterAnimation)} style={wrapStyle}>
+    <div className={animClass(el.enterAnimation)} style={wrapStyle}>
       {content}
     </div>
   )
@@ -226,22 +233,38 @@ function StaticEl({ el }: { el: CanvasElement }) {
 
 // ─── Scaled preview canvas ────────────────────────────────────────────────────
 
-function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH }: {
+function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH, deviceId }: {
   elements: CanvasElement[]
   background: CanvasBackground
   deviceWidth: number
   deviceHeight: number
   containerW: number
   containerH: number
+  deviceId: 'desktop' | 'tablet' | 'mobile'
 }) {
-  const scale = Math.min((containerW - 32) / deviceWidth, (containerH - 32) / deviceHeight, 1)
-  const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
+  const innerContentRef = useRef<HTMLDivElement>(null)
+
+  // Apply responsive reflow for tablet/mobile
+  const responsiveDevice: ResponsiveDevice = deviceId
+  const layout = computeResponsiveLayout(elements, responsiveDevice)
+  const sorted = [...layout].sort((a, b) => a.zIndex - b.zIndex)
+
+  // Compute actual content height (elements may reflow below the preset device height)
+  const contentHeight = sorted.length > 0
+    ? Math.max(deviceHeight, ...sorted.map((el) => el.y + el.height)) + 40
+    : deviceHeight
+
+  // Scale based on width only so the full page is visible at correct width
+  const scale = Math.min((containerW - 32) / deviceWidth, 1)
+  // Scaled dimensions for the outer wrapper
+  const scaledW = deviceWidth * scale
+  const scaledH = contentHeight * scale
 
   return (
     <div
       style={{
-        width: deviceWidth * scale,
-        height: deviceHeight * scale,
+        width: scaledW,
+        height: scaledH,
         position: 'relative',
         overflow: 'hidden',
         flexShrink: 0,
@@ -252,7 +275,7 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
       <div
         style={{
           width: deviceWidth,
-          height: deviceHeight,
+          height: contentHeight,
           position: 'absolute',
           top: 0,
           left: 0,
@@ -263,7 +286,13 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
           overflow: 'hidden',
         }}
       >
-        {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
+        <div 
+          ref={innerContentRef}
+          style={{ position: 'relative', width: deviceWidth, minHeight: contentHeight }}
+        >
+          <NavbarScrollHandler scrollScope={innerContentRef.current} />
+          {sorted.map((el) => !el.hidden && <StaticEl key={el.id} el={el} />)}
+        </div>
       </div>
     </div>
   )
@@ -310,7 +339,7 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
     : 0
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#0d0d11' }}>
+    <div className="fixed inset-0 flex flex-col" style={{ background: '#0d0d11', zIndex: 9999 }}>
       {/* Browser chrome header */}
       <div
         className="flex h-12 shrink-0 items-center gap-3 border-b px-4"
@@ -378,11 +407,11 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
         </div>
       </div>
 
-      {/* Preview content */}
+      {/* Preview content — scrollable, top-aligned so long pages scroll naturally */}
       <div
         ref={contentRef}
-        className="flex flex-1 items-center justify-center overflow-auto"
-        style={{ background: '#141416', padding: 24 }}
+        className="flex flex-1 justify-center overflow-y-auto overflow-x-hidden"
+        style={{ background: '#141416', padding: 24, alignItems: 'flex-start' }}
       >
         {containerSize.w > 0 && (
           <PreviewCanvas
@@ -392,6 +421,7 @@ export function PreviewModal({ open, onClose, elements, background, publishedSlu
             deviceHeight={device.height}
             containerW={containerSize.w}
             containerH={containerSize.h}
+            deviceId={device.id}
           />
         )}
       </div>

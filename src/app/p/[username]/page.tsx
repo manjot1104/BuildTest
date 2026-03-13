@@ -2,10 +2,14 @@ import React from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { env } from '@/env'
+import { NavbarScrollHandler } from '@/components/buildify-studio/navbar-scroll-handler'
 import {
   type CanvasElement,
   type CanvasBackground,
   type EnterAnimation,
+  type ResponsiveDevice,
+  DEVICE_WIDTHS,
+  computeResponsiveLayout,
 } from '@/components/buildify-studio/types'
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
@@ -68,6 +72,59 @@ function enterAnimClass(anim: EnterAnimation | undefined): string {
   return map[anim] ?? ''
 }
 
+// ─── Responsive CSS generation ────────────────────────────────────────────────
+
+/** Generate responsive CSS for a given breakpoint using the full reflow layout. */
+function buildBreakpointCss(
+  elements: CanvasElement[],
+  device: 'tablet' | 'mobile',
+  maxWidth: number,
+  desktopWidth: number,
+): string {
+  const targetWidth = DEVICE_WIDTHS[device]
+  const layout = computeResponsiveLayout(elements, device, desktopWidth)
+  let rules = ''
+
+  for (let i = 0; i < elements.length; i++) {
+    const orig = elements[i]
+    const eff = layout[i]
+    if (!orig || !eff) continue
+    let css = ''
+    css += `left:${eff.x}px!important;`
+    css += `top:${eff.y}px!important;`
+    css += `width:${eff.width}px!important;`
+    css += `height:${eff.height}px!important;`
+    if (eff.hidden) css += `display:none!important;`
+
+    // Style properties from the computed layout
+    const s = eff.styles
+    if (s.fontSize !== undefined) css += `font-size:${s.fontSize}px!important;`
+    if (s.padding !== undefined) css += `padding:${s.padding}px!important;`
+    if (s.color) css += `color:${s.color}!important;`
+    if (s.backgroundColor) css += `background-color:${s.backgroundColor}!important;`
+    if (s.borderRadius !== undefined) css += `border-radius:${s.borderRadius}px!important;`
+    if (s.fontWeight) css += `font-weight:${s.fontWeight}!important;`
+    if (s.textAlign) css += `text-align:${s.textAlign}!important;`
+    if (s.lineHeight !== undefined) css += `line-height:${s.lineHeight}!important;`
+    if (s.letterSpacing !== undefined) css += `letter-spacing:${s.letterSpacing}px!important;`
+    if (s.gap !== undefined) css += `gap:${s.gap}px!important;`
+    if (s.opacity !== undefined) css += `opacity:${s.opacity / 100}!important;`
+    if (s.border) css += `border:${s.border}!important;`
+    if (s.boxShadow) css += `box-shadow:${s.boxShadow}!important;`
+
+    rules += `[data-el-id="${orig.id}"]{${css}}\n`
+  }
+
+  return `@media(max-width:${maxWidth}px){main{width:${targetWidth}px!important;}\n${rules}}\n`
+}
+
+function buildResponsiveCss(elements: CanvasElement[], desktopWidth = 1440): string {
+  let css = ''
+  css += buildBreakpointCss(elements, 'tablet', 768, desktopWidth)
+  css += buildBreakpointCss(elements, 'mobile', 480, desktopWidth)
+  return css
+}
+
 // ─── Static element renderer ──────────────────────────────────────────────────
 
 function StaticElement({ el }: { el: CanvasElement }) {
@@ -97,22 +154,26 @@ function StaticElement({ el }: { el: CanvasElement }) {
     switch (el.type) {
       case 'heading': {
         const Tag: React.ElementType = `h${el.headingLevel ?? 1}`
+        const slugId = el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
         return (
-          <Tag style={{
-            width: '100%', height: '100%', margin: 0,
-            color: styles.color ?? '#1a1a1a',
-            fontSize: styles.fontSize ?? 48,
-            fontWeight: styles.fontWeight ?? '700',
-            fontFamily: styles.fontFamily,
-            textAlign: styles.textAlign,
-            letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-            lineHeight: styles.lineHeight ?? '1.2',
-            padding: styles.padding ?? 4,
-            wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
-            display: 'flex',
-            alignItems: 'center',
-          } as React.CSSProperties}>{el.content}</Tag>
+          <Tag
+            id={slugId}
+            data-heading={el.content.toLowerCase()}
+            style={{
+              width: '100%', height: '100%', margin: 0,
+              color: styles.color ?? '#1a1a1a',
+              fontSize: styles.fontSize ?? 48,
+              fontWeight: styles.fontWeight ?? '700',
+              fontFamily: styles.fontFamily,
+              textAlign: styles.textAlign,
+              letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+              lineHeight: styles.lineHeight ?? '1.2',
+              padding: styles.padding ?? 4,
+              wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
+              display: 'flex',
+              alignItems: 'center',
+            } as React.CSSProperties}>{el.content}</Tag>
         )
       }
       case 'paragraph':
@@ -239,7 +300,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
     </a>
   ) : inner
 
-  return <div id={el.anchorId || undefined} className={animClass} style={wrapStyle}>{content}</div>
+  return <div data-el-id={el.id} className={animClass} style={wrapStyle}>{content}</div>
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -256,6 +317,23 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
 
   const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
   const bgCss = getBgCss(bg)
+
+  // Compute page height from element positions (absolute positioning doesn't contribute to parent height)
+  const pageHeight = elements.length > 0
+    ? Math.max(960, ...elements.map((el) => el.y + el.height)) + 40
+    : 960
+
+  // Generate responsive CSS for tablet/mobile overrides
+  const responsiveCss = buildResponsiveCss(elements)
+
+  // Compute page heights for each breakpoint using the full reflow layout
+  const computeLayoutHeight = (els: CanvasElement[], device: ResponsiveDevice) => {
+    const layout = computeResponsiveLayout(els, device)
+    if (layout.length === 0) return 960
+    return Math.max(960, ...layout.map((el) => el.y + el.height)) + 40
+  }
+  const tabletHeight = computeLayoutHeight(elements, 'tablet')
+  const mobileHeight = computeLayoutHeight(elements, 'mobile')
 
   return (
     <>
@@ -276,11 +354,24 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         .pb-anim-bounce{animation:pb-bounce 1s ease infinite}
         *{box-sizing:border-box;margin:0;padding:0}
         html{scroll-behavior:smooth}
-        body{font-family:system-ui,-apple-system,sans-serif}
-        main{position:relative;width:1440px;height:960px;margin:0 auto;${bgCss}overflow:hidden}
-        @media(max-width:1460px){main{transform-origin:top left;transform:scale(calc(100vw / 1440));height:calc(960px * (100vw / 1440))}}
+        body{font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden}
+        main{position:relative;width:1440px;min-height:${pageHeight}px;margin:0 auto;${bgCss}}
+        @media(max-width:1460px) and (min-width:769px){
+          main{transform-origin:top left;transform:scale(calc(100vw / 1440));width:1440px;min-height:${pageHeight}px}
+          body{height:calc(${pageHeight}px * (100vw / 1440))}
+        }
+        @media(max-width:768px) and (min-width:481px){
+          main{width:${DEVICE_WIDTHS.tablet}px!important;min-height:${tabletHeight}px!important;transform:none!important;margin:0 auto}
+          body{height:auto}
+        }
+        @media(max-width:480px){
+          main{width:${DEVICE_WIDTHS.mobile}px!important;min-height:${mobileHeight}px!important;transform:none!important;margin:0 auto}
+          body{height:auto}
+        }
+        ${responsiveCss}
       `}</style>
       <main>
+        <NavbarScrollHandler />
         {sorted.map((el) => <StaticElement key={el.id} el={el} />)}
       </main>
     </>

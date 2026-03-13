@@ -69,7 +69,7 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                 <SidebarMenuItem>
                     <SidebarMenuButton
                         size="lg"
-                        className="hk-nav-item w-full"
+                        className="w-full"
                         onClick={() => router.push("/login")}
                     >
                         <Avatar className="h-8 w-8 rounded-lg">
@@ -106,78 +106,74 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                     <DropdownMenuTrigger asChild>
                         <SidebarMenuButton
                             size="lg"
-                            className="hk-nav-item data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <div className="hk-neon-avatar relative rounded-lg">
-                                <Avatar className="h-8 w-8 rounded-lg">
-                                    <AvatarImage src={user.avatar} alt={user.name} />
-                                    <AvatarFallback className="rounded-lg bg-primary/10 font-mono text-xs">{initials}</AvatarFallback>
-                                </Avatar>
-                            </div>
+                            <Avatar className="h-8 w-8 rounded-lg">
+                                <AvatarImage src={user.avatar} alt={user.name} />
+                                <AvatarFallback className="rounded-lg bg-muted text-xs">{initials}</AvatarFallback>
+                            </Avatar>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-medium">{user.name}</span>
-                                <span className="truncate font-mono text-[10px] text-muted-foreground">{user.email}</span>
+                                <span className="truncate text-[10px] text-muted-foreground">{user.email}</span>
                             </div>
                             <ChevronsUpDown className="ml-auto size-4" />
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                        className="hk-neon-dropdown w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg shadow-md"
                         side={isMobile ? "bottom" : "right"}
                         align="end"
                         sideOffset={4}
                     >
                         <DropdownMenuLabel className="p-0 font-normal">
                             <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                <div className="hk-neon-avatar relative rounded-lg">
-                                    <Avatar className="h-8 w-8 rounded-lg">
-                                        <AvatarImage src={user.avatar} alt={user.name} />
-                                        <AvatarFallback className="rounded-lg bg-primary/10 font-mono text-xs">{initials}</AvatarFallback>
-                                    </Avatar>
-                                </div>
+                                <Avatar className="h-8 w-8 rounded-lg">
+                                    <AvatarImage src={user.avatar} alt={user.name} />
+                                    <AvatarFallback className="rounded-lg bg-muted text-xs">{initials}</AvatarFallback>
+                                </Avatar>
                                 <div className="grid flex-1 text-left text-sm leading-tight">
                                     <span className="truncate font-medium">{user.name}</span>
-                                    <span className="truncate font-mono text-[10px] text-muted-foreground">{user.email}</span>
+                                    <span className="truncate text-[10px] text-muted-foreground">{user.email}</span>
                                 </div>
                             </div>
                         </DropdownMenuLabel>
-                        <DropdownMenuSeparator className="hk-neon-separator" />
+                        <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setSubscriptionModalOpen(true)}>
+                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
                                 {hasActiveSubscription ? (
                                     <>
-                                        <Coins className="hk-neon-icon" />
+                                        <Coins className="size-4" />
                                         <span className="flex-1">Credits</span>
-                                        <span className="ml-auto font-mono text-xs text-muted-foreground">
+                                        <span className="ml-auto text-xs text-muted-foreground">
                                             {isLoading ? "..." : credits?.totalCredits ?? 0}
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <Sparkles className="hk-neon-icon" />
+                                        <Sparkles className="size-4" />
                                         Buy Pro
                                     </>
                                 )}
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator className="hk-neon-separator" />
+                        <DropdownMenuSeparator />
                         <DropdownMenuGroup>
-                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => onSettingsClick?.("general")}>
-                                <BadgeCheck className="hk-neon-icon" />
+                            <DropdownMenuItem onClick={() => onSettingsClick?.("general")}>
+                                <BadgeCheck className="size-4" />
                                 Account
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setSubscriptionModalOpen(true)}>
-                                <CreditCard className="hk-neon-icon" />
+                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
+                                <CreditCard className="size-4" />
                                 Billing
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="hk-neon-dropdown-item" onClick={() => setNotificationsOpen(true)}>
-                                <Bell className="hk-neon-icon" />
+                            <DropdownMenuItem onClick={() => setNotificationsOpen(true)}>
+                                <Bell className="size-4" />
                                 Notifications
                             </DropdownMenuItem>
                         </DropdownMenuGroup>
-                        <DropdownMenuSeparator className="hk-neon-separator" />
-                        <DropdownMenuItem className="hk-neon-dropdown-item" onClick={handleLogout}>
-                            <LogOut className="hk-neon-icon" />
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleLogout}>
+                            <LogOut className="size-4" />
                             Log out
                         </DropdownMenuItem>
                     </DropdownMenuContent>

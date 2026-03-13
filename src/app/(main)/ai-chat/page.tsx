@@ -709,7 +709,7 @@ function AppRunner({ content }: { content: string }) {
           size="sm"
           className={cn(
             "h-7 gap-1.5 text-xs",
-            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20 hover:text-primary",
+            !hasResult && "bg-primary/10 text-primary hover:bg-primary/20",
           )}
           onClick={hasResult ? handleStop : handleRun}
           disabled={execution.isRunning}
@@ -1019,7 +1019,7 @@ const toggleStar = async () => {
     <div className="group flex gap-3">
       <div className={cn(
         "mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg",
-        message.isError ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary",
+        message.isError ? "bg-destructive/10 text-destructive" : "bg-muted text-primary",
       )}>
         {message.isError ? <AlertTriangle className="size-3.5" /> : <Bot className="size-3.5" />}
       </div>
@@ -1074,7 +1074,7 @@ const toggleStar = async () => {
 function TypingIndicator({ modelName }: { modelName: string }) {
   return (
     <div className="flex gap-3">
-      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+      <div className="mt-1 flex size-7 shrink-0 items-center justify-center rounded-lg bg-muted text-primary">
         <Bot className="size-3.5" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1127,10 +1127,9 @@ function EmptyState({
 }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-8 py-16 text-center">
-      {/* Logo with glow */}
+      {/* Logo without glow */}
       <div className="relative">
-        <div className="absolute inset-0 scale-150 rounded-full bg-primary/10 blur-2xl" />
-        <div className="relative flex size-16 items-center justify-center rounded-2xl border border-primary/20 bg-primary/5">
+        <div className="relative flex size-16 items-center justify-center rounded-2xl border bg-muted">
           <BuildifyLogo size="lg" />
         </div>
       </div>
@@ -1149,9 +1148,9 @@ function EmptyState({
             <button
               key={s.label}
               onClick={() => onSuggestion(s.prompt)}
-              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm"
+              className="group/card flex items-center gap-3 rounded-xl border bg-card px-4 py-3 text-left transition-all hover:border-border hover:bg-muted hover:shadow-sm"
             >
-              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-primary/10">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted transition-colors group-hover/card:bg-background">
                 <s.icon className="size-4 text-muted-foreground transition-colors group-hover/card:text-primary" />
               </div>
               <div>
@@ -1211,8 +1210,8 @@ function GenerationSettings({
               size="icon-xs"
               disabled={disabled}
               className={cn(
-                "rounded-lg border-border/60 hover:border-primary/30",
-                !isDefault && "border-primary/40 bg-primary/5 text-primary",
+                "rounded-lg border-border/60 hover:border-border hover:bg-muted",
+                !isDefault && "border-primary/40 bg-muted text-primary",
               )}
             >
               <SlidersHorizontal className="size-3.5" />
@@ -1221,7 +1220,7 @@ function GenerationSettings({
         </TooltipTrigger>
         <TooltipContent>Generation settings</TooltipContent>
       </Tooltip>
-      <PopoverContent side="top" align="start" className="w-80">
+      <PopoverContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold">Generation Settings</h4>
           {!isDefault && (
@@ -1339,14 +1338,14 @@ function ModelSelector({
           variant="outline"
           size="sm"
           disabled={disabled}
-          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground"
+          className="h-8 gap-1.5 rounded-xl border-border/60 px-2.5 text-xs font-medium text-muted-foreground hover:border-border hover:bg-muted hover:text-foreground"
         >
           <Sparkles className="size-3.5 text-primary" />
           <span className="max-w-[130px] truncate">{selected.name}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-80">
+      <DropdownMenuContent side="top" align="start" className="w-80 shadow-lg rounded-xl">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Select a model
         </DropdownMenuLabel>
@@ -1357,7 +1356,7 @@ function ModelSelector({
             onClick={() => onSelect(m.id)}
             className={cn(
               "flex cursor-pointer items-start gap-2.5 py-2.5",
-              m.id === modelId && "bg-primary/5",
+              m.id === modelId && "bg-muted",
             )}
           >
             <div className={cn(
@@ -1699,7 +1698,7 @@ useEffect(() => {
   <div className="flex-1 flex flex-col">
    <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+          <div className="flex size-7 items-center justify-center rounded-lg bg-muted">
             <BrainCircuit className="size-4 text-primary" />
           </div>
           <div className="flex flex-col">
@@ -1764,7 +1763,7 @@ useEffect(() => {
       {/* ── Input area ── */}
       <div className="shrink-0 border-t bg-background px-4 py-3">
         <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
+          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:border-primary/30">
             {/* Textarea */}
             <Textarea
               ref={textareaRef}
@@ -1837,10 +1836,10 @@ useEffect(() => {
 {activeFiles.length > 0 && (
   <>
     {/* Resize Handle */}
-    <div className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" />
+    <div className="w-1 cursor-col-resize bg-border hover:bg-muted transition-colors" />
 
     {/* Sidebar */}
-    <div className="w-[420px] border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl">
+    <div className="w-[420px] border-l bg-background flex flex-col shadow-2xl">
 
       {/* Header */}
       <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
@@ -1869,7 +1868,7 @@ useEffect(() => {
             className={cn(
               "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
               index === selectedFileIndex
-                ? "border-primary text-primary bg-primary/5"
+                ? "border-primary text-primary bg-muted"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
           >
