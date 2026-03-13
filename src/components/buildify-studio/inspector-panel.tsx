@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import { Upload, Plus, Trash2, ExternalLink, ChevronRight } from 'lucide-react'
+import { Upload, Plus, Trash2, ExternalLink, ChevronRight, Search } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import {
   type CanvasElement,
@@ -13,6 +13,7 @@ import {
   type FormField,
   getResponsiveElement,
 } from './types'
+import { ICON_NAMES } from './element-renderer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -583,42 +584,7 @@ function ContentTab({ element, upd }: {
       )
 
     case 'icon':
-      return (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Name</Label>
-            <Input
-              value={element.content || element.iconName || ''}
-              onChange={(e) => upd({ content: e.target.value })}
-              className="h-7 text-xs"
-              placeholder="star, heart, zap, home…"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Available: star, heart, zap, check, home, user, mail, phone, globe, camera, code, music, coffee, shield, rocket, smile, diamond, flame, leaf, crown
-            </p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Size</Label>
-            <NumInput value={element.styles.iconSize} onChange={(v) => upd({ styles: { ...element.styles, iconSize: v } })} min={12} max={200} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Color</Label>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="color"
-                value={element.styles.iconColor ?? '#3b82f6'}
-                onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
-                className="size-7 cursor-pointer rounded border border-border"
-              />
-              <Input
-                value={element.styles.iconColor ?? '#3b82f6'}
-                onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
-                className="h-7 font-mono text-xs"
-              />
-            </div>
-          </div>
-        </div>
-      )
+      return <IconEditor element={element} upd={upd} />
 
     case 'social-links':
       return <SocialLinksEditor element={element} upd={upd} />
@@ -715,6 +681,77 @@ function SocialLinksEditor({ element, upd }: {
               className="h-7 font-mono text-xs"
             />
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IconEditor({ element, upd }: {
+  element: CanvasElement
+  upd: (updates: Partial<CanvasElement>) => void
+}) {
+  const [iconSearch, setIconSearch] = useState('')
+  const currentIcon = element.content || element.iconName || 'star'
+
+  const filtered = iconSearch
+    ? ICON_NAMES.filter((name) => name.includes(iconSearch.toLowerCase()))
+    : ICON_NAMES
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Current: {currentIcon}</Label>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={iconSearch}
+            onChange={(e) => setIconSearch(e.target.value)}
+            className="h-7 pl-7 text-xs"
+            placeholder="Search icons..."
+          />
+        </div>
+      </div>
+      <div className="grid max-h-48 grid-cols-6 gap-1 overflow-y-auto rounded-md border border-border p-1">
+        {filtered.slice(0, 120).map((name) => (
+          <button
+            key={name}
+            type="button"
+            title={name}
+            onClick={() => upd({ content: name })}
+            className={`flex items-center justify-center rounded p-1.5 text-xs transition-colors ${
+              currentIcon === name
+                ? 'bg-primary/20 text-primary ring-1 ring-primary'
+                : 'hover:bg-accent text-muted-foreground'
+            }`}
+          >
+            <span style={{ fontSize: 10, lineHeight: 1 }}>{name.slice(0, 3)}</span>
+          </button>
+        ))}
+      </div>
+      {filtered.length > 120 && (
+        <p className="text-[10px] text-muted-foreground">
+          Showing 120 of {filtered.length} — search to find more
+        </p>
+      )}
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Icon Size</Label>
+        <NumInput value={element.styles.iconSize} onChange={(v) => upd({ styles: { ...element.styles, iconSize: v } })} min={12} max={200} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Icon Color</Label>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="color"
+            value={element.styles.iconColor ?? '#3b82f6'}
+            onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
+            className="size-7 cursor-pointer rounded border border-border"
+          />
+          <Input
+            value={element.styles.iconColor ?? '#3b82f6'}
+            onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
+            className="h-7 font-mono text-xs"
+          />
         </div>
       </div>
     </div>

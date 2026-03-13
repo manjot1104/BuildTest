@@ -174,9 +174,37 @@ type SegmentText = { type: "text"; content: string };
 type SegmentCode = { type: "code"; lang: string; code: string };
 type Segment = SegmentText | SegmentCode;
 
+/** Infer language from a filename extension */
+function langFromFilename(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  const map: Record<string, string> = {
+    tsx: "tsx", ts: "typescript", jsx: "jsx", js: "javascript",
+    html: "html", htm: "html", css: "css", scss: "scss",
+    py: "python", json: "json", md: "markdown", svg: "svg",
+  };
+  return map[ext] ?? (ext || "text");
+}
+
 function splitCodeBlocks(raw: string): Segment[] {
   const segments: Segment[] = [];
-  const parts = raw.split(/(```(?:\w+)?\n?[\s\S]*?```)/g);
+
+  // First, unwrap <FILE> tags — extract code from inside them
+  // Handles both: <FILE filename="X.tsx">code</FILE>
+  // and nested: <FILE filename="X.tsx">\n```tsx\ncode\n```\n</FILE>
+  let unwrapped = raw.replace(
+    /<FILE\s+[^>]*?filename=["']([^"']+)["'][^>]*>([\s\S]*?)<\/FILE>/g,
+    (_match, filename: string, inner: string) => {
+      const trimmed = inner.trim();
+      // If the content already has code fences, unwrap them and re-wrap with the correct lang
+      const fenceMatch = /^```\w*\n?([\s\S]*?)```$/.exec(trimmed);
+      const code = fenceMatch ? fenceMatch[1]!.trimEnd() : trimmed;
+      const lang = langFromFilename(filename);
+      return `\n\`\`\`${lang}\n${code}\n\`\`\`\n`;
+    },
+  );
+
+  // Now split on standard code fences
+  const parts = unwrapped.split(/(```(?:\w+)?\n?[\s\S]*?```)/g);
   for (const part of parts) {
     const codeMatch = /^```(\w*)\n?([\s\S]*?)```$/.exec(part);
     if (codeMatch) {
@@ -185,7 +213,7 @@ function splitCodeBlocks(raw: string): Segment[] {
         lang: codeMatch[1] ?? "text",
         code: (codeMatch[2] ?? "").trimEnd(),
       });
-    } else if (part) {
+    } else if (part.trim()) {
       segments.push({ type: "text", content: part });
     }
   }
@@ -399,9 +427,13 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
  */
 function stripModuleSyntax(code: string): string {
   return code
-    .replace(/^\s*import\s+type\s+.*?;?\s*$/gm, "")
-    .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s+type\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s+.*?from\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*import\s*\{[^}]*\}\s*from\s*['"].*?['"];?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^\s*export\s+type\s+/gm, "type ")
+    .replace(/^\s*export\s+interface\s+/gm, "interface ")
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -595,8 +627,6 @@ function buildBabelRunnerScript(rawCode: string): string {
     "  }",
     "})();",
   ];
-  const mountCode = mountLines.join("\\n");
-
   return `<script>
 (function() {
   /* ── Error display: DOM-only, no innerHTML with style strings ── */
@@ -951,16 +981,6 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
                   </Button>
                 </div>
               </div>
-              {/*
-                CRITICAL FIX: Added allow-same-origin to sandbox so that CDN scripts
-                (loaded from cdn.jsdelivr.net) can execute properly.
-                Without allow-same-origin, cross-origin scripts are blocked and throw
-                "Script error." with no useful stack trace.
-                allow-scripts: allows JS execution
-                allow-same-origin: allows CDN scripts to run without CORS block
-                allow-forms: allows form submissions
-                allow-popups: allows window.open / links
-              */}
               <iframe
                 srcDoc={execution.htmlPreview}
                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

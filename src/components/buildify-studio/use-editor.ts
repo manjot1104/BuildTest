@@ -390,7 +390,6 @@ if (type === 'section') {
         element: {
           id: crypto.randomUUID(),
           type,
-          sectionKey: type === 'section' ? 'section-' + Date.now() : undefined,
           x: Math.round(offsetX),
           y: Math.round(offsetY),
           width: def.width ?? 200,
