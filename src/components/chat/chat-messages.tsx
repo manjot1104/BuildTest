@@ -12,6 +12,7 @@ import type { ChatMessage } from '@/hooks/use-chat'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { authClient } from '@/server/better-auth/client'
 import { cn } from '@/lib/utils'
+import { stripSystemPrompt } from '@/lib/prompt-enhancer'
 
 interface Chat {
   id: string
@@ -91,6 +92,39 @@ function MessageWrapper({
       </div>
     </div>
   )
+}
+
+// Strip system prompt prefix from binary format content (for user messages loaded from API)
+function stripSystemPromptFromBinary(
+  content: MessageBinaryFormat,
+): MessageBinaryFormat {
+  if (!Array.isArray(content)) return content
+
+  const marker = "User's Request:\n"
+  let markerFound = false
+
+  return content.map((row) => {
+    if (markerFound || !Array.isArray(row)) return row
+
+    const processedRow = row.map((item: unknown) => {
+      if (markerFound || typeof item !== 'string') return item
+      const idx = item.indexOf(marker)
+      if (idx !== -1) {
+        markerFound = true
+        return item.slice(idx + marker.length)
+      }
+      // Part of the system prefix before the marker — strip it
+      if (
+        item.includes('YOU ARE THE BEST SOFTWARE DEVELOPER') ||
+        item.includes('CRITICAL CSS RULE')
+      ) {
+        return ''
+      }
+      return item
+    })
+
+    return processedRow as (typeof content)[number]
+  }) as MessageBinaryFormat
 }
 
 // Function to preprocess message content and remove V0_FILE markers
@@ -200,10 +234,16 @@ export function ChatMessages({
                 showLoadingIndicator={false}
               />
             ) : typeof msg.content === 'string' ? (
-              <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+              <p className="leading-relaxed whitespace-pre-wrap">
+                {msg.type === 'user' ? stripSystemPrompt(msg.content) : msg.content}
+              </p>
             ) : (
               <V0Message
-                content={preprocessMessageContent(msg.content)}
+                content={
+                  msg.type === 'user'
+                    ? stripSystemPromptFromBinary(preprocessMessageContent(msg.content))
+                    : preprocessMessageContent(msg.content)
+                }
                 messageId={`msg-${index}`}
                 role={msg.type}
                 components={sharedComponents}
