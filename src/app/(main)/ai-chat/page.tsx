@@ -451,8 +451,99 @@ function stripModuleSyntax(code: string): string {
     .replace(/export\s+var\s/g, "var ")
     .replace(/^\s*export\s+default\s+/gm, "var _default = ")
    .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
-  .replace(/<(?:[A-Za-z][a-zA-Z0-9]*(?:\[\])?(?:\s*\|\s*[A-Za-z][a-zA-Z0-9]*(?:\[\])?)*\s*)>/g, "")
     .trim();
+}
+
+/**
+ * Fixes ALL TypeScript patterns that Babel standalone cannot parse.
+ * Handles:
+ * 1. Generic arrows:   const X = <T,>({  →  const X = ({
+ * 2. Double annotation: const X = <T,>(p: Type<T>) => JSX.Element = ({  →  const X = ({
+ * 3. Generic functions: function sort<T>(  →  function sort(
+ * Does NOT touch JSX tags like <div>, <h2>, <Component />
+ */
+function fixGenericArrows(code: string): string {
+  let result = code;
+
+  // PASS 1: Replace = <TypeParam...>( where TypeParam starts with uppercase
+  // Uses a smart regex that handles nested <> like Record<string, any>
+  // Only replaces TypeScript generics, NOT JSX tags (lowercase start, or has quotes)
+  result = result.replace(
+    /=\s*<([A-Z][^>]*(?:<[^>]*>[^>]*)*)>\s*\(/g,
+    (match: string, inner: string) => {
+      const trimmed = inner.trim();
+      if (/^[a-z]/.test(trimmed)) return match; // lowercase = JSX tag, skip
+      if (trimmed.includes('"') || trimmed.includes("'")) return match; // JSX attr, skip
+      return "= (";
+    }
+  );
+
+  // PASS 2: Fix double-annotation pattern AI hallucinates:
+  // After pass 1, pattern becomes: = (junk_params) => ReturnType = ({real_params}) => {
+  // We want just:                  = ({real_params}) => {
+  result = result.replace(
+    /\([^)]*\)\s*=>\s*(?:JSX\.Element|React\.(?:FC|ReactNode|ReactElement|ReactChild|ComponentType|VFC|FunctionComponent)(?:<[^>]*>)?)\s*=\s*\(/g,
+    "("
+  );
+
+ // PASS 3: Generic functions
+result = result.replace(/(function\s+\w+)\s*<[A-Z][^>]*(?:<[^>]*>)?[^>]*>\s*\(/g, "$1(");
+
+// PASS 4: remove hook generics
+result = result.replace(
+  /\b(useState|useRef|useCallback|useMemo|useContext|useReducer)\s*<[^(]+>\s*\(/g,
+  "$1("
+);
+
+return result;
+}
+
+/**
+ * Merges multiple TSX/JSX files into a single runnable code block.
+ * Components are placed before the entry file so they're defined when used.
+ * Local relative imports (./x, ../x) are stripped from each file.
+ */
+function mergeFilesForPreview(
+  files: { filename: string; language: string; code: string }[]
+): { mergedCode: string; mergedCss: string; mainHtml: string } | null {
+  const jsxFiles = files.filter((f) =>
+    ["tsx", "jsx", "ts", "js", "typescript", "javascript"].includes(f.language.toLowerCase())
+  );
+  const cssFiles = files.filter((f) =>
+    ["css", "scss", "less"].includes(f.language.toLowerCase())
+  );
+  const htmlFiles = files.filter((f) =>
+    ["html", "htm"].includes(f.language.toLowerCase())
+  );
+
+  if (jsxFiles.length === 0) return null;
+
+  // Sort: entry file (App/Dashboard/Index/Main/Page) goes LAST
+  // so all components are defined before the entry file uses them
+  const entryNames = ["app", "dashboard", "index", "main", "page", "home"];
+  const sorted = [...jsxFiles].sort((a, b) => {
+    const aBase = a.filename.replace(/\.[^.]+$/, "").replace(/.*\//, "").toLowerCase();
+    const bBase = b.filename.replace(/\.[^.]+$/, "").replace(/.*\//, "").toLowerCase();
+    const aIsEntry = entryNames.some((e) => aBase === e || aBase.startsWith(e));
+    const bIsEntry = entryNames.some((e) => bBase === e || bBase.startsWith(e));
+    if (aIsEntry && !bIsEntry) return 1;
+    if (!aIsEntry && bIsEntry) return -1;
+    return 0;
+  });
+
+  // Strip relative imports from each file — they can't resolve in browser sandbox
+  const stripLocalImports = (code: string) =>
+    code
+      .replace(/^\s*import\s+[\s\S]*?from\s+['"]\.[^'"]*['"];?\s*$/gm, "")
+      .replace(/^\s*import\s+['"]\.[^'"]*['"];?\s*$/gm, "");
+
+  const mergedCode = sorted
+    .map((f) => `// === ${f.filename} ===\n${stripLocalImports(f.code)}`)
+    .join("\n\n");
+  const mergedCss = cssFiles.map((f) => f.code).join("\n");
+  const mainHtml = htmlFiles.map((f) => f.code).join("\n");
+
+  return { mergedCode, mergedCss, mainHtml };
 }
 
 /**
@@ -463,25 +554,33 @@ function stripModuleSyntax(code: string): string {
 const REACT_GLOBALS_SHIM = `<script>
 (function(){
   if(typeof React==='undefined') return;
-  // Hooks
+
   var hooks=['useState','useEffect','useRef','useCallback','useMemo','useContext',
-    'useReducer','useId','useLayoutEffect','useImperativeHandle','useDebugValue',
-    'useDeferredValue','useTransition','useSyncExternalStore','useInsertionEffect'];
-  hooks.forEach(function(h){if(React[h])window[h]=React[h];});
-  // Common APIs
+  'useReducer','useId','useLayoutEffect','useImperativeHandle','useDebugValue',
+  'useDeferredValue','useTransition','useSyncExternalStore','useInsertionEffect'];
+
+  hooks.forEach(function(h){
+    if(React[h]) window[h] = React[h];
+  });
+
   ['createElement','createContext','createRef','forwardRef','lazy','memo',
    'Fragment','Suspense','StrictMode','Children','cloneElement','isValidElement'
-  ].forEach(function(k){if(React[k])window[k]=React[k];});
-  // ReactDOM
+  ].forEach(function(k){
+    if(React[k]) window[k] = React[k];
+  });
+
   if(typeof ReactDOM!=='undefined'){
-    window.createRoot=ReactDOM.createRoot;
-    window.createPortal=ReactDOM.createPortal;
+    window.createRoot = ReactDOM.createRoot;
+    window.createPortal = ReactDOM.createPortal;
   }
 })();
 </script>`;
 
 /** Combines all code blocks into a single runnable HTML document */
-function buildHtmlApp(blocks: SegmentCode[]): string {
+function buildHtmlApp(
+  blocks: SegmentCode[],
+  preMerged?: { mergedCode: string; mergedCss: string; mainHtml: string }
+): string {
   const htmlBlocks: string[] = [];
   const cssBlocks: string[] = [];
   const jsBlocks: string[] = [];
@@ -491,16 +590,29 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
   const looksLikeJsx = (code: string) =>
     /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || code.includes("React.createElement") || /from\s+['"]react['"]/.test(code);
 
-  for (const block of blocks) {
-    const lang = block.lang.toLowerCase();
-    if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
-    else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
-    else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
-      jsxBlocks.push(stripModuleSyntax(block.code));
-    else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
+  if (preMerged) {
+    // Multi-file path: all files pre-merged, use directly
+    if (preMerged.mainHtml) htmlBlocks.push(preMerged.mainHtml);
+    if (preMerged.mergedCss) cssBlocks.push(preMerged.mergedCss);
+    if (preMerged.mergedCode) {
+      jsxBlocks.push(fixGenericArrows(stripModuleSyntax(preMerged.mergedCode)));
+    }
+  } else {
+    // Single-file path: original logic
+    for (const block of blocks) {
+      const lang = block.lang.toLowerCase();
+      if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
+      else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
+      else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
+        jsxBlocks.push(fixGenericArrows(stripModuleSyntax(block.code)));
+      else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
+    }
   }
 
   const needsReact = jsxBlocks.length > 0;
+  const allCode = jsxBlocks.join("\n") + jsBlocks.join("\n");
+  const needsChartJs = allCode.includes("new Chart(") || allCode.includes("Chart.register") || allCode.includes("from 'chart.js'") || allCode.includes('from "chart.js"');
+  const needsD3 = allCode.includes("d3.") || allCode.includes("from 'd3'") || allCode.includes('from "d3"');
   const mainHtml = htmlBlocks.join("\n");
   const hasFullDocument = mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
 
@@ -524,7 +636,43 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
       }
     }
     if (needsReact && !doc.includes("react")) {
-  const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>\n<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
+  const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script><script>
+(function(){
+  if(typeof ReactRouterDOM==='undefined') return;
+
+  [
+   'BrowserRouter','HashRouter','Routes','Route','Link','NavLink',
+   'Navigate','Outlet','useNavigate','useLocation','useParams',
+   'useMatch','useRoutes','useHref','useSearchParams'
+  ].forEach(function(k){
+    if(ReactRouterDOM[k]) window[k]=ReactRouterDOM[k];
+  });
+
+  window.Router = ReactRouterDOM.BrowserRouter;
+})();
+</script>\n<script src="https://unpkg.com/@emotion/react@11/dist/emotion-react.umd.min.js"><\/script>\n<script src="https://unpkg.com/@emotion/styled@11/dist/emotion-styled.umd.min.js"><\/script>\n<script src="https://unpkg.com/@mui/material@5/umd/material-ui.production.min.js"><\/script>
+<script>
+(function(){
+  if(typeof MaterialUI==='undefined') return;
+
+  [
+   'Box','Container','Grid','Paper','Typography','Button','TextField',
+   'Card','CardContent','CardHeader','CardActions','List','ListItem',
+   'ListItemText','ListItemIcon','ListItemButton','AppBar','Toolbar',
+   'Drawer','IconButton','Avatar','Badge','Chip','Divider',
+   'Alert','AlertTitle','Dialog','DialogTitle','DialogContent','DialogActions',
+   'Table','TableBody','TableCell','TableContainer','TableHead','TableRow',
+   'Tabs','Tab','Switch','Checkbox','Select','MenuItem','InputLabel',
+   'FormControl','FormLabel','Stack','Tooltip','createTheme',
+   'ThemeProvider','CssBaseline','useTheme','useMediaQuery','styled'
+  ].forEach(function(k){
+    if(MaterialUI[k]) window[k]=MaterialUI[k];
+  });
+
+})();
+</script>\n<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\/script>
+<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
       if (doc.includes("</head>")) {
         doc = doc.replace("</head>", `${reactCdn}\n</head>`);
       } else if (doc.includes("<body")) {
@@ -573,6 +721,43 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
 ${REACT_GLOBALS_SHIM}
 <script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>
 <script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>
+<script>
+(function(){
+  if(typeof ReactRouterDOM==='undefined') return;
+
+  [
+   'BrowserRouter','HashRouter','Routes','Route','Link','NavLink',
+   'Navigate','Outlet','useNavigate','useLocation','useParams',
+   'useMatch','useRoutes','useHref','useSearchParams'
+  ].forEach(function(k){
+    if(ReactRouterDOM[k]) window[k]=ReactRouterDOM[k];
+  });
+
+  window.Router = ReactRouterDOM.BrowserRouter;
+})();
+</script>
+<script src="https://unpkg.com/@emotion/react@11/dist/emotion-react.umd.min.js"><\/script>\n<script src="https://unpkg.com/@emotion/styled@11/dist/emotion-styled.umd.min.js"><\/script>\n<script src="https://unpkg.com/@mui/material@5/umd/material-ui.production.min.js"><\/script>
+<script>
+(function(){
+  if(typeof MaterialUI==='undefined') return;
+
+  [
+   'Box','Container','Grid','Paper','Typography','Button','TextField',
+   'Card','CardContent','CardHeader','CardActions','List','ListItem',
+   'ListItemText','ListItemIcon','ListItemButton','AppBar','Toolbar',
+   'Drawer','IconButton','Avatar','Badge','Chip','Divider',
+   'Alert','AlertTitle','Dialog','DialogTitle','DialogContent','DialogActions',
+   'Table','TableBody','TableCell','TableContainer','TableHead','TableRow',
+   'Tabs','Tab','Switch','Checkbox','Select','MenuItem','InputLabel',
+   'FormControl','FormLabel','Stack','Tooltip','createTheme',
+   'ThemeProvider','CssBaseline','useTheme','useMediaQuery','styled'
+  ].forEach(function(k){
+    if(MaterialUI[k]) window[k]=MaterialUI[k];
+  });
+
+})();
+</script>\n<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"><\/script>
 <script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`
     : "";
 
@@ -654,10 +839,10 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
   const segments = splitCodeBlocks(content);
   let codeBlocks = segments.filter((s): s is SegmentCode => s.type === "code");
 
-  // If we have explicit files (e.g. from structured output), prioritize them
+  // If we have explicit files from structured output, prioritize them
   if (files && files.length > 0) {
     const fileBlocks: SegmentCode[] = files.map((f) => ({
-      type: "code",
+      type: "code" as const,
       lang: f.language,
       code: f.code,
     }));
@@ -681,7 +866,15 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
 
     if (webApp) {
       // Build and render client-side — instant, no server call
-      const html = buildHtmlApp(codeBlocks);
+      // For multi-file (e.g. Dashboard + Sidebar + Header), merge all into one bundle
+      let html: string;
+      if (files && files.length > 1) {
+        // Multi-file: merge components before entry file so imports resolve
+        const merged = mergeFilesForPreview(files);
+        html = merged ? buildHtmlApp(codeBlocks, merged) : buildHtmlApp(codeBlocks);
+      } else {
+        html = buildHtmlApp(codeBlocks);
+      }
       setExecution({
         isRunning: false, htmlPreview: html, consoleOutput: null,
         error: null, exitCode: 0, executionTimeMs: 0, status: "completed",
@@ -828,7 +1021,7 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
               </div>
              <iframe
   srcDoc={execution.htmlPreview}
-  sandbox="allow-scripts allow-forms allow-popups"
+ sandbox="allow-scripts allow-forms allow-popups allow-modals"
   className={cn(
     "w-full bg-white transition-all duration-300",
     isExpanded ? "h-[500px]" : "h-72",
