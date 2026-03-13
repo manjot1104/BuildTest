@@ -16,8 +16,6 @@
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
-// currently using 'standard' as default for Budget_presets, but will change it in future.
-
 import { measurePagePerformanceWithPuppeteer } from "./puppeteer.service";
 
 const TINYFISH_API_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
@@ -36,25 +34,29 @@ export interface TestBudgetAllocation {
   totalTests: number;
 }
 
-export const BUDGET_PRESETS = {
-  free: { maxPages: 3, maxTests: 5, concurrency: 3 } satisfies CrawlBudget,
-  standard: { maxPages: 5, maxTests: 10, concurrency: 5 } satisfies CrawlBudget,
-  deep: { maxPages: 10, maxTests: 15, concurrency: 10 } satisfies CrawlBudget,
-} as const;
+// Default budget used when the user does not specify maxPages / maxTests.
+// These are the values the server falls back to — not exposed as named presets.
+const DEFAULT_BUDGET: CrawlBudget = {
+  maxPages: 5,
+  maxTests: 10,
+  concurrency: 5,
+};
 
+// Hard server-side caps — the UI enforces its own soft limits before these.
+// These must stay in sync with the Elysia route schema constraints:
+//   maxPages: t.Integer({ minimum: 1, maximum: 20 })
+//   maxTests: t.Integer({ minimum: 1, maximum: 30 })
 const HARD_CAPS = {
-  MAX_PAGES: 10,
-  MAX_TESTS: 15,
-  MAX_TESTS_PER_PAGE: 5,
+  MAX_PAGES: 20,
+  MAX_TESTS: 30,
+  MAX_TESTS_PER_PAGE: 8,
   MIN_TESTS_PER_PAGE: 1,
 } as const;
 
 const TIMEOUTS = {
-  // Discovery: needs time to click nav + wait for URL changes
   DISCOVERY_MS: 300_000,
   EXTRACTION_MS: 300_000,
   EXTRACTION_RETRY_MS: 60_000,
-  // Test execution
   EXECUTE_TEST_BASE_MS: 300_000,
   EXECUTE_TEST_RETRY_BONUS_MS: 60_000,
 } as const;
@@ -543,7 +545,6 @@ function tryParseRawText(raw: string | null): Record<string, unknown> | null {
         /* continue */
       }
     }
-    // Also try array recovery for discovery results
     const arrStart = cleaned.indexOf("[");
     const arrEnd = cleaned.lastIndexOf("]");
     if (arrStart !== -1 && arrEnd > arrStart) {
@@ -650,11 +651,6 @@ async function fetchStaticHtmlLinks(
 }
 
 // ─── Stage 1: Discovery prompt ────────────────────────────────────────────────
-//
-// This is a SINGLE TinyFish call on the root URL.
-// Its only job: navigate the site (including clicking SPA nav items) and
-// return a flat JSON array of all page URLs it found.
-// It does NOT extract page content — that happens in parallel in Stage 2.
 
 function buildDiscoveryGoal(
   rootUrl: string,
@@ -693,9 +689,6 @@ The "urls" field must be an array of absolute URL strings.
 }
 
 // ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
-//
-// Called in parallel for each discovered URL.
-// Passive only — no clicking. Just reads what's on the page.
 
 function buildExtractionGoal(url: string, allowedHostname: string): string {
   return `Navigate to this URL: ${url}
@@ -905,24 +898,26 @@ export async function crawlSite(
   const abortSignal = options.abortSignal;
   const ctx = makeCrawlContext();
 
+  // Resolve effective budget: user values → defaults → hard caps
   const budget: CrawlBudget = {
     maxPages: Math.min(
-      options.budget?.maxPages ?? BUDGET_PRESETS.standard.maxPages,
+      options.budget?.maxPages ?? DEFAULT_BUDGET.maxPages,
       HARD_CAPS.MAX_PAGES,
     ),
     maxTests: Math.min(
-      options.budget?.maxTests ?? BUDGET_PRESETS.standard.maxTests,
+      options.budget?.maxTests ?? DEFAULT_BUDGET.maxTests,
       HARD_CAPS.MAX_TESTS,
     ),
     concurrency:
-      options.budget?.concurrency ?? BUDGET_PRESETS.standard.concurrency,
+      options.budget?.concurrency ?? DEFAULT_BUDGET.concurrency,
   };
 
   console.log(
-    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests}`,
+    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests} ` +
+      `(user-requested: pages=${options.budget?.maxPages ?? "default"} tests=${options.budget?.maxTests ?? "default"})`,
   );
 
-  // ── Stage 0: Free URL seeding (no TinyFish credits) ───────────────────────
+  // ── Stage 0: Free URL seeding ──────────────────────────────────────────────
   const [sitemapUrls, staticHtmlLinks] = await Promise.all([
     fetchSitemapUrls(rootUrl, allowedHostname),
     fetchStaticHtmlLinks(rootUrl, allowedHostname),
@@ -931,16 +926,14 @@ export async function crawlSite(
   const freeUrls = dedupeUrls(
     [normalizeUrl(rootUrl), ...sitemapUrls, ...staticHtmlLinks],
     allowedHostname,
-    budget.maxPages * 3, // gather more than needed, will trim after discovery
+    budget.maxPages * 3,
   );
 
   console.log(
     `[Stage0] Free seed: ${freeUrls.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
   );
 
-  // ── Stage 1: Discovery via TinyFish ──────────────────────────────────────
-  // One call on the root URL — clicks nav items to find all SPA pages.
-  // Falls back gracefully to Stage 0 free URLs if discovery fails.
+  // ── Stage 1: Discovery via TinyFish ───────────────────────────────────────
   let discoveredUrls: string[] = [];
 
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
@@ -952,7 +945,7 @@ export async function crawlSite(
       {
         url: rootUrl,
         goal: buildDiscoveryGoal(rootUrl, allowedHostname, budget.maxPages),
-        browser_profile: "stealth", // stealth for nav clicking to avoid bot detection
+        browser_profile: "stealth",
       },
       ctx,
     ),
@@ -967,11 +960,9 @@ export async function crawlSite(
     `discovery(${rootUrl})`,
   );
 
-  // Extract URLs from discovery result — try every possible shape TinyFish might return
   function extractUrlsFromDiscovery(result: TinyFishResult): string[] {
     const candidates: string[] = [];
 
-    // Strategy 1: resultJson is present — try all known key names
     if (result.resultJson) {
       const raw = result.resultJson;
       const urlList = Array.isArray(raw)
@@ -994,7 +985,6 @@ export async function crawlSite(
       );
     }
 
-    // Strategy 2: rawText JSON parse
     if (result.rawText && candidates.length === 0) {
       const parsed = tryParseRawText(result.rawText);
       if (parsed) {
@@ -1015,8 +1005,6 @@ export async function crawlSite(
       }
     }
 
-    // Strategy 3: regex scan rawText for any URL matching allowedHostname
-    // This is the last-resort fallback when TinyFish writes prose instead of JSON
     if (result.rawText && candidates.length === 0) {
       const urlRegex = new RegExp(
         `https?://${allowedHostname.replace(/\./g, "\\.")}[^\\s"'<>\\]},]*`,
@@ -1051,11 +1039,9 @@ export async function crawlSite(
     );
   }
 
-  // Always ensure root URL is included
   const rootNorm = normalizeUrl(rootUrl);
   if (!discoveredUrls.includes(rootNorm)) discoveredUrls.unshift(rootNorm);
 
-  // Merge with free URLs — discovery takes priority, free URLs fill gaps
   const allCandidateUrls = dedupeUrls(
     [...discoveredUrls, ...freeUrls],
     allowedHostname,
@@ -1073,7 +1059,6 @@ export async function crawlSite(
   );
 
   // ── Stage 2: Parallel extraction ──────────────────────────────────────────
-  // ALL pages extracted simultaneously — no BFS, no waiting on each other.
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
   console.log(
@@ -1127,7 +1112,7 @@ export async function crawlSite(
           screenshots: { url375: null, url768: null, url1440: null },
         } as CrawledPage;
       }
-      return null; // extraction failed after retries
+      return null;
     }),
   );
 

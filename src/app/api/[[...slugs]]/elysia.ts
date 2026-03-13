@@ -1259,6 +1259,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // ============================================
 
   // POST /api/test/run — start a new test run, returns { testRunId } immediately
+  // CHANGED: body schema now includes optional maxPages and maxTests so users
+  // can specify how many pages to crawl and how many test cases to generate.
+  // Both fields are optional integers — the server uses its own defaults when omitted.
+  // t.Integer() ensures we reject floats/strings at the Elysia validation layer.
   .post(
     "/test/run",
     async ({ body, set }) => {
@@ -1271,6 +1275,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       body: t.Object({
         url: t.String(),
         projectId: t.Optional(t.String()),
+        // ADDED: user-controlled crawl budget — both optional, server defaults apply when absent
+        maxPages: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+        maxTests: t.Optional(t.Integer({ minimum: 1, maximum: 30 })),
       }),
     },
   )

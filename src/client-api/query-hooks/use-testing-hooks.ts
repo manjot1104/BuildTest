@@ -3,6 +3,8 @@
 //   - `tests_generated` SSE event: populates `generatedTestCases` so the UI
 //     can show all test cases as "pending" cards immediately after generation.
 //   - `SSEState.generatedTestCases`: ordered list of test cases with live status.
+//   - CHANGED: `useStartTestRun` mutation input now accepts optional `maxPages`
+//     and `maxTests` so users can control the crawl/test budget from the UI.
 
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -425,10 +427,21 @@ export function useTestRunSSE(testRunId: string | null, initialStatus?: string) 
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
+// CHANGED: mutation input now accepts optional maxPages and maxTests.
+// These are forwarded to POST /api/test/run and flow into the crawl budget.
+// Defaults are intentionally omitted here so the server's own defaults apply
+// when the user hasn't changed the sliders.
 export function useStartTestRun() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (input: { url: string; projectId?: string }): Promise<{ testRunId: string }> => {
+    mutationFn: async (input: {
+      url: string;
+      projectId?: string;
+      /** Maximum number of pages to crawl. Omit to use server default (5). */
+      maxPages?: number;
+      /** Maximum number of test cases to generate. Omit to use server default (10). */
+      maxTests?: number;
+    }): Promise<{ testRunId: string }> => {
       const res = await fetch('/api/test/run', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
       })

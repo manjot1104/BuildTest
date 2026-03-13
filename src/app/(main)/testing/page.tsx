@@ -7,7 +7,7 @@ import {
   Eye, Navigation, FileText, Lock, Bug, ArrowRight, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
-  Code2, X, Network, StopCircle, ImageOff,
+  Code2, X, StopCircle, ImageOff, Minus, Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +61,10 @@ const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, executing: 2, reporting: 3, complete: 4,
 };
 
+// Server-side limits (must match elysia route schema)
+const MAX_PAGES_LIMIT = 20;
+const MAX_TESTS_LIMIT = 30;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function statusBg(s: string) {
@@ -74,6 +78,54 @@ function statusColor(s: string) {
   if (s === "needs-improvement") return "text-yellow-400";
   if (s === "poor") return "text-red-400";
   return "text-muted-foreground";
+}
+
+// ─── Budget Stepper ───────────────────────────────────────────────────────────
+
+function BudgetStepper({
+  label,
+  hint,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  min: number;
+  max: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(min, value - 1))}
+          disabled={value <= min}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
+          <span className="text-sm font-bold tabular-nums text-foreground">{value}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(max, value + 1))}
+          disabled={value >= max}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // ─── Bug Screenshot ────────────────────────────────────────────────────────────
@@ -580,6 +632,8 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TestingPage() {
   const [url, setUrl] = useState("");
+  const [maxPages, setMaxPages] = useState(5);
+  const [maxTests, setMaxTests] = useState(10);
   const [testRunId, setTestRunId] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -635,9 +689,23 @@ export default function TestingPage() {
   const liveTestCases = sseState.generatedTestCases;
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
 
+  // ── Budget constraint handlers ─────────────────────────────────────────────
+  // Invariant: maxPages >= 1, maxTests >= maxPages, both within server limits.
+  const handleMaxPagesChange = (next: number) => {
+    const pages = Math.max(1, Math.min(next, MAX_PAGES_LIMIT));
+    setMaxPages(pages);
+    // If pages would exceed tests, bump tests up to match
+    if (pages > maxTests) setMaxTests(pages);
+  };
+
+  const handleMaxTestsChange = (next: number) => {
+    const tests = Math.max(maxPages, Math.min(next, MAX_TESTS_LIMIT));
+    setMaxTests(tests);
+  };
+
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL"); return; }
-    startTest({ url: url.trim() }, {
+    startTest({ url: url.trim(), maxPages, maxTests }, {
       onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
       onError: (err) => toast.error(err.message ?? "Failed to start test run"),
     });
@@ -700,6 +768,7 @@ export default function TestingPage() {
               <p className="text-muted-foreground text-lg max-w-md">Paste a URL. Get a comprehensive bug report in minutes.</p>
             </div>
             <div className="w-full max-w-xl space-y-3">
+              {/* URL + run button */}
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -711,6 +780,36 @@ export default function TestingPage() {
                   {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /> Run Tests</>}
                 </Button>
               </div>
+
+              {/* Test budget controls */}
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Test Budget</p>
+                <div className="flex gap-4">
+                  <BudgetStepper
+                    label="Pages to crawl"
+                    hint={`max ${MAX_PAGES_LIMIT}`}
+                    value={maxPages}
+                    min={1}
+                    // pages can't exceed tests (each page needs at least one test)
+                    max={Math.min(MAX_PAGES_LIMIT, maxTests)}
+                    onChange={handleMaxPagesChange}
+                  />
+                  <div className="w-px bg-border shrink-0" />
+                  <BudgetStepper
+                    label="Tests to generate"
+                    hint={`max ${MAX_TESTS_LIMIT}`}
+                    value={maxTests}
+                    // tests can never drop below pages
+                    min={maxPages}
+                    max={MAX_TESTS_LIMIT}
+                    onChange={handleMaxTestsChange}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground/50 font-mono">
+                  Tests ≥ pages · more tests = slower but more thorough
+                </p>
+              </div>
+
               <p className="text-xs text-muted-foreground/60 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
             </div>
           </div>

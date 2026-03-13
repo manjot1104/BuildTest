@@ -117,9 +117,13 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
+// CHANGED: runPipeline now accepts optional userMaxPages and userMaxTests
+// so user-provided values are carried all the way into crawlSite's budget.
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
+  userMaxPages?: number,
+  userMaxTests?: number,
 ): Promise<void> {
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
@@ -129,17 +133,21 @@ async function runPipeline(
     broadcastToRun(testRunId, buildSSELine(event));
 
   try {
-    await runPipelineStages(testRunId, targetUrl, send, abortController.signal);
+    await runPipelineStages(testRunId, targetUrl, send, abortController.signal, userMaxPages, userMaxTests);
   } finally {
     crawlAbortControllers.delete(testRunId);
   }
 }
 
+// CHANGED: runPipelineStages accepts optional userMaxPages and userMaxTests
+// and passes them into crawlSite via the budget option.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
   send: (event: PipelineSSEEvent) => void,
   abortSignal: AbortSignal,
+  userMaxPages?: number,
+  userMaxTests?: number,
 ): Promise<void> {
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
   checkCancelled(testRunId);
@@ -148,7 +156,16 @@ async function runPipelineStages(
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
   try {
-    siteData = await crawlSite(targetUrl, { testRunId, abortSignal });
+    siteData = await crawlSite(targetUrl, {
+      testRunId,
+      abortSignal,
+      // CHANGED: pass user-specified page/test counts into the budget if provided.
+      // Falls back to the service-level defaults when not specified.
+      budget: {
+        ...(userMaxPages !== undefined && { maxPages: userMaxPages }),
+        ...(userMaxTests !== undefined && { maxTests: userMaxTests }),
+      },
+    });
   } catch (err) {
     if (abortSignal.aborted || cancelledPipelines.has(testRunId))
       throw new Error(`CANCELLED:${testRunId}`);
@@ -633,15 +650,17 @@ async function runPipelineStages(
 // POST /api/test/run
 // ---------------------------------------------------------------------------
 
+// CHANGED: body now accepts optional maxPages and maxTests from the user.
+// These are passed through to runPipeline → runPipelineStages → crawlSite.
 export async function startTestRunHandler({
   body,
 }: {
-  body: { url: string; projectId?: string };
+  body: { url: string; projectId?: string; maxPages?: number; maxTests?: number };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-    const { url, projectId } = body;
+    const { url, projectId, maxPages, maxTests } = body;
     if (!url) return { error: "URL is required", status: 400 };
 
     const targetUrl = normaliseUrl(url);
@@ -662,7 +681,8 @@ export async function startTestRunHandler({
 
     activePipelines.add(testRunId);
 
-    void runPipeline(testRunId, targetUrl)
+    // CHANGED: forward user-specified maxPages/maxTests into the pipeline
+    void runPipeline(testRunId, targetUrl, maxPages, maxTests)
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("CANCELLED:")) {
@@ -808,6 +828,9 @@ export async function streamTestRunHandler({
         unregister = registerEmitter(params.id, emit);
       } else {
         // Pipeline not running — start it and wire this client as the first emitter
+        // NOTE: when restarting via SSE, we do NOT have user-specified maxPages/maxTests
+        // because this path is for reconnecting to an already-persisted run.
+        // The original maxPages/maxTests were already applied when POST /test/run was called.
         console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
         activePipelines.add(params.id);
         unregister = registerEmitter(params.id, emit);
