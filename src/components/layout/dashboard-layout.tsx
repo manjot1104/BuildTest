@@ -66,7 +66,7 @@ export default function DashboardLayout({
                     onSettingsClick={handleSettingsClick}
                     className="border-r"
                 />
-                <SidebarInset>
+          <SidebarInset className="min-h-screen">
                     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export default function DashboardLayout({
                             </div>
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
+                  <div className="flex flex-col gap-4 p-4 pt-4">
                         {children}
                     </div>
                 </SidebarInset>

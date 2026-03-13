@@ -449,18 +449,21 @@ console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrent
 if (!chatMode) {
   return (
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-   <ModeSelection
-  onSelect={(mode) => {
-    if (mode === "AI_CHAT") {
-      router.push("/ai-chat")
-    }
-
-   if (mode === "BUILDER") {
-  setChatMode("BUILDER")
-}
-  }}
-/>
-
+      <Suspense fallback={null}>
+        <SearchParamsHandler
+          onReset={handleReset}
+          onChatIdChange={handleChatIdChange}
+        />
+      </Suspense>
+      <ModeSelection
+        onSelect={(mode) => {
+          if (mode === "AI_CHAT") {
+            router.push("/ai-chat")
+          } else if (mode === "BUILDER") {
+            setChatMode("BUILDER")
+          }
+        }}
+      />
     </div>
   )
 }
@@ -498,7 +501,7 @@ if (!chatMode) {
 
     return (
        <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
-       <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+      <div className={cn("bg-background flex flex-col", showChatInterface ? "h-[calc(100vh-48px)] overflow-hidden" : "min-h-[calc(100vh-48px)]")}>
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -665,7 +668,7 @@ if (!chatMode) {
                            </div>
 )}
           {!showChatInterface && (
-  <div className="px-4 sm:px-6 lg:px-8 pb-12">
+<div className="px-4 sm:px-6 lg:px-8 pb-12">
       <div className="max-w-5xl w-full mx-auto">
           <CommunityBuildsGrid />
       </div>
