@@ -1,6 +1,7 @@
 'use client'
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { ModeSelection } from "./components/mode-selection"
-import React, { useState, useEffect, useRef, Suspense } from 'react'
+
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from "next/navigation"
 import {
@@ -66,13 +67,16 @@ function SearchParamsHandler({
             newUrl.searchParams.delete('reset')
             window.history.replaceState({}, '', newUrl.pathname)
         }
-    }, [searchParams, onReset])
+    }, [searchParams])
 
     // Handle chatId from URL
-    useEffect(() => {
-        const chatId = searchParams.get('chatId')
+   // Handle chatId from URL
+useEffect(() => {
+    const chatId = searchParams.get('chatId')
+    if (chatId !== null) {              
         onChatIdChange(chatId)
-    }, [searchParams, onChatIdChange])
+    }
+}, [searchParams, onChatIdChange])
 
     return null
 }
@@ -84,32 +88,24 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
 
+
+    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const [isDragOver, setIsDragOver] = useState(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
+    const [micError, setMicError] = useState<string | null>(null)
+    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+        return new URLSearchParams(window.location.search).get('chatId')
+    }
+    return null
+})
    useEffect(() => {
   if (chatMode === "AI_CHAT") {
     setShowChatInterface(true)
     setUrlChatId(null)
   }
 }, [chatMode])
-    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
-    const [isDragOver, setIsDragOver] = useState(false)
-    const [isFullscreen, setIsFullscreen] = useState(false)
-    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
-    const [micError, setMicError] = useState<string | null>(null)
-    const searchParams = useSearchParams()
-    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-        if (typeof window !== 'undefined') {
-            return new URLSearchParams(window.location.search).get('chatId')
-        }
-        return null
-    })
-
-    // Update urlChatId whenever searchParams change
-    useEffect(() => {
-        const chatId = searchParams.get('chatId')
-        if (chatId !== urlChatId) {
-            setUrlChatId(chatId)
-        }
-    }, [searchParams, urlChatId])
 
     useEffect(() => {
         if (urlChatId) {
@@ -165,37 +161,28 @@ console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrent
         setIsLoading(hookIsLoading)
     }, [hookIsLoading])
 
-    const handleReset = () => {
-        // Reset all chat-related state
-        setShowChatInterface(false)
-        setChatMode(null)
-        
-        setMessage('')
-        setAttachments([])
-        setIsLoading(false)
-        setIsFullscreen(false)
-        setUrlChatId(null)
+  const handleReset = useCallback(() => {
+    setShowChatInterface(false)
+    setChatMode(null)
+    setMessage('')
+    setAttachments([])
+    setIsLoading(false)
+    setIsFullscreen(false)
+    setUrlChatId(null)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('chatId')
+    window.history.replaceState({}, '', newUrl.pathname)
+    clearPromptFromStorage()
+    setTimeout(() => {
+        if (textareaRef.current) {
+            textareaRef.current.focus()
+        }
+    }, 0)
+}, [])
 
-        // Clear chatId from URL
-        const newUrl = new URL(window.location.href)
-        newUrl.searchParams.delete('chatId')
-        window.history.replaceState({}, '', newUrl.pathname)
-
-        // Clear any stored data
-        clearPromptFromStorage()
-
-        // Focus textarea after reset
-        setTimeout(() => {
-            if (textareaRef.current) {
-                textareaRef.current.focus()
-            }
-        }, 0)
-    }
-
-    const handleChatIdChange = (chatId: string | null) => {
-        setUrlChatId(chatId)
-
-    }
+const handleChatIdChange = (chatId: string | null) => {
+    setUrlChatId(chatId)
+}
 
     // Auto-focus the textarea on page load and restore from sessionStorage
     useEffect(() => {
@@ -459,7 +446,8 @@ if (!chatMode) {
         onSelect={(mode) => {
           if (mode === "AI_CHAT") {
             router.push("/ai-chat")
-          } else if (mode === "BUILDER") {
+          }
+          if (mode === "BUILDER") {
             setChatMode("BUILDER")
           }
         }}
