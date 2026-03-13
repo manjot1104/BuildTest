@@ -13,6 +13,7 @@ export interface ResumeTemplate {
   description: string
   preview: string // Description of the template style
   styleGuide: string // Instructions for AI to generate in this style
+  format?: 'latex' | 'html' | 'both' // Template format - defaults to 'both' for backward compatibility
 }
 
 // ─── Resume Templates ─────────────────────────────────────────────────────
@@ -25,6 +26,7 @@ export const RESUME_TEMPLATES: ResumeTemplate[] = [
     category: 'professional',
     description: 'Traditional two-column layout with clean typography',
     preview: 'Classic professional resume with left sidebar for contact/skills and right column for experience',
+    format: 'html',
     styleGuide: `PROFESSIONAL CLASSIC TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -171,6 +173,7 @@ CRITICAL: Use EXACTLY this two-column structure with left sidebar (35%) and righ
     category: 'modern',
     description: 'Clean single-column design with generous whitespace',
     preview: 'Minimalist single-column layout with focus on content and readability',
+    format: 'html',
     styleGuide: `MODERN MINIMAL TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 MANDATORY STRUCTURE (LaTeX):
@@ -221,6 +224,7 @@ CRITICAL: Use EXACTLY this single-column centered layout with generous whitespac
     category: 'creative',
     description: 'Bold design with visual elements and creative layout',
     preview: 'Creative resume with unique layout, color accents, and visual interest',
+    format: 'html',
     styleGuide: `CREATIVE PORTFOLIO TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -308,6 +312,7 @@ CRITICAL: Use EXACTLY this layout with colored header section. MUST have gradien
     category: 'executive',
     description: 'Senior-level format with emphasis on achievements',
     preview: 'Executive resume format highlighting leadership and strategic achievements',
+    format: 'html',
     styleGuide: `EXECUTIVE SUMMARY TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -391,6 +396,7 @@ CRITICAL: Summary section MUST be at top after name/contact, followed by Key Ach
     category: 'academic',
     description: 'Academic format with publications and research focus',
     preview: 'Academic resume format with emphasis on education, publications, and research',
+    format: 'html',
     styleGuide: `ACADEMIC SCHOLAR TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -512,6 +518,7 @@ CRITICAL FORMATTING RULES:
     category: 'professional',
     description: 'Tech-focused layout highlighting technical skills',
     preview: 'Technology-focused resume with prominent skills section and technical achievements',
+    format: 'html',
     styleGuide: `TECH PROFESSIONAL TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -670,6 +677,7 @@ CRITICAL FORMATTING RULES:
     category: 'creative',
     description: 'Design-focused resume with visual portfolio emphasis',
     preview: 'Designer resume with emphasis on visual work, portfolio, and creative projects',
+    format: 'html',
     styleGuide: `CREATIVE DESIGNER TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
@@ -947,5 +955,636 @@ CRITICAL FORMATTING RULES:
 - Projects format: "Project Name — Technologies — Year" on first line (bold), then bullet points below - use em dash — NOT pipe |
 - DO NOT use any colors - everything must be black text only
 - MUST include Projects section if user provided project data`,
+    format: 'html',
+  },
+  
+  // ── LaTeX Templates ────────────────────────────────────────────────────────
+  
+  // 1. Classic Professional LaTeX Resume
+  {
+    id: 'latex-classic-professional',
+    name: 'Classic Professional',
+    category: 'professional',
+    description: 'Traditional single-column layout with clean typography',
+    preview: 'Professional LaTeX resume with clear sections and traditional formatting',
+    format: 'latex',
+    styleGuide: `CLASSIC PROFESSIONAL LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+\\usepackage{hyperref}
+
+\\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=blue,
+    urlcolor=blue,
+}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{NAME}}\\\\[0.3cm]
+{\\large Job Title}\\\\[0.2cm]
+email | phone | location\\\\
+linkedin | portfolio
+\\end{center}
+
+\\vspace{0.3cm}
+
+\\section*{Summary}
+Summary text describing professional background and key qualifications. This section should be 2-3 lines highlighting your expertise and career focus.
+
+\\section*{Skills}
+\\begin{itemize}
+\\item Skill1, Skill2, Skill3, Skill4
+\\item Skill5, Skill6, Skill7, Skill8
+\\item Skill9, Skill10, Skill11, Skill12
+\\end{itemize}
+
+\\section*{Work Experience}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location} \\hfill \\textit{Start Date - End Date}
+\\begin{itemize}
+\\item Achievement or responsibility description with detailed information spanning multiple lines to provide context and impact
+\\item Another achievement with specific metrics and outcomes that demonstrate value delivered
+\\item Additional responsibility or accomplishment with relevant details and scope
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location} \\hfill \\textit{Start Date - End Date}
+\\begin{itemize}
+\\item Achievement or responsibility description with detailed information spanning multiple lines
+\\item Another achievement with specific metrics and outcomes
+\\end{itemize}
+
+\\section*{Education}
+
+\\textbf{Degree Name} \\hfill \\textit{Graduation Date}\\\\
+\\textit{Institution Name, Location}\\\\
+Relevant coursework, honors, or GPA if applicable
+
+\\section*{Projects}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used}
+\\begin{itemize}
+\\item Project description with detailed information about the problem solved, technologies used, and impact delivered
+\\item Key features or achievements with specific outcomes and user impact
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used}
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\section*{Certifications}
+
+\\textbf{Certification Name} \\hfill \\textit{Date}\\\\
+\\textit{Issuing Organization}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info format: "email | phone | location" on one line, "linkedin | portfolio" on second line (use pipe separator |)
+- Skills MUST be grouped in comma-separated lists within bullet points (NOT individual items)
+- Experience format: Job Title (bold) on first line with dates (italic, right-aligned), Company and Location (italic) on second line with date range (italic, right-aligned)
+- Education format: Degree (bold) with graduation date (italic, right-aligned), Institution and Location (italic) on second line
+- Projects format: Project Name (bold) with Year (italic, right-aligned), Technologies (italic) on second line
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions
+- Use \\hfill for right-aligned dates
+- Section headings use \\section* with custom formatting
+- Optimize spacing to prevent blank first page`,
+
+  },
+
+  // 2. Compact LaTeX Resume
+  {
+    id: 'latex-compact',
+    name: 'Compact Layout',
+    category: 'professional',
+    description: 'Space-efficient single-column design for maximum content',
+    preview: 'Compact LaTeX resume optimized for dense information presentation',
+    format: 'latex',
+    styleGuide: `COMPACT LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[10pt]{article}
+\\usepackage[margin=0.6in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}
+
+\\setlength{\\parskip}{0.3em}
+\\setlength{\\itemsep}{0.1em}
+\\setlist[itemize]{leftmargin=*,topsep=0.1em,itemsep=0.05em,labelsep=0.2em}
+
+\\begin{document}
+
+\\noindent
+{\\Large\\textbf{NAME}}\\\\
+{\\normalsize Job Title}\\\\
+email | phone | location
+
+\\vspace{0.2cm}
+
+\\section*{SUMMARY}
+Summary text in 2-3 lines describing professional background and key qualifications.
+
+\\section*{SKILLS}
+Skill1, Skill2, Skill3, Skill4, Skill5, Skill6, Skill7, Skill8, Skill9, Skill10
+
+\\section*{EXPERIENCE}
+\\textbf{Job Title} | \\textit{Company Name} | \\textit{Dates}\\\\
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines to provide context
+\\item Another achievement with specific metrics and outcomes demonstrating value
+\\end{itemize}
+
+\\textbf{Job Title} | \\textit{Company Name} | \\textit{Dates}\\\\
+\\begin{itemize}
+\\item Achievement description with detailed information
+\\item Another achievement with specific metrics
+\\end{itemize}
+
+\\section*{EDUCATION}
+\\textbf{Degree Name} | \\textit{Institution Name} | \\textit{Dates}\\\\
+Relevant coursework, honors, or GPA
+
+\\section*{PROJECTS}
+\\textbf{Project Name} | \\textit{Technologies} | \\textit{Year}\\\\
+\\begin{itemize}
+\\item Project description with detailed information about problem solved and impact
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\section*{CERTIFICATIONS}
+\\textbf{Certification Name} | \\textit{Issuing Organization} | \\textit{Date}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Compact spacing: Use 10pt font, 0.6in margins, tight itemsep and parskip
+- Contact info: Single line format "email | phone | location" (use pipe separator |)
+- Skills: Comma-separated single line (NOT bullet points)
+- Experience: "Job Title | Company Name | Dates" format on one line (use pipe separator |)
+- Education: "Degree Name | Institution Name | Dates" format (use pipe separator |)
+- Projects: "Project Name | Technologies | Year" format (use pipe separator |)
+- Certifications: "Certification Name | Organization | Date" format (use pipe separator |)
+- Section headings: UPPERCASE, bold, no extra spacing
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 3. Two-Column LaTeX Resume
+  {
+    id: 'latex-two-column',
+    name: 'Two-Column Layout',
+    category: 'professional',
+    description: 'Traditional two-column layout with sidebar',
+    preview: 'Two-column LaTeX resume with left sidebar for contact/skills and right column for experience',
+    format: 'latex',
+    styleGuide: `TWO-COLUMN LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+
+\\begin{document}
+
+\\begin{minipage}[t]{0.32\\textwidth}
+{\\Huge\\textbf{NAME}}\\\\[0.2cm]
+{\\normalsize Job Title}\\\\[0.3cm]
+
+\\section*{Contact}
+email\\\\
+phone\\\\
+location\\\\
+linkedin\\\\
+portfolio
+
+\\vspace{0.3cm}
+
+\\section*{Skills}
+\\begin{itemize}
+\\item Skill1, Skill2
+\\item Skill3, Skill4
+\\item Skill5, Skill6
+\\item Skill7, Skill8
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\section*{Education}
+\\textbf{Degree Name}\\\\
+\\textit{Institution}\\\\
+\\textit{Dates}\\\\
+Relevant details
+
+\\vspace{0.3cm}
+
+\\section*{Certifications}
+\\textbf{Certification}\\\\
+\\textit{Organization}\\\\
+\\textit{Date}
+
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.65\\textwidth}
+
+\\section*{Summary}
+Summary text in 2-3 lines describing professional background and key qualifications.
+
+\\section*{Experience}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines to provide context and impact
+\\item Another achievement with specific metrics and outcomes that demonstrate value delivered
+\\item Additional responsibility or accomplishment with relevant details
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement description with detailed information
+\\item Another achievement with specific metrics
+\\end{itemize}
+
+\\section*{Projects}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used}
+\\begin{itemize}
+\\item Project description with detailed information about problem solved and impact
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\end{minipage}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Two-column layout: Left column 32% width (Contact, Skills, Education, Certifications), Right column 65% width (Summary, Experience, Projects)
+- Left column: Contact info on separate lines (NOT pipe-separated)
+- Skills: Grouped in comma-separated pairs within bullet points
+- Right column: Experience and Projects with dates right-aligned using \\hfill
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions
+- Use minipage for columns, NOT multicol package`,
+
+  },
+
+  // 4. Minimal ATS-Friendly LaTeX Resume
+  {
+    id: 'latex-minimal-ats',
+    name: 'Minimal ATS-Friendly',
+    category: 'minimal',
+    description: 'Ultra-clean design optimized for ATS systems',
+    preview: 'Minimal LaTeX resume with simple formatting for maximum ATS compatibility',
+    format: 'latex',
+    styleGuide: `MINIMAL ATS-FRIENDLY LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Large\\textbf{NAME}}\\\\[0.2cm]
+email | phone | location
+\\end{center}
+
+\\vspace{0.3cm}
+
+\\textbf{SUMMARY}\\\\
+Summary text in 2-3 lines describing professional background and key qualifications.
+
+\\vspace{0.3cm}
+
+\\textbf{SKILLS}\\\\
+Skill1, Skill2, Skill3, Skill4, Skill5, Skill6, Skill7, Skill8, Skill9, Skill10
+
+\\vspace{0.3cm}
+
+\\textbf{EXPERIENCE}\\\\
+\\textbf{Job Title} | Company Name | Location | Dates
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines to provide context
+\\item Another achievement with specific metrics and outcomes demonstrating value
+\\item Additional responsibility with relevant details and scope
+\\end{itemize}
+
+\\textbf{Job Title} | Company Name | Location | Dates
+\\begin{itemize}
+\\item Achievement description with detailed information
+\\item Another achievement with specific metrics
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{EDUCATION}\\\\
+\\textbf{Degree Name} | Institution Name | Location | Dates
+Relevant coursework, honors, or GPA if applicable
+
+\\vspace{0.3cm}
+
+\\textbf{PROJECTS}\\\\
+\\textbf{Project Name} | Technologies | Year
+\\begin{itemize}
+\\item Project description with detailed information about problem solved and impact
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\textbf{Project Name} | Technologies | Year
+\\begin{itemize}
+\\item Project description with detailed information
+\\item Key features or achievements
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{CERTIFICATIONS}\\\\
+Certification Name | Issuing Organization | Date
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- NO colors, NO fancy formatting - pure black text only
+- NO section commands - use \\textbf{} for section headings
+- Contact info: Single line "email | phone | location" (use pipe separator |)
+- Skills: Comma-separated single line (NOT bullet points)
+- Experience: "Job Title | Company Name | Location | Dates" format (use pipe separator |)
+- Education: "Degree Name | Institution Name | Location | Dates" format (use pipe separator |)
+- Projects: "Project Name | Technologies | Year" format (use pipe separator |)
+- Certifications: "Certification Name | Organization | Date" format (use pipe separator |)
+- Simple spacing with \\vspace between sections
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions
+- Maximum ATS compatibility - no complex LaTeX commands`,
+
+  },
+
+  // 5. Modern Clean LaTeX Resume
+  {
+    id: 'latex-modern-clean',
+    name: 'Modern Clean',
+    category: 'modern',
+    description: 'Contemporary design with balanced spacing',
+    preview: 'Modern LaTeX resume with clean typography and professional layout',
+    format: 'latex',
+    styleGuide: `MODERN CLEAN LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\definecolor{sectioncolor}{RGB}{0,51,102}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\color{sectioncolor}}{}{0em}{}
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.25em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{NAME}}\\\\[0.3cm]
+{\\large\\textit{Job Title}}\\\\[0.2cm]
+email $\\cdot$ phone $\\cdot$ location\\\\
+linkedin $\\cdot$ portfolio
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{Professional Summary}
+Summary text in 2-3 lines describing professional background, key qualifications, and career focus.
+
+\\section*{Technical Skills}
+\\begin{itemize}
+\\item \\textbf{Category1:} Skill1, Skill2, Skill3
+\\item \\textbf{Category2:} Skill4, Skill5, Skill6
+\\item \\textbf{Category3:} Skill7, Skill8, Skill9
+\\end{itemize}
+
+\\section*{Professional Experience}
+
+\\textbf{Job Title} \\hfill \\textcolor{gray}{Start Date - End Date}\\\\
+\\textit{Company Name} \\hfill \\textit{Location}
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines to provide context and demonstrate impact
+\\item Another achievement with specific metrics, technologies used, and outcomes that show value delivered
+\\item Additional responsibility or accomplishment with relevant details about scope and collaboration
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{Job Title} \\hfill \\textcolor{gray}{Start Date - End Date}\\\\
+\\textit{Company Name} \\hfill \\textit{Location}
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines
+\\item Another achievement with specific metrics and outcomes
+\\end{itemize}
+
+\\section*{Education}
+
+\\textbf{Degree Name} \\hfill \\textcolor{gray}{Graduation Date}\\\\
+\\textit{Institution Name} \\hfill \\textit{Location}\\\\
+Relevant coursework, honors, GPA, or academic achievements
+
+\\section*{Notable Projects}
+
+\\textbf{Project Name} \\hfill \\textcolor{gray}{Year}\\\\
+\\textit{Technologies:} Technology1, Technology2, Technology3
+\\begin{itemize}
+\\item Project description with detailed information about the problem solved, approach taken, and impact delivered
+\\item Key features or technical achievements with specific outcomes and user benefits
+\\item Additional details about challenges overcome or innovative solutions implemented
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{Project Name} \\hfill \\textcolor{gray}{Year}\\\\
+\\textit{Technologies:} Technology1, Technology2
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\section*{Certifications \\& Awards}
+
+\\textbf{Certification Name} \\hfill \\textcolor{gray}{Date}\\\\
+\\textit{Issuing Organization}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: Use $\\cdot$ (centered dot) as separator: "email $\\cdot$ phone $\\cdot$ location"
+- Skills: Grouped by category with bold category names (e.g., "\\textbf{Category1:} Skill1, Skill2")
+- Experience: Dates in gray color using \\textcolor{gray}, right-aligned with \\hfill
+- Education: Similar format with gray dates
+- Projects: "Technologies:" label in italic before comma-separated list
+- Section headings: Colored blue using \\definecolor{sectioncolor}
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions
+- Professional spacing with \\vspace between major sections`,
+
+  },
+
+  // 6. Balanced Professional LaTeX Resume
+  {
+    id: 'latex-balanced-professional',
+    name: 'Balanced Professional',
+    category: 'professional',
+    description: 'Well-structured layout with equal emphasis on all sections',
+    preview: 'Balanced LaTeX resume with harmonious section distribution',
+    format: 'latex',
+    styleGuide: `BALANCED PROFESSIONAL LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\vspace{-0.3em}\\titlerule\\vspace{0.5em}]
+
+\\setlength{\\parskip}{0.4em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.12em}
+
+\\begin{document}
+
+\\begin{center}
+{\\LARGE\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize Job Title}\\\\[0.15cm]
+email | phone | location\\\\
+\\small linkedin | portfolio
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{PROFESSIONAL SUMMARY}
+Summary text in 2-3 lines describing professional background, key qualifications, and career objectives.
+
+\\section*{CORE COMPETENCIES}
+Skill1, Skill2, Skill3, Skill4, Skill5, Skill6, Skill7, Skill8, Skill9, Skill10, Skill11, Skill12
+
+\\section*{PROFESSIONAL EXPERIENCE}
+
+\\textbf{Job Title} \\hfill \\textit{Start Date - End Date}\\\\
+\\textit{Company Name} \\hfill \\textit{Location}
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines to provide comprehensive context about responsibilities and impact
+\\item Another achievement with specific metrics, technologies utilized, and quantifiable outcomes that demonstrate value and results
+\\item Additional responsibility or project accomplishment with relevant details about scope, team collaboration, and business impact
+\\end{itemize}
+
+\\vspace{0.25cm}
+
+\\textbf{Job Title} \\hfill \\textit{Start Date - End Date}\\\\
+\\textit{Company Name} \\hfill \\textit{Location}
+\\begin{itemize}
+\\item Achievement description with detailed information spanning multiple lines
+\\item Another achievement with specific metrics and outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{Degree Name} \\hfill \\textit{Graduation Date}\\\\
+\\textit{Institution Name} \\hfill \\textit{Location}\\\\
+Relevant coursework, academic honors, GPA, or notable achievements
+
+\\section*{KEY PROJECTS}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used:} Technology1, Technology2, Technology3
+\\begin{itemize}
+\\item Project description with detailed information about the problem addressed, technical approach, and impact delivered
+\\item Key features or technical achievements with specific outcomes, user benefits, and measurable results
+\\item Additional details about innovative solutions, challenges overcome, or collaboration aspects
+\\end{itemize}
+
+\\vspace{0.25cm}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used:} Technology1, Technology2
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features or achievements with specific outcomes
+\\end{itemize}
+
+\\section*{CERTIFICATIONS}
+
+\\textbf{Certification Name} \\hfill \\textit{Date}\\\\
+\\textit{Issuing Organization}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" on first line, "linkedin | portfolio" on second line in \\small (use pipe separator |)
+- Core Competencies: Comma-separated single line (NOT bullet points)
+- Experience: Dates in italic, right-aligned with \\hfill
+- Education: Similar format with dates right-aligned
+- Projects: "Technologies Used:" label in italic before comma-separated list
+- Section headings: UPPERCASE with horizontal rule below
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions
+- Balanced spacing throughout for harmonious appearance`,
+
   },
 ]

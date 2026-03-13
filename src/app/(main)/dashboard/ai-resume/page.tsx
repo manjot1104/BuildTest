@@ -370,14 +370,8 @@ export default function AIResumeBuilderPage() {
     setTemplateType(selectedType)
     form.setValue('templateType', selectedType)
     
-    // If HTML is selected, show templates. If LaTeX, skip templates and go to form
-    if (selectedType === 'html') {
-      setCurrentStep('template-browser')
-    } else {
-      // LaTeX: skip templates for now (will be added later)
-      setSelectedTemplate(null)
-      setCurrentStep('form')
-    }
+    // Show templates for both HTML and LaTeX formats
+    setCurrentStep('template-browser')
   }
 
   // Show format selection first

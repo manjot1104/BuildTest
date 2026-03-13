@@ -336,12 +336,30 @@ ${data.templateStyleGuide}
 ║  8. If template shows minipage, use minipage - DO NOT use multicol            ║
 ║  9. If template shows center, use center - DO NOT use left-align              ║
 ║  10. Follow the template code examples EXACTLY as written                    ║
+║  11. If template shows multicol, use multicol - DO NOT use minipage           ║
+║  12. If template shows two-column layout, you MUST use the exact same method  ║
+║      (minipage OR multicol) as shown in the template structure                ║
+║  13. For two-column templates: ALL sections must be inside the column        ║
+║      environment (\\begin{multicols}{2}...\\end{multicols} OR                ║
+║      \\begin{minipage}...\\end{minipage})                                     ║
+║  14. Use \\columnbreak ONLY if template shows it - place it exactly where    ║
+║      shown in the template structure                                          ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 
 IMPORTANT: Look at the "MANDATORY STRUCTURE" code examples in the template guide above.
 Copy that EXACT structure and replace only the placeholder values with the user's actual data.
 DO NOT modify the structure, layout, or code organization.
+
+🚨 CRITICAL FOR TWO-COLUMN TEMPLATES:
+- If the template uses \\begin{multicols}{2}, you MUST use multicols for ALL sections
+- If the template uses \\begin{minipage}, you MUST use minipage for the columns
+- DO NOT mix minipage and multicol - use ONLY what the template shows
+- Place \\columnbreak exactly where shown in the template (usually after Education section)
+- Ensure ALL content sections (Skills, Education, Experience, Projects) are inside the column environment
+- Left column typically contains: Skills, Education
+- Right column typically contains: Experience, Projects
+- DO NOT put sections outside the column environment
 
 `
     : ''

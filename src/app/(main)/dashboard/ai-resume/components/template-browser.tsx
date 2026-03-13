@@ -47,14 +47,24 @@ const getCategoryIcon = (category: ResumeTemplateCategory) => {
 
 // ─── Template Browser ─────────────────────────────────────────────────────────
 
-export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'latex' }: ResumeTemplateBrowserProps) {
+export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: ResumeTemplateBrowserProps) {
   const [activeCategory, setActiveCategory] = useState<ResumeTemplateCategory | 'all'>('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [previewTemplate, setPreviewTemplate] = useState<ResumeTemplate | null>(null)
   const [previewFormat, setPreviewFormat] = useState<'latex' | 'html'>(defaultFormat)
 
+  // Filter templates by format (LaTeX or HTML)
+  const formatFiltered = RESUME_TEMPLATES.filter((t) => {
+    if (!t.format || t.format === 'both') {
+      // If no format specified or 'both', show only HTML templates for HTML format, LaTeX for LaTeX format
+      // For backward compatibility, assume existing templates without format are HTML
+      return defaultFormat === 'html'
+    }
+    return t.format === defaultFormat
+  })
+
   const filtered =
-    activeCategory === 'all' ? RESUME_TEMPLATES : RESUME_TEMPLATES.filter((t) => t.category === activeCategory)
+    activeCategory === 'all' ? formatFiltered : formatFiltered.filter((t) => t.category === activeCategory)
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6">

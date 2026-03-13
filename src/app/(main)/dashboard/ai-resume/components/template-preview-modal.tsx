@@ -415,6 +415,484 @@ Tech Corp — 2021 - Present\\\\
 
 \\end{document}`
 
+    // LaTeX-only templates
+    case 'latex-classic-professional':
+      return `\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+\\usepackage{hyperref}
+
+\\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=blue,
+    urlcolor=blue,
+}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\[0.3cm]
+{\\large Senior Software Engineer}\\\\[0.2cm]
+${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | San Francisco, CA\\\\
+linkedin.com/in/johndoe | portfolio.com
+\\end{center}
+
+\\vspace{0.3cm}
+
+\\section*{Summary}
+Experienced software engineer with expertise in full-stack development, microservices architecture, and cloud technologies. Proven track record of delivering scalable solutions.
+
+\\section*{Skills}
+\\begin{itemize}
+\\item React, TypeScript, Node.js, PostgreSQL
+\\item AWS, Docker, Git, CI/CD
+\\item Python, JavaScript, SQL
+\\end{itemize}
+
+\\section*{Work Experience}
+
+\\textbf{Senior Software Engineer} \\hfill \\textit{2021 - Present}\\\\
+\\textit{Tech Corp, San Francisco, CA} \\hfill \\textit{2021 - Present}
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved system reliability and performance
+\\item Improved application performance by 40% through optimization techniques and caching strategies
+\\item Mentored team of 5 junior developers and established best practices for code quality
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Software Engineer} \\hfill \\textit{2019 - 2021}\\\\
+\\textit{StartupXYZ, New York, NY} \\hfill \\textit{2019 - 2021}
+\\begin{itemize}
+\\item Built core features using React and Node.js that increased user engagement by 25%
+\\item Collaborated with design team on UI/UX improvements resulting in better user experience
+\\end{itemize}
+
+\\section*{Education}
+
+\\textbf{Bachelor of Science in Computer Science} \\hfill \\textit{2019}\\\\
+\\textit{University of Technology, Boston, MA}\\\\
+Relevant coursework: Data Structures, Algorithms, Database Systems
+
+\\section*{Projects}
+
+\\textbf{E-Commerce Platform} \\hfill \\textit{2023}\\\\
+\\textit{React, Node.js, PostgreSQL, AWS}
+\\begin{itemize}
+\\item Full-stack application with React frontend and Node.js backend serving 10,000+ active users
+\\item Integrated payment gateway and inventory management system with real-time updates
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Task Management App} \\hfill \\textit{2022}\\\\
+\\textit{React, WebSockets, PWA}
+\\begin{itemize}
+\\item Real-time collaboration features using WebSockets with mobile-responsive design
+\\end{itemize}
+
+\\section*{Certifications}
+
+\\textbf{AWS Certified Solutions Architect} \\hfill \\textit{2022}\\\\
+\\textit{Amazon Web Services}
+
+\\end{document}`
+
+    case 'latex-compact':
+      return `\\documentclass[10pt]{article}
+\\usepackage[margin=0.6in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}
+
+\\setlength{\\parskip}{0.3em}
+\\setlength{\\itemsep}{0.1em}
+\\setlist[itemize]{leftmargin=*,topsep=0.1em,itemsep=0.05em,labelsep=0.2em}
+
+\\begin{document}
+
+\\noindent
+{\\Large\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\
+{\\normalsize Senior Software Engineer}\\\\
+${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | San Francisco, CA
+
+\\vspace{0.2cm}
+
+\\section*{SUMMARY}
+Experienced software engineer with expertise in full-stack development and cloud technologies.
+
+\\section*{SKILLS}
+React, TypeScript, Node.js, PostgreSQL, AWS, Docker, Git, Python, JavaScript, SQL
+
+\\section*{EXPERIENCE}
+\\textbf{Senior Software Engineer} | \\textit{Tech Corp} | \\textit{2021 - Present}
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved reliability
+\\item Improved application performance by 40% through optimization and caching strategies
+\\end{itemize}
+
+\\textbf{Software Engineer} | \\textit{StartupXYZ} | \\textit{2019 - 2021}
+\\begin{itemize}
+\\item Built core features using React and Node.js increasing user engagement by 25%
+\\item Collaborated with design team on UI/UX improvements
+\\end{itemize}
+
+\\section*{EDUCATION}
+\\textbf{Bachelor of Science in Computer Science} | \\textit{University of Technology} | \\textit{2015 - 2019}
+Relevant coursework: Data Structures, Algorithms, Database Systems
+
+\\section*{PROJECTS}
+\\textbf{E-Commerce Platform} | \\textit{React, Node.js, PostgreSQL} | \\textit{2023}
+\\begin{itemize}
+\\item Full-stack application serving 10,000+ active users with payment gateway integration
+\\item Real-time inventory management system with scalable architecture
+\\end{itemize}
+
+\\section*{CERTIFICATIONS}
+\\textbf{AWS Certified Solutions Architect} | \\textit{Amazon Web Services} | \\textit{2022}
+
+\\end{document}`
+
+    case 'latex-two-column':
+      return `\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+
+\\begin{document}
+
+\\begin{minipage}[t]{0.32\\textwidth}
+{\\Huge\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\[0.2cm]
+{\\normalsize Senior Software Engineer}\\\\[0.3cm]
+
+\\section*{Contact}
+${SAMPLE_RESUME_DATA.email}\\\\
+${SAMPLE_RESUME_DATA.phone}\\\\
+San Francisco, CA\\\\
+linkedin.com/in/johndoe\\\\
+portfolio.com
+
+\\vspace{0.3cm}
+
+\\section*{Skills}
+\\begin{itemize}
+\\item React, TypeScript
+\\item Node.js, PostgreSQL
+\\item AWS, Docker
+\\item Git, CI/CD
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\section*{Education}
+\\textbf{Bachelor of Science}\\\\
+\\textit{University of Technology}\\\\
+\\textit{2015 - 2019}\\\\
+Magna Cum Laude
+
+\\vspace{0.3cm}
+
+\\section*{Certifications}
+\\textbf{AWS Solutions Architect}\\\\
+\\textit{Amazon Web Services}\\\\
+\\textit{2022}
+
+\\end{minipage}
+\\hfill
+\\begin{minipage}[t]{0.65\\textwidth}
+
+\\section*{Summary}
+Experienced software engineer with expertise in full-stack development and cloud technologies.
+
+\\section*{Experience}
+
+\\textbf{Senior Software Engineer} \\hfill \\textit{2021 - Present}\\\\
+\\textit{Tech Corp, San Francisco, CA}
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved system reliability
+\\item Improved application performance by 40% through optimization techniques and caching
+\\item Mentored team of 5 junior developers establishing best practices
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Software Engineer} \\hfill \\textit{2019 - 2021}\\\\
+\\textit{StartupXYZ, New York, NY}
+\\begin{itemize}
+\\item Built core features using React and Node.js increasing engagement by 25%
+\\item Collaborated with design team on UI/UX improvements
+\\end{itemize}
+
+\\section*{Projects}
+
+\\textbf{E-Commerce Platform} \\hfill \\textit{2023}\\\\
+\\textit{React, Node.js, PostgreSQL, AWS}
+\\begin{itemize}
+\\item Full-stack application serving 10,000+ active users with payment integration
+\\item Real-time inventory management with scalable architecture
+\\end{itemize}
+
+\\end{minipage}
+
+\\end{document}`
+
+    case 'latex-minimal-ats':
+      return `\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Large\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\[0.2cm]
+${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | San Francisco, CA
+\\end{center}
+
+\\vspace{0.3cm}
+
+\\textbf{SUMMARY}\\\\
+Experienced software engineer with expertise in full-stack development and cloud technologies.
+
+\\vspace{0.3cm}
+
+\\textbf{SKILLS}\\\\
+React, TypeScript, Node.js, PostgreSQL, AWS, Docker, Git, Python, JavaScript, SQL
+
+\\vspace{0.3cm}
+
+\\textbf{EXPERIENCE}\\\\
+\\textbf{Senior Software Engineer} | Tech Corp | San Francisco, CA | 2021 - Present
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved reliability
+\\item Improved application performance by 40% through optimization and caching strategies
+\\item Mentored team of 5 junior developers establishing best practices
+\\end{itemize}
+
+\\textbf{Software Engineer} | StartupXYZ | New York, NY | 2019 - 2021
+\\begin{itemize}
+\\item Built core features using React and Node.js increasing user engagement by 25%
+\\item Collaborated with design team on UI/UX improvements
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{EDUCATION}\\\\
+\\textbf{Bachelor of Science in Computer Science} | University of Technology | Boston, MA | 2015 - 2019
+Relevant coursework: Data Structures, Algorithms, Database Systems
+
+\\vspace{0.3cm}
+
+\\textbf{PROJECTS}\\\\
+\\textbf{E-Commerce Platform} | React, Node.js, PostgreSQL | 2023
+\\begin{itemize}
+\\item Full-stack application serving 10,000+ active users with payment gateway integration
+\\item Real-time inventory management system with scalable architecture
+\\end{itemize}
+
+\\textbf{Task Management App} | React, WebSockets | 2022
+\\begin{itemize}
+\\item Real-time collaboration features with mobile-responsive design
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{CERTIFICATIONS}\\\\
+AWS Certified Solutions Architect | Amazon Web Services | 2022
+
+\\end{document}`
+
+    case 'latex-modern-clean':
+      return `\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\definecolor{sectioncolor}{RGB}{0,51,102}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\color{sectioncolor}}{}{0em}{}
+
+\\setlength{\\parskip}{0.5em}
+\\setlength{\\itemsep}{0.25em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\[0.3cm]
+{\\large\\textit{Senior Software Engineer}}\\\\[0.2cm]
+${SAMPLE_RESUME_DATA.email} $\\cdot$ ${SAMPLE_RESUME_DATA.phone} $\\cdot$ San Francisco, CA\\\\
+linkedin.com/in/johndoe $\\cdot$ portfolio.com
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{Professional Summary}
+Experienced software engineer with expertise in full-stack development, microservices architecture, and cloud technologies.
+
+\\section*{Technical Skills}
+\\begin{itemize}
+\\item \\textbf{Frontend:} React, TypeScript, JavaScript
+\\item \\textbf{Backend:} Node.js, Python, PostgreSQL
+\\item \\textbf{Cloud:} AWS, Docker, CI/CD, Git
+\\end{itemize}
+
+\\section*{Professional Experience}
+
+\\textbf{Senior Software Engineer} \\hfill \\textcolor{gray}{2021 - Present}\\\\
+\\textit{Tech Corp} \\hfill \\textit{San Francisco, CA}
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved system reliability and performance metrics
+\\item Improved application performance by 40% through optimization techniques, caching strategies, and database query improvements
+\\item Mentored team of 5 junior developers and established best practices for code quality and development workflows
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{Software Engineer} \\hfill \\textcolor{gray}{2019 - 2021}\\\\
+\\textit{StartupXYZ} \\hfill \\textit{New York, NY}
+\\begin{itemize}
+\\item Built core features using React and Node.js that increased user engagement by 25% through improved functionality
+\\item Collaborated with design team on UI/UX improvements resulting in better user experience metrics
+\\end{itemize}
+
+\\section*{Education}
+
+\\textbf{Bachelor of Science in Computer Science} \\hfill \\textcolor{gray}{2019}\\\\
+\\textit{University of Technology} \\hfill \\textit{Boston, MA}\\\\
+Relevant coursework: Data Structures, Algorithms, Database Systems
+
+\\section*{Notable Projects}
+
+\\textbf{E-Commerce Platform} \\hfill \\textcolor{gray}{2023}\\\\
+\\textit{Technologies:} React, Node.js, PostgreSQL, AWS
+\\begin{itemize}
+\\item Full-stack application serving 10,000+ active users with integrated payment gateway and real-time inventory management
+\\item Implemented scalable architecture with microservices design patterns and cloud infrastructure
+\\item Delivered measurable improvements in user experience and system performance
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{Task Management App} \\hfill \\textcolor{gray}{2022}\\\\
+\\textit{Technologies:} React, WebSockets, PWA
+\\begin{itemize}
+\\item Real-time collaboration features with mobile-responsive design and progressive web app capabilities
+\\end{itemize}
+
+\\section*{Certifications \\& Awards}
+
+\\textbf{AWS Certified Solutions Architect} \\hfill \\textcolor{gray}{2022}\\\\
+\\textit{Amazon Web Services}
+
+\\end{document}`
+
+    case 'latex-balanced-professional':
+      return `\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\vspace{-0.3em}\\titlerule\\vspace{0.5em}]
+
+\\setlength{\\parskip}{0.4em}
+\\setlength{\\itemsep}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.12em}
+
+\\begin{document}
+
+\\begin{center}
+{\\LARGE\\textbf{${SAMPLE_RESUME_DATA.fullName}}}\\\\[0.25cm]
+{\\normalsize Senior Software Engineer}\\\\[0.15cm]
+${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | San Francisco, CA\\\\
+\\small linkedin.com/in/johndoe | portfolio.com
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{PROFESSIONAL SUMMARY}
+Experienced software engineer with expertise in full-stack development, microservices architecture, and cloud technologies.
+
+\\section*{CORE COMPETENCIES}
+React, TypeScript, Node.js, PostgreSQL, AWS, Docker, Git, Python, JavaScript, SQL, CI/CD, Microservices
+
+\\section*{PROFESSIONAL EXPERIENCE}
+
+\\textbf{Senior Software Engineer} \\hfill \\textit{2021 - Present}\\\\
+\\textit{Tech Corp} \\hfill \\textit{San Francisco, CA}
+\\begin{itemize}
+\\item Led development of microservices architecture serving 2M+ users with improved system reliability, performance metrics, and scalability
+\\item Improved application performance by 40% through optimization techniques, caching strategies, database query improvements, and infrastructure enhancements
+\\item Mentored team of 5 junior developers and established best practices for code quality, development workflows, and team collaboration
+\\end{itemize}
+
+\\vspace{0.25cm}
+
+\\textbf{Software Engineer} \\hfill \\textit{2019 - 2021}\\\\
+\\textit{StartupXYZ} \\hfill \\textit{New York, NY}
+\\begin{itemize}
+\\item Built core features using React and Node.js that increased user engagement by 25% through improved functionality and user experience
+\\item Collaborated with design team on UI/UX improvements resulting in better user experience metrics and satisfaction
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{Bachelor of Science in Computer Science} \\hfill \\textit{2019}\\\\
+\\textit{University of Technology} \\hfill \\textit{Boston, MA}\\\\
+Relevant coursework: Data Structures, Algorithms, Database Systems. Graduated Magna Cum Laude.
+
+\\section*{KEY PROJECTS}
+
+\\textbf{E-Commerce Platform} \\hfill \\textit{2023}\\\\
+\\textit{Technologies Used:} React, Node.js, PostgreSQL, AWS
+\\begin{itemize}
+\\item Full-stack application serving 10,000+ active users with integrated payment gateway, real-time inventory management, and scalable architecture
+\\item Implemented microservices design patterns with cloud infrastructure delivering measurable improvements in performance
+\\item Delivered enhanced user experience with responsive design and optimized system performance
+\\end{itemize}
+
+\\vspace{0.25cm}
+
+\\textbf{Task Management App} \\hfill \\textit{2022}\\\\
+\\textit{Technologies Used:} React, WebSockets, PWA
+\\begin{itemize}
+\\item Real-time collaboration features with mobile-responsive design and progressive web app capabilities
+\\end{itemize}
+
+\\section*{CERTIFICATIONS}
+
+\\textbf{AWS Certified Solutions Architect} \\hfill \\textit{2022}\\\\
+\\textit{Amazon Web Services}
+
+\\end{document}`
+
     default:
       // Fallback to professional classic
       return `\\documentclass{article}
@@ -930,23 +1408,99 @@ export function ResumeTemplatePreviewModal({
 }: ResumeTemplatePreviewModalProps) {
   const contentRef = useRef<HTMLDivElement>(null)
   const [previewContent, setPreviewContent] = useState<string>('')
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
+  const [isCompilingPdf, setIsCompilingPdf] = useState(false)
   const [currentFormat, setCurrentFormat] = useState<'latex' | 'html'>(defaultFormat)
 
   useEffect(() => {
     if (!open || !template) return
-    setCurrentFormat(defaultFormat)
+    const format = template.format || 'both'
+    const newFormat = format === 'latex' 
+      ? 'latex' 
+      : format === 'html' 
+      ? 'html' 
+      : defaultFormat
+    setCurrentFormat(newFormat)
   }, [open, template, defaultFormat])
 
   useEffect(() => {
     if (!open || !template) return
     
-    // Generate preview content based on format
-    if (currentFormat === 'latex') {
-      setPreviewContent(generateSampleLatex(template))
-    } else {
+    // Generate preview content based on template format
+    const format = template.format || 'both'
+    if (format === 'latex') {
+      const latexCode = generateSampleLatex(template)
+      setPreviewContent(latexCode)
+      
+      // Compile LaTeX to PDF for preview
+      setIsCompilingPdf(true)
+      fetch('/api/resume/compile-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
+      })
+        .then(async (res) => {
+          if (res.ok) {
+            const blob = await res.blob()
+            const url = URL.createObjectURL(blob)
+            setPdfUrl(url)
+          } else {
+            setPdfUrl(null)
+          }
+        })
+        .catch(() => {
+          setPdfUrl(null)
+        })
+        .finally(() => {
+          setIsCompilingPdf(false)
+        })
+    } else if (format === 'html') {
       setPreviewContent(generateSampleHtml(template))
+      setPdfUrl(null)
+    } else {
+      // For 'both' or undefined, use currentFormat
+      if (currentFormat === 'latex') {
+        const latexCode = generateSampleLatex(template)
+        setPreviewContent(latexCode)
+        
+        // Compile LaTeX to PDF for preview
+        setIsCompilingPdf(true)
+        fetch('/api/resume/compile-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
+        })
+          .then(async (res) => {
+            if (res.ok) {
+              const blob = await res.blob()
+              const url = URL.createObjectURL(blob)
+              setPdfUrl(url)
+            } else {
+              setPdfUrl(null)
+            }
+          })
+          .catch(() => {
+            setPdfUrl(null)
+          })
+          .finally(() => {
+            setIsCompilingPdf(false)
+          })
+      } else {
+        setPreviewContent(generateSampleHtml(template))
+        setPdfUrl(null)
+      }
     }
+    
   }, [open, template, currentFormat])
+
+  // Cleanup PDF URL when modal closes or component unmounts
+  useEffect(() => {
+    return () => {
+      if (pdfUrl) {
+        URL.revokeObjectURL(pdfUrl)
+      }
+    }
+  }, [pdfUrl])
 
   useEffect(() => {
     if (!open) return
@@ -959,7 +1513,18 @@ export function ResumeTemplatePreviewModal({
 
   if (!open || !template) return null
 
-  const isHtml = currentFormat === 'html'
+  // Determine if format toggle should be shown
+  const templateFormat = template.format || 'both'
+  const showFormatToggle = templateFormat === 'both' || !template.format
+  
+  // Determine display format - locked to template format if specified
+  const displayFormat = templateFormat === 'latex' 
+    ? 'latex' 
+    : templateFormat === 'html' 
+    ? 'html' 
+    : currentFormat
+  
+  const isHtml = displayFormat === 'html'
 
   return (
     <div className="fixed inset-0 z-[9999] flex flex-col" style={{ background: '#0d0d11' }}>
@@ -977,35 +1542,41 @@ export function ResumeTemplatePreviewModal({
             )}
             <h2 className="text-lg font-semibold text-white">{template.name}</h2>
           </div>
-          <div className="h-4 w-px bg-white/10" />
           
-          {/* Format Toggle */}
-          <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-            <button
-              type="button"
-              onClick={() => setCurrentFormat('html')}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-              style={{ 
-                color: currentFormat === 'html' ? '#fff' : 'rgba(255,255,255,0.5)',
-                background: currentFormat === 'html' ? 'rgba(255,255,255,0.12)' : 'transparent'
-              }}
-            >
-              <Monitor className="size-3.5" />
-              HTML
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrentFormat('latex')}
-              className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-              style={{ 
-                color: currentFormat === 'latex' ? '#fff' : 'rgba(255,255,255,0.5)',
-                background: currentFormat === 'latex' ? 'rgba(255,255,255,0.12)' : 'transparent'
-              }}
-            >
-              <FileText className="size-3.5" />
-              LaTeX
-            </button>
-          </div>
+          {/* Show divider and format toggle only if template supports both formats */}
+          {showFormatToggle && (
+            <>
+              <div className="h-4 w-px bg-white/10" />
+              
+              {/* Format Toggle */}
+              <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentFormat('html')}
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
+                  style={{ 
+                    color: currentFormat === 'html' ? '#fff' : 'rgba(255,255,255,0.5)',
+                    background: currentFormat === 'html' ? 'rgba(255,255,255,0.12)' : 'transparent'
+                  }}
+                >
+                  <Monitor className="size-3.5" />
+                  HTML
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrentFormat('latex')}
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
+                  style={{ 
+                    color: currentFormat === 'latex' ? '#fff' : 'rgba(255,255,255,0.5)',
+                    background: currentFormat === 'latex' ? 'rgba(255,255,255,0.12)' : 'transparent'
+                  }}
+                >
+                  <FileText className="size-3.5" />
+                  LaTeX
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         <button
@@ -1026,7 +1597,7 @@ export function ResumeTemplatePreviewModal({
         style={{ background: '#141416', padding: 24 }}
       >
         <div className="w-full max-w-4xl">
-          {isHtml ? (
+          {displayFormat === 'html' ? (
             // HTML Preview - Render in iframe
             <div className="rounded-lg border border-white/10 bg-white shadow-2xl">
               <iframe
@@ -1037,19 +1608,33 @@ export function ResumeTemplatePreviewModal({
               />
             </div>
           ) : (
-            // LaTeX Preview - Show code with syntax highlighting
-            <div className="rounded-lg border border-white/10 bg-[#1e1e2e] p-6 shadow-2xl">
-              <div className="mb-4 flex items-center gap-2">
-                <div className="flex gap-1.5">
-                  <span className="size-3 rounded-full bg-[#ff5f57]" />
-                  <span className="size-3 rounded-full bg-[#febc2e]" />
-                  <span className="size-3 rounded-full bg-[#28c840]" />
+            // LaTeX Preview - Show rendered PDF
+            <div className="rounded-lg border border-white/10 bg-white shadow-2xl">
+              {isCompilingPdf ? (
+                <div className="flex h-[800px] items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="size-8 animate-spin rounded-full border-4 border-white/20 border-t-white" />
+                    <span className="text-sm text-white/60">Compiling LaTeX to PDF...</span>
+                  </div>
                 </div>
-                <span className="ml-4 text-xs text-white/40">LaTeX Code Preview</span>
-              </div>
-              <pre className="overflow-auto text-sm font-mono leading-relaxed text-[#cdd6f4]">
-                <code>{previewContent}</code>
-              </pre>
+              ) : pdfUrl ? (
+                <iframe
+                  src={pdfUrl}
+                  className="h-[800px] w-full rounded-lg"
+                  style={{ border: 'none' }}
+                  title="LaTeX Resume Preview"
+                />
+              ) : (
+                <div className="flex h-[800px] items-center justify-center p-6">
+                  <div className="text-center">
+                    <p className="text-sm text-white/60 mb-2">Failed to compile LaTeX preview</p>
+                    <p className="text-xs text-white/40">Showing code instead</p>
+                    <pre className="mt-4 overflow-auto text-sm font-mono leading-relaxed text-[#cdd6f4] text-left">
+                      <code>{previewContent}</code>
+                    </pre>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
