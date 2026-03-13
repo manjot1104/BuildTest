@@ -553,7 +553,7 @@ export default function LandingPage() {
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-                className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
+               className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />

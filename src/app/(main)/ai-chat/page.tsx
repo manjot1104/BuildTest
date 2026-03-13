@@ -64,38 +64,6 @@ import { toast } from "sonner";
 
 // ─── Models ──────────────────────────────────────────────────────────────────
 
-// All IDs verified against OpenRouter /api/v1/models (Feb 2026)
-// const MODELS = [
-//   {
-//     id: "meta-llama/llama-3.3-70b-instruct:free",
-//     name: "LLaMA 3.3 70B",
-//     provider: "Meta",
-//     description: "Best model for complex reasoning & long context",
-//     badge: "Best",
-//     badgeVariant: "default" as const,
-//   },
-//   {
-//     id: "openai/gpt-oss-120b:free",
-//     name: "GPT OSS 120B",
-//     provider: "OpenAI",
-//     description: "OpenAI's powerful 120B model",
-//     badge: "New",
-//     badgeVariant: "default" as const,
-//   },
- 
-//   {
-//     id: "mistralai/mistral-small-3.1-24b-instruct:free",
-//     name: "Mistral Small 3.1 24B",
-//     provider: "Mistral AI",
-//     description: "Fast and reliable for everyday tasks",
-//     badge: "Reliable",
-//     badgeVariant: "secondary" as const,
-//   },
-  
-  
-// ] as const;
-
-
 const MODELS = [
   {
     id: "arcee-ai/trinity-large-preview:free",
@@ -192,9 +160,7 @@ type ChatMessage = {
   isError?: boolean;
   timestamp: Date;
   starred?: boolean;
-  conversationId?: string   
-
-  
+  conversationId?: string;
   files?: {
     filename: string;
     language: string;
@@ -346,11 +312,8 @@ const SERVER_ONLY_LANGUAGES = new Set(["py", "python", "sh", "bash", "shell"]);
 /** Checks if code blocks can be rendered client-side in a browser */
 function isWebApp(blocks: SegmentCode[]): boolean {
   const langs = blocks.map((b) => b.lang.toLowerCase());
-  // Has HTML → definitely a web app
   if (langs.some((l) => ["html", "htm"].includes(l))) return true;
-  // Has JSX/TSX → React code, render client-side with React CDN
   if (langs.some((l) => JSX_LANGUAGES.has(l))) return true;
-  // Has JS/TS/CSS only (no server-only languages) → can render in browser
   const hasScript = langs.some((l) => SCRIPT_LANGUAGES.has(l));
   const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
   const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
@@ -387,8 +350,7 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
     line.textContent=prefix+Array.from(args).map(_fmt).join(' ');
     _out.appendChild(line);
   }
-  // Messages to suppress from display (e.g. Babel transformer warning)
-  var _suppress=['in-browser Babel transformer','babel.min.js'];
+  var _suppress=['in-browser Babel transformer','babel.min.js','@babel/standalone'];
   function _isSuppressed(args){
     var s=Array.from(args).join(' ');
     for(var i=0;i<_suppress.length;i++){if(s.indexOf(_suppress[i])!==-1)return true;}
@@ -399,10 +361,14 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
   console.warn=function(){_orig.warn.apply(console,arguments);if(!_isSuppressed(arguments))_log('warn',arguments);};
   console.error=function(){_orig.error.apply(console,arguments);if(!_isSuppressed(arguments))_log('error',arguments);};
   console.info=function(){_orig.info.apply(console,arguments);if(!_isSuppressed(arguments))_log('info',arguments);};
- window.onerror=function(m,s,l,c,e){_log('error',['SCRIPT ERROR: '+m+' | file: '+s+' | line: '+l+' | col: '+c+' | '+(e?e.stack||e.message:'no stack')]);};
+  window.onerror=function(m,s,l,c,e){
+    // Suppress cross-origin script errors (no useful info anyway)
+    if(!s || s===''){return true;}
+    _log('error',['SCRIPT ERROR: '+m+' | file: '+s+' | line: '+l]);
+    return false;
+  };
   window.onunhandledrejection=function(e){_log('error',['Unhandled Promise: '+(e.reason&&e.reason.stack||e.reason)]);};
 
-  // After DOM loads, hide console panel if there's visible content in body
   window.addEventListener('DOMContentLoaded', function(){
     var children = document.body.children;
     var hasVisibleContent = false;
@@ -425,24 +391,17 @@ const CONSOLE_CAPTURE_SCRIPT = `<script>
     }
   });
 })();
-</script>`;
+<\/script>`;
 
 /**
- * Strips import/export statements from code so it can run in a browser <script> tag.
- * - Removes `import ... from '...'` lines
- * - Converts `export default function X` → `function X`
- * - Converts `export default class X` → `class X`
- * - Converts `export function X` → `function X`
- * - Converts `export const/let/var X` → `const/let/var X`
- * - Removes bare `export default` at end
+ * Strips import/export module syntax from code.
+ * TypeScript type-level syntax is left for Babel's typescript preset.
  */
 function stripModuleSyntax(code: string): string {
   return code
-    .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "") 
+    .replace(/^\s*import\s+type\s+.*?;?\s*$/gm, "")
+    .replace(/^\s*import\s+[\s\S]*?from\s+['"].*?['"];?\s*$/gm, "")
     .replace(/^\s*import\s+['"].*?['"];?\s*$/gm, "")
-    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
-    .replace(/^\s*export\s+type\s+\w/gm, "type ")
-    .replace(/^\s*export\s+interface\s/gm, "interface ")
     .replace(/export\s+default\s+function\s/g, "function ")
     .replace(/export\s+default\s+class\s/g, "class ")
     .replace(/export\s+function\s/g, "function ")
@@ -450,35 +409,263 @@ function stripModuleSyntax(code: string): string {
     .replace(/export\s+let\s/g, "let ")
     .replace(/export\s+var\s/g, "var ")
     .replace(/^\s*export\s+default\s+/gm, "var _default = ")
-   .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
-  .replace(/<(?:[A-Za-z][a-zA-Z0-9]*(?:\[\])?(?:\s*\|\s*[A-Za-z][a-zA-Z0-9]*(?:\[\])?)*\s*)>/g, "")
+    .replace(/^\s*export\s+type\s+\{[^}]*\};?\s*$/gm, "")
+    .replace(/^\s*export\s+\{[^}]*\};?\s*$/gm, "")
     .trim();
 }
 
 /**
- * Exposes React hooks & common APIs as globals so code that had
- * `import { useState } from 'react'` stripped still works.
- * Must be placed AFTER React/ReactDOM CDN scripts load.
+ * Preprocesses TSX code to fix patterns that confuse Babel's TSX parser even
+ * with the typescript preset enabled.
+ *
+ * PRIMARY FIX: Generic arrow functions like `<T extends object>(` are
+ * ambiguous in TSX — Babel may parse `<T` as the start of a JSX element.
+ * The standard fix is to add a trailing comma: `<T extends object,>(`.
+ * We only apply this when the `>` is immediately followed by `(` (function params)
+ * confirming it's a generic type parameter, not a JSX opening tag.
  */
-const REACT_GLOBALS_SHIM = `<script>
-(function(){
-  if(typeof React==='undefined') return;
-  // Hooks
-  var hooks=['useState','useEffect','useRef','useCallback','useMemo','useContext',
-    'useReducer','useId','useLayoutEffect','useImperativeHandle','useDebugValue',
-    'useDeferredValue','useTransition','useSyncExternalStore','useInsertionEffect'];
-  hooks.forEach(function(h){if(React[h])window[h]=React[h];});
-  // Common APIs
-  ['createElement','createContext','createRef','forwardRef','lazy','memo',
-   'Fragment','Suspense','StrictMode','Children','cloneElement','isValidElement'
-  ].forEach(function(k){if(React[k])window[k]=React[k];});
-  // ReactDOM
-  if(typeof ReactDOM!=='undefined'){
-    window.createRoot=ReactDOM.createRoot;
-    window.createPortal=ReactDOM.createPortal;
+function preprocessTsx(code: string): string {
+  return code.replace(
+    /<([A-Z][A-Za-z0-9]*(?:\s*,\s*[A-Z][A-Za-z0-9]*)*)\s+extends\s+([^>]*[^,\s])>/g,
+    (match: string, typeParams: string, constraint: string, offset: number, str: string) => {
+      const after = str.slice(offset + match.length);
+      // Only transform when followed by ( — confirms generic function, not JSX element
+      if (after.trimStart().startsWith("(") || after.trimStart().startsWith(">")) {
+        return `<${typeParams} extends ${constraint},>`;
+      }
+      return match;
+    },
+  );
+}
+
+/**
+ * Returns ALL CDN scripts + globals shim.
+ *
+ * Covers every library AI models commonly import:
+ *  - React 18, ReactDOM, Babel (typescript+react presets)
+ *  - Recharts (charts)
+ *  - react-router-dom v6  → Router/BrowserRouter remapped to HashRouter (iframe-safe)
+ *  - lucide-react         → all icons exposed as globals
+ *  - Tailwind CSS play CDN
+ *  - Polyfills: process, matchMedia, ResizeObserver, IntersectionObserver
+ *  - axios mock           → resolves with empty data instead of crashing
+ */
+function buildCdnScripts(): string {
+  return `<script src="https://cdn.tailwindcss.com"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.development.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.development.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/react-router-dom@6/umd/react-router-dom.production.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.26.4/babel.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.263.1/dist/umd/lucide-react.min.js"><\/script>
+<script>
+(function() {
+  /* ── Polyfills ── */
+  if (typeof process === 'undefined') {
+    window.process = { env: { NODE_ENV: 'development', PUBLIC_URL: '' }, browser: true, version: '' };
+  }
+  if (!window.matchMedia) {
+    window.matchMedia = function(q) {
+      return { matches: false, media: q, onchange: null,
+        addListener: function(){}, removeListener: function(){},
+        addEventListener: function(){}, removeEventListener: function(){}, dispatchEvent: function(){ return false; } };
+    };
+  }
+  if (!window.ResizeObserver) {
+    window.ResizeObserver = function(cb) { return { observe: function(){}, unobserve: function(){}, disconnect: function(){} }; };
+  }
+  if (!window.IntersectionObserver) {
+    window.IntersectionObserver = function(cb) { return { observe: function(){}, unobserve: function(){}, disconnect: function(){}, root: null, rootMargin: '', thresholds: [] }; };
+  }
+
+  /* ── axios mock (prevents crashes when AI generates data-fetching code) ── */
+  var mockResp = function(data) { return Promise.resolve({ data: data || {}, status: 200, statusText: 'OK', headers: {}, config: {} }); };
+  window.axios = {
+    get: function(u, c) { return mockResp({}); },
+    post: function(u, d, c) { return mockResp(d); },
+    put: function(u, d, c) { return mockResp(d); },
+    patch: function(u, d, c) { return mockResp(d); },
+    delete: function(u, c) { return mockResp({}); },
+    create: function() { return window.axios; },
+    defaults: { baseURL: '', headers: { common: {}, get: {}, post: {} } },
+    interceptors: { request: { use: function(){}, eject: function(){} }, response: { use: function(){}, eject: function(){} } },
+  };
+
+  /* ── React hooks + APIs as globals ── */
+  if (typeof React !== 'undefined') {
+    ['useState','useEffect','useRef','useCallback','useMemo','useContext','useReducer',
+     'useId','useLayoutEffect','useImperativeHandle','useDebugValue','useDeferredValue',
+     'useTransition','useSyncExternalStore','useInsertionEffect'
+    ].forEach(function(h) { if (React[h]) window[h] = React[h]; });
+    ['createElement','createContext','createRef','forwardRef','lazy','memo','Fragment',
+     'Suspense','StrictMode','Children','cloneElement','isValidElement'
+    ].forEach(function(k) { if (React[k]) window[k] = React[k]; });
+  }
+  if (typeof ReactDOM !== 'undefined') {
+    window.createRoot = ReactDOM.createRoot;
+    window.createPortal = ReactDOM.createPortal;
+  }
+
+  /* ── react-router-dom: expose all exports; remap BrowserRouter→HashRouter (iframe-safe) ── */
+  if (typeof ReactRouterDOM !== 'undefined') {
+    Object.keys(ReactRouterDOM).forEach(function(k) { window[k] = ReactRouterDOM[k]; });
+    /* BrowserRouter requires a real URL history stack which iframes don't have.
+       HashRouter works in any context. Silently remap so AI-generated router code just works. */
+    window.BrowserRouter = ReactRouterDOM.HashRouter;
+    window.Router        = ReactRouterDOM.HashRouter;
+    window.MemoryRouter  = ReactRouterDOM.HashRouter;
+  }
+
+  /* ── Recharts globals ── */
+  if (typeof Recharts !== 'undefined') {
+    ['LineChart','BarChart','PieChart','AreaChart','ScatterChart','RadarChart',
+     'XAxis','YAxis','ZAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer',
+     'Line','Bar','Pie','Area','Cell','Scatter','Radar','RadialBarChart','RadialBar',
+     'ComposedChart','Brush','ReferenceLine','ReferenceArea','Treemap','FunnelChart','Funnel','LabelList'
+    ].forEach(function(k) { if (Recharts[k]) window[k] = Recharts[k]; });
+  }
+
+  /* ── lucide-react: expose every icon as a global ── */
+  if (typeof LucideReact !== 'undefined') {
+    Object.keys(LucideReact).forEach(function(k) {
+      if (typeof LucideReact[k] === 'function') window[k] = LucideReact[k];
+    });
   }
 })();
-</script>`;
+<\/script>`;
+}
+
+/**
+ * Builds the Babel runner <script> block that compiles and mounts user code.
+ *
+ * Handles ALL React/TSX prompt patterns safely:
+ *
+ *  ① User code is JSON.stringify-encoded in page.tsx, then JSON.parse-decoded in the
+ *    injected script — zero escaping issues with backslashes, backticks, quotes, ${}.
+ *
+ *  ② preprocessTsx() adds trailing comma to <T extends X>( → <T extends X,>( so
+ *    Babel's TSX parser doesn't mistake generic type params for JSX open tags.
+ *
+ *  ③ showError() uses only DOM methods (textContent + style.cssText), never
+ *    innerHTML with style strings — avoids the "Unexpected identifier 'color'" crash.
+ *
+ *  ④ Smart auto-mount priority:
+ *     App > Main > Page > Index > Home > Root > _default > last uppercase function
+ *     This ensures reusable-component prompts (DataTable, Card, etc.) don't get
+ *     mounted directly without props and crash with "Cannot read .slice of undefined".
+ *     When a non-entry component is mounted as a last resort it gets an empty-props
+ *     try/catch so the error is visible, not a blank page.
+ */
+function buildBabelRunnerScript(rawCode: string): string {
+  const processed = preprocessTsx(stripModuleSyntax(rawCode));
+  const jsonCode = JSON.stringify(processed); // safe encoding — handles ALL characters
+
+  // mountCode is built as a string array (no template literals, no backtick nesting)
+  const mountLines = [
+    "(function() {",
+    "  var rootEl = document.getElementById('root');",
+    "  if (!rootEl) { rootEl = document.createElement('div'); rootEl.id = 'root'; document.body.appendChild(rootEl); }",
+    // libs that must never be treated as app entry points
+    "  var SKIP = ['React','ReactDOM','Babel','Recharts','ReactRouterDOM','LucideReact',",
+    "    'Object','Array','String','Number','Boolean','Symbol','Map','Set','Promise',",
+    "    'Error','Date','Math','JSON','RegExp','Function','WeakMap','WeakSet',",
+    "    'URL','URLSearchParams','Headers','Request','Response','Event','CustomEvent',",
+    "    'HTMLElement','SVGElement','Node','Element','Document','Window'];",
+    // priority entry-point names — check these first
+    "  var ENTRY = ['App','Main','Page','Index','Home','Root','Application','Dashboard'];",
+    "  var component = null;",
+    "  for (var i = 0; i < ENTRY.length; i++) {",
+    "    if (typeof window[ENTRY[i]] === 'function') { component = window[ENTRY[i]]; break; }",
+    "  }",
+    // fall back to export-default capture
+    "  if (!component && typeof _default !== 'undefined' && typeof _default === 'function') component = _default;",
+    // last resort: last uppercase function on window
+    "  if (!component) {",
+    "    Object.keys(window).forEach(function(k) {",
+    "      if (/^[A-Z]/.test(k) && typeof window[k] === 'function' && SKIP.indexOf(k) === -1) component = window[k];",
+    "    });",
+    "  }",
+    "  if (component) {",
+    "    try {",
+    "      ReactDOM.createRoot(rootEl).render(React.createElement(component));",
+    "    } catch(e) {",
+    "      rootEl.textContent = 'Render error: ' + e.message;",
+    "      rootEl.style.cssText = 'color:red;padding:16px;font-family:monospace;font-size:13px;white-space:pre-wrap';",
+    "    }",
+    "  }",
+    "})();",
+  ];
+  const mountCode = mountLines.join("\\n");
+
+  return `<script>
+(function() {
+  /* ── Error display: DOM-only, no innerHTML with style strings ── */
+  function showError(title, detail) {
+    var root = document.getElementById('root') || document.body;
+    root.style.cssText = 'background:#1e1e2e;min-height:100vh;padding:20px;box-sizing:border-box';
+    var h = document.createElement('div');
+    h.style.cssText = 'color:#f87171;font-family:ui-monospace,monospace;font-size:14px;font-weight:bold;margin-bottom:12px';
+    h.textContent = title;
+    var b = document.createElement('pre');
+    b.style.cssText = 'color:#e4e4e7;font-family:ui-monospace,monospace;font-size:13px;white-space:pre-wrap;margin:0;line-height:1.6;overflow:auto';
+    b.textContent = detail;
+    root.innerHTML = '';
+    root.appendChild(h);
+    root.appendChild(b);
+  }
+
+  if (typeof Babel === 'undefined') { showError('CDN Error', 'Babel failed to load. Check your internet connection.'); return; }
+  if (typeof React === 'undefined') { showError('CDN Error', 'React failed to load. Check your internet connection.'); return; }
+
+  var userCode = ${jsonCode};
+
+  var transformed;
+  try {
+    transformed = Babel.transform(userCode, {
+      presets: [['typescript', { allExtensions: true, isTSX: true }], ['react']],
+      filename: 'app.tsx',
+    }).code;
+  } catch (e) {
+    showError('Compilation Error', e.message);
+    return;
+  }
+
+  try {
+    var s = document.createElement('script');
+    s.textContent = transformed + '\\n' + ${JSON.stringify(mountLines.join("\n"))};
+    document.body.appendChild(s);
+  } catch (e) {
+    showError('Runtime Error', e.stack || e.message);
+  }
+})();
+<\/script>`;
+}
+
+/**
+ * Builds a complete, self-contained HTML document for React/JSX/TSX apps.
+ */
+function buildReactHtmlDoc(jsxCode: string, cssCode: string, extraHtml: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  #root { min-height: 100vh; }
+  ${cssCode}
+</style>
+${buildCdnScripts()}
+</head>
+<body>
+${CONSOLE_CAPTURE_SCRIPT}
+<div id="root"></div>
+${extraHtml}
+${buildBabelRunnerScript(jsxCode)}
+</body>
+</html>`;
+}
 
 /** Combines all code blocks into a single runnable HTML document */
 function buildHtmlApp(blocks: SegmentCode[]): string {
@@ -487,147 +674,87 @@ function buildHtmlApp(blocks: SegmentCode[]): string {
   const jsBlocks: string[] = [];
   const jsxBlocks: string[] = [];
 
-  // Detect if code contains JSX syntax (even if tagged as js/ts)
+  // Treat ts/js as JSX too if it looks like React code
   const looksLikeJsx = (code: string) =>
-    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) || code.includes("React.createElement") || /from\s+['"]react['"]/.test(code);
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(code) ||
+    /<[a-z]+[\s/>]/.test(code) ||
+    code.includes("React.createElement") ||
+    /from\s+['"]react['"]/.test(code) ||
+    /useState|useEffect|useRef/.test(code);
 
   for (const block of blocks) {
     const lang = block.lang.toLowerCase();
     if (["html", "htm"].includes(lang)) htmlBlocks.push(block.code);
     else if (["css", "scss", "less"].includes(lang)) cssBlocks.push(block.code);
     else if (JSX_LANGUAGES.has(lang) || (SCRIPT_LANGUAGES.has(lang) && looksLikeJsx(block.code)))
-      jsxBlocks.push(stripModuleSyntax(block.code));
+      jsxBlocks.push(block.code);
     else if (SCRIPT_LANGUAGES.has(lang)) jsBlocks.push(stripModuleSyntax(block.code));
   }
 
-  const needsReact = jsxBlocks.length > 0;
+  const hasJsx = jsxBlocks.length > 0;
+  const combinedJsx = jsxBlocks.join("\n\n");
+  const combinedCss = cssBlocks.join("\n");
   const mainHtml = htmlBlocks.join("\n");
-  const hasFullDocument = mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
+  const hasFullDocument =
+    mainHtml.toLowerCase().includes("<!doctype") || mainHtml.toLowerCase().includes("<html");
 
-  // If the HTML already looks like a full document, inject CSS/JS/console into it
+  // --- Pure React/JSX/TSX with no HTML template (most common AI output) ---
+  if (hasJsx && !hasFullDocument) {
+    return buildReactHtmlDoc(combinedJsx, combinedCss, mainHtml);
+  }
+
+  // --- Full HTML document that also has JSX: inject CDN + programmatic Babel runner ---
   if (hasFullDocument) {
     let doc = mainHtml;
-    // Inject console capture right after <body>
+
     if (doc.includes("<body")) {
       doc = doc.replace(/<body[^>]*>/, `$&\n${CONSOLE_CAPTURE_SCRIPT}`);
     } else {
       doc = CONSOLE_CAPTURE_SCRIPT + doc;
     }
+
     if (cssBlocks.length > 0) {
-      const cssTag = `<style>\n${cssBlocks.join("\n")}\n</style>`;
-      if (doc.includes("</head>")) {
-        doc = doc.replace("</head>", `${cssTag}\n</head>`);
-      } else if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${cssTag}\n</body>`);
-      } else {
-        doc += `\n${cssTag}`;
-      }
+      const cssTag = `<style>\n${combinedCss}\n</style>`;
+      if (doc.includes("</head>")) doc = doc.replace("</head>", `${cssTag}\n</head>`);
+      else if (doc.includes("</body>")) doc = doc.replace("</body>", `${cssTag}\n</body>`);
+      else doc += `\n${cssTag}`;
     }
-    if (needsReact && !doc.includes("react")) {
-  const reactCdn = `<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin><\/script>\n<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>\n${REACT_GLOBALS_SHIM}\n<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>\n<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>\n<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`;
-      if (doc.includes("</head>")) {
-        doc = doc.replace("</head>", `${reactCdn}\n</head>`);
-      } else if (doc.includes("<body")) {
-        doc = doc.replace(/<body[^>]*>/, `$&\n${reactCdn}`);
-      }
+
+    // Inject CDN scripts if JSX is present and React isn't already in the doc
+    if (hasJsx && !doc.toLowerCase().includes("cdn.jsdelivr.net/npm/react")) {
+      const cdnBlock = buildCdnScripts();
+      if (doc.includes("</head>")) doc = doc.replace("</head>", `${cdnBlock}\n</head>`);
+      else if (doc.includes("<body")) doc = doc.replace(/<body[^>]*>/, `$&\n${cdnBlock}`);
     }
+
     if (jsBlocks.length > 0) {
       const jsTag = `<script>\n${jsBlocks.join("\n")}\n<\/script>`;
-      if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${jsTag}\n</body>`);
-      } else {
-        doc += `\n${jsTag}`;
-      }
+      if (doc.includes("</body>")) doc = doc.replace("</body>", `${jsTag}\n</body>`);
+      else doc += `\n${jsTag}`;
     }
-   // REPLACE WITH:
-    if (jsxBlocks.length > 0) {
-      const mergedJsx = jsxBlocks.join("\n\n");
-      const autoMount = `
-(function() {
-  var _mounted = false;
-  function mount() {
-    if (_mounted) return;
-    var rootEl = document.getElementById('root');
-    if (!rootEl) { rootEl = document.createElement('div'); rootEl.id = 'root'; document.body.appendChild(rootEl); }
-    var component = typeof App !== 'undefined' ? App : typeof _default !== 'undefined' ? _default : (function(){ var keys = Object.keys(window).filter(function(k){ return /^[A-Z]/.test(k) && typeof window[k]==='function' && k!=='React' && k!=='ReactDOM' && k!=='Babel'; }); return keys.length > 0 ? window[keys[keys.length-1]] : null; })();
-    if (component) { _mounted = true; ReactDOM.createRoot(rootEl).render(React.createElement(component)); }
-  }
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', mount); } else { mount(); }
-})();`;
-      const jsxTag = `<script type="text/babel" data-presets="react,typescript">\n${mergedJsx}\n${autoMount}\n<\/script>`;
-      if (doc.includes("</body>")) {
-        doc = doc.replace("</body>", `${jsxTag}\n</body>`);
-      } else {
-        doc += `\n${jsxTag}`;
-      }
+
+    if (hasJsx) {
+      // Use the shared builder — same JSON encoding + preprocessTsx + DOM error display
+      const jsxRunnerTag = buildBabelRunnerScript(combinedJsx);
+      if (doc.includes("</body>")) doc = doc.replace("</body>", `${jsxRunnerTag}\n</body>`);
+      else doc += `\n${jsxRunnerTag}`;
     }
+
     return doc;
   }
 
-  // Build a minimal HTML document
- // Build a minimal HTML document
- const reactCdn = needsReact
-    ? `<script src="https://unpkg.com/react@18/umd/react.development.js"><\/script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"><\/script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
-${REACT_GLOBALS_SHIM}
-<script defer src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"><\/script>
-<script src="https://unpkg.com/react-router-dom@6.28.0/dist/umd/react-router-dom.production.min.js"><\/script>
-<script>(function(){if(typeof Recharts!=='undefined'){['LineChart','BarChart','PieChart','AreaChart','XAxis','YAxis','CartesianGrid','Tooltip','Legend','ResponsiveContainer','Line','Bar','Pie','Area','Cell'].forEach(function(k){if(Recharts[k])window[k]=Recharts[k];});}})();<\/script>`
-    : "";
-
-  // ALL jsx blocks merged into ONE single babel script
-  const mergedJsx = jsxBlocks.join("\n\n");
-
-  const autoMount = needsReact ? `
-(function() {
-  var _mounted = false;
-  function mount() {
-    if (_mounted) return;
-    var rootEl = document.getElementById('root');
-    if (!rootEl) {
-      rootEl = document.createElement('div');
-      rootEl.id = 'root';
-      document.body.appendChild(rootEl);
-    }
-    var component =
-      typeof App !== 'undefined' ? App :
-      typeof _default !== 'undefined' ? _default :
-      (function() {
-        var keys = Object.keys(window).filter(function(k) {
-          return /^[A-Z]/.test(k) && typeof window[k] === 'function'
-            && k !== 'React' && k !== 'ReactDOM' && k !== 'Babel';
-        });
-        return keys.length > 0 ? window[keys[keys.length - 1]] : null;
-      })();
-    if (component) {
-      _mounted = true;
-      ReactDOM.createRoot(rootEl).render(React.createElement(component));
-    }
-  }
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', mount);
-  } else {
-    mount();
-  }
-})();` : "";
-
+  // --- Pure HTML/CSS/JS (no JSX, no full document) ---
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-${cssBlocks.length > 0 ? `<style>\n${cssBlocks.join("\n")}\n</style>` : ""}
-${reactCdn}
+${cssBlocks.length > 0 ? `<style>\n${combinedCss}\n</style>` : ""}
 </head>
 <body>
 ${CONSOLE_CAPTURE_SCRIPT}
-${mainHtml || (needsReact ? '<div id="root"></div>' : "")}
+${mainHtml}
 ${jsBlocks.length > 0 ? `<script>\n${jsBlocks.join("\n")}\n<\/script>` : ""}
-${needsReact && mergedJsx ? `<script type="text/babel" data-presets="react,typescript">
-${mergedJsx}
-${autoMount}
-<\/script>` : ""}
 </body>
 </html>`;
 }
@@ -641,7 +768,6 @@ const SERVER_LANG_MAP: Record<string, string> = {
 function buildBackendCode(blocks: SegmentCode[]): { code: string; language: string } | null {
   const serverBlocks = blocks.filter((b) => SERVER_LANG_MAP[b.lang.toLowerCase()]);
   if (serverBlocks.length === 0) return null;
-
   const primaryLang = serverBlocks[0]!.lang.toLowerCase();
   const daytonaLang = SERVER_LANG_MAP[primaryLang] ?? primaryLang;
   const combinedCode = serverBlocks.map((b) => b.code).join("\n\n");
@@ -680,7 +806,6 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
     if (execution.isRunning) return;
 
     if (webApp) {
-      // Build and render client-side — instant, no server call
       const html = buildHtmlApp(codeBlocks);
       setExecution({
         isRunning: false, htmlPreview: html, consoleOutput: null,
@@ -826,15 +951,25 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
                   </Button>
                 </div>
               </div>
-             <iframe
-  srcDoc={execution.htmlPreview}
-  sandbox="allow-scripts allow-forms allow-popups"
-  className={cn(
-    "w-full bg-white transition-all duration-300",
-    isExpanded ? "h-[500px]" : "h-72",
-  )}
-  title="App Preview"
-/>
+              {/*
+                CRITICAL FIX: Added allow-same-origin to sandbox so that CDN scripts
+                (loaded from cdn.jsdelivr.net) can execute properly.
+                Without allow-same-origin, cross-origin scripts are blocked and throw
+                "Script error." with no useful stack trace.
+                allow-scripts: allows JS execution
+                allow-same-origin: allows CDN scripts to run without CORS block
+                allow-forms: allows form submissions
+                allow-popups: allows window.open / links
+              */}
+              <iframe
+                srcDoc={execution.htmlPreview}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                className={cn(
+                  "w-full bg-white transition-all duration-300",
+                  isExpanded ? "h-[500px]" : "h-72",
+                )}
+                title="App Preview"
+              />
             </>
           )}
 
@@ -870,7 +1005,6 @@ function highlightCode(code: string, lang: string): ReactNode[] {
   const isHtml = ["html", "htm", "xml", "svg"].includes(l);
   const isCss = ["css", "scss", "less"].includes(l);
 
-  // Tokenize line-by-line for performance
   const lines = code.split("\n");
   return lines.map((line, li) => {
     const parts: ReactNode[] = [];
@@ -881,7 +1015,6 @@ function highlightCode(code: string, lang: string): ReactNode[] {
       parts.push(color ? <span key={ki++} style={{ color }}>{text}</span> : <span key={ki++}>{text}</span>);
     };
 
-    // Process the line with regex matching
     const regex = isHtml
       ? /(<\/?[\w-]+|>|\/>|[\w-]+(?==)|"[^"]*"|'[^']*'|<!--[\s\S]*?-->|&\w+;)/g
       : isCss
@@ -892,7 +1025,6 @@ function highlightCode(code: string, lang: string): ReactNode[] {
     let lastIndex = 0;
 
     while ((match = regex.exec(remaining)) !== null) {
-      // Text before match
       if (match.index > lastIndex) {
         push(remaining.slice(lastIndex, match.index));
       }
@@ -914,7 +1046,6 @@ function highlightCode(code: string, lang: string): ReactNode[] {
         else if (/\d/.test(token)) push(token, "#79c0ff");
         else push(token);
       } else {
-        // JS/TS/Python
         if (token.startsWith("//") || token.startsWith("#") || token.startsWith("/*")) push(token, "#8b949e");
         else if (token.startsWith('"') || token.startsWith("'") || token.startsWith("`")) push(token, "#a5d6ff");
         else if (/^(import|export|from|default|return|const|let|var|function|class|if|else|for|while|do|switch|case|break|continue|new|this|typeof|instanceof|void|delete|throw|try|catch|finally|async|await|yield|of|in|extends|implements|interface|type|enum|namespace|declare|abstract|readonly|public|private|protected|static|get|set|def|self|print|True|False|None|elif|lambda|with|as|raise|pass|and|or|not|is)$/.test(token)) push(token, "#ff7b72");
@@ -928,7 +1059,6 @@ function highlightCode(code: string, lang: string): ReactNode[] {
 
       lastIndex = match.index + token.length;
     }
-    // Remaining text after last match
     if (lastIndex < remaining.length) {
       push(remaining.slice(lastIndex));
     }
@@ -1013,29 +1143,29 @@ function MessageBubble({
   message,
   setMessages,
 }: {
-  message: ChatMessage
-  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>
+  message: ChatMessage;
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }) {
-const toggleStar = async () => {
-  try {
-    await fetch("/api/openrouter/star", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        conversationId: message.conversationId,
-        starred: !message.starred
-      }),
-    });
+  const toggleStar = async () => {
+    try {
+      await fetch("/api/openrouter/star", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversationId: message.conversationId,
+          starred: !message.starred,
+        }),
+      });
 
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === message.id ? { ...m, starred: !m.starred } : m
-      )
-    );
-  } catch (error) {
-    console.error("Failed to star message", error);
-  }
-}
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === message.id ? { ...m, starred: !m.starred } : m
+        )
+      );
+    } catch (error) {
+      console.error("Failed to star message", error);
+    }
+  };
 
   const modelInfo = MODELS.find((m) => m.id === message.modelId);
   const modelLabel = modelInfo?.name
@@ -1050,36 +1180,32 @@ const toggleStar = async () => {
             <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
           </div>
           <div className="flex items-center gap-1">
-  <CopyMessageButton content={message.content} />
-
-  <Button
-    variant="ghost"
-    size="icon-xs"
-    onClick={toggleStar}
-    className={cn(
-      "opacity-0 transition-opacity group-hover:opacity-100",
-      message.starred && "text-yellow-500 opacity-100"
-    )}
-  >
-    <Star
-      className="size-3"
-      fill={message.starred ? "currentColor" : "none"}
-    />
-  </Button>
-
-  <span className="text-[11px] text-muted-foreground">
-    {message.timestamp.toLocaleTimeString([], {
-      hour: "2-digit",
-      minute: "2-digit",
-    })}
-  </span>
-</div>
-          
+            <CopyMessageButton content={message.content} />
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={toggleStar}
+              className={cn(
+                "opacity-0 transition-opacity group-hover:opacity-100",
+                message.starred && "text-yellow-500 opacity-100"
+              )}
+            >
+              <Star
+                className="size-3"
+                fill={message.starred ? "currentColor" : "none"}
+              />
+            </Button>
+            <span className="text-[11px] text-muted-foreground">
+              {message.timestamp.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           </div>
         </div>
-      
-);
-}
+      </div>
+    );
+  }
 
   return (
     <div className="group flex gap-3">
@@ -1108,25 +1234,23 @@ const toggleStar = async () => {
           <MarkdownMessage content={message.content} />
         </div>
         {!message.isError && <AppRunner content={message.content} files={message.files} />}
-       <div className="flex items-center gap-1">
-  <CopyMessageButton content={message.content} />
-
-  <Button
-    variant="ghost"
-    size="icon-xs"
-    onClick={toggleStar}
-    className={cn(
-      "opacity-0 transition-opacity group-hover:opacity-100",
-      message.starred && "text-yellow-500 opacity-100"
-    )}
-  >
-    <Star
-      className="size-3"
-      fill={message.starred ? "currentColor" : "none"}
-    />
-  </Button>
-
-  <span className="text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <CopyMessageButton content={message.content} />
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={toggleStar}
+            className={cn(
+              "opacity-0 transition-opacity group-hover:opacity-100",
+              message.starred && "text-yellow-500 opacity-100"
+            )}
+          >
+            <Star
+              className="size-3"
+              fill={message.starred ? "currentColor" : "none"}
+            />
+          </Button>
+          <span className="text-[11px] text-muted-foreground">
             {message.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
@@ -1459,51 +1583,48 @@ function ModelSelector({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OpenRouterChatPage() {
- 
   const [activeFiles, setActiveFiles] = useState<
-  { filename: string; language: string; code: string }[]
->([]);
+    { filename: string; language: string; code: string }[]
+  >([]);
 
-const [selectedFileIndex, setSelectedFileIndex] = useState(0);
-const [panelWidth, setPanelWidth] = useState(420);
-const isResizing = useRef(false);
+  const [selectedFileIndex, setSelectedFileIndex] = useState(0);
+  const [panelWidth, setPanelWidth] = useState(420);
+  const isResizing = useRef(false);
 
-const handleMouseMove = useCallback((e: MouseEvent) => {
-  if (!isResizing.current) return;
-  const newWidth = window.innerWidth - e.clientX;
-  if (newWidth > 320 && newWidth < 1000) {
-    setPanelWidth(newWidth);
-  }
-}, []);
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isResizing.current) return;
+    const newWidth = window.innerWidth - e.clientX;
+    if (newWidth > 320 && newWidth < 1000) {
+      setPanelWidth(newWidth);
+    }
+  }, []);
 
-const handleMouseUp = useCallback(() => {
-  isResizing.current = false;
-  document.removeEventListener("mousemove", handleMouseMove);
-  document.removeEventListener("mouseup", handleMouseUp);
-  document.body.style.cursor = "default";
-}, [handleMouseMove]);
-
-const handleMouseDown = useCallback((e: React.MouseEvent) => {
-  e.preventDefault();
-  isResizing.current = true;
-  document.addEventListener("mousemove", handleMouseMove);
-  document.addEventListener("mouseup", handleMouseUp);
-  document.body.style.cursor = "col-resize";
-}, [handleMouseMove, handleMouseUp]);
-
-// Clean up listeners on unmount
-useEffect(() => {
-  return () => {
+  const handleMouseUp = useCallback(() => {
+    isResizing.current = false;
     document.removeEventListener("mousemove", handleMouseMove);
     document.removeEventListener("mouseup", handleMouseUp);
-  };
-}, [handleMouseMove, handleMouseUp]);
+    document.body.style.cursor = "default";
+  }, [handleMouseMove]);
 
-const searchParams = useSearchParams();
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = "col-resize";
+  }, [handleMouseMove, handleMouseUp]);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [handleMouseMove, handleMouseUp]);
+
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-// const [conversationList, setConversationList] = useState<any[]>([]);
   const [modelId, setModelId] = useState<string>(MODELS[0]!.id);
   const [isLoading, setIsLoading] = useState(false);
   const [genParams, setGenParams] = useState<GenerationParams>(DEFAULT_PARAMS);
@@ -1512,45 +1633,41 @@ const searchParams = useSearchParams();
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const selectedModel = MODELS.find((m) => m.id === modelId) ?? MODELS[0]!;
+
   useEffect(() => {
-  const chatId = searchParams.get("chatId");
+    const chatId = searchParams.get("chatId");
+    if (!chatId) return;
+    setActiveConversationId(chatId);
+    fetch(`/api/openrouter/messages?conversationId=${chatId}`)
+      .then(res => res.json())
+      .then(data => {
+        const loaded = data.map((m: any) => ({
+          id: m.id,
+          role: m.role.toLowerCase(),
+          content: m.content,
+          timestamp: new Date(m.created_at),
+          modelId: m.model,
+          starred: m.starred || false,
+          conversationId: m.conversation_id,
+          files: m.files || [],
+        }));
+        setMessages(loaded);
+      })
+      .catch(() => {
+        console.error("Failed to load conversation");
+      });
+  }, [searchParams]);
 
-  if (!chatId) return;
+  useEffect(() => {
+    const lastAssistant = [...messages]
+      .reverse()
+      .find((m) => m.role === "assistant" && m.files && m.files.length > 0);
+    if (lastAssistant?.files) {
+      setActiveFiles(lastAssistant.files);
+      setSelectedFileIndex(0);
+    }
+  }, [messages]);
 
-  setActiveConversationId(chatId);
-
-  fetch(`/api/openrouter/messages?conversationId=${chatId}`)
-    .then(res => res.json())
-    .then(data => {
-     const loaded = data.map((m: any) => ({
-  id: m.id,
-  role: m.role.toLowerCase(),
-  content: m.content,
-  timestamp: new Date(m.created_at),
-  modelId: m.model,
-  starred: m.starred || false,
-  conversationId: m.conversation_id,
-  files: m.files || []
-}));
-       
-
-      setMessages(loaded);
-    })
-    .catch(() => {
-      console.error("Failed to load conversation");
-    });
-
-}, [searchParams]);
-useEffect(() => {
-  const lastAssistant = [...messages]
-    .reverse()
-    .find((m) => m.role === "assistant" && m.files && m.files.length > 0);
-
-  if (lastAssistant?.files) {
-    setActiveFiles(lastAssistant.files);
-    setSelectedFileIndex(0);
-  }
-}, [messages]);
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -1564,7 +1681,6 @@ useEffect(() => {
     toast.info("Generation stopped");
   }, []);
 
-  // Global Escape key listener to stop generation
   useEffect(() => {
     if (!isLoading) return;
     const handler = (e: globalThis.KeyboardEvent) => {
@@ -1601,18 +1717,17 @@ useEffect(() => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-  messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
-  model: modelId,
-  streaming: true,
-  maxTokens: genParams.maxTokens,
-  temperature: genParams.temperature,
-  topP: genParams.topP,
-  conversationId: activeConversationId,   
-}),
+            messages: nextMessages.map((m) => ({ role: m.role, content: m.content })),
+            model: modelId,
+            streaming: true,
+            maxTokens: genParams.maxTokens,
+            temperature: genParams.temperature,
+            topP: genParams.topP,
+            conversationId: activeConversationId,
+          }),
           signal: controller.signal,
         });
 
-        // Non-OK without a stream body → JSON error
         if (!res.ok) {
           let errorMsg = `Request failed (${res.status})`;
           try {
@@ -1624,7 +1739,6 @@ useEffect(() => {
 
         if (!res.body) throw new Error("No response body received");
 
-        // Add empty assistant message that we'll stream into
         setMessages((prev) => [
           ...prev,
           { id: assistantId, role: "assistant", content: "", timestamp: new Date() },
@@ -1644,8 +1758,6 @@ useEffect(() => {
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-
-          // Split on double newline (SSE event boundary)
           const parts = buffer.split("\n\n");
           buffer = parts.pop() ?? "";
 
@@ -1658,13 +1770,13 @@ useEffect(() => {
                 const event = JSON.parse(jsonStr) as
                   | { type: "meta"; model: string; fallback: boolean }
                   | { type: "delta"; content: string }
-              | { 
-    type: "done"; 
-    cleanedText?: string; 
-    files?: { filename: string; language: string; code: string }[]; 
-    usedModel?: string;
-    conversationId?: string;
-  }
+                  | {
+                      type: "done";
+                      cleanedText?: string;
+                      files?: { filename: string; language: string; code: string }[];
+                      usedModel?: string;
+                      conversationId?: string;
+                    }
                   | { type: "error"; message: string };
 
                 switch (event.type) {
@@ -1674,7 +1786,6 @@ useEffect(() => {
                     break;
                   case "delta":
                     fullContent += event.content;
-                    // Batch UI updates to once per animation frame
                     cancelAnimationFrame(rafId);
                     rafId = requestAnimationFrame(() => {
                       setMessages((prev) =>
@@ -1688,17 +1799,16 @@ useEffect(() => {
                     break;
                   case "error":
                     throw new Error(event.message);
-             case "done":
-  if (!activeConversationId && event.conversationId) {
-    setActiveConversationId(event.conversationId);
-  }
-
-  if (event.files?.length) {
-    assistantFiles = event.files;
-    setActiveFiles(event.files);
-    setSelectedFileIndex(0);
-  }
-  break;
+                  case "done":
+                    if (!activeConversationId && event.conversationId) {
+                      setActiveConversationId(event.conversationId);
+                    }
+                    if (event.files?.length) {
+                      assistantFiles = event.files;
+                      setActiveFiles(event.files);
+                      setSelectedFileIndex(0);
+                    }
+                    break;
                 }
               } catch (e) {
                 if (e instanceof SyntaxError) continue;
@@ -1708,17 +1818,16 @@ useEffect(() => {
           }
         }
 
-        // Cancel any pending rAF and do a final sync update
         cancelAnimationFrame(rafId);
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
-              ? { 
-                  ...m, 
-                  content: fullContent || "No response received.", 
-                  modelId: usedModel, 
+              ? {
+                  ...m,
+                  content: fullContent || "No response received.",
+                  modelId: usedModel,
                   isFallback,
-                  files: assistantFiles
+                  files: assistantFiles,
                 }
               : m,
           ),
@@ -1734,13 +1843,11 @@ useEffect(() => {
           });
         }
       } catch (err) {
-        // Silently ignore AbortError — user cancelled
         if (err instanceof DOMException && err.name === "AbortError") return;
 
         setMessages((prev) => {
           const hasAssistant = prev.some((m) => m.id === assistantId);
           if (hasAssistant) {
-            // Update the existing assistant message — keep partial content if any
             return prev.map((m) =>
               m.id === assistantId
                 ? {
@@ -1751,7 +1858,6 @@ useEffect(() => {
                 : m,
             );
           }
-          // No assistant message yet — add one with the error
           return [
             ...prev,
             {
@@ -1770,7 +1876,7 @@ useEffect(() => {
         textareaRef.current?.focus();
       }
     },
-   [ input, isLoading, messages, modelId, genParams, activeConversationId ]
+    [input, isLoading, messages, modelId, genParams, activeConversationId],
   );
 
   const handleKeyDown = useCallback(
@@ -1798,231 +1904,208 @@ useEffect(() => {
 
   const hasMessages = messages.length > 0;
 
- return (
- <div className="flex h-[calc(100svh-4rem)] -m-4">
-
-  {/* LEFT SIDEBAR */}
- 
-
-  {/* RIGHT SIDE — YOUR EXISTING CHAT UI */}
-  <div className="flex-1 flex flex-col">
-   <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
-            <BrainCircuit className="size-4 text-primary" />
+  return (
+    <div className="flex h-[calc(100svh-4rem)] -m-4">
+      {/* RIGHT SIDE — CHAT UI */}
+      <div className="flex-1 flex flex-col">
+        <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
+          <div className="flex items-center gap-2.5">
+            <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
+              <BrainCircuit className="size-4 text-primary" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold">Buildify AI Chat</span>
+              <span className="text-[11px] text-muted-foreground">
+                {hasMessages
+                  ? `${messages.length} message${messages.length !== 1 ? "s" : ""} · ${selectedModel.name}`
+                  : `${selectedModel.name} · ${selectedModel.provider}`}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">Buildify AI Chat</span>
-            <span className="text-[11px] text-muted-foreground">
-              {hasMessages
-                ? `${messages.length} message${messages.length !== 1 ? "s" : ""} · ${selectedModel.name}`
-                : `${selectedModel.name} · ${selectedModel.provider}`}
-            </span>
-          </div>
-        </div>
-        {hasMessages && (
-          <div className="flex items-center gap-1">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-xs" onClick={retryLast} disabled={isLoading}>
-                  <RotateCcw className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Retry last message</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-xs" onClick={clearChat} disabled={isLoading} className="hover:text-destructive">
-                  <Trash2 className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Clear chat</TooltipContent>
-            </Tooltip>
-          </div>
-        )}
-      </div>
-
-      {/* ── Messages ── */}
-      <div className={cn("flex-1 overflow-y-auto", !hasMessages && "flex")}>
-        <div className={cn(
-          "mx-auto w-full max-w-3xl px-4",
-          hasMessages ? "py-6" : "flex flex-1 flex-col",
-        )}>
-          {!hasMessages && (
-            <EmptyState
-              onSuggestion={(t) => void sendMessage(t)}
-              selectedModel={selectedModel}
-            />
+          {hasMessages && (
+            <div className="flex items-center gap-1">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-xs" onClick={retryLast} disabled={isLoading}>
+                    <RotateCcw className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Retry last message</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon-xs" onClick={clearChat} disabled={isLoading} className="hover:text-destructive">
+                    <Trash2 className="size-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Clear chat</TooltipContent>
+              </Tooltip>
+            </div>
           )}
-          <div className="space-y-6">
-           {messages.map((msg) => (
-  <MessageBubble
-    key={msg.id}
-    message={msg}
-    setMessages={setMessages}
-  />
-))}
-            {isLoading && !(messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content) && (
-              <TypingIndicator modelName={selectedModel.name} />
+        </div>
+
+        {/* ── Messages ── */}
+        <div className={cn("flex-1 overflow-y-auto", !hasMessages && "flex")}>
+          <div className={cn(
+            "mx-auto w-full max-w-3xl px-4",
+            hasMessages ? "py-6" : "flex flex-1 flex-col",
+          )}>
+            {!hasMessages && (
+              <EmptyState
+                onSuggestion={(t) => void sendMessage(t)}
+                selectedModel={selectedModel}
+              />
             )}
-            <div ref={scrollAnchorRef} />
+            <div className="space-y-6">
+              {messages.map((msg) => (
+                <MessageBubble
+                  key={msg.id}
+                  message={msg}
+                  setMessages={setMessages}
+                />
+              ))}
+              {isLoading && !(messages.length > 0 && messages[messages.length - 1]?.role === "assistant" && messages[messages.length - 1]?.content) && (
+                <TypingIndicator modelName={selectedModel.name} />
+              )}
+              <div ref={scrollAnchorRef} />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ── Input area ── */}
-      <div className="shrink-0 border-t bg-background px-4 py-3">
-        <div className="mx-auto max-w-3xl">
-          <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
-            {/* Textarea */}
-            <Textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Describe what you want to build..."
-              className="min-h-[52px] max-h-44 resize-none rounded-t-2xl rounded-b-none border-0 px-4 pt-3.5 pb-1 text-sm shadow-none focus-visible:ring-0"
-              disabled={isLoading}
-              autoFocus
-            />
-
-            {/* Toolbar row — model selector left, hints + send right */}
-            <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
-              {/* Model selector + generation settings */}
-              <div className="flex items-center gap-1.5">
-                <ModelSelector modelId={modelId} onSelect={setModelId} disabled={isLoading} />
-                <GenerationSettings params={genParams} onChange={setGenParams} disabled={isLoading} />
-              </div>
-
-              <div className="flex items-center gap-2">
-                {/* Keyboard hints — visible when input has text, desktop only */}
-                {input.trim() && (
-                  <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground/60 sm:flex">
-                    <Kbd>Enter</Kbd>
-                    <span>send</span>
-                    <Kbd>Shift+Enter</Kbd>
-                    <span>newline</span>
-                  </div>
-                )}
-
-                {/* Send / Stop button */}
-                {isLoading ? (
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={handleStopGeneration}
-                    className="h-8 gap-1.5 rounded-xl px-3 text-xs"
-                  >
-                    <CircleStop className="size-3.5" />
-                    Stop
-                  </Button>
-                ) : (
-                  <Button
-                    size="icon"
-                    onClick={() => void sendMessage()}
-                    disabled={!input.trim()}
-                    className="size-8 rounded-xl"
-                  >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                )}
+        {/* ── Input area ── */}
+        <div className="shrink-0 border-t bg-background px-4 py-3">
+          <div className="mx-auto max-w-3xl">
+            <div className="flex flex-col rounded-2xl border bg-card shadow-sm transition-all focus-within:shadow-md focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/30">
+              <Textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Describe what you want to build..."
+                className="min-h-[52px] max-h-44 resize-none rounded-t-2xl rounded-b-none border-0 px-4 pt-3.5 pb-1 text-sm shadow-none focus-visible:ring-0"
+                disabled={isLoading}
+                autoFocus
+              />
+              <div className="flex items-center justify-between gap-2 px-2 pb-2 pt-1">
+                <div className="flex items-center gap-1.5">
+                  <ModelSelector modelId={modelId} onSelect={setModelId} disabled={isLoading} />
+                  <GenerationSettings params={genParams} onChange={setGenParams} disabled={isLoading} />
+                </div>
+                <div className="flex items-center gap-2">
+                  {input.trim() && (
+                    <div className="hidden items-center gap-1.5 text-[11px] text-muted-foreground/60 sm:flex">
+                      <Kbd>Enter</Kbd>
+                      <span>send</span>
+                      <Kbd>Shift+Enter</Kbd>
+                      <span>newline</span>
+                    </div>
+                  )}
+                  {isLoading ? (
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={handleStopGeneration}
+                      className="h-8 gap-1.5 rounded-xl px-3 text-xs"
+                    >
+                      <CircleStop className="size-3.5" />
+                      Stop
+                    </Button>
+                  ) : (
+                    <Button
+                      size="icon"
+                      onClick={() => void sendMessage()}
+                      disabled={!input.trim()}
+                      className="size-8 rounded-xl"
+                    >
+                      <ArrowUp className="size-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-  </div>
+      {/* SIDEBAR */}
+      {activeFiles.length > 0 && (
+        <>
+          {/* Resize Handle */}
+          <div
+            className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors"
+            onMouseDown={handleMouseDown}
+          />
 
-
-
-  {/* EXISTING CHAT UI BELOW */}
-
-      {/* ── Header ── */}
-      
-   
-
-  {/* SIDEBAR */}
-{activeFiles.length > 0 && (
-  <>
-    {/* Resize Handle */}
-    <div 
-      className="w-1 cursor-col-resize bg-border hover:bg-primary/50 transition-colors" 
-      onMouseDown={handleMouseDown}
-    />
-
-    {/* Sidebar */}
-    <div 
-      className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
-      style={{ width: `${panelWidth}px` }}
-    >
-
-      {/* Header */}
-      <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
-        <div className="flex items-center gap-2">
-          <BrainCircuit className="size-4 text-primary" />
-          <span className="text-sm font-semibold tracking-tight">
-            Generated Code
-          </span>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          onClick={() => setActiveFiles([])}
-        >
-          ✕
-        </Button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex overflow-x-auto border-b">
-        {activeFiles.map((file, index) => (
-          <button
-            key={file.filename}
-            onClick={() => setSelectedFileIndex(index)}
-            className={cn(
-              "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
-              index === selectedFileIndex
-                ? "border-primary text-primary bg-primary/5"
-                : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
-            )}
+          {/* Sidebar */}
+          <div
+            className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+            style={{ width: `${panelWidth}px` }}
           >
-            {file.filename}
-          </button>
-        ))}
-      </div>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">
+              <div className="flex items-center gap-2">
+                <BrainCircuit className="size-4 text-primary" />
+                <span className="text-sm font-semibold tracking-tight">
+                  Generated Code
+                </span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-8"
+                onClick={() => setActiveFiles([])}
+              >
+                ✕
+              </Button>
+            </div>
 
-      {/* Code Area */}
-      <div className="flex-1 overflow-auto">
-        <div className="flex items-center justify-between border-b px-4 py-1.5">
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {activeFiles[selectedFileIndex]?.language}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-xs"
-            onClick={() =>
-              navigator.clipboard.writeText(
-                activeFiles[selectedFileIndex]?.code ?? ""
-              )
-            }
-          >
-            Copy
-          </Button>
-        </div>
+            {/* Tabs */}
+            <div className="flex overflow-x-auto border-b">
+              {activeFiles.map((file, index) => (
+                <button
+                  key={file.filename}
+                  onClick={() => setSelectedFileIndex(index)}
+                  className={cn(
+                    "px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors border-b-2",
+                    index === selectedFileIndex
+                      ? "border-primary text-primary bg-primary/5"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                  )}
+                >
+                  {file.filename}
+                </button>
+              ))}
+            </div>
 
-        <pre className="p-5 text-sm leading-relaxed overflow-x-auto font-mono bg-muted/30">
-          <code>
-            {activeFiles[selectedFileIndex]?.code}
-          </code>
-        </pre>
-      </div>
+            {/* Code Area */}
+            <div className="flex-1 overflow-auto">
+              <div className="flex items-center justify-between border-b px-4 py-1.5">
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {activeFiles[selectedFileIndex]?.language}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() =>
+                    navigator.clipboard.writeText(
+                      activeFiles[selectedFileIndex]?.code ?? ""
+                    )
+                  }
+                >
+                  Copy
+                </Button>
+              </div>
 
+              <pre className="p-5 text-sm leading-relaxed overflow-x-auto font-mono bg-muted/30">
+                <code>
+                  {activeFiles[selectedFileIndex]?.code}
+                </code>
+              </pre>
+            </div>
+          </div>
+        </>
+      )}
     </div>
-  </>
-)}
-
-  </div>
-);}
+  );
+}
