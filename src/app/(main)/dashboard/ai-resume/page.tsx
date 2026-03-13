@@ -24,7 +24,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code } from 'lucide-react'
+import { TemplateSelection } from './components/template-selection'
+import { ResumeTemplateBrowser } from './components/template-browser'
+import type { ResumeTemplate } from './templates'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
@@ -101,6 +104,7 @@ function getModelName(modelId: string): string {
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
+  templateType: z.enum(['latex', 'html']).default('latex'),
   fullName: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
@@ -113,15 +117,19 @@ const resumeSchema = z.object({
 
 type ResumeFormData = z.infer<typeof resumeSchema>
 
-type Step = 'form' | 'latex-preview' | 'compiling'
+type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling'
 
 export default function AIResumeBuilderPage() {
-  const [currentStep, setCurrentStep] = useState<Step>('form')
+  const [currentStep, setCurrentStep] = useState<Step>('format-selection')
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isCompiling, setIsCompiling] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState<ResumeTemplate | null>(null)
+  const [templateType, setTemplateType] = useState<'latex' | 'html'>('html')
   const [latexCode, setLatexCode] = useState('')
   const [editedLatex, setEditedLatex] = useState('')
+  const [htmlCode, setHtmlCode] = useState('')
+  const [editedHtml, setEditedHtml] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [rawAIResponse, setRawAIResponse] = useState('')
   const [showRawResponse, setShowRawResponse] = useState(false)
@@ -133,6 +141,7 @@ export default function AIResumeBuilderPage() {
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
     defaultValues: {
+      templateType: 'latex',
       fullName: '',
       email: '',
       phone: '',
@@ -146,47 +155,60 @@ export default function AIResumeBuilderPage() {
 
   const currentModelInfo = RESUME_MODELS.find((m) => m.id === selectedModel)
 
-  // Generate LaTeX code
-  const onGenerateLaTeX = async (data: ResumeFormData) => {
+  // Generate Resume code (LaTeX or HTML)
+  const onGenerateResume = async (data: ResumeFormData) => {
     setIsGenerating(true)
-    toast.loading('Generating LaTeX code...', { id: 'resume-generate' })
+    const isLaTeX = data.templateType === 'latex'
+    setTemplateType(data.templateType)
+    toast.loading(`Generating ${isLaTeX ? 'LaTeX' : 'HTML'} code...`, { id: 'resume-generate' })
 
     try {
-      const response = await fetch('/api/resume/generate-latex', {
+      const endpoint = isLaTeX ? '/api/resume/generate-latex' : '/api/resume/generate-html'
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, model: selectedModel }),
+        body: JSON.stringify({ 
+          ...data, 
+          model: selectedModel,
+          templateId: selectedTemplate?.id,
+          templateStyleGuide: selectedTemplate?.styleGuide,
+        }),
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to generate LaTeX' }))
-        throw new Error(error.error || 'Failed to generate LaTeX code')
+        const error = await response.json().catch(() => ({ error: `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'}` }))
+        throw new Error(error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`)
       }
 
       const result = await response.json()
-      const generatedLatex = result.latex
+      const generatedCode = isLaTeX ? result.latex : result.html
       const rawResponse = result.rawResponse || ''
 
-      if (!generatedLatex) {
-        throw new Error('No LaTeX code returned from API')
+      if (!generatedCode) {
+        throw new Error(`No ${isLaTeX ? 'LaTeX' : 'HTML'} code returned from API`)
       }
 
-      setLatexCode(generatedLatex)
-      setEditedLatex(generatedLatex)
+      if (isLaTeX) {
+        setLatexCode(generatedCode)
+        setEditedLatex(generatedCode)
+      } else {
+        setHtmlCode(generatedCode)
+        setEditedHtml(generatedCode)
+      }
       setRawAIResponse(rawResponse)
       setUsedModel(result.model || selectedModel)
       setIsFallback(result.isFallback || false)
-      setCurrentStep('latex-preview')
+      setCurrentStep('preview')
 
       if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
       } else {
-        toast.success('LaTeX code generated successfully!', { id: 'resume-generate' })
+        toast.success(`${isLaTeX ? 'LaTeX' : 'HTML'} code generated successfully!`, { id: 'resume-generate' })
       }
     } catch (error) {
-      console.error('Error generating LaTeX:', error)
+      console.error(`Error generating ${isLaTeX ? 'LaTeX' : 'HTML'}:`, error)
       toast.error(
-        error instanceof Error ? error.message : 'Failed to generate LaTeX code. Please try again.',
+        error instanceof Error ? error.message : `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code. Please try again.`,
         { id: 'resume-generate' }
       )
     } finally {
@@ -194,24 +216,25 @@ export default function AIResumeBuilderPage() {
     }
   }
 
-  // Compile LaTeX to PDF
+  // Compile to PDF (LaTeX or HTML)
   const onCompilePDF = async () => {
     setIsCompiling(true)
-    toast.loading('Compiling PDF...', { id: 'resume-compile' })
+    toast.loading('Generating PDF...', { id: 'resume-compile' })
 
     try {
-      const response = await fetch('/api/resume/compile-pdf', {
+      const endpoint = templateType === 'latex' ? '/api/resume/compile-pdf' : '/api/resume/compile-html-pdf'
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          latex: editedLatex,
+          [templateType === 'latex' ? 'latex' : 'html']: templateType === 'latex' ? editedLatex : editedHtml,
           fileName: form.getValues('fullName') || 'Resume',
         }),
       })
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: 'Failed to compile PDF' }))
-        throw new Error(error.error || 'Failed to compile PDF')
+        const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }))
+        throw new Error(error.error || 'Failed to generate PDF')
       }
 
       const blob = await response.blob()
@@ -226,9 +249,9 @@ export default function AIResumeBuilderPage() {
 
       toast.success('PDF generated successfully!', { id: 'resume-compile' })
     } catch (error) {
-      console.error('Error compiling PDF:', error)
+      console.error('Error generating PDF:', error)
       toast.error(
-        error instanceof Error ? error.message : 'Failed to compile PDF. Please try again.',
+        error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
         { id: 'resume-compile' }
       )
     } finally {
@@ -239,17 +262,25 @@ export default function AIResumeBuilderPage() {
   const handleEdit = () => setIsEditing(true)
 
   const handleSaveEdit = () => {
-    setLatexCode(editedLatex)
+    if (templateType === 'latex') {
+      setLatexCode(editedLatex)
+    } else {
+      setHtmlCode(editedHtml)
+    }
     setIsEditing(false)
-    toast.success('LaTeX code updated')
+    toast.success(`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code updated`)
   }
 
   const handleCancelEdit = () => {
-    setEditedLatex(latexCode)
+    if (templateType === 'latex') {
+      setEditedLatex(latexCode)
+    } else {
+      setEditedHtml(htmlCode)
+    }
     setIsEditing(false)
   }
 
-  // Handle follow-up prompt to modify LaTeX
+  // Handle follow-up prompt to modify code
   const handleFollowUpPrompt = async () => {
     if (!followUpPrompt.trim()) {
       toast.error('Please enter a prompt')
@@ -260,11 +291,14 @@ export default function AIResumeBuilderPage() {
     toast.loading('Processing your request...', { id: 'follow-up' })
 
     try {
-      const response = await fetch('/api/resume/follow-up', {
+      const endpoint = templateType === 'latex' ? '/api/resume/follow-up' : '/api/resume/follow-up-html'
+      const currentCode = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          currentLatex: editedLatex || latexCode,
+          [templateType === 'latex' ? 'currentLatex' : 'currentHtml']: currentCode,
           prompt: followUpPrompt,
           model: selectedModel,
         }),
@@ -276,15 +310,20 @@ export default function AIResumeBuilderPage() {
       }
 
       const result = await response.json()
-      const updatedLatex = result.latex
+      const updatedCode = templateType === 'latex' ? result.latex : result.html
       const rawResponse = result.rawResponse || ''
 
-      if (!updatedLatex) {
-        throw new Error('No LaTeX code returned from AI')
+      if (!updatedCode) {
+        throw new Error(`No ${templateType === 'latex' ? 'LaTeX' : 'HTML'} code returned from AI`)
       }
 
-      setLatexCode(updatedLatex)
-      setEditedLatex(updatedLatex)
+      if (templateType === 'latex') {
+        setLatexCode(updatedCode)
+        setEditedLatex(updatedCode)
+      } else {
+        setHtmlCode(updatedCode)
+        setEditedHtml(updatedCode)
+      }
       setRawAIResponse(rawResponse)
       setUsedModel(result.model || selectedModel)
       setIsFallback(result.isFallback || false)
@@ -293,7 +332,7 @@ export default function AIResumeBuilderPage() {
       if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'follow-up' })
       } else {
-        toast.success('LaTeX updated successfully!', { id: 'follow-up' })
+        toast.success(`${templateType === 'latex' ? 'LaTeX' : 'HTML'} updated successfully!`, { id: 'follow-up' })
       }
     } catch (error) {
       console.error('Error processing follow-up:', error)
@@ -307,9 +346,12 @@ export default function AIResumeBuilderPage() {
   }
 
   const handleReset = () => {
-    setCurrentStep('form')
+    setCurrentStep('format-selection')
+    setSelectedTemplate(null)
     setLatexCode('')
     setEditedLatex('')
+    setHtmlCode('')
+    setEditedHtml('')
     setRawAIResponse('')
     setFollowUpPrompt('')
     setIsEditing(false)
@@ -319,8 +361,48 @@ export default function AIResumeBuilderPage() {
     form.reset()
   }
 
-  // Show LaTeX preview step
-  if (currentStep === 'latex-preview') {
+  const handleResumeTemplateSelect = (template: ResumeTemplate) => {
+    setSelectedTemplate(template)
+    setCurrentStep('form')
+  }
+
+  const handleFormatSelect = (selectedType: 'latex' | 'html') => {
+    setTemplateType(selectedType)
+    form.setValue('templateType', selectedType)
+    
+    // If HTML is selected, show templates. If LaTeX, skip templates and go to form
+    if (selectedType === 'html') {
+      setCurrentStep('template-browser')
+    } else {
+      // LaTeX: skip templates for now (will be added later)
+      setSelectedTemplate(null)
+      setCurrentStep('form')
+    }
+  }
+
+  // Show format selection first
+  if (currentStep === 'format-selection') {
+    return (
+      <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
+        <TemplateSelection onSelect={handleFormatSelect} />
+      </div>
+    )
+  }
+
+  // Show template browser only for HTML format
+  if (currentStep === 'template-browser') {
+    return (
+      <div className="bg-background min-h-[calc(100vh-48px)]">
+        <ResumeTemplateBrowser 
+          onSelect={handleResumeTemplateSelect} 
+          defaultFormat={templateType}
+        />
+      </div>
+    )
+  }
+
+  // Show preview step
+  if (currentStep === 'preview') {
     return (
       <div className="container mx-auto max-w-6xl px-3 py-4 sm:px-4 sm:py-8">
         <motion.div
@@ -339,7 +421,7 @@ export default function AIResumeBuilderPage() {
               </button>
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">LaTeX Preview</h1>
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{templateType === 'latex' ? 'LaTeX' : 'HTML'} Preview</h1>
                   {usedModel && (
                     <span className={cn(
                       "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
@@ -352,7 +434,7 @@ export default function AIResumeBuilderPage() {
                   )}
                 </div>
                 <p className="mt-0.5 text-sm text-muted-foreground">
-                  Review, edit, or refine with AI before compiling.
+                  Review, edit, or refine with AI before generating PDF.
                 </p>
               </div>
             </div>
@@ -361,8 +443,9 @@ export default function AIResumeBuilderPage() {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  navigator.clipboard.writeText(editedLatex || latexCode)
-                  toast.success('LaTeX copied to clipboard')
+                  const codeToCopy = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+                  navigator.clipboard.writeText(codeToCopy)
+                  toast.success(`${templateType === 'latex' ? 'LaTeX' : 'HTML'} copied to clipboard`)
                 }}
                 className="gap-1.5"
               >
@@ -371,7 +454,7 @@ export default function AIResumeBuilderPage() {
               </Button>
               <Button
                 onClick={onCompilePDF}
-                disabled={isCompiling || !editedLatex.trim()}
+                disabled={isCompiling || (templateType === 'latex' ? !editedLatex.trim() : !editedHtml.trim())}
                 size="sm"
                 className="flex-1 gap-1.5 sm:flex-initial"
               >
@@ -425,14 +508,16 @@ export default function AIResumeBuilderPage() {
               </motion.div>
             )}
 
-            {/* LaTeX Code Display/Editor */}
+            {/* Code Display/Editor */}
             <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
               <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-secondary">
-                    <FileText className="size-3 text-foreground" />
+                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
+                    <FileText className="size-3 text-primary" />
                   </div>
-                  <span className="truncate font-mono text-xs font-medium text-muted-foreground">resume.tex</span>
+                  <span className="truncate font-mono text-xs font-medium text-muted-foreground">
+                    {templateType === 'latex' ? 'resume.tex' : 'resume.html'}
+                  </span>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {!isEditing ? (
@@ -462,16 +547,24 @@ export default function AIResumeBuilderPage() {
 
               {isEditing ? (
                 <Textarea
-                  value={editedLatex}
-                  onChange={(e) => setEditedLatex(e.target.value)}
+                  value={templateType === 'latex' ? editedLatex : editedHtml}
+                  onChange={(e) => {
+                    if (templateType === 'latex') {
+                      setEditedLatex(e.target.value)
+                    } else {
+                      setEditedHtml(e.target.value)
+                    }
+                  }}
                   className={cn(
                     "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
                     "resize-none border-0 rounded-none focus-visible:ring-0"
                   )}
-                  placeholder="LaTeX code will appear here..."
+                  placeholder={`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code will appear here...`}
                 />
-              ) : (
+              ) : templateType === 'latex' ? (
                 <LaTeXPreview code={latexCode} />
+              ) : (
+                <HTMLPreview code={htmlCode} />
               )}
             </div>
 
@@ -545,13 +638,108 @@ export default function AIResumeBuilderPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">Build Your Resume</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground sm:text-base">
-            Fill in your details and AI will craft a professional LaTeX resume you can edit and download as PDF.
+            Fill in your details and AI will craft a professional resume you can edit and download as PDF.
           </p>
         </div>
       </motion.div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onGenerateLaTeX)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onGenerateResume)} className="space-y-6">
+          {/* Selected Template & Format Display */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.02, ease: [0.25, 0.1, 0.25, 1] }}
+            className="space-y-3"
+          >
+            {/* Template Info */}
+            {selectedTemplate && (
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+                <div className="flex items-center justify-between gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                  <div className="flex items-center gap-2.5">
+                    <FileText className="size-4 shrink-0 text-primary" />
+                    <span className="shrink-0 text-sm font-medium">Selected Template</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (templateType === 'html') {
+                        setCurrentStep('template-browser')
+                      } else {
+                        setCurrentStep('format-selection')
+                      }
+                    }}
+                    className="h-7 gap-1.5 text-xs"
+                  >
+                    <ArrowLeft className="size-3" />
+                    <span className="hidden xs:inline">Change</span>
+                  </Button>
+                </div>
+                <div className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
+                      <FileText className="size-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{selectedTemplate.name}</p>
+                      <p className="text-xs text-muted-foreground">{selectedTemplate.description}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Format Type */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center justify-between gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <div className="flex items-center gap-2.5">
+                  <Settings2 className="size-4 shrink-0 text-primary" />
+                  <span className="shrink-0 text-sm font-medium">Output Format</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (templateType === 'html' && selectedTemplate) {
+                      setCurrentStep('template-browser')
+                    } else {
+                      setCurrentStep('format-selection')
+                    }
+                  }}
+                  className="h-7 gap-1.5 text-xs"
+                >
+                  <ArrowLeft className="size-3" />
+                  <span className="hidden xs:inline">Change</span>
+                </Button>
+              </div>
+              <div className="p-4">
+                <div className="flex items-center gap-3">
+                  {templateType === 'latex' ? (
+                    <>
+                      <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/20">
+                        <FileText className="size-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">LaTeX → PDF</p>
+                        <p className="text-xs text-muted-foreground">Professional typography, ATS-friendly</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex size-10 items-center justify-center rounded-lg bg-violet-500/10 ring-1 ring-violet-500/20">
+                        <Code className="size-5 text-violet-500" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">HTML → PDF</p>
+                        <p className="text-xs text-muted-foreground">Modern design, flexible styling</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.div>
           {/* Model Selection */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -827,7 +1015,7 @@ export default function AIResumeBuilderPage() {
               {isGenerating ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Generating LaTeX...
+                  Generating {form.watch('templateType') === 'latex' ? 'LaTeX' : 'HTML'}...
                 </>
               ) : (
                 <>
@@ -846,6 +1034,54 @@ export default function AIResumeBuilderPage() {
 // LaTeX Preview Component with Syntax Highlighting
 function LaTeXPreview({ code }: { code: string }) {
   const { html, isLoading } = useHighlightCode(code, 'latex')
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[300px] items-center justify-center bg-muted/20 sm:min-h-[600px]">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          <span>Loading syntax highlighter...</span>
+        </div>
+      </div>
+    )
+  }
+
+  const lines = code.split('\n')
+  const lineNumberWidth = String(lines.length).length
+
+  return (
+    <div className="max-h-[400px] overflow-auto bg-background sm:max-h-[600px]" style={{ scrollbarWidth: 'thin' }}>
+      <div className="flex min-w-0">
+        {/* Line numbers */}
+        <div className="sticky left-0 z-10 hidden flex-col border-r border-border bg-muted/30 py-3 text-right select-none sm:flex">
+          {lines.map((_, i) => (
+            <span
+              key={i}
+              className="px-3 font-mono text-[11px] tabular-nums leading-5 text-muted-foreground/40"
+              style={{ minWidth: `${lineNumberWidth + 2}ch` }}
+            >
+              {i + 1}
+            </span>
+          ))}
+        </div>
+
+        {/* Code content */}
+        <div
+          className={cn(
+            'min-w-0 flex-1 overflow-x-auto px-3 py-3 sm:px-4',
+            '[&_pre]:bg-transparent! [&_pre]:m-0! [&_pre]:p-0!',
+            '[&_code]:text-[12px]! [&_code]:leading-5! [&_code]:font-mono sm:[&_code]:text-[13px]!',
+          )}
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
+      </div>
+    </div>
+  )
+}
+
+// HTML Preview Component with Syntax Highlighting
+function HTMLPreview({ code }: { code: string }) {
+  const { html, isLoading } = useHighlightCode(code, 'html')
 
   if (isLoading) {
     return (
