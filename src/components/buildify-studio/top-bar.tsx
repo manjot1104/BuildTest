@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Undo2, Redo2, Eye, Save, Globe, ArrowLeft, Loader2,
-  Grid3X3, Copy, Trash2, ChevronDown, Monitor, Tablet, Smartphone,
+  Grid3X3, Magnet, Copy, Trash2, ChevronDown, Monitor, Tablet, Smartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { type UseEditorReturn } from './use-editor'
@@ -125,7 +125,7 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
           <button
             type="button"
             onClick={() => setGrid({ ...state.grid, enabled: !state.grid.enabled })}
-            title="Toggle grid"
+            title="Toggle grid overlay"
             className={`rounded-md p-1.5 transition-colors ${
               state.grid.enabled
                 ? 'bg-primary/15 text-primary'
@@ -133,6 +133,20 @@ export function TopBar({ editor, onBack, onSaveDraft, onPublish, onPreview, isSa
             }`}
           >
             <Grid3X3 className="size-4" />
+          </button>
+
+          {/* Snap to grid toggle */}
+          <button
+            type="button"
+            onClick={() => setGrid({ ...state.grid, snap: !state.grid.snap })}
+            title={`Snap to grid (${state.grid.size}px) — ${state.grid.snap ? 'ON' : 'OFF'}`}
+            className={`rounded-md p-1.5 transition-colors ${
+              state.grid.snap
+                ? 'bg-primary/15 text-primary'
+                : 'text-muted-foreground hover:bg-background hover:text-foreground'
+            }`}
+          >
+            <Magnet className="size-4" />
           </button>
 
           {/* Canvas background picker */}
