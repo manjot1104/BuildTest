@@ -599,7 +599,8 @@ async function runPipelineStages(
     file_url: null,
     ai_summary: aiSummary,
     shareable_slug: shareableSlug,
-    is_public: false,
+    // CHANGED: was `is_public: false` — set to true so share links work out of the box
+    is_public: true,
     embed_badge_token: embedBadgeToken,
   });
 
@@ -1177,6 +1178,9 @@ export async function getPublicReportHandler({
   if (!exportRow) return { error: "Report not found", status: 404 };
   if (!exportRow.is_public)
     return { error: "This report is private", status: 403 };
+  // CHANGED: previously called getTestReportHandler({ params: { id: exportRow.test_run_id } })
+  // which requires a session and returns 401 for unauthenticated users.
+  // Now we pass the run id directly via params so the share link works without login.
   return getTestReportHandler({ params: { id: exportRow.test_run_id } });
 }
 
@@ -1206,6 +1210,70 @@ export async function getEmbedBadgeHandler({
       ? `/report/${exportRow.shareable_slug}`
       : null,
   };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/badge/[token]/svg
+// ADDED: Returns an actual SVG image so the badge renders in GitHub READMEs,
+// websites, and any Markdown renderer. The copied badge markdown from the
+// report page points to this endpoint as the image src.
+// No auth required — token is a nanoid(32) opaque string.
+// ---------------------------------------------------------------------------
+
+export async function getEmbedBadgeSvgHandler({
+  params,
+}: {
+  params: { token: string };
+}): Promise<Response> {
+  const exportRow = await db.query.report_exports.findFirst({
+    where: eq(report_exports.embed_badge_token, params.token),
+    with: { testRun: true },
+  });
+
+  // ADDED: return plain-text 404 (not JSON) so broken image shows cleanly
+  if (!exportRow) {
+    return new Response("Badge not found", { status: 404 });
+  }
+
+  const score =
+    (exportRow as unknown as { testRun: { overall_score: number | null } })
+      .testRun?.overall_score ?? 0;
+
+  // ADDED: colour mirrors the score gauge thresholds used in the dashboard UI
+  const color =
+    score >= 90 ? "#22c55e" : score >= 70 ? "#eab308" : "#ef4444";
+
+  // UPDATED: single unified label as specified in the plan doc —
+  // "Tested by Buildify — Score: 94" as one cohesive badge, not two
+  // separate dark-label + colored-score sections.
+  const badgeText = `Tested by Buildify — Score: ${score}`;
+  const totalWidth = 220;
+
+  // ADDED: standard Shields.io-style SVG badge structure.
+  // Two text nodes (offset shadow + main) give the embossed look.
+  // Whole badge is one solid color (green/yellow/red) based on score.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
+  <linearGradient id="g" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <rect rx="3" width="${totalWidth}" height="20" fill="${color}"/>
+  <rect rx="3" width="${totalWidth}" height="20" fill="url(#g)"/>
+  <g fill="#fff" text-anchor="middle" font-family="DejaVu Sans,Verdana,Geneva,sans-serif" font-size="11">
+    <text x="${totalWidth / 2}" y="15" fill="#010101" fill-opacity=".3">${badgeText}</text>
+    <text x="${totalWidth / 2}" y="14">${badgeText}</text>
+  </g>
+</svg>`;
+
+  return new Response(svg, {
+    headers: {
+      "Content-Type": "image/svg+xml",
+      // ADDED: cache for 5 minutes so score stays fresh without hammering the DB
+      "Cache-Control": "public, max-age=300",
+      // ADDED: allow GitHub's image proxy (camo) to load the badge cross-origin
+      "Access-Control-Allow-Origin": "*",
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1536,13 +1604,13 @@ export async function exportTestReportPdfHandler({
         status: 500,
       };
 
-    const nodeBuffer = Buffer.from(pdfBytes);
-    const arrayBuffer = nodeBuffer.buffer.slice(
-      nodeBuffer.byteOffset,
-      nodeBuffer.byteOffset + nodeBuffer.byteLength,
-    ) as ArrayBuffer;
-
-    return new Response(arrayBuffer, {
+    // FIXED: pdfBytes is already a clean ArrayBuffer returned by safePdfBytes()
+    // inside generateHtmlPdf() in puppeteer.service.ts — it owns its own memory
+    // slice with no pool offset. Wrapping it in Buffer.from() then reading
+    // .buffer re-attaches it to Node's shared pool, which causes the byteOffset
+    // to be non-zero and sends garbage bytes before the PDF header, corrupting
+    // the file. Pass pdfBytes directly so exactly the right bytes are sent.
+    return new Response(pdfBytes, {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

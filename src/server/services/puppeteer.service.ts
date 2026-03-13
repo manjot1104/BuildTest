@@ -447,7 +447,7 @@ export async function generateHtmlPdf(html: string): Promise<ArrayBuffer | null>
     const page: AnyPage = await browser.newPage();
     try {
       await page.setViewport({ width: 1200, height: 900 });
-      await page.setContent(html, { waitUntil: "networkidle0", timeout: 30_000 });
+      await page.setContent(html, { waitUntil:  "domcontentloaded", timeout: 30_000 });
       await new Promise((r) => setTimeout(r, 2_000));
       await page.evaluate(() => {
         document.querySelectorAll("details").forEach((d) => { (d as HTMLDetailsElement).open = true; });

@@ -45,25 +45,21 @@ const SEVERITY_CONFIG = {
 const PRIORITY_CONFIG = {
   P0: { color: "text-red-400 bg-red-500/10 border-red-500/20"          },
   P1: { color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
-  P2: { color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20"       },
+  P2: { color: "text-muted-foreground bg-muted/50 border-border"       },
 };
 
 const STATUS_CONFIG = {
-  pending:  { icon: Clock,         color: "text-zinc-500",    bg: "bg-zinc-500/10 border-zinc-500/20",       label: "Pending"  },
-  running:  { icon: Loader2,       color: "text-blue-400",    bg: "bg-blue-500/10 border-blue-500/20",       label: "Running"  },
-  passed:   { icon: CheckCircle2,  color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", label: "Passed"   },
-  failed:   { icon: XCircle,       color: "text-red-400",     bg: "bg-red-500/10 border-red-500/20",         label: "Failed"   },
-  flaky:    { icon: AlertTriangle, color: "text-yellow-400",  bg: "bg-yellow-500/10 border-yellow-500/20",   label: "Flaky"    },
-  skipped:  { icon: Clock,         color: "text-zinc-500",    bg: "bg-zinc-500/10 border-zinc-500/20",       label: "Skipped"  },
+  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Pending"  },
+  running:  { icon: Loader2,       color: "text-blue-400",          bg: "bg-blue-500/10 border-blue-500/20",               label: "Running"  },
+  passed:   { icon: CheckCircle2,  color: "text-emerald-400",       bg: "bg-emerald-500/10 border-emerald-500/20",         label: "Passed"   },
+  failed:   { icon: XCircle,       color: "text-red-400",           bg: "bg-red-500/10 border-red-500/20",                 label: "Failed"   },
+  flaky:    { icon: AlertTriangle, color: "text-yellow-400",        bg: "bg-yellow-500/10 border-yellow-500/20",           label: "Flaky"    },
+  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Skipped"  },
 };
 
 const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, executing: 2, reporting: 3, complete: 4,
 };
-
-// ─── Types ─────────────────────────────────────────────────────────────────
-
-interface NavMenu { label: string; items: { text: string; href: string }[] }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -71,18 +67,16 @@ function statusBg(s: string) {
   if (s === "good") return "bg-emerald-500";
   if (s === "needs-improvement") return "bg-yellow-500";
   if (s === "poor") return "bg-red-500";
-  return "bg-zinc-600";
+  return "bg-muted-foreground/30";
 }
 function statusColor(s: string) {
   if (s === "good") return "text-emerald-400";
   if (s === "needs-improvement") return "text-yellow-400";
   if (s === "poor") return "text-red-400";
-  return "text-zinc-500";
+  return "text-muted-foreground";
 }
 
-// ─── Bug Screenshot with robust error handling ────────────────────────────────
-// Screenshots should ONLY appear on bugs (not on crawl data).
-// We use a proper img element with onError fallback + crossOrigin for S3.
+// ─── Bug Screenshot ────────────────────────────────────────────────────────────
 
 function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
@@ -90,10 +84,10 @@ function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: str
 
   if (failed) {
     return (
-      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-600 text-xs font-mono">
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted border border-border text-muted-foreground text-xs font-mono">
         <ImageOff className="h-3.5 w-3.5" />
         <span>Screenshot unavailable</span>
-        <a href={url} target="_blank" rel="noopener noreferrer" className="ml-auto text-zinc-500 hover:text-zinc-300 underline">
+        <a href={url} target="_blank" rel="noopener noreferrer" className="ml-auto text-muted-foreground hover:text-foreground underline">
           open ↗
         </a>
       </div>
@@ -101,18 +95,12 @@ function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: str
   }
 
   return (
-    <div className="relative rounded-xl overflow-hidden border border-zinc-800 bg-zinc-900">
+    <div className="relative rounded-xl overflow-hidden border border-border bg-muted">
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-zinc-600" />
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
-      {/* 
-        crossOrigin="anonymous" is required for S3 images to load in Puppeteer PDF.
-        referrerPolicy="no-referrer" prevents blocked requests.
-        We proxy via a Next.js image route or use direct URL.
-        The key fix: use a regular <img> (not Next Image) so Puppeteer can render it.
-      */}
       <img
         src={url}
         alt={alt}
@@ -128,7 +116,7 @@ function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: str
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-black/60 text-zinc-300 hover:text-white px-2 py-1 rounded-lg backdrop-blur-sm"
+          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-background/80 text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg backdrop-blur-sm"
         >
           <ExternalLink className="h-3 w-3" />
           Full size
@@ -146,14 +134,14 @@ function ScoreGauge({ score, size = 140 }: { score: number; size?: number }) {
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={cx} cy={cx} r={r} stroke="#1f2937" strokeWidth={size * 0.071} fill="none" />
+        <circle cx={cx} cy={cx} r={r} stroke="currentColor" strokeWidth={size * 0.071} fill="none" className="text-muted/60" />
         <circle cx={cx} cy={cx} r={r} stroke={color} strokeWidth={size * 0.071} fill="none"
           strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round"
           style={{ transition: "stroke-dashoffset 1s ease" }} />
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className={`${size < 100 ? "text-xl" : "text-4xl"} font-bold tabular-nums`} style={{ color }}>{score}</span>
-        <span className="text-xs text-zinc-500 font-mono">/100</span>
+        <span className="text-xs text-muted-foreground font-mono">/100</span>
       </div>
     </div>
   );
@@ -165,33 +153,32 @@ function CategoryDonut({ passed, total, category, onClick, active }: { passed: n
   const col = pct >= 0.8 ? "#22c55e" : pct >= 0.5 ? "#eab308" : "#ef4444";
   const Icon = CATEGORY_ICONS[category] ?? Bug;
   return (
-    <button onClick={onClick} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${active ? "border-emerald-500/40 bg-emerald-500/10" : "border-zinc-800 bg-zinc-900/40 hover:border-zinc-700"}`}>
+    <button onClick={onClick} className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${active ? "border-emerald-500/40 bg-emerald-500/10" : "border-border bg-card hover:border-border/80"}`}>
       <div className="relative inline-flex items-center justify-center">
         <svg width="72" height="72" className="-rotate-90">
-          <circle cx="36" cy="36" r={r} stroke="#1f2937" strokeWidth="7" fill="none" />
+          <circle cx="36" cy="36" r={r} stroke="currentColor" strokeWidth="7" fill="none" className="text-muted/60" />
           <circle cx="36" cy="36" r={r} stroke={col} strokeWidth="7" fill="none"
             strokeDasharray={circ} strokeDashoffset={circ - pct * circ} strokeLinecap="round"
             style={{ transition: "stroke-dashoffset 0.8s ease" }} />
         </svg>
-        <div className="absolute"><Icon className="h-4 w-4 text-zinc-400" /></div>
+        <div className="absolute"><Icon className="h-4 w-4 text-muted-foreground" /></div>
       </div>
       <div className="text-center">
         <p className="text-xs font-bold tabular-nums" style={{ color: col }}>{Math.round(pct * 100)}%</p>
-        <p className="text-xs text-zinc-500 capitalize">{category.replace("_", " ")}</p>
-        <p className="text-xs text-zinc-600 font-mono">{passed}/{total}</p>
+        <p className="text-xs text-muted-foreground capitalize">{category.replace("_", " ")}</p>
+        <p className="text-xs text-muted-foreground/60 font-mono">{passed}/{total}</p>
       </div>
     </button>
   );
 }
 
 // ─── Perf Gauge Row ───────────────────────────────────────────────────────────
-// Max values for proportional bar scaling (at these values = 100% bar width)
 const PERF_MAX: Record<string, number> = {
-  LCP:  6000,   // 6s = full bar (> 4s is already "poor")
-  TTFB: 3000,   // 3s = full bar
-  DCL:  5000,   // 5s = full bar
-  Load: 6000,   // 6s = full bar
-  CLS:  0.5,    // 0.5 = full bar (> 0.25 is already "poor")
+  LCP:  6000,
+  TTFB: 3000,
+  DCL:  5000,
+  Load: 6000,
+  CLS:  0.5,
 };
 
 function PerfGaugeRow({
@@ -212,8 +199,8 @@ function PerfGaugeRow({
 
   return (
     <div className="flex items-center gap-3">
-      <div className="w-12 text-xs font-mono text-zinc-500 shrink-0">{label}</div>
-      <div className="flex-1 h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+      <div className="w-12 text-xs font-mono text-muted-foreground shrink-0">{label}</div>
+      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         {value !== null && (
           <div
             className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
@@ -231,7 +218,7 @@ function PerfGaugeRow({
 
 // ─── Trend Sparkline ──────────────────────────────────────────────────────────
 function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
-  if (data.length < 2) return (<div className="h-16 flex items-center justify-center text-xs text-zinc-600 font-mono">Run more tests to see trend</div>);
+  if (data.length < 2) return (<div className="h-16 flex items-center justify-center text-xs text-muted-foreground font-mono">Run more tests to see trend</div>);
   const scores = data.map((d) => d.score ?? 0); const min = Math.min(...scores), max = Math.max(...scores), range = max - min || 1;
   const w = 300, h = 64, pad = 8;
   const pts = data.map((d, i) => ({ x: pad + (i / (data.length - 1)) * (w - pad * 2), y: h - pad - (((d.score ?? 0) - min) / range) * (h - pad * 2), d }));
@@ -245,9 +232,9 @@ function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
         <defs><linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.2" /><stop offset="100%" stopColor={color} stopOpacity="0" /></linearGradient></defs>
         <path d={area} fill="url(#sparkGrad)" />
         <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        {pts.map((p) => (<circle key={p.d.runId} cx={p.x} cy={p.y} r={p.d.isCurrent ? 5 : 3} fill={p.d.isCurrent ? color : "#27272a"} stroke={color} strokeWidth="1.5" />))}
+        {pts.map((p) => (<circle key={p.d.runId} cx={p.x} cy={p.y} r={p.d.isCurrent ? 5 : 3} fill={p.d.isCurrent ? color : "var(--card)"} stroke={color} strokeWidth="1.5" />))}
       </svg>
-      <div className="flex justify-between text-xs font-mono text-zinc-600 mt-1">
+      <div className="flex justify-between text-xs font-mono text-muted-foreground mt-1">
         <span>{new Date(data[0]!.date).toLocaleDateString()}</span>
         <span className={`font-bold ${score >= 90 ? "text-emerald-400" : score >= 70 ? "text-yellow-400" : "text-red-400"}`}>Latest: {score}</span>
         <span>{new Date(data[data.length - 1]!.date).toLocaleDateString()}</span>
@@ -265,44 +252,44 @@ function LiveTestCaseCard({ tc }: { tc: LiveTestCase }) {
   const priorityCfg = PRIORITY_CONFIG[tc.priority as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.P2;
   return (
     <div className={`rounded-xl border overflow-hidden transition-all duration-300 ${
-      tc.status === "passed"  ? "border-emerald-500/20 bg-emerald-500/3"
-      : tc.status === "failed"  ? "border-red-500/20 bg-red-500/3"
-      : tc.status === "flaky"   ? "border-yellow-500/20 bg-yellow-500/3"
-      : tc.status === "running" ? "border-blue-500/20 bg-blue-500/3 animate-pulse"
-      : "border-zinc-800 bg-zinc-900/40"
+      tc.status === "passed"  ? "border-emerald-500/20 bg-emerald-500/5"
+      : tc.status === "failed"  ? "border-red-500/20 bg-red-500/5"
+      : tc.status === "flaky"   ? "border-yellow-500/20 bg-yellow-500/5"
+      : tc.status === "running" ? "border-blue-500/20 bg-blue-500/5 animate-pulse"
+      : "border-border bg-card/40"
     }`}>
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-white/3 transition-colors">
+      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-muted/30 transition-colors">
         <StatusIcon className={`h-4 w-4 shrink-0 mt-0.5 ${cfg.color} ${tc.status === "running" ? "animate-spin" : ""}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
             <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${priorityCfg.color}`}>{tc.priority}</span>
-            <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-800/80 px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               <Icon className="h-3 w-3" />{tc.category.replace("_", " ")}
             </span>
             {tc.durationMs !== undefined && (
-              <span className="text-xs text-zinc-600 font-mono ml-auto">{(tc.durationMs / 1000).toFixed(1)}s</span>
+              <span className="text-xs text-muted-foreground font-mono ml-auto">{(tc.durationMs / 1000).toFixed(1)}s</span>
             )}
           </div>
-          <p className="mt-1.5 text-sm font-medium text-zinc-200">{tc.title}</p>
+          <p className="mt-1.5 text-sm font-medium text-foreground">{tc.title}</p>
         </div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-zinc-600 shrink-0 mt-0.5" /> : <ChevronDown className="h-4 w-4 text-zinc-600 shrink-0 mt-0.5" />}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
       </button>
       {expanded && (
-        <div className="px-4 pb-4 border-t border-zinc-800/60 pt-4 space-y-3">
+        <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
           <div>
-            <p className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider">Test Steps</p>
+            <p className="text-xs font-mono text-muted-foreground mb-2 uppercase tracking-wider">Test Steps</p>
             <ol className="space-y-1.5">
               {tc.steps.map((step, i) => (
-                <li key={i} className="text-xs text-zinc-400 flex gap-2">
-                  <span className="text-zinc-600 font-mono shrink-0">{i + 1}.</span>{step}
+                <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                  <span className="text-muted-foreground/50 font-mono shrink-0">{i + 1}.</span>{step}
                 </li>
               ))}
             </ol>
           </div>
           <div>
-            <p className="text-xs font-mono text-zinc-500 mb-1 uppercase tracking-wider">Expected</p>
-            <p className="text-xs text-zinc-400">{tc.expected_result}</p>
+            <p className="text-xs font-mono text-muted-foreground mb-1 uppercase tracking-wider">Expected</p>
+            <p className="text-xs text-muted-foreground">{tc.expected_result}</p>
           </div>
         </div>
       )}
@@ -321,71 +308,71 @@ function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { status:
   const StatusIcon = cfg.icon;
   return (
     <div className={`rounded-xl border overflow-hidden transition-all duration-300 ${
-      status === "passed"  ? "border-emerald-500/20 bg-emerald-500/3"
-      : status === "failed"  ? "border-red-500/20 bg-red-500/3"
-      : status === "flaky"   ? "border-yellow-500/20 bg-yellow-500/3"
-      : status === "running" ? "border-blue-500/20 bg-blue-500/3"
-      : "border-zinc-800 bg-zinc-900/40"
+      status === "passed"  ? "border-emerald-500/20 bg-emerald-500/5"
+      : status === "failed"  ? "border-red-500/20 bg-red-500/5"
+      : status === "flaky"   ? "border-yellow-500/20 bg-yellow-500/5"
+      : status === "running" ? "border-blue-500/20 bg-blue-500/5"
+      : "border-border bg-card/40"
     }`}>
-      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-white/3 transition-colors">
+      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-start gap-3 p-4 text-left hover:bg-muted/30 transition-colors">
         <StatusIcon className={`h-4 w-4 shrink-0 mt-0.5 ${cfg.color} ${status === "running" ? "animate-spin" : ""}`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
             <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${priorityCfg.color}`}>{tc.priority}</span>
-            <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-800/80 px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
               <Icon className="h-3 w-3" />{tc.category.replace("_", " ")}
             </span>
             {(liveStatus?.durationMs ?? result?.duration_ms) && (
-              <span className="text-xs text-zinc-600 font-mono ml-auto">
+              <span className="text-xs text-muted-foreground font-mono ml-auto">
                 {((liveStatus?.durationMs ?? result?.duration_ms ?? 0) / 1000).toFixed(1)}s
                 {result && result.retry_count > 0 && ` · ${result.retry_count} retr${result.retry_count === 1 ? "y" : "ies"}`}
               </span>
             )}
           </div>
-          <p className="mt-1.5 text-sm font-medium text-zinc-200">{tc.title}</p>
-          {result?.actual_result && <p className="mt-0.5 text-xs text-zinc-500 truncate">{result.actual_result}</p>}
+          <p className="mt-1.5 text-sm font-medium text-foreground">{tc.title}</p>
+          {result?.actual_result && <p className="mt-0.5 text-xs text-muted-foreground truncate">{result.actual_result}</p>}
         </div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-zinc-600 shrink-0 mt-0.5" /> : <ChevronDown className="h-4 w-4 text-zinc-600 shrink-0 mt-0.5" />}
+        {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />}
       </button>
       {expanded && (
-        <div className="px-4 pb-4 border-t border-zinc-800/60 pt-4 space-y-4">
-          {tc.description && <p className="text-sm text-zinc-400">{tc.description}</p>}
+        <div className="px-4 pb-4 border-t border-border pt-4 space-y-4">
+          {tc.description && <p className="text-sm text-muted-foreground">{tc.description}</p>}
           <div>
-            <p className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider">Test Steps</p>
+            <p className="text-xs font-mono text-muted-foreground mb-2 uppercase tracking-wider">Test Steps</p>
             <ol className="space-y-1.5">
-              {tc.steps.map((step, i) => (<li key={i} className="text-xs text-zinc-400 flex gap-2"><span className="text-zinc-600 font-mono shrink-0">{i + 1}.</span>{step}</li>))}
+              {tc.steps.map((step, i) => (<li key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-muted-foreground/50 font-mono shrink-0">{i + 1}.</span>{step}</li>))}
             </ol>
           </div>
           <div>
-            <p className="text-xs font-mono text-zinc-500 mb-1 uppercase tracking-wider">Expected</p>
-            <p className="text-xs text-zinc-400">{tc.expected_result}</p>
+            <p className="text-xs font-mono text-muted-foreground mb-1 uppercase tracking-wider">Expected</p>
+            <p className="text-xs text-muted-foreground">{tc.expected_result}</p>
           </div>
           {result && (
             <div className={`rounded-lg border p-3 ${cfg.bg}`}>
               <p className={`text-xs font-mono mb-1 uppercase tracking-wider ${cfg.color}`}>Actual Result</p>
-              <p className="text-xs text-zinc-300">{result.actual_result}</p>
+              <p className="text-xs text-foreground">{result.actual_result}</p>
               {result.error_details && <p className="mt-2 text-xs text-red-400 font-mono">{result.error_details}</p>}
             </div>
           )}
           {result?.console_logs && result.console_logs.length > 0 && (
             <div>
-              <p className="text-xs font-mono text-zinc-500 mb-1.5 uppercase tracking-wider flex items-center gap-1"><Terminal className="h-3 w-3" /> Console Logs</p>
-              <div className="rounded-lg bg-zinc-950 border border-zinc-800 p-2 space-y-0.5 max-h-32 overflow-y-auto">
-                {result.console_logs.map((log, i) => <p key={i} className="text-xs font-mono text-zinc-500">{log}</p>)}
+              <p className="text-xs font-mono text-muted-foreground mb-1.5 uppercase tracking-wider flex items-center gap-1"><Terminal className="h-3 w-3" /> Console Logs</p>
+              <div className="rounded-lg bg-muted border border-border p-2 space-y-0.5 max-h-32 overflow-y-auto">
+                {result.console_logs.map((log, i) => <p key={i} className="text-xs font-mono text-muted-foreground">{log}</p>)}
               </div>
             </div>
           )}
           {result?.network_logs && result.network_logs.length > 0 && (
             <div>
-              <p className="text-xs font-mono text-zinc-500 mb-1.5 uppercase tracking-wider flex items-center gap-1"><Wifi className="h-3 w-3" /> Network Errors</p>
+              <p className="text-xs font-mono text-muted-foreground mb-1.5 uppercase tracking-wider flex items-center gap-1"><Wifi className="h-3 w-3" /> Network Errors</p>
               <div className="space-y-1">
                 {result.network_logs.map((log, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs font-mono rounded bg-zinc-900 border border-zinc-800 px-2 py-1.5">
+                  <div key={i} className="flex items-center gap-2 text-xs font-mono rounded bg-muted border border-border px-2 py-1.5">
                     <span className={`shrink-0 px-1 py-0.5 rounded ${(log.status ?? 0) >= 500 ? "bg-red-500/20 text-red-400" : "bg-orange-500/20 text-orange-400"}`}>{log.status ?? "ERR"}</span>
-                    <span className="text-zinc-400">{log.method}</span>
-                    <span className="text-zinc-500 truncate flex-1">{log.url}</span>
-                    {log.durationMs !== null && <span className="text-zinc-600 shrink-0">{log.durationMs}ms</span>}
+                    <span className="text-muted-foreground">{log.method}</span>
+                    <span className="text-muted-foreground/60 truncate flex-1">{log.url}</span>
+                    {log.durationMs !== null && <span className="text-muted-foreground/50 shrink-0">{log.durationMs}ms</span>}
                   </div>
                 ))}
               </div>
@@ -398,65 +385,60 @@ function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { status:
 }
 
 // ─── Bug Detail Modal ─────────────────────────────────────────────────────────
-// Screenshots ONLY shown here (on bugs), not in any crawl data section.
 function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => void }) {
   const cfg = SEVERITY_CONFIG[bug.severity] ?? SEVERITY_CONFIG.medium;
   const Icon = CATEGORY_ICONS[bug.category] ?? Bug;
   const [copied, setCopied] = useState(false);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5 border-b border-zinc-800 bg-zinc-950">
+      <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-background shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-3 p-5 border-b border-border bg-background">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-2">
               <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-mono ${cfg.color}`}>
                 <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />{cfg.label}
               </span>
-              <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
                 <Icon className="h-3 w-3" />{bug.category}
               </span>
               <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${
                 bug.status === "open" ? "text-red-400 border-red-500/30 bg-red-500/10"
                 : bug.status === "fixed" ? "text-emerald-400 border-emerald-500/30 bg-emerald-500/10"
-                : "text-zinc-400 border-zinc-600 bg-zinc-800"
+                : "text-muted-foreground border-border bg-muted"
               }`}>{bug.status}</span>
             </div>
-            <h3 className="text-sm font-semibold text-zinc-100">{bug.title}</h3>
+            <h3 className="text-sm font-semibold text-foreground">{bug.title}</h3>
             <a href={bug.page_url} target="_blank" rel="noopener noreferrer"
-              className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1 mt-1 font-mono">
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 mt-1 font-mono">
               {bug.page_url}<ExternalLink className="h-3 w-3" />
             </a>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500"><X className="h-4 w-4" /></button>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
         <div className="p-5 space-y-5">
-
-          {/* Bug screenshot — ONLY shown here on bugs */}
           {bug.screenshot_url && (
             <div>
-              <p className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider flex items-center gap-1">
+              <p className="text-xs font-mono text-muted-foreground mb-2 uppercase tracking-wider flex items-center gap-1">
                 <Eye className="h-3 w-3" /> Failure Screenshot
               </p>
               <BugScreenshot url={bug.screenshot_url} alt={`Screenshot of bug: ${bug.title}`} />
             </div>
           )}
-
           {bug.description && (
             <div>
-              <p className="text-xs font-mono text-zinc-500 mb-2 uppercase tracking-wider">Description</p>
-              <p className="text-sm text-zinc-300 leading-relaxed">{bug.description}</p>
+              <p className="text-xs font-mono text-muted-foreground mb-2 uppercase tracking-wider">Description</p>
+              <p className="text-sm text-foreground leading-relaxed">{bug.description}</p>
             </div>
           )}
-
           {bug.reproduction_steps?.length > 0 && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider">Steps to Reproduce</p>
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Steps to Reproduce</p>
                 <button onClick={() => {
                   void navigator.clipboard.writeText(bug.reproduction_steps.join("\n"));
                   setCopied(true); setTimeout(() => setCopied(false), 2000);
-                }} className="flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300">
+                }} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                   {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
                   {copied ? "Copied" : "Copy"}
                 </button>
@@ -464,21 +446,20 @@ function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => void })
               <ol className="space-y-2">
                 {bug.reproduction_steps.map((step, i) => (
                   <li key={i} className="flex gap-3 text-sm">
-                    <span className="shrink-0 h-5 w-5 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-xs font-mono text-zinc-500">{i + 1}</span>
-                    <span className="text-zinc-300 pt-0.5">{step}</span>
+                    <span className="shrink-0 h-5 w-5 rounded-full bg-muted border border-border flex items-center justify-center text-xs font-mono text-muted-foreground">{i + 1}</span>
+                    <span className="text-foreground pt-0.5">{step}</span>
                   </li>
                 ))}
               </ol>
             </div>
           )}
-
           {bug.ai_fix_suggestion && (
             <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-4">
               <div className="flex items-center gap-2 mb-3">
                 <Sparkles className="h-4 w-4 text-emerald-400" />
                 <p className="text-xs font-mono text-emerald-400 uppercase tracking-wider">AI Fix Suggestion</p>
               </div>
-              <div className="text-sm text-zinc-300 font-mono bg-zinc-950/60 rounded-lg p-3 border border-zinc-800 whitespace-pre-wrap">
+              <div className="text-sm text-foreground font-mono bg-muted/60 rounded-lg p-3 border border-border whitespace-pre-wrap">
                 {bug.ai_fix_suggestion}
               </div>
             </div>
@@ -489,34 +470,32 @@ function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => void })
   );
 }
 
-// ─── Bug Card (in bugs tab list) ──────────────────────────────────────────────
-// Shows a thumbnail of the screenshot inline on the bug card for quick scanning.
+// ─── Bug Card ──────────────────────────────────────────────────────────────────
 function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void }) {
   const cfg = SEVERITY_CONFIG[bug.severity] ?? SEVERITY_CONFIG.medium;
   const Icon = CATEGORY_ICONS[bug.category] ?? Bug;
   const [thumbFailed, setThumbFailed] = useState(false);
 
   return (
-    <button onClick={onClick} className="w-full flex items-start gap-3 p-4 rounded-xl border border-zinc-800 bg-zinc-900/60 text-left hover:bg-zinc-800/60 hover:border-zinc-700 transition-all group">
+    <button onClick={onClick} className="w-full flex items-start gap-3 p-4 rounded-xl border border-border bg-card text-left hover:bg-muted/50 hover:border-border/80 transition-all group">
       <div className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1.5">
           <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-mono ${cfg.color}`}>{cfg.label}</span>
-          <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded-full">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
             <Icon className="h-3 w-3" />{bug.category}
           </span>
         </div>
-        <p className="text-sm font-medium text-zinc-200">{bug.title}</p>
-        <p className="mt-0.5 text-xs text-zinc-500 truncate">{bug.page_url}</p>
+        <p className="text-sm font-medium text-foreground">{bug.title}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground truncate">{bug.page_url}</p>
         {bug.ai_fix_suggestion && (
           <p className="mt-1 text-xs text-emerald-500/70 flex items-center gap-1">
             <Sparkles className="h-3 w-3" /> AI fix available
           </p>
         )}
       </div>
-      {/* Thumbnail screenshot — only on bugs */}
       {bug.screenshot_url && !thumbFailed && (
-        <div className="shrink-0 h-14 w-24 rounded-lg overflow-hidden border border-zinc-700 bg-zinc-800">
+        <div className="shrink-0 h-14 w-24 rounded-lg overflow-hidden border border-border bg-muted">
           <img
             src={bug.screenshot_url}
             alt=""
@@ -527,7 +506,7 @@ function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void }) {
           />
         </div>
       )}
-      <ChevronRight className="h-4 w-4 text-zinc-600 shrink-0 mt-0.5 group-hover:text-zinc-400 transition-colors" />
+      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-foreground transition-colors" />
     </button>
   );
 }
@@ -539,26 +518,26 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
     if (status === "complete") return <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />;
     if (status === "failed") return <XCircle className="h-4 w-4 text-red-400 shrink-0" />;
     if (status === "cancelled") return (
-      <span className="inline-flex items-center gap-1 text-xs font-mono text-zinc-500 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-full shrink-0">
+      <span className="inline-flex items-center gap-1 text-xs font-mono text-muted-foreground bg-muted border border-border px-2 py-0.5 rounded-full shrink-0">
         <StopCircle className="h-3 w-3" /> Cancelled
       </span>
     );
-    return <Loader2 className="h-4 w-4 animate-spin text-zinc-500 shrink-0" />;
+    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground shrink-0" />;
   }
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="relative z-10 w-full max-w-md h-full bg-zinc-950 border-l border-zinc-800 flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-5 border-b border-zinc-800">
-          <div className="flex items-center gap-2"><History className="h-4 w-4 text-zinc-400" /><h2 className="text-sm font-semibold">Test History</h2></div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-500"><X className="h-4 w-4" /></button>
+      <div className="absolute inset-0 bg-background/50 backdrop-blur-sm" />
+      <div className="relative z-10 w-full max-w-md h-full bg-background border-l border-border flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-border">
+          <div className="flex items-center gap-2"><History className="h-4 w-4 text-muted-foreground" /><h2 className="text-sm font-semibold">Test History</h2></div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"><X className="h-4 w-4" /></button>
         </div>
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-zinc-600" /></div>}
+          {isLoading && <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}
           {!isLoading && (!history || history.length === 0) && (
             <div className="text-center py-12">
-              <FlaskConical className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
-              <p className="text-sm text-zinc-500">No previous test runs</p>
+              <FlaskConical className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No previous test runs</p>
             </div>
           )}
           {history?.map((item: TestHistoryItem) => {
@@ -566,11 +545,11 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
             const isCancelled = item.status === "cancelled";
             return (
               <button key={item.id} onClick={() => { onSelect(item.id, item.status); onClose(); }}
-                className={`w-full text-left p-4 rounded-xl border bg-zinc-900/60 hover:border-zinc-700 hover:bg-zinc-800/60 transition-all group ${isCancelled ? "border-zinc-800/60 opacity-70" : "border-zinc-800"}`}>
+                className={`w-full text-left p-4 rounded-xl border bg-card hover:border-border/80 hover:bg-muted/50 transition-all group ${isCancelled ? "border-border/40 opacity-70" : "border-border"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs text-zinc-400 font-mono truncate">{item.targetUrl}</p>
-                    <p className="text-xs text-zinc-600 font-mono mt-0.5">{new Date(item.startedAt).toLocaleDateString()} · {new Date(item.startedAt).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground font-mono truncate">{item.targetUrl}</p>
+                    <p className="text-xs text-muted-foreground/60 font-mono mt-0.5">{new Date(item.startedAt).toLocaleDateString()} · {new Date(item.startedAt).toLocaleTimeString()}</p>
                   </div>
                   <div className="shrink-0">{item.status === "complete" && item.overallScore !== null
                     ? <span className={`text-lg font-bold tabular-nums ${scoreColor}`}>{item.overallScore}</span>
@@ -581,13 +560,13 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
                   <div className="flex gap-3 mt-2 text-xs font-mono">
                     <span className="text-emerald-400">{item.passed ?? 0}✓</span>
                     <span className="text-red-400">{item.failed ?? 0}✗</span>
-                    <span className="text-zinc-600">{item.skipped ?? 0} skipped</span>
+                    <span className="text-muted-foreground/60">{item.skipped ?? 0} skipped</span>
                   </div>
                 )}
-                {isCancelled && <p className="mt-1.5 text-xs text-zinc-600 font-mono italic">Stopped by user</p>}
-                {item.aiSummary && !isCancelled && <p className="mt-2 text-xs text-zinc-500 line-clamp-2">{item.aiSummary}</p>}
+                {isCancelled && <p className="mt-1.5 text-xs text-muted-foreground/60 font-mono italic">Stopped by user</p>}
+                {item.aiSummary && !isCancelled && <p className="mt-2 text-xs text-muted-foreground line-clamp-2">{item.aiSummary}</p>}
                 <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <span className="text-xs text-zinc-500 flex items-center gap-1"><ArrowRight className="h-3 w-3" /> View details</span>
+                  <span className="text-xs text-muted-foreground flex items-center gap-1"><ArrowRight className="h-3 w-3" /> View details</span>
                 </div>
               </button>
             );
@@ -679,12 +658,12 @@ export default function TestingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-background text-foreground">
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
       {showHistory && <HistoryPanel onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }} onClose={() => setShowHistory(false)} />}
 
       {/* Header */}
-      <div className="border-b border-zinc-800/60 bg-zinc-950/90 backdrop-blur sticky top-0 z-20">
+      <div className="border-b border-border bg-background/90 backdrop-blur sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -692,15 +671,15 @@ export default function TestingPage() {
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight">Testing Engine</h1>
-              <p className="text-xs text-zinc-500 font-mono">Crawl → Generate → Execute → Report</p>
+              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Execute → Report</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowHistory(true)} className="text-zinc-500 hover:text-zinc-300 text-xs gap-1.5">
+            <Button variant="ghost" size="sm" onClick={() => setShowHistory(true)} className="text-muted-foreground hover:text-foreground text-xs gap-1.5">
               <History className="h-3.5 w-3.5" /> History
             </Button>
             {!!testRunId && (
-              <Button variant="ghost" size="sm" onClick={handleReset} className="text-zinc-500 hover:text-zinc-300 text-xs gap-1.5">
+              <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground hover:text-foreground text-xs gap-1.5">
                 <RotateCcw className="h-3 w-3" /> New Test
               </Button>
             )}
@@ -717,22 +696,22 @@ export default function TestingPage() {
               <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
                 <Zap className="h-3 w-3" />AI-powered · 50+ parallel sessions · 6 test categories
               </div>
-              <h2 className="text-4xl font-bold tracking-tight">Test any site. <span className="text-zinc-500">Automatically.</span></h2>
-              <p className="text-zinc-500 text-lg max-w-md">Paste a URL. Get a comprehensive bug report in minutes.</p>
+              <h2 className="text-4xl font-bold tracking-tight">Test any site. <span className="text-muted-foreground/50">Automatically.</span></h2>
+              <p className="text-muted-foreground text-lg max-w-md">Paste a URL. Get a comprehensive bug report in minutes.</p>
             </div>
             <div className="w-full max-w-xl space-y-3">
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input placeholder="https://yoursite.com" value={url} onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleStart()}
-                    className="pl-9 bg-zinc-900 border-zinc-800 text-zinc-100 placeholder:text-zinc-600 h-11 font-mono text-sm focus:border-emerald-500/50" />
+                    className="pl-9 h-11 font-mono text-sm" />
                 </div>
                 <Button onClick={handleStart} disabled={isStarting || !url.trim()} className="h-11 px-5 bg-emerald-600 hover:bg-emerald-500 text-white gap-2 font-medium">
                   {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /> Run Tests</>}
                 </Button>
               </div>
-              <p className="text-xs text-zinc-600 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
+              <p className="text-xs text-muted-foreground/60 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
             </div>
           </div>
         )}
@@ -741,12 +720,12 @@ export default function TestingPage() {
         {isRunning && (
           <div className="space-y-6">
             <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-2 text-xs font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-4 py-2 rounded-full">
-                <Globe className="h-3 w-3 text-zinc-600" />{url || run?.targetUrl}
+              <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground bg-muted border border-border px-4 py-2 rounded-full">
+                <Globe className="h-3 w-3 text-muted-foreground/60" />{url || run?.targetUrl}
               </div>
               <div className="w-full max-w-xl space-y-2">
-                <Progress value={percent} className="h-1.5 bg-zinc-800" />
-                <div className="flex justify-between text-xs text-zinc-600 font-mono">
+                <Progress value={percent} className="h-1.5" />
+                <div className="flex justify-between text-xs text-muted-foreground font-mono">
                   <span>{percent}% complete</span>
                   {counter.total > 0 && <span>{counter.passed + counter.failed + counter.skipped}/{counter.total} tests done</span>}
                 </div>
@@ -755,24 +734,24 @@ export default function TestingPage() {
 
             {/* Pipeline steps */}
             <div className="w-full max-w-xl mx-auto relative">
-              <div className="absolute left-[18px] top-6 bottom-6 w-px bg-zinc-800" />
+              <div className="absolute left-[18px] top-6 bottom-6 w-px bg-border" />
               <div className="space-y-1">
                 {PIPELINE_STEPS.map((step, i) => {
                   const isActive = step.key === pipelineStatus;
                   const isDone   = i < currentStepIndex;
                   const Icon     = step.icon;
                   return (
-                    <div key={step.key} className={`flex items-start gap-4 p-3 rounded-xl transition-all ${isActive ? "bg-zinc-900 border border-zinc-700/60" : ""}`}>
+                    <div key={step.key} className={`flex items-start gap-4 p-3 rounded-xl transition-all ${isActive ? "bg-muted border border-border" : ""}`}>
                       <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all ${
                         isDone ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                        : isActive ? "bg-zinc-800 border-zinc-600 text-zinc-200"
-                        : "bg-zinc-900 border-zinc-800 text-zinc-600"
+                        : isActive ? "bg-muted border-border text-foreground"
+                        : "bg-background border-border text-muted-foreground"
                       }`}>
                         {isDone ? <CheckCircle2 className="h-4 w-4" /> : isActive ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
                       </div>
                       <div className="pt-1.5">
-                        <p className={`text-sm font-medium ${i > currentStepIndex ? "text-zinc-600" : "text-zinc-200"}`}>{step.label}</p>
-                        <p className="text-xs text-zinc-600">{step.desc}</p>
+                        <p className={`text-sm font-medium ${i > currentStepIndex ? "text-muted-foreground" : "text-foreground"}`}>{step.label}</p>
+                        <p className="text-xs text-muted-foreground">{step.desc}</p>
                       </div>
                       {isActive && (
                         <div className="ml-auto pt-2 flex gap-1">
@@ -804,11 +783,11 @@ export default function TestingPage() {
                   { value: counter.passed,  label: "passed",  color: "text-emerald-400" },
                   { value: counter.failed,  label: "failed",  color: "text-red-400"     },
                   { value: counter.running, label: "running", color: "text-blue-400"    },
-                  { value: counter.skipped, label: "skipped", color: "text-zinc-500"    },
+                  { value: counter.skipped, label: "skipped", color: "text-muted-foreground" },
                 ].map(({ value, label, color }) => (
-                  <div key={label} className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3 text-center">
+                  <div key={label} className="rounded-xl border border-border bg-card p-3 text-center">
                     <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
-                    <p className="text-xs text-zinc-500 font-mono mt-0.5">{label}</p>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{label}</p>
                   </div>
                 ))}
               </div>
@@ -818,14 +797,14 @@ export default function TestingPage() {
             {liveTestCases.length > 0 && (
               <div className="w-full max-w-2xl mx-auto space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <FlaskConical className="h-3.5 w-3.5" />Test Cases — {liveTestCases.length} generated
                   </p>
                   <div className="flex gap-3 text-xs font-mono">
                     <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
                     <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
                     <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
-                    <span className="text-zinc-500">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                    <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
                   </div>
                 </div>
                 <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
@@ -834,17 +813,17 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Live bugs — no screenshots here, just list */}
+            {/* Live bugs */}
             {sseState.liveBugs.length > 0 && (
               <div className="w-full max-w-2xl mx-auto">
-                <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
                   <Bug className="h-3 w-3 text-red-400" /> Failed ({sseState.liveBugs.length})
                 </p>
                 <div className="space-y-1.5">
                   {sseState.liveBugs.map((bug) => (
                     <div key={bug.id} className="flex items-center gap-3 p-3 rounded-lg border border-red-500/20 bg-red-500/5">
-                      <div className={`h-2 w-2 rounded-full shrink-0 ${SEVERITY_CONFIG[bug.severity as keyof typeof SEVERITY_CONFIG]?.dot ?? "bg-zinc-500"}`} />
-                      <p className="text-xs text-zinc-300 flex-1 truncate">{bug.title}</p>
+                      <div className={`h-2 w-2 rounded-full shrink-0 ${SEVERITY_CONFIG[bug.severity as keyof typeof SEVERITY_CONFIG]?.dot ?? "bg-muted-foreground"}`} />
+                      <p className="text-xs text-foreground flex-1 truncate">{bug.title}</p>
                     </div>
                   ))}
                 </div>
@@ -856,17 +835,17 @@ export default function TestingPage() {
         {/* ── CANCELLED ── */}
         {isCancelled && (
           <div className="flex flex-col items-center gap-6 py-16">
-            <div className="h-16 w-16 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex items-center justify-center">
-              <StopCircle className="h-8 w-8 text-zinc-400" />
+            <div className="h-16 w-16 rounded-2xl bg-muted border border-border flex items-center justify-center">
+              <StopCircle className="h-8 w-8 text-muted-foreground" />
             </div>
             <div className="text-center">
-              <h3 className="text-lg font-semibold text-zinc-200">Test run cancelled</h3>
-              <p className="text-zinc-500 text-sm mt-1">You stopped this run. No further calls will be made.</p>
+              <h3 className="text-lg font-semibold text-foreground">Test run cancelled</h3>
+              <p className="text-muted-foreground text-sm mt-1">You stopped this run. No further calls will be made.</p>
               {(counter.passed > 0 || counter.failed > 0) && (
-                <p className="text-zinc-600 text-xs font-mono mt-2">{counter.passed} passed · {counter.failed} failed before stopping</p>
+                <p className="text-muted-foreground/60 text-xs font-mono mt-2">{counter.passed} passed · {counter.failed} failed before stopping</p>
               )}
             </div>
-            <Button onClick={handleReset} variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2">
+            <Button onClick={handleReset} variant="outline" className="gap-2">
               <RotateCcw className="h-4 w-4" /> Run New Test
             </Button>
           </div>
@@ -880,9 +859,9 @@ export default function TestingPage() {
             </div>
             <div className="text-center">
               <h3 className="text-lg font-semibold">Test run failed</h3>
-              <p className="text-zinc-500 text-sm mt-1">{sseState.errorMessage ?? "Something went wrong. Please try again."}</p>
+              <p className="text-muted-foreground text-sm mt-1">{sseState.errorMessage ?? "Something went wrong. Please try again."}</p>
             </div>
-            <Button onClick={handleReset} variant="outline" className="border-zinc-700 text-zinc-300 gap-2">
+            <Button onClick={handleReset} variant="outline" className="gap-2">
               <RotateCcw className="h-4 w-4" /> Try Again
             </Button>
           </div>
@@ -892,18 +871,18 @@ export default function TestingPage() {
         {isComplete && report && (
           <div className="space-y-8">
             {/* Score Hero */}
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
+            <div className="rounded-2xl border border-border bg-card p-6">
               <div className="flex flex-col sm:flex-row items-center gap-8">
                 <ScoreGauge score={report.overallScore ?? 0} />
                 <div className="flex-1 space-y-4 w-full">
                   <div>
-                    <div className="flex items-center gap-2 text-xs text-zinc-500 font-mono mb-1">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-1">
                       <Globe className="h-3 w-3" />{report.targetUrl}
                       <a href={report.targetUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3 w-3 hover:text-zinc-300" />
+                        <ExternalLink className="h-3 w-3 hover:text-foreground" />
                       </a>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-zinc-600 font-mono">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground/60 font-mono">
                       <Clock className="h-3 w-3" />
                       {report.crawlSummary.totalPages} pages crawled · {Math.round(report.crawlSummary.crawlTimeMs / 1000)}s crawl time
                     </div>
@@ -912,13 +891,13 @@ export default function TestingPage() {
                     <div className="flex gap-px h-2 rounded-full overflow-hidden">
                       <div className="bg-emerald-500" style={{ width: `${((report.passed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
                       <div className="bg-red-500"     style={{ width: `${((report.failed  ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
-                      <div className="bg-zinc-700 flex-1" />
+                      <div className="bg-muted flex-1" />
                     </div>
                     <div className="flex gap-4 text-xs font-mono">
                       <span className="text-emerald-400">{report.passed} passed</span>
                       <span className="text-red-400">{report.failed} failed</span>
-                      <span className="text-zinc-500">{report.skipped} skipped</span>
-                      <span className="text-zinc-600 ml-auto">{report.totalTests} total</span>
+                      <span className="text-muted-foreground">{report.skipped} skipped</span>
+                      <span className="text-muted-foreground/60 ml-auto">{report.totalTests} total</span>
                     </div>
                   </div>
                 </div>
@@ -928,7 +907,7 @@ export default function TestingPage() {
             {/* Category Ring Charts */}
             {Object.keys(report.resultsByCategory).length > 0 && (
               <div>
-                <p className="text-xs font-mono text-zinc-500 uppercase tracking-wider mb-3">Category Breakdown</p>
+                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Category Breakdown</p>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {Object.entries(report.resultsByCategory).map(([cat, data]) => (
                     <CategoryDonut key={cat} category={cat} passed={data.passed} total={data.total}
@@ -940,17 +919,17 @@ export default function TestingPage() {
 
             {/* AI Summary */}
             {report.aiSummary && (
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <div className="rounded-2xl border border-border bg-card p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Sparkles className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs font-mono text-zinc-400 uppercase tracking-wider">AI Summary</span>
+                  <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Summary</span>
                 </div>
-                <p className="text-sm text-zinc-300 leading-relaxed">{report.aiSummary}</p>
+                <p className="text-sm text-foreground leading-relaxed">{report.aiSummary}</p>
               </div>
             )}
 
-            {/* Tabs — NOTE: "crawl" tab removed, screenshots only on bugs */}
-            <div className="flex gap-1 border-b border-zinc-800 overflow-x-auto">
+            {/* Tabs */}
+            <div className="flex gap-1 border-b border-border overflow-x-auto">
               {([
                 { key: "tests",       label: "Test Cases",  count: report.testCases?.length ?? 0,        icon: FlaskConical },
                 { key: "bugs",        label: "Bugs",        count: report.bugs?.length ?? 0,              icon: Bug         },
@@ -959,11 +938,11 @@ export default function TestingPage() {
               ] as const).map(({ key, label, count, icon: Icon }) => (
                 <button key={key} onClick={() => setActiveTab(key as typeof activeTab)}
                   className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px shrink-0 ${
-                    activeTab === key ? "border-emerald-500 text-emerald-400" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                    activeTab === key ? "border-emerald-500 text-emerald-400" : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}>
                   <Icon className="h-3.5 w-3.5" />{label}
                   {count > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${activeTab === key ? "bg-emerald-500/20 text-emerald-400" : "bg-zinc-800 text-zinc-500"}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${activeTab === key ? "bg-emerald-500/20 text-emerald-400" : "bg-muted text-muted-foreground"}`}>
                       {count}
                     </span>
                   )}
@@ -975,12 +954,12 @@ export default function TestingPage() {
             {activeTab === "tests" && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-zinc-500 font-mono">Filter:</span>
+                  <span className="text-xs text-muted-foreground font-mono">Filter:</span>
                   {(["all", "passed", "failed", "flaky"] as const).map((f) => (
                     <button key={f} onClick={() => setTcFilter(f)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${tcFilter === f ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-400"}`}>
+                      className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${tcFilter === f ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                       {f}{f !== "all" && (
-                        <span className="ml-1 text-zinc-600">
+                        <span className="ml-1 text-muted-foreground/60">
                           ({(report.testCases ?? []).filter((tc) => {
                             const live = sseState.testUpdates[tc.id]?.status;
                             return (live ?? tc.results?.[0]?.status ?? "skipped") === f;
@@ -992,9 +971,9 @@ export default function TestingPage() {
                 </div>
                 <div className="space-y-2">
                   {filteredTestCases.length === 0
-                    ? (<div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
-                        <FlaskConical className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
-                        <p className="text-sm text-zinc-500">No test cases match this filter</p>
+                    ? (<div className="rounded-xl border border-border bg-card p-8 text-center">
+                        <FlaskConical className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                        <p className="text-sm text-muted-foreground">No test cases match this filter</p>
                       </div>)
                     : filteredTestCases.map((tc) => <TestCaseCard key={tc.id} tc={tc} liveStatus={sseState.testUpdates[tc.id]} />)
                   }
@@ -1002,7 +981,7 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Bugs Tab — screenshots ONLY shown here */}
+            {/* Bugs Tab */}
             {activeTab === "bugs" && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-3">
@@ -1013,16 +992,16 @@ export default function TestingPage() {
                   <div className="flex gap-1 flex-wrap">
                     {["all", "critical", "high", "medium", "low"].map((sev) => (
                       <button key={sev} onClick={() => setFilterSeverity(sev)}
-                        className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${filterSeverity === sev ? "bg-zinc-700 text-zinc-200" : "text-zinc-500 hover:text-zinc-400"}`}>
+                        className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${filterSeverity === sev ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                         {sev}
                       </button>
                     ))}
                   </div>
                 </div>
                 {filteredBugs.length === 0
-                  ? (<div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
+                  ? (<div className="rounded-xl border border-border bg-card p-8 text-center">
                       <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
-                      <p className="text-sm text-zinc-400">No bugs found for this filter</p>
+                      <p className="text-sm text-muted-foreground">No bugs found for this filter</p>
                     </div>)
                   : (<div className="space-y-2">{filteredBugs.map((bug) => <BugCard key={bug.id} bug={bug} onClick={() => setSelectedBug(bug)} />)}</div>)
                 }
@@ -1034,64 +1013,46 @@ export default function TestingPage() {
               <div className="space-y-4">
                 {(!report.performanceGauges || report.performanceGauges.length === 0)
                   ? (
-                    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
-                      <Activity className="h-8 w-8 text-zinc-600 mx-auto mb-2" />
-                      <p className="text-sm text-zinc-500">No performance data available</p>
+                    <div className="rounded-xl border border-border bg-card p-8 text-center">
+                      <Activity className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">No performance data available</p>
                     </div>
                   )
                   : report.performanceGauges.map((pg: PerformanceGauge) => (
-                    <div key={pg.pageUrl} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+                    <div key={pg.pageUrl} className="rounded-xl border border-border bg-card p-5">
                       <div className="flex items-center gap-2 mb-4">
-                        <Globe className="h-4 w-4 text-zinc-500 shrink-0" />
-                        <p className="text-xs font-mono text-zinc-400 truncate">{pg.pageUrl}</p>
+                        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <p className="text-xs font-mono text-muted-foreground truncate">{pg.pageUrl}</p>
                       </div>
 
-                      {/* Core Web Vitals */}
-                      <p className="text-xs font-mono text-zinc-600 uppercase tracking-wider mb-2">
-                        Core Web Vitals
-                      </p>
+                      <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Core Web Vitals</p>
                       <div className="space-y-3 mb-5">
                         <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
                         <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
                         <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
                       </div>
 
-                      {/* Load Timing — always available from Navigation Timing API */}
-                      <p className="text-xs font-mono text-zinc-600 uppercase tracking-wider mb-2">
-                        Load Timing
-                      </p>
+                      <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Load Timing</p>
                       <div className="space-y-3">
-                        <PerfGaugeRow
-                          label="DCL"
-                          value={pg.domContentLoadedMs}
-                          unit="ms"
-                          status={pg.domContentLoadedStatus ?? "unknown"}
-                        />
-                        <PerfGaugeRow
-                          label="Load"
-                          value={pg.loadEventMs}
-                          unit="ms"
-                          status={pg.loadEventStatus ?? "unknown"}
-                        />
+                        <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
+                        <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"} />
                       </div>
 
-                      {/* Legend */}
-                      <div className="flex gap-4 mt-4 pt-3 border-t border-zinc-800/60 flex-wrap">
+                      <div className="flex gap-4 mt-4 pt-3 border-t border-border flex-wrap">
                         {[
-                          { label: "Good",             color: "bg-emerald-500" },
-                          { label: "Needs improvement", color: "bg-yellow-500" },
-                          { label: "Poor",             color: "bg-red-500"     },
-                          { label: "Unknown",          color: "bg-zinc-600"    },
+                          { label: "Good",              color: "bg-emerald-500" },
+                          { label: "Needs improvement", color: "bg-yellow-500"  },
+                          { label: "Poor",              color: "bg-red-500"     },
+                          { label: "Unknown",           color: "bg-muted-foreground/30" },
                         ].map(({ label, color }) => (
-                          <div key={label} className="flex items-center gap-1.5 text-xs text-zinc-500">
+                          <div key={label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <div className={`h-2 w-2 rounded-full ${color}`} />
                             {label}
                           </div>
                         ))}
                       </div>
 
-                      {/* Tooltip-style explainers */}
-                      <div className="mt-3 pt-3 border-t border-zinc-800/60 grid grid-cols-2 gap-x-6 gap-y-1">
+                      <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-x-6 gap-y-1">
                         {[
                           { label: "LCP",  desc: "Largest Contentful Paint — render time of largest element"  },
                           { label: "CLS",  desc: "Cumulative Layout Shift — visual stability score"            },
@@ -1100,8 +1061,8 @@ export default function TestingPage() {
                           { label: "Load", desc: "Page Load — all resources including images finished"        },
                         ].map(({ label, desc }) => (
                           <div key={label} className="flex gap-2 text-xs py-0.5">
-                            <span className="font-mono text-zinc-500 shrink-0 w-10">{label}</span>
-                            <span className="text-zinc-600">{desc}</span>
+                            <span className="font-mono text-muted-foreground shrink-0 w-10">{label}</span>
+                            <span className="text-muted-foreground/60">{desc}</span>
                           </div>
                         ))}
                       </div>
@@ -1113,24 +1074,24 @@ export default function TestingPage() {
 
             {/* Trend Tab */}
             {activeTab === "trend" && (
-              <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5">
+              <div className="rounded-xl border border-border bg-card p-5">
                 <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="h-4 w-4 text-zinc-400" />
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   <h3 className="text-sm font-semibold">Score Over Time</h3>
-                  <span className="text-xs text-zinc-600 font-mono">{report.targetUrl}</span>
+                  <span className="text-xs text-muted-foreground/60 font-mono">{report.targetUrl}</span>
                 </div>
                 <TrendSparkline data={report.trendData ?? []} />
                 {report.trendData && report.trendData.length > 1 && (
-                  <div className="mt-4 pt-4 border-t border-zinc-800 space-y-2">
+                  <div className="mt-4 pt-4 border-t border-border space-y-2">
                     {report.trendData.map((pt: TrendDataPoint) => (
-                      <div key={pt.runId} className={`flex items-center gap-3 text-xs font-mono ${pt.isCurrent ? "text-zinc-200" : "text-zinc-500"}`}>
+                      <div key={pt.runId} className={`flex items-center gap-3 text-xs font-mono ${pt.isCurrent ? "text-foreground" : "text-muted-foreground"}`}>
                         <span className="w-24 shrink-0">{new Date(pt.date).toLocaleDateString()}</span>
-                        <div className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                        <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
                           <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-emerald-500" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`}
                             style={{ width: `${pt.score ?? 0}%` }} />
                         </div>
                         <span className={`w-8 text-right ${(pt.score ?? 0) >= 90 ? "text-emerald-400" : (pt.score ?? 0) >= 70 ? "text-yellow-400" : "text-red-400"}`}>{pt.score}</span>
-                        {pt.isCurrent && <span className="text-zinc-600">(current)</span>}
+                        {pt.isCurrent && <span className="text-muted-foreground/60">(current)</span>}
                       </div>
                     ))}
                   </div>
@@ -1140,7 +1101,7 @@ export default function TestingPage() {
 
             {/* Footer actions */}
             <div className="flex gap-3 flex-wrap pb-10">
-              <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2 text-sm"
+              <Button variant="outline" className="gap-2 text-sm"
                 disabled={isExportingPdf}
                 onClick={() => {
                   if (!testRunId) return;
@@ -1152,7 +1113,7 @@ export default function TestingPage() {
                 {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                 {isExportingPdf ? "Generating PDF…" : "Export PDF"}
               </Button>
-              <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2 text-sm"
+              <Button variant="outline" className="gap-2 text-sm"
                 onClick={() => {
                   const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
                   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -1162,7 +1123,7 @@ export default function TestingPage() {
                 <FileText className="h-4 w-4" /> Export JSON
               </Button>
               {report.shareableSlug && (
-                <Button variant="outline" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2 text-sm"
+                <Button variant="outline" className="gap-2 text-sm"
                   onClick={() => {
                     void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`);
                     setCopied(true); toast.success("Shareable link copied!"); setTimeout(() => setCopied(false), 2000);
@@ -1172,7 +1133,7 @@ export default function TestingPage() {
                 </Button>
               )}
               {report.embedBadgeToken && (
-                <Button variant="ghost" className="text-zinc-500 hover:text-zinc-300 gap-2 text-sm"
+                <Button variant="ghost" className="text-muted-foreground hover:text-foreground gap-2 text-sm"
                   onClick={() => {
                     const badge = `[![Tested by Buildify](${window.location.origin}/api/badge/${report.embedBadgeToken}/svg)](${window.location.origin}/report/${report.shareableSlug})`;
                     void navigator.clipboard.writeText(badge); toast.success("Badge markdown copied!");
@@ -1180,7 +1141,7 @@ export default function TestingPage() {
                   <Code2 className="h-4 w-4" /> Copy Badge
                 </Button>
               )}
-              <Button variant="ghost" className="text-zinc-500 hover:text-zinc-300 gap-2 text-sm ml-auto" onClick={handleReset}>
+              <Button variant="ghost" className="text-muted-foreground hover:text-foreground gap-2 text-sm ml-auto" onClick={handleReset}>
                 <RotateCcw className="h-4 w-4" /> New Test
               </Button>
             </div>
