@@ -435,6 +435,7 @@ export const accessibility_test_runs = createTable(
     total_violations: d.integer("total_violations").default(0),
     total_passes: d.integer("total_passes").default(0),
     total_incomplete: d.integer("total_incomplete").default(0),
+    logs: d.text("logs"), // JSON array of SSEEvent objects
     pdf_report_base64: d.text("pdf_report_base64"),
     error_message: d.text("error_message"),
     started_at: d.timestamp("started_at", { withTimezone: true }),

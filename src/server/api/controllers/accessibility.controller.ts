@@ -75,7 +75,10 @@ export async function startAccessibilityTestHandler({
 
   const readable = new ReadableStream({
     async start(controller) {
+      const collectedLogs: SSEEvent[] = []
+
       const send = (event: SSEEvent) => {
+        collectedLogs.push(event)
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
         } catch {
@@ -142,7 +145,9 @@ export async function startAccessibilityTestHandler({
           pageResults,
         })
 
-        // Update test run with results
+        send({ type: 'report:complete', testRunId })
+
+        // Update test run with results + logs
         await db
           .update(accessibility_test_runs)
           .set({
@@ -151,22 +156,23 @@ export async function startAccessibilityTestHandler({
             total_violations: summary.totalViolations,
             total_passes: summary.totalPasses,
             total_incomplete: summary.totalIncomplete,
+            logs: JSON.stringify(collectedLogs),
             pdf_report_base64: pdfBase64,
             completed_at: new Date(),
             updated_at: new Date(),
           })
           .where(eq(accessibility_test_runs.id, testRunId))
-
-        send({ type: 'report:complete', testRunId })
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error'
         send({ type: 'error', message, fatal: true })
 
+        // Save logs even on failure
         await db
           .update(accessibility_test_runs)
           .set({
             status: 'failed',
             error_message: message,
+            logs: JSON.stringify(collectedLogs),
             completed_at: new Date(),
             updated_at: new Date(),
           })
@@ -212,7 +218,17 @@ export async function getTestHistoryHandler(): Promise<
   }
 
   const runs = await db
-    .select()
+    .select({
+      id: accessibility_test_runs.id,
+      target_url: accessibility_test_runs.target_url,
+      standards: accessibility_test_runs.standards,
+      status: accessibility_test_runs.status,
+      total_pages_tested: accessibility_test_runs.total_pages_tested,
+      total_violations: accessibility_test_runs.total_violations,
+      total_passes: accessibility_test_runs.total_passes,
+      created_at: accessibility_test_runs.created_at,
+      completed_at: accessibility_test_runs.completed_at,
+    })
     .from(accessibility_test_runs)
     .where(eq(accessibility_test_runs.user_id, session.user.id))
     .orderBy(desc(accessibility_test_runs.created_at))
@@ -249,6 +265,7 @@ export async function getTestResultsHandler({
         createdAt: string
         completedAt: string | null
         errorMessage: string | null
+        logs: unknown[]
       }
       pageResults: Array<{
         id: string
@@ -272,7 +289,21 @@ export async function getTestResultsHandler({
   }
 
   const [testRun] = await db
-    .select()
+    .select({
+      id: accessibility_test_runs.id,
+      target_url: accessibility_test_runs.target_url,
+      standards: accessibility_test_runs.standards,
+      status: accessibility_test_runs.status,
+      total_pages_tested: accessibility_test_runs.total_pages_tested,
+      total_violations: accessibility_test_runs.total_violations,
+      total_passes: accessibility_test_runs.total_passes,
+      total_incomplete: accessibility_test_runs.total_incomplete,
+      created_at: accessibility_test_runs.created_at,
+      completed_at: accessibility_test_runs.completed_at,
+      error_message: accessibility_test_runs.error_message,
+      logs: accessibility_test_runs.logs,
+      user_id: accessibility_test_runs.user_id,
+    })
     .from(accessibility_test_runs)
     .where(
       and(
@@ -304,6 +335,7 @@ export async function getTestResultsHandler({
       createdAt: testRun.created_at.toISOString(),
       completedAt: testRun.completed_at?.toISOString() ?? null,
       errorMessage: testRun.error_message,
+      logs: testRun.logs ? (JSON.parse(testRun.logs) as unknown[]) : [],
     },
     pageResults: pageResults.map((p) => ({
       id: p.id,

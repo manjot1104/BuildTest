@@ -17,7 +17,7 @@ import {
   Globe,
 } from 'lucide-react'
 import { ViolationCard } from './violation-card'
-import type { TestSummary, SSEEvent, AxeViolation } from '@/types/accessibility.types'
+import type { TestSummary, AxeViolation } from '@/types/accessibility.types'
 import {
   BarChart,
   Bar,
@@ -28,66 +28,31 @@ import {
   Cell,
 } from 'recharts'
 
-interface ResultsDashboardProps {
-  summary: TestSummary
-  logs: SSEEvent[]
-  testRunId: string | null
-}
-
-interface PageTestData {
+export interface PageResultData {
   url: string
+  title: string | null
   violations: AxeViolation[]
   violationCount: number
   passCount: number
   incompleteCount: number
+  inapplicableCount: number
+  passes: Array<{ id: string; description: string; help: string; tags: string[] }>
+  incomplete: Array<{ id: string; description: string; help: string; impact: string; tags: string[] }>
 }
 
-export function ResultsDashboard({ summary, logs, testRunId }: ResultsDashboardProps) {
+interface ResultsDashboardProps {
+  summary: TestSummary
+  pageResults: PageResultData[]
+  testRunId: string | null
+}
+
+export function ResultsDashboard({ summary, pageResults, testRunId }: ResultsDashboardProps) {
   const complianceScore =
     summary.totalPasses + summary.totalViolations > 0
       ? Math.round(
           (summary.totalPasses / (summary.totalPasses + summary.totalViolations)) * 100,
         )
       : 100
-
-  // Extract per-page data from logs
-  const pageDataMap = new Map<string, PageTestData>()
-
-  for (const log of logs) {
-    if (log.type === 'test:start') {
-      if (!pageDataMap.has(log.url)) {
-        pageDataMap.set(log.url, {
-          url: log.url,
-          violations: [],
-          violationCount: 0,
-          passCount: 0,
-          incompleteCount: 0,
-        })
-      }
-    } else if (log.type === 'test:violation') {
-      const page = pageDataMap.get(log.url)
-      if (page) {
-        page.violations.push({
-          id: log.ruleId,
-          impact: log.impact as AxeViolation['impact'],
-          description: log.description,
-          help: '',
-          helpUrl: '',
-          tags: [],
-          nodes: [],
-        })
-      }
-    } else if (log.type === 'test:page_complete') {
-      const page = pageDataMap.get(log.url)
-      if (page) {
-        page.violationCount = log.violationCount
-        page.passCount = log.passCount
-        page.incompleteCount = log.incompleteCount
-      }
-    }
-  }
-
-  const pageData = Array.from(pageDataMap.values())
 
   const severityData = [
     { name: 'Critical', count: summary.criticalCount, color: '#dc2626' },
@@ -96,7 +61,7 @@ export function ResultsDashboard({ summary, logs, testRunId }: ResultsDashboardP
     { name: 'Minor', count: summary.minorCount, color: '#6b7280' },
   ]
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!testRunId) return
     const link = document.createElement('a')
     link.href = `/api/accessibility/report/${testRunId}`
@@ -198,10 +163,10 @@ export function ResultsDashboard({ summary, logs, testRunId }: ResultsDashboardP
           <CardTitle className="text-base">Page-by-Page Breakdown</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {pageData.map((page) => (
+          {pageResults.map((page) => (
             <PageAccordion key={page.url} page={page} />
           ))}
-          {pageData.length === 0 && (
+          {pageResults.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No page data available.
             </p>
@@ -212,7 +177,7 @@ export function ResultsDashboard({ summary, logs, testRunId }: ResultsDashboardP
   )
 }
 
-function PageAccordion({ page }: { page: PageTestData }) {
+function PageAccordion({ page }: { page: PageResultData }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -220,7 +185,12 @@ function PageAccordion({ page }: { page: PageTestData }) {
       <CollapsibleTrigger className="flex w-full items-center justify-between rounded-md border p-3 text-left hover:bg-muted/50 transition-colors">
         <div className="flex items-center gap-2 min-w-0">
           <Globe className="size-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm">{page.url}</span>
+          <div className="min-w-0">
+            <span className="block truncate text-sm">{page.title || page.url}</span>
+            {page.title && (
+              <span className="block truncate text-xs text-muted-foreground">{page.url}</span>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           <div className="flex items-center gap-1.5">
@@ -245,6 +215,40 @@ function PageAccordion({ page }: { page: PageTestData }) {
           page.violations.map((v, i) => <ViolationCard key={i} violation={v} />)
         ) : (
           <p className="py-2 text-sm text-green-600">No violations found on this page.</p>
+        )}
+
+        {/* Passes summary */}
+        {page.passes.length > 0 && (
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 py-1 text-xs text-green-600 hover:text-green-700">
+              <ChevronDown className="size-3" />
+              {page.passes.length} passing rules
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1 space-y-1 pl-5">
+              {page.passes.map((p) => (
+                <div key={p.id} className="text-xs text-muted-foreground">
+                  <code className="mr-1 text-green-600">{p.id}</code> {p.description}
+                </div>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
+        {/* Incomplete summary */}
+        {page.incomplete.length > 0 && (
+          <Collapsible>
+            <CollapsibleTrigger className="flex items-center gap-2 py-1 text-xs text-yellow-600 hover:text-yellow-700">
+              <ChevronDown className="size-3" />
+              {page.incomplete.length} incomplete (needs review)
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-1 space-y-1 pl-5">
+              {page.incomplete.map((inc) => (
+                <div key={inc.id} className="text-xs text-muted-foreground">
+                  <code className="mr-1 text-yellow-600">{inc.id}</code> {inc.description}
+                </div>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
         )}
       </CollapsibleContent>
     </Collapsible>
