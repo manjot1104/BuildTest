@@ -525,17 +525,26 @@ if (!chatMode) {
             />
           </div>
 
-          <ChatInput
-            message={message}
-            setMessage={setMessage}
-            onSubmit={handleSendMessage}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            showSuggestions={false}
-            attachments={attachments}
-            onAttachmentsChange={setAttachments}
-            textareaRef={textareaRef}
-          />
+          {isViewingOthersChat ? (
+            <ForkBanner
+              isAuthenticated={!!session?.user}
+              isForking={forkChat.isPending}
+              onFork={handleFork}
+              onSignIn={() => window.location.href = "/login"}
+            />
+          ) : (
+            <ChatInput
+              message={message}
+              setMessage={setMessage}
+              onSubmit={handleSendMessage}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              showSuggestions={false}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              textareaRef={textareaRef}
+            />
+          )}
 
         </div>
       }

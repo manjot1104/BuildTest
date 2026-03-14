@@ -3,6 +3,7 @@ import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { useChatDetails } from './use-chat-api'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
+import { stripSystemPrompt } from '@/lib/prompt-enhancer'
 
 interface Chat {
   id: string
@@ -89,11 +90,37 @@ export function useChat(chatId?: string) {
 
       // Only update chat history if it's empty (initial load)
       if (chatData.messages && chatHistory.length === 0) {
+        let firstUserMessageSeen = false
         setChatHistory(
-          chatData.messages.map((msg) => ({
-            type: msg.role,
-            content: msg.experimental_content as MessageBinaryFormat ?? msg.content as string | MessageBinaryFormat,
-          })),
+          chatData.messages
+            .filter((msg) => {
+              // Filter out V0 fork notice messages (e.g. "X was duplicated from Y")
+              if (msg.role === 'assistant') {
+                const text = typeof msg.content === 'string'
+                  ? msg.content
+                  : JSON.stringify(msg.experimental_content ?? msg.content ?? '')
+                if (text.includes('was duplicated from') || text.includes('was forked from')) {
+                  return false
+                }
+              }
+              return true
+            })
+            .map((msg) => {
+              // For the first user message, always use stripped string content
+              // to ensure the system prompt prefix is never shown.
+              // User messages are plain text so binary format isn't needed.
+              if (msg.role === 'user' && !firstUserMessageSeen) {
+                firstUserMessageSeen = true
+                return {
+                  type: msg.role,
+                  content: stripSystemPrompt(msg.content),
+                }
+              }
+              return {
+                type: msg.role,
+                content: msg.experimental_content as MessageBinaryFormat ?? msg.content as string | MessageBinaryFormat,
+              }
+            }),
         )
       }
     }

@@ -203,6 +203,17 @@ export async function createChatHandler({
       return { error: 'Message is required' }
     }
 
+    // Ownership check: only the chat owner can send follow-up messages
+    if (chatId && session?.user?.id) {
+      const existingChat = await getUserChat({ v0ChatId: chatId })
+      if (existingChat && existingChat.user_id !== session.user.id) {
+        return {
+          error: 'forbidden',
+          details: 'You cannot send messages to a chat you do not own. Fork the chat first.',
+        }
+      }
+    }
+
     // Check rate limiting
     const rateLimitResponse = await checkRateLimit(session, request)
     if (rateLimitResponse) {

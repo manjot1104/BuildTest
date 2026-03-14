@@ -43,7 +43,24 @@ export async function generateMetadata({
   const { username } = await params
   const design = await getDesign(username)
   if (!design) return { title: 'Page not found' }
-  return { title: `${design.title} — Buildify`, description: `View ${design.title}` }
+
+  const title = `${design.title} — Buildify`
+  const description = `Check out "${design.title}" — a page designed and published with Buildify Studio.`
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+    },
+  }
 }
 
 // ─── Background helper ────────────────────────────────────────────────────────

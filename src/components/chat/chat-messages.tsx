@@ -95,36 +95,54 @@ function MessageWrapper({
 }
 
 // Strip system prompt prefix from binary format content (for user messages loaded from API)
+// MessageBinaryFormat is [number, ...any[]][] — each row is a tuple with a type number first
 function stripSystemPromptFromBinary(
   content: MessageBinaryFormat,
 ): MessageBinaryFormat {
   if (!Array.isArray(content)) return content
 
-  const marker = "User's Request:\n"
+  // Try to find the marker "User's Request:" (with or without trailing newline)
+  const markers = ["User's Request:\n", "User's Request:"]
   let markerFound = false
 
-  return content.map((row) => {
-    if (markerFound || !Array.isArray(row)) return row
-
-    const processedRow = row.map((item: unknown) => {
-      if (markerFound || typeof item !== 'string') return item
-      const idx = item.indexOf(marker)
-      if (idx !== -1) {
-        markerFound = true
-        return item.slice(idx + marker.length)
+  // Recursively strip system prompt strings from any nested structure
+  function stripFromValue(val: unknown): unknown {
+    if (markerFound) return val
+    if (typeof val === 'string') {
+      for (const marker of markers) {
+        const idx = val.indexOf(marker)
+        if (idx !== -1) {
+          markerFound = true
+          return val.slice(idx + marker.length).replace(/^\n/, '')
+        }
       }
       // Part of the system prefix before the marker — strip it
       if (
-        item.includes('YOU ARE THE BEST SOFTWARE DEVELOPER') ||
-        item.includes('CRITICAL CSS RULE')
+        val.includes('YOU ARE THE BEST SOFTWARE DEVELOPER') ||
+        val.includes('CRITICAL CSS RULE') ||
+        val.includes('UNDERSTAND THE USER')
       ) {
         return ''
       }
-      return item
-    })
+      return val
+    }
+    if (Array.isArray(val)) {
+      return val.map(stripFromValue)
+    }
+    return val
+  }
 
-    return processedRow as (typeof content)[number]
+  return content.map((row) => {
+    if (markerFound) return row
+    return stripFromValue(row) as (typeof content)[number]
   }) as MessageBinaryFormat
+}
+
+// Check if binary content contains a V0 fork notice message
+function isForkNoticeContent(content: MessageBinaryFormat): boolean {
+  if (!Array.isArray(content)) return false
+  const str = JSON.stringify(content)
+  return str.includes('was duplicated from') || str.includes('was forked from')
 }
 
 // Function to preprocess message content and remove V0_FILE markers
@@ -211,7 +229,17 @@ export function ChatMessages({
   return (
     <Conversation>
       <ConversationContent>
-        {chatHistory.map((msg, index) => (
+        {chatHistory.map((msg, index) => {
+          // Skip V0 fork notice messages in rendering (safety net)
+          if (msg.type === 'assistant' && !msg.isStreaming) {
+            if (typeof msg.content === 'string' && (msg.content.includes('was duplicated from') || msg.content.includes('was forked from'))) {
+              return null
+            }
+            if (typeof msg.content !== 'string' && isForkNoticeContent(msg.content)) {
+              return null
+            }
+          }
+          return (
           <MessageWrapper key={`msg-${index}-${msg.type}`} role={msg.type}>
             {msg.isStreaming && msg.stream ? (
               <StreamingMessage
@@ -250,7 +278,7 @@ export function ChatMessages({
               />
             )}
           </MessageWrapper>
-        ))}
+        )})}
         {showBottomLoader && (
           <div className="flex items-center justify-center gap-2 py-4">
             <Loader size={16} className="text-gray-500 dark:text-gray-400" />

@@ -13,6 +13,7 @@ import {
   getChatCountByUserId,
   getChatCountByIP,
   getChatDemoUrl,
+  getUserChat,
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
@@ -138,6 +139,18 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       if (streaming) {
         try {
           const session = await getSession()
+
+          // Ownership check: only the chat owner can send follow-up messages
+          if (chatId && session?.user?.id) {
+            const existingChat = await getUserChat({ v0ChatId: chatId })
+            if (existingChat && existingChat.user_id !== session.user.id) {
+              set.status = 403
+              return {
+                error: 'forbidden',
+                message: 'You cannot send messages to a chat you do not own. Fork the chat first.',
+              }
+            }
+          }
 
           // Rate limiting for streaming
           if (session?.user?.id) {
