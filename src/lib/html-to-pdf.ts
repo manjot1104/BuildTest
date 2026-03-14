@@ -49,12 +49,9 @@ export async function generatePDFFromHtml(
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
       ],
       // Try to use system Chrome if available, otherwise use bundled Chromium
       executablePath: chromePath,
-      ignoreHTTPSErrors: true,
       timeout: 30000, // 30 second timeout
     })
 

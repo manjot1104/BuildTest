@@ -72,7 +72,7 @@ export async function generatePDFFromLatex({
  */
 export async function generatePDFFromLatexPuppeteer({
   latexContent,
-  filename = 'resume',
+  filename: _filename = 'resume',
 }: PDFGenerationOptions): Promise<Buffer> {
   try {
     const puppeteer = await import('puppeteer');
@@ -91,11 +91,8 @@ export async function generatePDFFromLatexPuppeteer({
         '--disable-dev-shm-usage',
         '--disable-accelerated-2d-canvas',
         '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
       ],
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      ignoreHTTPSErrors: true,
       timeout: 30000,
     });
 

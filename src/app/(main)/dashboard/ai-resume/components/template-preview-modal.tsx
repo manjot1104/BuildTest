@@ -1425,14 +1425,15 @@ export function ResumeTemplatePreviewModal({
 
   useEffect(() => {
     if (!open || !template) return
-    
-    // Generate preview content based on template format
+
     const format = template.format || 'both'
-    if (format === 'latex') {
+    const effectiveFormat = format === 'both' ? currentFormat : format
+
+    if (effectiveFormat === 'latex') {
       const latexCode = generateSampleLatex(template)
       setPreviewContent(latexCode)
-      
-      // Compile LaTeX to PDF for preview
+
+      let cancelled = false
       setIsCompilingPdf(true)
       fetch('/api/resume/compile-pdf', {
         method: 'POST',
@@ -1440,57 +1441,26 @@ export function ResumeTemplatePreviewModal({
         body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
       })
         .then(async (res) => {
+          if (cancelled) return
           if (res.ok) {
             const blob = await res.blob()
-            const url = URL.createObjectURL(blob)
-            setPdfUrl(url)
+            setPdfUrl(URL.createObjectURL(blob))
           } else {
             setPdfUrl(null)
           }
         })
         .catch(() => {
-          setPdfUrl(null)
+          if (!cancelled) setPdfUrl(null)
         })
         .finally(() => {
-          setIsCompilingPdf(false)
+          if (!cancelled) setIsCompilingPdf(false)
         })
-    } else if (format === 'html') {
+
+      return () => { cancelled = true }
+    } else {
       setPreviewContent(generateSampleHtml(template))
       setPdfUrl(null)
-    } else {
-      // For 'both' or undefined, use currentFormat
-      if (currentFormat === 'latex') {
-        const latexCode = generateSampleLatex(template)
-        setPreviewContent(latexCode)
-        
-        // Compile LaTeX to PDF for preview
-        setIsCompilingPdf(true)
-        fetch('/api/resume/compile-pdf', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
-        })
-          .then(async (res) => {
-            if (res.ok) {
-              const blob = await res.blob()
-              const url = URL.createObjectURL(blob)
-              setPdfUrl(url)
-            } else {
-              setPdfUrl(null)
-            }
-          })
-          .catch(() => {
-            setPdfUrl(null)
-          })
-          .finally(() => {
-            setIsCompilingPdf(false)
-          })
-      } else {
-        setPreviewContent(generateSampleHtml(template))
-        setPdfUrl(null)
-      }
     }
-    
   }, [open, template, currentFormat])
 
   // Cleanup PDF URL when modal closes or component unmounts
