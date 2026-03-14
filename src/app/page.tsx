@@ -2,6 +2,7 @@
 
 import {
     motion,
+    AnimatePresence,
     useScroll,
     useTransform,
     useMotionValueEvent,
@@ -11,11 +12,11 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, Maximize, Minimize } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
@@ -374,7 +375,7 @@ const FEATURE_DEMOS = [
     },
 ] as const
 
-function FeatureVideo({ src, index }: { src: string; index: number }) {
+function FeatureVideo({ src, index, onClick }: { src: string; index: number; onClick?: () => void }) {
     const ref = useRef<HTMLVideoElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(containerRef, { once: false, margin: '-100px' })
@@ -408,7 +409,8 @@ function FeatureVideo({ src, index }: { src: string; index: number }) {
                 whileInView="visible"
                 viewport={{ once: true, margin: '-80px' }}
                 custom={0.15}
-                className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15]"
+                className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15] cursor-pointer"
+                onClick={onClick}
             >
                 <video
                     ref={ref}
@@ -424,6 +426,110 @@ function FeatureVideo({ src, index }: { src: string; index: number }) {
     )
 }
 
+function VideoModal({ src, title, onClose }: { src: string; title: string; onClose: () => void }) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const videoRef = useRef<HTMLVideoElement>(null)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                if (isFullscreen) {
+                    void document.exitFullscreen().catch(() => {})
+                } else {
+                    onClose()
+                }
+            }
+        }
+        document.addEventListener('keydown', handleKey)
+        return () => document.removeEventListener('keydown', handleKey)
+    }, [onClose, isFullscreen])
+
+    useEffect(() => {
+        document.body.style.overflow = 'hidden'
+        return () => { document.body.style.overflow = '' }
+    }, [])
+
+    useEffect(() => {
+        const onFsChange = () => setIsFullscreen(!!document.fullscreenElement)
+        document.addEventListener('fullscreenchange', onFsChange)
+        return () => document.removeEventListener('fullscreenchange', onFsChange)
+    }, [])
+
+    const toggleFullscreen = () => {
+        if (!containerRef.current) return
+        if (document.fullscreenElement) {
+            void document.exitFullscreen().catch(() => {})
+        } else {
+            void containerRef.current.requestFullscreen().catch(() => {})
+        }
+    }
+
+    return (
+        <motion.div
+            ref={containerRef}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className={cn(
+                "fixed inset-0 z-[9999] flex flex-col",
+                isFullscreen ? "bg-black" : "bg-black/85 backdrop-blur-sm p-6 md:p-12"
+            )}
+            onClick={isFullscreen ? undefined : onClose}
+        >
+            {/* Popup container — centered card when not fullscreen, full screen when fullscreen */}
+            <motion.div
+                initial={{ scale: 0.92, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.92, opacity: 0 }}
+                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                className={cn(
+                    "flex flex-col overflow-hidden bg-black",
+                    isFullscreen
+                        ? "w-full h-full"
+                        : "w-full max-w-5xl max-h-full mx-auto my-auto rounded-2xl border border-white/10 shadow-2xl"
+                )}
+                onClick={(e) => e.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3 shrink-0 border-b border-white/10">
+                    <span className="text-sm font-medium text-white/80">{title}</span>
+                    <div className="flex items-center gap-1.5">
+                        <button
+                            onClick={toggleFullscreen}
+                            className="flex items-center justify-center size-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+                            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                        >
+                            {isFullscreen ? <Minimize className="size-4" /> : <Maximize className="size-4" />}
+                        </button>
+                        <button
+                            onClick={isFullscreen ? () => void document.exitFullscreen().catch(() => {}) : onClose}
+                            className="flex items-center justify-center size-8 rounded-full bg-white/10 text-white/70 hover:bg-white/20 hover:text-white transition-colors"
+                            title="Close"
+                        >
+                            <X className="size-4" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* Video */}
+                <div className="flex-1 min-h-0 flex items-center justify-center">
+                    <video
+                        ref={videoRef}
+                        src={src}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="max-w-full max-h-full object-contain"
+                    />
+                </div>
+            </motion.div>
+        </motion.div>
+    )
+}
+
 export default function LandingPage() {
     const { session, isPending } = useStateMachine()
     const router = useRouter()
@@ -434,6 +540,7 @@ export default function LandingPage() {
     const [prompt, setPrompt] = useState('')
     const [inputFocused, setInputFocused] = useState(false)
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const [demoModal, setDemoModal] = useState<{ src: string; title: string } | null>(null)
     const { state: micState, error: micError, clearError: clearMicError, toggle: toggleMic } = useSpeechRecord(
         (text) => setPrompt((prev) => (prev ? `${prev} ${text}` : text)),
     )
@@ -1211,7 +1318,7 @@ export default function LandingPage() {
                                             }}
                                             transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut', delay: index * 2 }}
                                         />
-                                        <FeatureVideo src={feature.video} index={index} />
+                                        <FeatureVideo src={feature.video} index={index} onClick={() => setDemoModal({ src: feature.video, title: feature.title })} />
                                     </div>
                                 </div>
                             )
@@ -1469,6 +1576,17 @@ export default function LandingPage() {
 
             {/* ── Footer ── */}
             <Footer />
+
+            {/* ── Demo Video Modal ── */}
+            <AnimatePresence>
+                {demoModal && (
+                    <VideoModal
+                        src={demoModal.src}
+                        title={demoModal.title}
+                        onClose={() => setDemoModal(null)}
+                    />
+                )}
+            </AnimatePresence>
         </div>
     )
 }

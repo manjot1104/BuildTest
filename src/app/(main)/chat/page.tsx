@@ -553,7 +553,7 @@ if (!chatMode) {
 
   </div>
 ) : (
-                <div className="max-w-2xl w-full mx-auto">
+                <div className="max-w-2xl w-full mx-auto flex-1 flex flex-col items-center justify-center px-4">
                     {/* Logo + Title */}
                     <div className="flex items-center justify-center gap-3 mb-3">
                         <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/10 flex items-center justify-center">
