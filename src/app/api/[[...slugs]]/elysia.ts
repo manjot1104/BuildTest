@@ -1210,3 +1210,67 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     { params: t.Object({ id: t.String() }) },
   )
+
+  // ============================================
+  // Accessibility Tester Endpoints
+  // ============================================
+
+  .post(
+    '/accessibility/test',
+    async ({ body, set }) => {
+      const { startAccessibilityTestHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await startAccessibilityTestHandler({ body })
+      if (result instanceof Response) return result
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      body: t.Object({
+        url: t.String(),
+        standards: t.Array(t.String()),
+        maxPages: t.Optional(t.Number()),
+        maxDepth: t.Optional(t.Number()),
+      }),
+    },
+  )
+
+  .get('/accessibility/history', async ({ set }) => {
+    const { getTestHistoryHandler } = await import('@/server/api/controllers/accessibility.controller')
+    const result = await getTestHistoryHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  .get(
+    '/accessibility/results/:id',
+    async ({ params, set }) => {
+      const { getTestResultsHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await getTestResultsHandler({ params })
+      if ('status' in result && !('testRun' in result)) { set.status = (result as { status: number }).status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  .get(
+    '/accessibility/report/:id',
+    async ({ params, set }) => {
+      const { downloadReportHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await downloadReportHandler({ params })
+      if (result instanceof Response) return result
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  .delete(
+    '/accessibility/test/:id',
+    async ({ params, set }) => {
+      const { deleteTestRunHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await deleteTestRunHandler({ params })
+      if ('status' in result && !('success' in result)) { set.status = (result as { status: number }).status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )

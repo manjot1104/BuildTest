@@ -28,6 +28,7 @@ const SEGMENT_LABELS: Record<string, string> = {
     "chat": "New Chat",
     "buildify-studio": "Buildify Studio",
     "ai-resume": "AI Resume Builder",
+    "accessibility-tester": "Accessibility Tester",
     "docs": "Documentation",
 };
 

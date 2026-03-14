@@ -10,6 +10,7 @@ import {
     LayoutTemplate,
     History,
     Star,
+    ShieldCheck,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -74,6 +75,11 @@ const buildNavSections = (
                 title: "AI Resume Builder",
                 url: "/dashboard/ai-resume",
                 icon: FileText,
+            },
+            {
+                title: "Accessibility Tester",
+                url: "/dashboard/accessibility-tester",
+                icon: ShieldCheck,
             },
         ],
     },
