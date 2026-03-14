@@ -125,7 +125,7 @@ export function LiveLogViewer({ logs, progress }: LiveLogViewerProps) {
       <CardContent>
         <div
           ref={scrollRef}
-          className="h-[400px] overflow-auto rounded-md bg-black/90 p-4 font-mono text-xs leading-relaxed"
+          className="h-[500px] overflow-auto rounded-lg border border-neutral-800 bg-[#0a0a0a] p-4 font-mono text-[13px] leading-relaxed"
         >
           {displayLogs.length === 0 ? (
             <span className="text-gray-500">Waiting for events...</span>
