@@ -1314,7 +1314,7 @@ const SUGGESTIONS = [
   {
     icon: Blocks,
     label: "Dashboard",
-    prompt: "Create a dashboard layout with sidebar navigation, stats cards, and charts",
+    prompt: "Build a modern admin dashboard using React. The layout should include a dark sidebar with icons, a top navigation bar with a search field and user avatar, and a main content area. Display statistic cards (users, revenue, orders, growth) with clean styling, rounded cards, subtle shadows, and color accents. Include a simple chart or activity list with sample data so the dashboard looks realistic. The UI should be visually appealing, well spaced, and responsive so it renders nicely in the preview.",
   },
   {
     icon: Code2,
@@ -1324,7 +1324,7 @@ const SUGGESTIONS = [
   {
     icon: Sparkles,
     label: "React component",
-    prompt: "Build a reusable React data table component with sorting and pagination",
+   prompt: "Build a runnable React demo showcasing a reusable data table component with sorting and pagination. Include an App component and sample data so the preview renders immediately.",
   },
 ];
 
