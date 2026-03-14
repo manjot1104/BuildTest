@@ -159,6 +159,16 @@ export async function runAccessibilityTest(
 
     // Phase 2: Test each page
     const { AxePuppeteer } = await import('@axe-core/puppeteer')
+    // Pre-load axe-core source to avoid require.resolve failures in serverless
+    const { readFileSync } = await import('fs')
+    const { resolve, dirname } = await import('path')
+    let axeSource: string | undefined
+    try {
+      const axeCorePath = resolve(dirname(require.resolve('axe-core')), 'axe.min.js')
+      axeSource = readFileSync(axeCorePath, 'utf-8')
+    } catch {
+      // Fallback: let AxePuppeteer try to resolve it itself
+    }
     const pageResults: PageResult[] = []
     const summary: TestSummary = {
       totalPages: 0,
@@ -193,7 +203,7 @@ export async function runAccessibilityTest(
         page.setDefaultNavigationTimeout(15000)
         await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 15000 })
 
-        const results = await new AxePuppeteer(page).withTags(tags).analyze()
+        const results = await new AxePuppeteer(page, axeSource).withTags(tags).analyze()
         const title = await page.title()
 
         const violations: AxeViolation[] = results.violations.map((v) => ({
