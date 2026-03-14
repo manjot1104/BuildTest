@@ -1324,7 +1324,7 @@ const SUGGESTIONS = [
   {
     icon: Sparkles,
     label: "React component",
-   prompt: "Build a runnable React demo showcasing a reusable data table component with sorting and pagination. Include an App component and sample data so the preview renders immediately.",
+    prompt: "Build a runnable React demo showcasing a reusable data table component with sorting and pagination. Include an App component and sample data so the preview renders immediately.",
   },
 ];
 
