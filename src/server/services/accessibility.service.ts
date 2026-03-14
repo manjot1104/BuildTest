@@ -1,4 +1,5 @@
 import { type Browser, type Page } from 'puppeteer'
+import { launchBrowser } from '@/lib/browser'
 import type {
   AccessibilityTestConfig,
   SSEEvent,
@@ -146,19 +147,7 @@ export async function runAccessibilityTest(
   let browser: Browser | null = null
 
   try {
-    const pptr = await import('puppeteer')
-
-    browser = await pptr.default.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      timeout: 30000,
-    })
+    browser = await launchBrowser()
 
     // Phase 1: Crawl
     onEvent({ type: 'crawl:start', url: config.url, timestamp: new Date().toISOString() })

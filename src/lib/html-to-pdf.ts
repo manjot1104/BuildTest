@@ -35,25 +35,8 @@ export async function generatePDFFromHtml(
   htmlContent: string,
 ): Promise<Buffer | null> {
   try {
-    const puppeteer = await import('puppeteer')
-
-    // Try to find Chrome executable automatically on Windows
-    const chromePath = process.env.PUPPETEER_EXECUTABLE_PATH || findChromeExecutable()
-
-    // Launch Puppeteer with enhanced configuration for Windows and production environments
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-      ],
-      // Try to use system Chrome if available, otherwise use bundled Chromium
-      executablePath: chromePath,
-      timeout: 30000, // 30 second timeout
-    })
+    const { launchBrowser } = await import('@/lib/browser')
+    const browser = await launchBrowser()
 
     const page = await browser.newPage()
     

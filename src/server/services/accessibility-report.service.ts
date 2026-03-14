@@ -218,18 +218,8 @@ function generateHtmlReport(data: ReportData): string {
 export async function generateAccessibilityReport(data: ReportData): Promise<string> {
   const html = generateHtmlReport(data)
 
-  const puppeteer = await import('puppeteer')
-  const browser = await puppeteer.default.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    timeout: 30000,
-  })
+  const { launchBrowser } = await import('@/lib/browser')
+  const browser = await launchBrowser()
 
   try {
     const page = await browser.newPage()
