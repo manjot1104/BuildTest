@@ -223,7 +223,8 @@ export async function generateAccessibilityReport(data: ReportData): Promise<str
 
   try {
     const page = await browser.newPage()
-    await page.setContent(html, { waitUntil: 'networkidle0' })
+    // Use domcontentloaded — report HTML is self-contained, no external resources to wait for
+    await page.setContent(html, { waitUntil: 'domcontentloaded' })
 
     const pdfBuffer = await page.pdf({
       format: 'A4',

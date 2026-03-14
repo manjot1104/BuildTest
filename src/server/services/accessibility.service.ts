@@ -30,12 +30,15 @@ function isPrivateUrl(hostname: string): boolean {
   return PRIVATE_IP_PATTERNS.some((p) => p.test(hostname))
 }
 
+/** Normalize URL: strip hash, strip trailing slash, always produce canonical form */
 function normalizeUrl(raw: string, base: string): string | null {
   try {
     const url = new URL(raw, base)
     url.hash = ''
+    url.search = '' // strip query params to avoid duplicates like ?ref=...
+    // Always strip trailing slash for dedup (including root "/")
     let normalized = url.href
-    if (normalized.endsWith('/') && url.pathname !== '/') {
+    if (normalized.endsWith('/')) {
       normalized = normalized.slice(0, -1)
     }
     return normalized
@@ -62,8 +65,9 @@ async function crawlPages(
   browser: Browser,
   onEvent: (event: SSEEvent) => void,
 ): Promise<string[]> {
+  const normalizedSeed = normalizeUrl(seedUrl, seedUrl)!
   const visited = new Set<string>()
-  const queue: Array<{ url: string; depth: number }> = [{ url: seedUrl, depth: 0 }]
+  const queue: Array<{ url: string; depth: number }> = [{ url: normalizedSeed, depth: 0 }]
   const discovered: string[] = []
   const seedOrigin = new URL(seedUrl).origin
 
@@ -200,8 +204,12 @@ export async function runAccessibilityTest(
       let page: Page | null = null
       try {
         page = await browser.newPage()
-        page.setDefaultNavigationTimeout(15000)
-        await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 15000 })
+        page.setDefaultNavigationTimeout(30000)
+
+        // Use domcontentloaded first, then wait for idle — more resilient than networkidle2
+        await page.goto(pageUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
+        // Give JS frameworks time to hydrate / render
+        await new Promise((r) => setTimeout(r, 2000))
 
         const results = await new AxePuppeteer(page, axeSource).withTags(tags).analyze()
         const title = await page.title()
