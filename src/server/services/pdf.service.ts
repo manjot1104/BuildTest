@@ -82,10 +82,21 @@ export async function generatePDFFromLatexPuppeteer({
     const latex = new LaTeXJS();
     const html = latex.parseAndGenerateHTML(latexContent);
 
-    // Launch Puppeteer
+    // Launch Puppeteer with enhanced configuration
     const browser = await puppeteer.default.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      ignoreHTTPSErrors: true,
+      timeout: 30000,
     });
 
     const page = await browser.newPage();
