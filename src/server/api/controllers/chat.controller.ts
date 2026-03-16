@@ -197,7 +197,7 @@ export async function createChatHandler({
   try {
     const session = await getSession()
     sessionUserId = session?.user?.id
-    const { message, chatId, attachments } = body
+  const { message, chatId, attachments, envVarNames = [] } = body
 
     if (!message) {
       return { error: 'Message is required' }
@@ -265,7 +265,7 @@ export async function createChatHandler({
         // Continue existing chat (non-streaming)
        chatResult = await v0.chats.sendMessage({
   chatId,
-  message: enhanceFollowUpPrompt(message),
+message: enhanceFollowUpPrompt(message, envVarNames),
   ...(attachments && attachments.length > 0 && { attachments }),
 })
       } catch (error) {
@@ -279,7 +279,7 @@ export async function createChatHandler({
         ) {
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
-            message: enhanceFirstPrompt(message),
+           message: enhanceFirstPrompt(message, envVarNames),
             responseMode: 'sync',
             ...(attachments && attachments.length > 0 && { attachments }),
           })
@@ -292,7 +292,7 @@ export async function createChatHandler({
     } else {
       // Create new chat with enhanced first prompt (non-streaming)
       chatResult = await v0.chats.create({
-        message: enhanceFirstPrompt(message),
+     message: enhanceFirstPrompt(message, envVarNames),
         responseMode: 'sync',
         ...(attachments && attachments.length > 0 && { attachments }),
       })

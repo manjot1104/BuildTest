@@ -56,6 +56,7 @@ import {
   toggleStarChat,
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
+
 import {
   getGithubStatusHandler,
   pushToGithubHandler,
@@ -109,6 +110,7 @@ interface ChatRequestBody {
   chatId?: string
   streaming?: boolean
   attachments?: ChatAttachment[]
+  envVarNames?: string[] 
 }
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
@@ -131,7 +133,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   .post(
     '/chat',
     async ({ body, request, set }) => {
-      const { message, chatId, streaming, attachments } = body as ChatRequestBody
+     const { message, chatId, streaming, attachments, envVarNames = [] } = body as ChatRequestBody
 
       const v0 = await getV0Client()
 
@@ -231,14 +233,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           if (chatId) {
             try {
               // Continue existing chat with streaming
-             stream = (await v0.chats.sendMessage({
+          stream = (await v0.chats.sendMessage({
   chatId,
-  message: enhanceFollowUpPrompt(message),
+  message: enhanceFollowUpPrompt(message, envVarNames),
   responseMode: 'experimental_stream',
   ...(attachments && attachments.length > 0 && { attachments }),
 })) as ReadableStream<Uint8Array>
             } catch (error) {
-              // If chat doesn't exist (404), create a new chat instead
+              // If cha t doesn't exist (404), create a new chat instead
               const errorMessage =
                 error instanceof Error ? error.message : String(error)
               if (
@@ -248,7 +250,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               ) {
                 // Chat not found on v0, create new chat instead
                 stream = (await v0.chats.create({
-                  message: enhanceFirstPrompt(message),
+                  message: enhanceFirstPrompt(message, envVarNames),
                   responseMode: 'experimental_stream',
                   ...(attachments && attachments.length > 0 && { attachments }),
                 })) as ReadableStream<Uint8Array>
@@ -260,7 +262,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           } else {
             // Create new chat with streaming (enhanced first prompt)
             stream = (await v0.chats.create({
-              message: enhanceFirstPrompt(message),
+             message: enhanceFirstPrompt(message, envVarNames),
               responseMode: 'experimental_stream',
               ...(attachments && attachments.length > 0 && { attachments }),
             })) as ReadableStream<Uint8Array>

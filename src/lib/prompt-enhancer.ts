@@ -49,12 +49,14 @@ In globals.css NEVER use:
 Instead define CSS variables directly inside :root {}.
 `
 
-export function enhanceFirstPrompt(userMessage: string): string {
-  return `${FIRST_PROMPT_SYSTEM}\n\n${SYSTEM_PROMPT_MARKER}${userMessage}`
+export function enhanceFirstPrompt(userMessage: string, envVarNames: string[] = []): string {
+  const envSection = buildEnvSection(envVarNames)
+  return `${FIRST_PROMPT_SYSTEM}${envSection}\n\n${SYSTEM_PROMPT_MARKER}${userMessage}`
 }
 
-export function enhanceFollowUpPrompt(userMessage: string): string {
-  return `${FOLLOWUP_PROMPT_SYSTEM}\n\n${FOLLOWUP_PROMPT_MARKER}${userMessage}`
+export function enhanceFollowUpPrompt(userMessage: string, envVarNames: string[] = []): string {
+  const envSection = buildEnvSection(envVarNames)
+  return `${FOLLOWUP_PROMPT_SYSTEM}${envSection}\n\n${FOLLOWUP_PROMPT_MARKER}${userMessage}`
 }
 
 export function stripSystemPrompt(message: string): string {
@@ -71,4 +73,9 @@ export function stripSystemPrompt(message: string): string {
     return message.slice(legacyIdx + legacyMarker.length)
   }
   return message
+}
+function buildEnvSection(envVarNames: string[]): string {
+  if (envVarNames.length === 0) return ''
+  const list = envVarNames.map((name) => `  - ${name}`).join('\n')
+  return `\n## Available environment variables\n\nThe user has configured the following env variables. Use these via process.env.VARIABLE_NAME:\n${list}\n`
 }

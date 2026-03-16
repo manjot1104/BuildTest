@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useChatDetails } from './use-chat-api'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
 import { stripSystemPrompt } from '@/lib/prompt-enhancer'
-
+import { useEnvVariables } from '@/hooks/use-env-variables'
 interface Chat {
   id: string
   demo?: string
@@ -34,7 +34,7 @@ export function useChat(chatId?: string) {
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([])
   const [currentChat, setCurrentChat] = useState<Chat | null>(null)
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false)
-
+const { getVariableNames } = useEnvVariables()
   // Use Tanstack Query to fetch chat details
   const {
     data: chatData,
@@ -155,6 +155,7 @@ export function useChat(chatId?: string) {
           chatId: chatId,
           streaming: true,
           ...(attachments && attachments.length > 0 && { attachments }),
+          envVarNames: getVariableNames(),
         }),
       })
 
