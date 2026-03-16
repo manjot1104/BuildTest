@@ -454,12 +454,22 @@ STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
       - Relevance: Focus on information relevant to the role or industry
       - ATS-friendly: Use standard terminology and keywords naturally
 
+STEP 4.5: REQUIRED SECTIONS (MANDATORY FOR ALL OUTPUTS):
+   - The resume MUST include these sections when the user provided data:
+     - Skills
+     - Experience
+     - Education
+     - Projects
+   - If the selected template's "MANDATORY STRUCTURE" is missing any of these sections, you MUST add the missing section(s)
+     using the SAME visual style (headings/dividers/typography) and the SAME layout method (minipage vs multicols).
+   - Do NOT invent fake content. Use only the user's data fields. If a field is empty, omit that section.
+
 STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change packages (\\usepackage commands)
    ❌ DO NOT change layout (minipage, center, multicol, etc.)
    ❌ DO NOT change colors or styling
    ❌ DO NOT change section order
-   ❌ DO NOT add or remove sections
+   ✅ You MAY add ONLY missing required sections (Skills/Experience/Education/Projects) if the template omitted them; otherwise do not add/remove sections
    ❌ DO NOT modify LaTeX structure
    ❌ DO NOT add skill categories - skills must be simple bullet points only
    ❌ DO NOT group or categorize skills - just list them as items
@@ -1015,12 +1025,22 @@ STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
       - Relevance: Focus on information relevant to the role or industry
       - ATS-friendly: Use standard terminology and keywords naturally
 
+STEP 4.5: REQUIRED SECTIONS (MANDATORY FOR ALL OUTPUTS):
+   - The resume MUST include these sections when the user provided data:
+     - Skills
+     - Experience
+     - Education
+     - Projects
+   - If the selected template's "MANDATORY STRUCTURE" is missing any of these sections, you MUST add the missing section(s)
+     using the SAME visual style (headings/dividers/typography) and the SAME layout method (flex vs grid, etc.).
+   - Do NOT invent fake content. Use only the user's data fields. If a field is empty, omit that section.
+
 STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change CSS styles or classes
    ❌ DO NOT change layout (flex, grid, center, etc.)
    ❌ DO NOT change colors or styling values
    ❌ DO NOT change section order
-   ❌ DO NOT add or remove sections
+   ✅ You MAY add ONLY missing required sections (Skills/Experience/Education/Projects) if the template omitted them; otherwise do not add/remove sections
    ❌ DO NOT modify HTML structure or CSS
    ❌ DO NOT add skill categories - skills must be simple bullet points only
    ❌ DO NOT group or categorize skills - just list them as items
