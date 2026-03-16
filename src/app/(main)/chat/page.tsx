@@ -458,27 +458,111 @@ if (!chatMode) {
     const suggestions = [
         {
             label: 'Landing Page',
-            text: 'Design a modern SaaS landing page with strong visual hierarchy: a bold hero section with headline, supporting subtext, and primary call-to-action; feature sections arranged in clean content grids; tiered pricing cards with visual emphasis on the recommended plan; testimonial carousels for social proof; and a conversion-focused footer. Use a 12-column grid, generous whitespace, soft gradients, rounded surfaces, subtle shadows, and smooth hover and scroll animations. Ensure mobile-first responsiveness, accessible contrast ratios, and clear CTA affordances.',
+         text: `
+Create a modern SaaS landing page.
+
+Sections:
+- Hero section with headline, subtext and primary CTA
+- Product screenshot or illustration
+- Features grid (3–6 cards with icons)
+- Pricing section with highlighted recommended plan
+- Testimonials section
+- Conversion-focused footer with links and CTA
+
+Design Requirements:
+- Clean modern UI
+- Generous whitespace
+- Smooth hover and scroll animations
+- Mobile-first responsive layout
+`, 
             icon: Layout,
         },
         {
             label: 'Task Management',
-            text: 'Build a productivity-focused task management application using a Kanban-style layout with draggable task cards, status columns, and a collapsible sidebar for projects and filters. Include inline editing, due-date indicators, priority color cues, and completion feedback animations. Define clear hover, active, drag, empty, and loading states, support keyboard navigation, and reduce cognitive load through consistent spacing and grouping.',
+           text: `
+Build a task management web application with a Kanban-style interface.
+
+Features:
+- Sidebar with projects and filters
+- Columns: Todo, In Progress, Done
+- Draggable task cards between columns
+- Task details with title, description and due date
+- Ability to add, edit and delete tasks
+
+UI Requirements:
+- Clean dashboard layout
+- Card based design
+- Responsive interface
+`,
             icon: CheckSquare,
         },
         {
             label: 'Dashboard',
-            text: 'Create a structured analytics dashboard featuring KPI summary cards, interactive charts, and persistent filter controls. Apply strong visual hierarchy to guide attention, consistent color semantics for data interpretation, and contextual tooltips for clarity. Use a dark UI theme with high contrast, subtle dividers, loading skeletons, and smooth transitions for real-time updates without overwhelming the user.',
+        text: `
+Create an analytics dashboard.
+
+Layout:
+- Left sidebar navigation
+- Top header with search and profile
+
+Main Content:
+- KPI stats cards (Users, Revenue, Growth)
+- Line chart for trends
+- Bar chart for category performance
+- Table for recent activity
+
+Design:
+- Dark modern UI
+- Clear visual hierarchy
+- Responsive layout
+`,
             icon: BarChart3,
         },
         {
             label: 'Blog',
-            text: 'Develop a content-first blog platform with a typography-driven layout optimized for reading comfort. Include markdown-based authoring, category and tag filtering, sticky table of contents for long-form articles, and reading-progress indicators. Focus on accessibility, readable font scales, rhythmic spacing, and distraction-free article pages.',
+        text: `
+Create a modern blog platform.
+
+Pages:
+- Homepage with article cards
+- Article detail page
+- Author profile page
+
+Features:
+- Category and tag filtering
+- Search functionality
+- Reading progress indicator
+- Pagination for posts
+
+Design:
+- Typography-focused layout
+- Clean reading experience
+- Responsive design
+`,
             icon: FileText,
         },
         {
             label: 'Shop',
-            text: 'Design a high-conversion e-commerce experience with scannable product cards, clear pricing, ratings, and prominent call-to-action placement. Build detailed product pages with image galleries, variant selectors, reviews, and trust signals. Streamline cart and checkout flows using step indicators, inline validation, minimal form friction, responsive layouts, and subtle feedback animations.',
+          text: `
+Create an e-commerce store.
+
+Pages:
+- Product listing page
+- Product detail page
+- Shopping cart
+- Checkout page
+
+Features:
+- Product cards with image, price and rating
+- Add to cart functionality
+- Product variants and quantity selector
+- Order summary and checkout flow
+
+Design:
+- Clean product grid
+- Mobile responsive layout
+- High-conversion UI patterns
+`,
             icon: ShoppingCart,
         },
     ]
