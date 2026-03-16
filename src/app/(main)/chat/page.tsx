@@ -1,7 +1,9 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { ModeSelection } from "./components/mode-selection"
-
+import { KeyRound } from 'lucide-react'
+import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
+import { useEnvVariables } from '@/hooks/use-env-variables'
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from "next/navigation"
 import {
@@ -88,7 +90,8 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
 
-
+const [envPanelOpen, setEnvPanelOpen] = useState(false)
+const { variables } = useEnvVariables()
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
     const [isDragOver, setIsDragOver] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -304,6 +307,7 @@ const handleChatIdChange = (chatId: string | null) => {
     if (chatMode === "AI_CHAT") {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                
                 <SubscriptionModal
                     open={showSubscriptionModal}
                     onOpenChange={setShowSubscriptionModal}
@@ -573,7 +577,9 @@ Design:
 
     return (
        <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+         <EnvVariablesPanel open={envPanelOpen} onOpenChange={setEnvPanelOpen} />
       <div className={cn("bg-background flex flex-col", showChatInterface ? "h-[calc(100vh-48px)] overflow-hidden" : "min-h-[calc(100vh-48px)]")}>
+           
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -689,6 +695,19 @@ Design:
                                         onImageSelect={handleImageFiles}
                                         disabled={isLoading}
                                     />
+                                    <button
+        type="button"
+        onClick={() => setEnvPanelOpen(true)}
+        title="Environment variables"
+        className="relative flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+        <KeyRound className="size-4" />
+        {variables.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+                {variables.length}
+            </span>
+        )}
+    </button>
                                 </PromptInputTools>
                                 <PromptInputTools>
                                     <PromptInputMicButton
