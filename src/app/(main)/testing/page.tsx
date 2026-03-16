@@ -1,13 +1,18 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useUserCredits } from "@/hooks/use-user-credits";
 import {
   Globe, Play, Loader2, CheckCircle2, XCircle, AlertTriangle,
   ChevronDown, ChevronUp, RotateCcw, ExternalLink, Shield, Zap,
   Eye, Navigation, FileText, Lock, Bug, ArrowRight, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
-  Code2, X, Network, StopCircle, ImageOff,
+  Code2, X, StopCircle, ImageOff, Minus, Plus, Pencil, Trash2,
+  ListChecks,
+  Settings2, // [EXISTING] icon for the "Advanced" toggle button
+  Search,    // [ADDED] used in CrawlProgressPanel "URLs Found" tab label
+  FileSearch, // [ADDED] used in CrawlProgressPanel "Pages Extracted" tab label
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,17 +21,23 @@ import { toast } from "sonner";
 import {
   useStartTestRun, useTestRunStatus, useTestReport,
   useTestHistory, useTestRunSSE, useCancelTestRun, useExportReportPdf,
+  useReviewTestCases, useCreateTestCase, useUpdateTestCase,
+  useDeleteTestCase, useConfirmAndExecute,
   type Bug as BugType, type TestCase, type PerformanceGauge,
-  type TrendDataPoint, type SSEState, type TestHistoryItem, type LiveTestCase,
+  type TrendDataPoint, type TestHistoryItem,
+  type LiveTestCase, type ReviewTestCase,
+  // [ADDED] crawl-progress types for the new live panel
+  type CrawlFoundUrl, type CrawlExtractedPage, type CrawlFailedPage,
 } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PIPELINE_STEPS = [
-  { key: "crawling",   label: "Crawling",   desc: "Mapping all pages and elements",   icon: Globe     },
-  { key: "generating", label: "Generating", desc: "AI creating test cases",            icon: Sparkles  },
-  { key: "executing",  label: "Executing",  desc: "Running parallel browser sessions", icon: Zap       },
-  { key: "reporting",  label: "Reporting",  desc: "Compiling results and AI summary",  icon: BarChart3 },
+  { key: "crawling",        label: "Crawling",   desc: "Mapping all pages and elements",      icon: Globe        },
+  { key: "generating",      label: "Generating", desc: "AI creating test cases",              icon: Sparkles    },
+  { key: "awaiting_review", label: "Review",     desc: "Confirm or edit test cases",          icon: ListChecks  },
+  { key: "executing",       label: "Executing",  desc: "Running parallel browser sessions",   icon: Zap         },
+  { key: "reporting",       label: "Reporting",  desc: "Compiling results and AI summary",    icon: BarChart3   },
 ];
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -49,17 +60,53 @@ const PRIORITY_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Pending"  },
-  running:  { icon: Loader2,       color: "text-blue-400",          bg: "bg-blue-500/10 border-blue-500/20",               label: "Running"  },
-  passed:   { icon: CheckCircle2,  color: "text-emerald-400",       bg: "bg-emerald-500/10 border-emerald-500/20",         label: "Passed"   },
-  failed:   { icon: XCircle,       color: "text-red-400",           bg: "bg-red-500/10 border-red-500/20",                 label: "Failed"   },
-  flaky:    { icon: AlertTriangle, color: "text-yellow-400",        bg: "bg-yellow-500/10 border-yellow-500/20",           label: "Flaky"    },
-  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Skipped"  },
+  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                 label: "Pending"  },
+  running:  { icon: Loader2,       color: "text-blue-400",          bg: "bg-blue-500/10 border-blue-500/20",         label: "Running"  },
+  passed:   { icon: CheckCircle2,  color: "text-emerald-400",       bg: "bg-emerald-500/10 border-emerald-500/20",   label: "Passed"   },
+  failed:   { icon: XCircle,       color: "text-red-400",           bg: "bg-red-500/10 border-red-500/20",           label: "Failed"   },
+  flaky:    { icon: AlertTriangle, color: "text-yellow-400",        bg: "bg-yellow-500/10 border-yellow-500/20",     label: "Flaky"    },
+  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                 label: "Skipped"  },
 };
 
 const PIPELINE_ORDER: Record<string, number> = {
-  crawling: 0, generating: 1, executing: 2, reporting: 3, complete: 4,
+  crawling: 0, generating: 1, awaiting_review: 2, executing: 3, reporting: 4, complete: 5,
 };
+
+const CATEGORIES = ["navigation", "forms", "visual", "performance", "a11y", "security"];
+
+// ─── Plan-aware budget limits ─────────────────────────────────────────────────
+// Plan IDs match subscriptions.plan_id in schema.ts: "starter" | "pro" | "enterprise"
+// No subscription row (unauthenticated or free) → null → FREE_LIMITS.
+interface PlanLimits { maxPages: number; maxTests: number; label: string }
+
+const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, label: "Free" };
+
+const PLAN_LIMITS: Record<string, PlanLimits> = {
+  starter:    { maxPages:  5, maxTests: 10, label: "Starter"    },
+  pro:        { maxPages: 10, maxTests: 20, label: "Pro"         },
+  enterprise: { maxPages: 20, maxTests: 30, label: "Enterprise"  },
+};
+
+function getPlanLimits(planId: string | null | undefined): PlanLimits {
+  if (!planId) return FREE_LIMITS;
+  return PLAN_LIMITS[planId.toLowerCase()] ?? FREE_LIMITS;
+}
+
+// [ADDED] Concurrency — plan-agnostic, same hard caps as tinyfish.service.ts.
+const CONCURRENCY_MIN = 1;
+const CONCURRENCY_MAX = 20;
+const CONCURRENCY_DEFAULT = 5;
+
+// [ADDED] Timeout limits in milliseconds — must match HARD_CAPS in tinyfish.service.ts.
+// Step is 30 s to keep the stepper usable without too many clicks.
+const TIMEOUT_MIN_MS   = 30_000;
+const TIMEOUT_MAX_MS   = 600_000;
+const TIMEOUT_STEP_MS  = 30_000;
+
+// [ADDED] Default values that mirror the TIMEOUTS constant in tinyfish.service.ts.
+const DEFAULT_DISCOVERY_MS  = 300_000;
+const DEFAULT_EXTRACTION_MS = 300_000;
+const DEFAULT_EXECUTE_MS    = 300_000;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -76,8 +123,318 @@ function statusColor(s: string) {
   return "text-muted-foreground";
 }
 
-// ─── Bug Screenshot ────────────────────────────────────────────────────────────
+// [ADDED] Renders milliseconds as a concise human-readable string.
+// 30000 → "30s", 300000 → "5m", 600000 → "10m"
+function fmtMs(ms: number): string {
+  if (ms < 60_000) return `${ms / 1000}s`;
+  const m = ms / 60_000;
+  return Number.isInteger(m) ? `${m}m` : `${m.toFixed(1)}m`;
+}
 
+// [ADDED] Returns just the pathname from a URL for compact display in the crawl panel.
+// "https://example.com/about/team" → "/about/team"
+// "https://example.com/" → "/"
+function urlPath(url: string): string {
+  try {
+    return new URL(url).pathname || "/";
+  } catch {
+    return url;
+  }
+}
+
+// ─── Budget Stepper ───────────────────────────────────────────────────────────
+
+function BudgetStepper({
+  label, hint, value, min, max, onChange,
+}: {
+  label: string; hint: string; value: number; min: number; max: number; onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <Minus className="h-3 w-3" />
+        </button>
+        <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
+          <span className="text-sm font-bold tabular-nums text-foreground">{value}</span>
+        </div>
+        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// [ADDED] TimeoutStepper — same visual as BudgetStepper but increments by
+// TIMEOUT_STEP_MS (30 s) and displays a human-readable duration label.
+function TimeoutStepper({
+  label, hint, value, onChange,
+}: {
+  label: string; hint: string; value: number; onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button"
+          onClick={() => onChange(Math.max(TIMEOUT_MIN_MS, value - TIMEOUT_STEP_MS))}
+          disabled={value <= TIMEOUT_MIN_MS}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <Minus className="h-3 w-3" />
+        </button>
+        <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
+          <span className="text-sm font-bold tabular-nums text-foreground">{fmtMs(value)}</span>
+        </div>
+        <button type="button"
+          onClick={() => onChange(Math.min(TIMEOUT_MAX_MS, value + TIMEOUT_STEP_MS))}
+          disabled={value >= TIMEOUT_MAX_MS}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── [ADDED] CrawlProgressPanel ───────────────────────────────────────────────
+// Shows real-time crawl activity during the "crawling" pipeline stage.
+//
+// WHY: Previously users stared at a blank spinner for 30–120 s during crawling.
+// Now they see exactly what stage the crawler is in, which URLs were discovered,
+// and which pages were successfully extracted — making the wait feel productive.
+//
+// Structure:
+//   • Header  — current sub-stage label + live URL / page counters
+//   • Tabs    — "URLs Found" | "Pages Extracted" (with failed sub-list)
+//   • Body    — scrollable list capped at max-h-52 so it never crowds the pipeline steps
+//
+// The component renders nothing until the first crawl_progress SSE event arrives
+// (stage === null && no data), avoiding layout shift on initial mount.
+function CrawlProgressPanel({
+  stage,
+  stageDescription,
+  foundUrls,
+  extractedPages,
+  failedPages,
+}: {
+  stage: string | null;
+  stageDescription: string | null;
+  foundUrls: CrawlFoundUrl[];
+  extractedPages: CrawlExtractedPage[];
+  failedPages: CrawlFailedPage[];
+}) {
+  // [ADDED] Tab state — default to "urls" because URLs appear first chronologically.
+  const [activeTab, setActiveTab] = useState<"urls" | "pages">("urls");
+
+  // [ADDED] Auto-switch to the pages tab once extraction starts so the user
+  // sees meaningful data without having to click.
+  useEffect(() => {
+    if (extractedPages.length > 0) setActiveTab("pages");
+  }, [extractedPages.length]);
+
+  // [ADDED] Source badge colour coding:
+  //   discovery (TinyFish) → emerald  — most interesting, TinyFish found it
+  //   sitemap               → blue    — found via robots.txt / sitemap.xml
+  //   html                  → muted   — found via static HTML parse (free)
+  const sourceBadge = (source: CrawlFoundUrl["source"]) => {
+    if (source === "discovery") return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+    if (source === "sitemap")   return "text-blue-400 bg-blue-500/10 border-blue-500/20";
+    return "text-muted-foreground bg-muted/50 border-border";
+  };
+
+  const hasData = foundUrls.length > 0 || extractedPages.length > 0 || failedPages.length > 0;
+
+  // Don't render until we have something to show — avoids layout shift.
+  if (!stage && !hasData) return null;
+
+  return (
+    <div className="w-full max-w-xl mx-auto rounded-xl border border-border bg-card overflow-hidden">
+
+      {/* ── Header: current crawl sub-stage + live counters ── */}
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/20">
+        <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground truncate">
+            {stage ?? "Starting crawl…"}
+          </p>
+          {stageDescription && (
+            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
+              {stageDescription}
+            </p>
+          )}
+        </div>
+        {/* [ADDED] Live counters — always visible regardless of active tab */}
+        <div className="flex items-center gap-2 shrink-0 text-xs font-mono">
+          <span className="text-muted-foreground/60">
+            <span className="text-foreground font-semibold">{foundUrls.length}</span> URLs
+          </span>
+          <span className="text-muted-foreground/30">·</span>
+          <span className="text-muted-foreground/60">
+            <span className="text-emerald-400 font-semibold">{extractedPages.length}</span> pages
+          </span>
+          {failedPages.length > 0 && (
+            <>
+              <span className="text-muted-foreground/30">·</span>
+              <span className="text-red-400 font-semibold">{failedPages.length} failed</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      {hasData && (
+        <>
+          <div className="flex border-b border-border text-xs font-mono">
+            <button
+              onClick={() => setActiveTab("urls")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                activeTab === "urls"
+                  ? "text-foreground border-b-2 border-emerald-500 -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Search className="h-3 w-3" />
+              URLs Found
+              {foundUrls.length > 0 && (
+                <span className="text-muted-foreground/50">({foundUrls.length})</span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("pages")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                activeTab === "pages"
+                  ? "text-foreground border-b-2 border-emerald-500 -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileSearch className="h-3 w-3" />
+              Pages Extracted
+              {extractedPages.length > 0 && (
+                <span className="text-muted-foreground/50">({extractedPages.length})</span>
+              )}
+            </button>
+          </div>
+
+          {/* ── Tab body ── */}
+          <div className="max-h-52 overflow-y-auto">
+
+            {/* URLs tab */}
+            {activeTab === "urls" && (
+              <div className="p-2 space-y-0.5">
+                {foundUrls.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/40 font-mono text-center py-5">
+                    Waiting for URL discovery…
+                  </p>
+                ) : (
+                  foundUrls.map((u, i) => (
+                    <div key={`${u.url}-${i}`}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors group">
+                      {/* [ADDED] Coloured dot mirrors the source badge colour */}
+                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                        u.source === "discovery" ? "bg-emerald-500"
+                        : u.source === "sitemap" ? "bg-blue-500"
+                        : "bg-muted-foreground/30"
+                      }`} />
+                      <span className="text-xs font-mono text-muted-foreground flex-1 truncate group-hover:text-foreground transition-colors">
+                        {urlPath(u.url)}
+                      </span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border shrink-0 ${sourceBadge(u.source)}`}>
+                        {u.source}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Pages tab */}
+            {activeTab === "pages" && (
+              <div className="p-2 space-y-0.5">
+                {extractedPages.length === 0 && failedPages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/40 font-mono text-center py-5">
+                    Extraction in progress…
+                  </p>
+                ) : (
+                  <>
+                    {/* Successful extractions */}
+                    {extractedPages.map((p, i) => (
+                      <div key={`${p.url}-${i}`}
+                        className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-muted/40 transition-colors">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">
+                            {p.title || urlPath(p.url)}
+                          </p>
+                          <p className="text-[10px] font-mono text-muted-foreground/50 truncate">
+                            {urlPath(p.url)}
+                          </p>
+                          {/* [ADDED] Per-page stats help users understand how much content was found */}
+                          <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground/40">
+                            <span>{p.elementsCount} elements</span>
+                            {p.formsCount > 0 && <span>· {p.formsCount} forms</span>}
+                            <span>· {p.linksCount} links</span>
+                          </div>
+                        </div>
+                        {/* [ADDED] "N / total" counter so progress is always legible */}
+                        <span className="text-[10px] font-mono text-muted-foreground/30 shrink-0 mt-0.5">
+                          {p.index}/{p.total}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Failed extractions — rendered below successes so they don't dominate */}
+                    {failedPages.length > 0 && (
+                      <>
+                        <div className="px-2 pt-2 pb-0.5">
+                          <p className="text-[10px] font-mono text-red-400/50 uppercase tracking-wider">
+                            Failed ({failedPages.length})
+                          </p>
+                        </div>
+                        {failedPages.map((p, i) => (
+                          <div key={`${p.url}-fail-${i}`}
+                            className="flex items-start gap-2 px-2 py-1.5 rounded-lg">
+                            <XCircle className="h-3.5 w-3.5 text-red-400/60 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-mono text-muted-foreground/50 truncate">
+                                {urlPath(p.url)}
+                              </p>
+                              <p className="text-[10px] font-mono text-red-400/50 truncate">
+                                {p.reason}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* [ADDED] Shown only before the first event — brief transient state */}
+      {!hasData && (
+        <div className="flex items-center justify-center py-5">
+          <p className="text-xs text-muted-foreground/40 font-mono">Initialising crawler…</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Bug Screenshot ────────────────────────────────────────────────────────────
 function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -112,12 +469,8 @@ function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: str
         onError={() => setFailed(true)}
       />
       {loaded && (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-background/80 text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg backdrop-blur-sm"
-        >
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-background/80 text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg backdrop-blur-sm">
           <ExternalLink className="h-3 w-3" />
           Full size
         </a>
@@ -174,43 +527,26 @@ function CategoryDonut({ passed, total, category, onClick, active }: { passed: n
 
 // ─── Perf Gauge Row ───────────────────────────────────────────────────────────
 const PERF_MAX: Record<string, number> = {
-  LCP:  6000,
-  TTFB: 3000,
-  DCL:  5000,
-  Load: 6000,
-  CLS:  0.5,
+  LCP: 6000, TTFB: 3000, DCL: 5000, Load: 6000, CLS: 0.5,
 };
 
-function PerfGaugeRow({
-  label, value, unit, status,
-}: {
-  label: string;
-  value: number | null;
-  unit: string;
-  status: string;
-}) {
+function PerfGaugeRow({ label, value, unit, status }: { label: string; value: number | null; unit: string; status: string; }) {
   const max = PERF_MAX[label] ?? 1000;
   const pct = value === null ? 0 : Math.min(100, (value / max) * 100);
-
   const display =
     value === null ? "—"
     : unit === "ms" ? `${Math.round(value).toLocaleString()}ms`
     : value.toFixed(3);
-
   return (
     <div className="flex items-center gap-3">
       <div className="w-12 text-xs font-mono text-muted-foreground shrink-0">{label}</div>
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         {value !== null && (
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
-            style={{ width: `${pct}%`, opacity: 0.85 }}
-          />
+          <div className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
+            style={{ width: `${pct}%`, opacity: 0.85 }} />
         )}
       </div>
-      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>
-        {display}
-      </div>
+      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>{display}</div>
       <div className={`h-2 w-2 rounded-full shrink-0 ${statusBg(status)}`} />
     </div>
   );
@@ -384,6 +720,307 @@ function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { status:
   );
 }
 
+// ─── Review Test Case Edit Form ───────────────────────────────────────────────
+interface EditFormState {
+  title: string;
+  category: string;
+  priority: "P0" | "P1" | "P2";
+  steps: string[];
+  expectedResult: string;
+  description: string;
+}
+
+function ReviewTestCaseForm({
+  initial, onSave, onCancel, isSaving,
+}: {
+  initial: EditFormState;
+  onSave: (data: EditFormState) => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}) {
+  const [form, setForm] = useState<EditFormState>(initial);
+  const setStep = (i: number, val: string) =>
+    setForm((f) => ({ ...f, steps: f.steps.map((s, idx) => (idx === i ? val : s)) }));
+  const addStep = () => setForm((f) => ({ ...f, steps: [...f.steps, ""] }));
+  const removeStep = (i: number) =>
+    setForm((f) => ({ ...f, steps: f.steps.filter((_, idx) => idx !== i) }));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2 space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Title *</label>
+          <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Login form submits correctly" className="h-9 text-sm" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Category *</label>
+          <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Priority</label>
+          <select value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "P0" | "P1" | "P2" }))}
+            className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+            <option value="P0">P0 — Critical</option>
+            <option value="P1">P1 — High</option>
+            <option value="P2">P2 — Normal</option>
+          </select>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Steps *</label>
+          <button type="button" onClick={addStep} className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors">
+            <Plus className="h-3 w-3" /> Add step
+          </button>
+        </div>
+        <div className="space-y-2">
+          {form.steps.map((step, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-xs font-mono text-muted-foreground/50 w-5 shrink-0 text-right">{i + 1}.</span>
+              <Input value={step} onChange={(e) => setStep(i, e.target.value)} placeholder={`Step ${i + 1}`} className="h-8 text-xs flex-1" />
+              <button type="button" onClick={() => removeStep(i)} disabled={form.steps.length <= 1}
+                className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Expected Result *</label>
+        <textarea value={form.expectedResult} onChange={(e) => setForm((f) => ({ ...f, expectedResult: e.target.value }))}
+          placeholder="What should happen when the test passes?" rows={2}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+      </div>
+      <div className="space-y-1.5">
+        <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Description <span className="text-muted-foreground/40">(optional)</span></label>
+        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          placeholder="Additional context about this test case" rows={2}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+      </div>
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="text-muted-foreground h-8 text-xs">Cancel</Button>
+        <Button type="button" size="sm" disabled={isSaving || !form.title.trim() || !form.expectedResult.trim() || form.steps.every((s) => !s.trim())}
+          onClick={() => onSave(form)}
+          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5">
+          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          {isSaving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Review Test Case Card ────────────────────────────────────────────────────
+function ReviewTestCaseCard({
+  tc, testRunId, totalCount,
+}: {
+  tc: ReviewTestCase; testRunId: string; totalCount: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing,  setEditing]  = useState(false);
+
+  const { mutate: updateFn, isPending: isUpdating } = useUpdateTestCase(testRunId);
+  const { mutate: deleteFn, isPending: isDeleting } = useDeleteTestCase(testRunId);
+
+  const Icon       = CATEGORY_ICONS[tc.category ?? ""] ?? FlaskConical;
+  const priorityCfg = PRIORITY_CONFIG[(tc.priority ?? "P2") as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.P2;
+
+  const handleSave = (data: EditFormState) => {
+    updateFn(
+      { caseId: tc.id, title: data.title, category: data.category, priority: data.priority, steps: data.steps.filter((s) => s.trim()), expectedResult: data.expectedResult, description: data.description || undefined },
+      {
+        onSuccess: () => { setEditing(false); toast.success("Test case updated"); },
+        onError: (err) => toast.error(err.message ?? "Failed to update"),
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    if (totalCount <= 1) { toast.error("Can't delete the last test case"); return; }
+    deleteFn(tc.id, {
+      onSuccess: () => toast.info("Test case removed"),
+      onError: (err) => toast.error(err.message ?? "Failed to delete"),
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden transition-all">
+      <div className="flex items-start gap-3 p-4">
+        <FlaskConical className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${priorityCfg.color}`}>{tc.priority ?? "P2"}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              <Icon className="h-3 w-3" />{(tc.category ?? "general").replace("_", " ")}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-foreground">{tc.title ?? "(untitled)"}</p>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => { setEditing(!editing); setExpanded(false); }}
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+            {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          </button>
+          <button onClick={handleDelete} disabled={isDeleting || totalCount <= 1}
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+          {!editing && (
+            <button onClick={() => setExpanded(!expanded)}
+              className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          )}
+        </div>
+      </div>
+      {expanded && !editing && (
+        <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
+          {tc.description && <p className="text-xs text-muted-foreground">{tc.description}</p>}
+          {(tc.steps?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-xs font-mono text-muted-foreground mb-1.5 uppercase tracking-wider">Steps</p>
+              <ol className="space-y-1">{(tc.steps ?? []).map((s, i) => <li key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-muted-foreground/40 font-mono shrink-0">{i + 1}.</span>{s}</li>)}</ol>
+            </div>
+          )}
+          {tc.expected_result && (
+            <div>
+              <p className="text-xs font-mono text-muted-foreground mb-1 uppercase tracking-wider">Expected</p>
+              <p className="text-xs text-muted-foreground">{tc.expected_result}</p>
+            </div>
+          )}
+        </div>
+      )}
+      {editing && (
+        <div className="px-4 pb-4 border-t border-border pt-4">
+          <ReviewTestCaseForm
+            initial={{ title: tc.title ?? "", category: tc.category ?? "navigation", priority: (tc.priority ?? "P2") as "P0" | "P1" | "P2", steps: (tc.steps ?? [""]).length > 0 ? (tc.steps ?? [""]) : [""], expectedResult: tc.expected_result ?? "", description: tc.description ?? "" }}
+            onSave={handleSave}
+            onCancel={() => setEditing(false)}
+            isSaving={isUpdating}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Add Test Case Panel ──────────────────────────────────────────────────────
+function AddTestCasePanel({ testRunId, onClose }: { testRunId: string; onClose: () => void }) {
+  const { mutate: createFn, isPending } = useCreateTestCase(testRunId);
+
+  const handleSave = (data: EditFormState) => {
+    createFn(
+      { title: data.title, category: data.category, priority: data.priority, steps: data.steps.filter((s) => s.trim()), expectedResult: data.expectedResult, description: data.description || undefined },
+      {
+        onSuccess: () => { toast.success("Test case added"); onClose(); },
+        onError: (err) => toast.error(err.message ?? "Failed to add test case"),
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Plus className="h-4 w-4 text-emerald-400" />
+        <p className="text-sm font-medium text-emerald-400">Add Test Case</p>
+      </div>
+      <ReviewTestCaseForm
+        initial={{ title: "", category: "navigation", priority: "P1", steps: [""], expectedResult: "", description: "" }}
+        onSave={handleSave}
+        onCancel={onClose}
+        isSaving={isPending}
+      />
+    </div>
+  );
+}
+
+// ─── Review Phase UI ──────────────────────────────────────────────────────────
+function ReviewPhase({ testRunId, targetUrl, onCancel }: { testRunId: string; targetUrl: string; onCancel: () => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+
+  const { data: cases, isLoading } = useReviewTestCases(testRunId, true);
+  const { mutate: confirmFn, isPending: isConfirming } = useConfirmAndExecute(testRunId);
+  const { mutate: cancelFn, isPending: isCancelling } = useCancelTestRun();
+
+  const handleConfirm = () => {
+    confirmFn(undefined, {
+      onSuccess: () => toast.success("Running tests…"),
+      onError: (err) => toast.error(err.message ?? "Failed to confirm"),
+    });
+  };
+
+  const handleCancel = () => {
+    cancelFn(testRunId, {
+      onSuccess: (data) => { if (data.cancelled) { toast.info("Test run cancelled."); onCancel(); } },
+      onError: (err) => toast.error(err.message ?? "Failed to cancel"),
+    });
+  };
+
+  const count = cases?.length ?? 0;
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5">
+        <div className="flex items-start gap-4">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+            <ListChecks className="h-5 w-5 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Review Generated Test Cases</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">{targetUrl}</p>
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              AI generated <span className="text-foreground font-medium">{count} test case{count !== 1 ? "s" : ""}</span>. Review, edit, delete or add before execution. You need at least one test case to proceed.
+            </p>
+          </div>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(cases ?? []).map((tc) => (
+            <ReviewTestCaseCard key={tc.id} tc={tc} testRunId={testRunId} totalCount={count} />
+          ))}
+          {count === 0 && (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <FlaskConical className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No test cases — add at least one to proceed</p>
+            </div>
+          )}
+        </div>
+      )}
+      {showAdd && <AddTestCasePanel testRunId={testRunId} onClose={() => setShowAdd(false)} />}
+      <div className="flex items-center gap-3 flex-wrap">
+        {!showAdd && (
+          <Button variant="outline" size="sm" onClick={() => setShowAdd(true)} className="gap-2 text-sm border-dashed">
+            <Plus className="h-3.5 w-3.5" /> Add Test Case
+          </Button>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={isCancelling}
+            className="border-red-900/60 text-red-400 hover:bg-red-950/40 hover:border-red-700 gap-2 text-sm">
+            {isCancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StopCircle className="h-3.5 w-3.5" />}
+            Cancel
+          </Button>
+          <Button size="sm" disabled={isConfirming || count === 0} onClick={handleConfirm}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 text-sm min-w-[140px]">
+            {isConfirming
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…</>
+              : <><Zap className="h-3.5 w-3.5" /> Run {count} Test{count !== 1 ? "s" : ""}</>
+            }
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Bug Detail Modal ─────────────────────────────────────────────────────────
 function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => void }) {
   const cfg = SEVERITY_CONFIG[bug.severity] ?? SEVERITY_CONFIG.medium;
@@ -496,14 +1133,8 @@ function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void }) {
       </div>
       {bug.screenshot_url && !thumbFailed && (
         <div className="shrink-0 h-14 w-24 rounded-lg overflow-hidden border border-border bg-muted">
-          <img
-            src={bug.screenshot_url}
-            alt=""
-            crossOrigin="anonymous"
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover object-top"
-            onError={() => setThumbFailed(true)}
-          />
+          <img src={bug.screenshot_url} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer"
+            className="h-full w-full object-cover object-top" onError={() => setThumbFailed(true)} />
         </div>
       )}
       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-foreground transition-colors" />
@@ -579,7 +1210,36 @@ function HistoryPanel({ onSelect, onClose }: { onSelect: (id: string, status: st
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TestingPage() {
+  const { subscription, hasActiveSubscription } = useUserCredits();
+
+  // Derive per-plan limits — re-computed whenever subscription changes.
+  const planLimits = useMemo(
+    () => getPlanLimits(subscription?.plan_id),
+    [subscription?.plan_id],
+  );
+
   const [url, setUrl] = useState("");
+  const [maxPages, setMaxPages] = useState(5);
+  const [maxTests, setMaxTests] = useState(10);
+
+  // [ADDED] Concurrency state — defaults to 5, plan-agnostic.
+  const [concurrency, setConcurrency] = useState(CONCURRENCY_DEFAULT);
+
+  // [ADDED] Timeout state — each mirrors the TIMEOUTS default in tinyfish.service.ts.
+  const [discoveryMs,  setDiscoveryMs]  = useState(DEFAULT_DISCOVERY_MS);
+  const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
+  const [executeMs,    setExecuteMs]    = useState(DEFAULT_EXECUTE_MS);
+
+  // [ADDED] Controls visibility of the Advanced Settings panel.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Clamp stored values whenever planLimits resolves or changes (e.g. after
+  // the subscription query loads, or the user upgrades mid-session).
+  useEffect(() => {
+    setMaxPages((p) => Math.min(p, planLimits.maxPages));
+    setMaxTests((t) => Math.min(Math.max(t, 1), planLimits.maxTests));
+  }, [planLimits]);
+
   const [testRunId, setTestRunId] = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
@@ -596,14 +1256,15 @@ export default function TestingPage() {
   const { data: run } = useTestRunStatus(testRunId);
 
   const initialStatusForSSE = run?.status && ["complete", "failed", "cancelled"].includes(run.status)
-    ? run.status : undefined;
+    ? run.status : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
 
   const { sseState } = useTestRunSSE(testRunId, initialStatusForSSE);
 
-  const isComplete  = sseState.isComplete  || run?.status === "complete";
-  const isFailed    = sseState.pipelineStatus === "failed" || run?.status === "failed";
+  const isComplete = sseState.isComplete  || run?.status === "complete";
+  const isFailed = sseState.pipelineStatus === "failed"   || run?.status === "failed";
   const isCancelled = sseState.isCancelled || run?.status === "cancelled";
-  const isRunning   = !!testRunId && !isComplete && !isFailed && !isCancelled;
+  const isAwaitingReview = sseState.isAwaitingReview || run?.status === "awaiting_review";
+  const isRunning = !!testRunId && !isComplete && !isFailed && !isCancelled && !isAwaitingReview;
 
   const { data: report } = useTestReport(testRunId, isComplete);
 
@@ -613,9 +1274,9 @@ export default function TestingPage() {
   };
 
   const sseStatus = sseState.pipelineStatus;
-  const dbStatus  = run?.status ?? "crawling";
-  const sseOrder  = PIPELINE_ORDER[sseStatus] ?? 0;
-  const dbOrder   = PIPELINE_ORDER[dbStatus]  ?? 0;
+  const dbStatus = run?.status ?? "crawling";
+  const sseOrder = PIPELINE_ORDER[sseStatus] ?? 0;
+  const dbOrder = PIPELINE_ORDER[dbStatus] ?? 0;
   const pipelineStatus = sseOrder >= dbOrder ? sseStatus : dbStatus;
   const percent = sseState.percent > 0 ? sseState.percent : (run?.percent ?? 10);
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.key === pipelineStatus);
@@ -635,12 +1296,50 @@ export default function TestingPage() {
   const liveTestCases = sseState.generatedTestCases;
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
 
+  // [ADDED] Whether the pipeline is currently in the crawling stage.
+  // Used to decide whether to show the CrawlProgressPanel.
+  const isCrawlingPhase = pipelineStatus === "crawling";
+
+  // ── Budget constraint handlers ─────────────────────────────────────────────
+  // Invariant: maxPages >= 1, maxTests >= maxPages, both within plan limits.
+  const handleMaxPagesChange = (next: number) => {
+    const pages = Math.max(1, Math.min(next, planLimits.maxPages));
+    setMaxPages(pages);
+    // If pages would exceed tests, bump tests up to match
+    if (pages > maxTests) setMaxTests(pages);
+  };
+
+  const handleMaxTestsChange = (next: number) => {
+    setMaxTests(Math.max(maxPages, Math.min(next, planLimits.maxTests)));
+  };
+
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL"); return; }
-    startTest({ url: url.trim() }, {
-      onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
-      onError: (err) => toast.error(err.message ?? "Failed to start test run"),
-    });
+
+    // [ADDED] Build the timeouts object, omitting fields that match the default
+    // so the server can apply its own defaults cleanly. Only non-default values
+    // are sent to avoid polluting logs with unnecessary overrides.
+    const timeouts: Record<string, number> = {};
+    if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs  = discoveryMs;
+    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs = extractionMs;
+    if (executeMs    !== DEFAULT_EXECUTE_MS)    timeouts.executeTestBaseMs = executeMs;
+
+    startTest(
+      {
+        url: url.trim(),
+        maxPages,
+        maxTests,
+        // [ADDED] Only send concurrency if it differs from the server default (5).
+        // The server accepts undefined and falls back to DEFAULT_BUDGET.concurrency.
+        ...(concurrency !== CONCURRENCY_DEFAULT && { concurrency }),
+        // [ADDED] Only include timeouts object if at least one override was set.
+        ...(Object.keys(timeouts).length > 0 && { timeouts }),
+      },
+      {
+        onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
+        onError: (err) => toast.error(err.message ?? "Failed to start test run"),
+      },
+    );
   };
 
   const handleCancel = () => {
@@ -657,6 +1356,21 @@ export default function TestingPage() {
     setTcFilter("all"); setActiveTab("tests"); setSelectedBug(null);
   };
 
+  // [ADDED] Resets all advanced settings back to their defaults.
+  const handleResetAdvanced = () => {
+    setConcurrency(CONCURRENCY_DEFAULT);
+    setDiscoveryMs(DEFAULT_DISCOVERY_MS);
+    setExtractionMs(DEFAULT_EXTRACTION_MS);
+    setExecuteMs(DEFAULT_EXECUTE_MS);
+  };
+
+  // [ADDED] True when any advanced setting differs from its default.
+  const hasAdvancedChanges =
+    concurrency  !== CONCURRENCY_DEFAULT   ||
+    discoveryMs  !== DEFAULT_DISCOVERY_MS  ||
+    extractionMs !== DEFAULT_EXTRACTION_MS ||
+    executeMs    !== DEFAULT_EXECUTE_MS;
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
@@ -671,7 +1385,7 @@ export default function TestingPage() {
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight">Testing Engine</h1>
-              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Execute → Report</p>
+              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Review → Execute → Report</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -700,6 +1414,7 @@ export default function TestingPage() {
               <p className="text-muted-foreground text-lg max-w-md">Paste a URL. Get a comprehensive bug report in minutes.</p>
             </div>
             <div className="w-full max-w-xl space-y-3">
+              {/* URL + run button */}
               <div className="flex gap-2">
                 <div className="relative flex-1">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -711,8 +1426,161 @@ export default function TestingPage() {
                   {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /> Run Tests</>}
                 </Button>
               </div>
+
+              {/* Test budget controls */}
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Test Budget</p>
+                  {!hasActiveSubscription && (
+                    <span className="text-[10px] font-mono text-muted-foreground/50 border border-border/40 rounded-full px-2 py-0.5">
+                      Free plan · <a href="/pricing" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">Upgrade</a> for more
+                    </span>
+                  )}
+                </div>
+                <div className="flex gap-4">
+                  <BudgetStepper
+                    label="Pages to crawl"
+                    hint={`max ${planLimits.maxPages}`}
+                    value={maxPages}
+                    min={1}
+                    // pages can't exceed tests (each page needs at least one test)
+                    max={Math.min(planLimits.maxPages, maxTests)}
+                    onChange={handleMaxPagesChange}
+                  />
+                  <div className="w-px bg-border shrink-0" />
+                  <BudgetStepper
+                    label="Tests to generate"
+                    hint={`max ${planLimits.maxTests}`}
+                    value={maxTests}
+                    // tests can never drop below pages
+                    min={maxPages}
+                    max={planLimits.maxTests}
+                    onChange={handleMaxTestsChange}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground/50 font-mono">
+                  Tests ≥ pages · more tests = slower but more thorough
+                </p>
+              </div>
+
+              {/* [ADDED] Advanced Settings — collapsible panel for concurrency + timeouts.
+                  Hidden by default to avoid overwhelming first-time users.
+                  A dot indicator appears on the toggle button when non-default values are active
+                  so the user knows something has been changed even while the panel is collapsed. */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                {/* Toggle header */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Advanced Settings</span>
+                    {/* [ADDED] Dot badge shown when any advanced value differs from its default */}
+                    {hasAdvancedChanges && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" title="Non-default settings active" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasAdvancedChanges && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleResetAdvanced(); }}
+                        className="text-[10px] font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded border border-border/40 hover:border-border"
+                      >
+                        reset
+                      </button>
+                    )}
+                    {showAdvanced
+                      ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    }
+                  </div>
+                </button>
+
+                {/* Expanded content */}
+                {showAdvanced && (
+                  <div className="px-4 pb-4 border-t border-border space-y-4 pt-4">
+
+                    {/* Concurrency */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Parallelism</p>
+                      <BudgetStepper
+                        label="Concurrent extractions"
+                        hint={`${CONCURRENCY_MIN}–${CONCURRENCY_MAX}`}
+                        value={concurrency}
+                        min={CONCURRENCY_MIN}
+                        max={CONCURRENCY_MAX}
+                        onChange={setConcurrency}
+                      />
+                      <p className="text-xs text-muted-foreground/50 font-mono">
+                        How many pages are fetched in parallel during crawl Stage 2. Higher = faster but uses more TinyFish credits simultaneously.
+                      </p>
+                    </div>
+
+                    <div className="w-full h-px bg-border" />
+
+                    {/* Timeouts */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Timeouts</p>
+                      <div className="flex gap-4">
+                        {/* Discovery timeout */}
+                        <TimeoutStepper
+                          label="Discovery"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={discoveryMs}
+                          onChange={setDiscoveryMs}
+                        />
+                        <div className="w-px bg-border shrink-0" />
+                        {/* Extraction timeout */}
+                        <TimeoutStepper
+                          label="Extraction"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={extractionMs}
+                          onChange={setExtractionMs}
+                        />
+                        <div className="w-px bg-border shrink-0" />
+                        {/* Test execution timeout */}
+                        <TimeoutStepper
+                          label="Execute"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={executeMs}
+                          onChange={setExecuteMs}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground/50 font-mono">
+                        Per-call TinyFish timeouts. Discovery = Stage 1 site crawl. Extraction = per-page data pull. Execute = per test step. Increase for slow or JS-heavy sites.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* end Advanced Settings */}
+
               <p className="text-xs text-muted-foreground/60 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
             </div>
+          </div>
+        )}
+
+        {/* ── REVIEW PHASE ── */}
+        {isAwaitingReview && testRunId && (
+          <div className="space-y-6">
+            {/* Mini pipeline header so user knows where they are */}
+            <div className="w-full max-w-2xl mx-auto">
+              <div className="flex items-center justify-between text-xs font-mono text-muted-foreground mb-3">
+                <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                  <ListChecks className="h-3.5 w-3.5" /> Review &amp; edit test cases before running
+                </span>
+                <span className="text-muted-foreground/50">{url || run?.targetUrl}</span>
+              </div>
+              <Progress value={40} className="h-1" />
+            </div>
+            <ReviewPhase
+              testRunId={testRunId}
+              targetUrl={url || (run?.targetUrl ?? "")}
+              onCancel={handleReset}
+            />
           </div>
         )}
 
@@ -767,6 +1635,21 @@ export default function TestingPage() {
               </div>
             </div>
 
+            {/* [ADDED] CrawlProgressPanel — rendered only during the crawling stage.
+                It reads the crawl_progress SSE events stored in sseState and displays
+                them as a live two-tab panel (URLs Found + Pages Extracted).
+                We pass falsy default values so the panel renders nothing until the
+                first SSE event arrives, avoiding a layout-shift flash on mount. */}
+            {isCrawlingPhase && (
+              <CrawlProgressPanel
+                stage={sseState.crawlStage}
+                stageDescription={sseState.crawlStageDescription}
+                foundUrls={sseState.crawlFoundUrls}
+                extractedPages={sseState.crawlExtractedPages}
+                failedPages={sseState.crawlFailedPages}
+              />
+            )}
+
             {/* Cancel */}
             <div className="flex justify-center w-full max-w-xl mx-auto">
               <Button onClick={handleCancel} disabled={isCancelling} variant="outline"
@@ -776,13 +1659,16 @@ export default function TestingPage() {
               </Button>
             </div>
 
-            {/* Counters */}
+            {/* Counters — shown as soon as executing begins, even at 0,
+                so the user knows execution has started and results are coming.
+                [CHANGED] was previously gated on isExecutingPhase which meant
+                no feedback during the first few seconds of execution. */}
             {isExecutingPhase && (
               <div className="grid grid-cols-4 gap-3 w-full max-w-xl mx-auto">
                 {[
                   { value: counter.passed,  label: "passed",  color: "text-emerald-400" },
-                  { value: counter.failed,  label: "failed",  color: "text-red-400"     },
-                  { value: counter.running, label: "running", color: "text-blue-400"    },
+                  { value: counter.failed,  label: "failed",  color: "text-red-400" },
+                  { value: counter.running, label: "running", color: "text-blue-400" },
                   { value: counter.skipped, label: "skipped", color: "text-muted-foreground" },
                 ].map(({ value, label, color }) => (
                   <div key={label} className="rounded-xl border border-border bg-card p-3 text-center">
@@ -793,23 +1679,48 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Live test cases */}
-            {liveTestCases.length > 0 && (
+            {/* Live test cases — shown during executing/reporting.
+                [CHANGED] Also shows a "waiting" placeholder during execution
+                when generatedTestCases is empty (reconnect / page refresh)
+                so the user always knows tests are running. */}
+            {isExecutingPhase && (
               <div className="w-full max-w-2xl mx-auto space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <FlaskConical className="h-3.5 w-3.5" />Test Cases — {liveTestCases.length} generated
+                    <FlaskConical className="h-3.5 w-3.5" />
+                    {liveTestCases.length > 0
+                      ? `Test Cases — ${liveTestCases.length} running`
+                      : "Test Cases — waiting for first result…"}
                   </p>
-                  <div className="flex gap-3 text-xs font-mono">
-                    <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
-                    <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
-                    <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
-                    <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                  {liveTestCases.length > 0 && (
+                    <div className="flex gap-3 text-xs font-mono">
+                      <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
+                      <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
+                      <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
+                      <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                    </div>
+                  )}
+                </div>
+                {liveTestCases.length === 0 ? (
+                  // Placeholder shown on reconnect / first moments of execution
+                  // before any test_update events have arrived yet
+                  <div className="rounded-xl border border-border bg-card/40 p-6 flex items-center justify-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground font-mono">Executing tests in parallel…</p>
                   </div>
-                </div>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                  {liveTestCases.map((tc) => <LiveTestCaseCard key={tc.id} tc={tc} />)}
-                </div>
+                ) : (
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                    {liveTestCases.map((tc) => <LiveTestCaseCard key={tc.id} tc={tc} />)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* During generating phase — show a compact note so user knows AI is building test cases */}
+            {pipelineStatus === "generating" && (
+              <div className="w-full max-w-xl mx-auto rounded-xl border border-border bg-card/40 p-4 flex items-center gap-3">
+                <Sparkles className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-sm text-muted-foreground">AI is generating test cases from the crawled pages…</p>
               </div>
             )}
 
@@ -1024,20 +1935,17 @@ export default function TestingPage() {
                         <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
                         <p className="text-xs font-mono text-muted-foreground truncate">{pg.pageUrl}</p>
                       </div>
-
                       <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Core Web Vitals</p>
                       <div className="space-y-3 mb-5">
                         <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
                         <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
                         <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
                       </div>
-
                       <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Load Timing</p>
                       <div className="space-y-3">
                         <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
                         <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"} />
                       </div>
-
                       <div className="flex gap-4 mt-4 pt-3 border-t border-border flex-wrap">
                         {[
                           { label: "Good",              color: "bg-emerald-500" },
@@ -1051,7 +1959,6 @@ export default function TestingPage() {
                           </div>
                         ))}
                       </div>
-
                       <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-x-6 gap-y-1">
                         {[
                           { label: "LCP",  desc: "Largest Contentful Paint — render time of largest element"  },

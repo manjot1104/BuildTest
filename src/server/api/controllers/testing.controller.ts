@@ -19,6 +19,8 @@ import {
   MAX_TEST_RETRIES,
   type PagePerformanceMetrics,
   type PipelineSSEEvent,
+  type TimeoutOverrides, // [ADDED] import for per-run timeout override type
+  type CrawlProgressEvent, // [ADDED] import for live crawl progress event type
 } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import {
@@ -31,6 +33,18 @@ import {
   type BugContext,
 } from "@/server/services/openRouter.service";
 import type { ApiErrorResponse } from "@/types/api.types";
+import {
+  countTestCasesByRunId,
+  createTestCase,
+  deleteTestCase,
+  getTestCasesByRunId,
+  insertCrawlResult,
+  insertPerformanceMetrics,
+  insertTestCases,
+  updateTestCase,
+  updateTestRunCounters,
+  updateTestRunStatus,
+} from "@/server/db/queries";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,17 +68,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
   return chunks;
 }
 
-async function updateRunStatus(
-  testRunId: string,
-  status: typeof test_runs.$inferInsert.status,
-  extra?: Partial<typeof test_runs.$inferInsert>,
-) {
-  await db
-    .update(test_runs)
-    .set({ status, ...extra })
-    .where(eq(test_runs.id, testRunId));
-}
-
 function buildSSELine(event: PipelineSSEEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
@@ -74,6 +77,62 @@ function buildTestGoal(tc: TestCase): string {
     .map((step, i) => `Step ${i + 1}: ${step}`)
     .join("\n");
   return `${numberedSteps}\n\nExpected result: ${tc.expected_result}`;
+}
+
+// ---------------------------------------------------------------------------
+// Plan limit helpers
+// ---------------------------------------------------------------------------
+
+// Plan IDs match subscriptions.plan_id in schema.ts: "starter" | "pro" | "enterprise"
+// No subscription row → null → FREE_PLAN_LIMITS applies.
+// These MUST stay in sync with PLAN_LIMITS / FREE_LIMITS in testing.page.tsx.
+// The UI enforces soft limits before sending; these are the server-side hard gates.
+interface PlanLimits {
+  maxPages: number;
+  maxTests: number;
+}
+
+const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5 };
+
+const SERVER_PLAN_LIMITS: Record<string, PlanLimits> = {
+  starter:    { maxPages:  5, maxTests: 10 },
+  pro:        { maxPages: 10, maxTests: 20 },
+  enterprise: { maxPages: 20, maxTests: 30 },
+};
+
+/**
+ * Resolves the hard server-side test-generation cap for a given subscription.
+ * Called in runPipelineStages to clamp AI-generated case count and in
+ * createTestCaseHandler to enforce the add-case ceiling during review.
+ *
+ * @param planId - value of subscriptions.plan_id, or null/undefined for free tier.
+ */
+function getServerPlanLimits(planId: string | null | undefined): PlanLimits {
+  if (!planId) return FREE_PLAN_LIMITS;
+  return SERVER_PLAN_LIMITS[planId.toLowerCase()] ?? FREE_PLAN_LIMITS;
+}
+
+/**
+ * Fetches the active subscription plan_id for a user, or null if none exists.
+ * Used by the pipeline and createTestCaseHandler to look up per-plan limits.
+ */
+async function getUserPlanId(userId: string): Promise<string | null> {
+  // Import subscriptions table inline to avoid potential circular module issues
+  const { subscriptions } = await import("@/server/db/schema");
+  const { and } = await import("drizzle-orm");
+
+  const [sub] = await db
+    .select({ plan_id: subscriptions.plan_id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.user_id, userId),
+        eq(subscriptions.status, "active"),
+      ),
+    )
+    .limit(1);
+
+  return sub?.plan_id ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,6 +147,75 @@ const crawlAbortControllers = new Map<string, AbortController>();
 // We fan-out events to all of them.
 const pipelineEmitters = new Map<string, Set<(line: string) => void>>();
 
+// Stores a resolve function for each run that is paused at awaiting_review.
+// Calling it with true resumes execution; false cancels.
+const reviewResolvers = new Map<string, (confirmed: boolean) => void>();
+
+// [ADDED] crawl_progress event buffer — stores all crawl_progress SSE lines
+// emitted so far for each active run.
+//
+// WHY: The pipeline starts immediately after POST /api/test/run, so Stage 0
+// (URL seeding, ~instant) and early Stage 1 events fire before the browser
+// even opens the SSE connection. Without a buffer those events are lost and
+// the CrawlProgressPanel stays blank even though the server already found URLs.
+//
+// When a new SSE client connects during the crawling phase, we flush the entire
+// buffer to it before attaching as a live listener, giving an instant catch-up.
+// The buffer is cleared when the pipeline moves out of the crawling stage
+// (i.e. on the first non-crawl "status" event) so it never grows unbounded.
+const crawlProgressBuffers = new Map<string, string[]>();
+
+// [ADDED] Execution event buffer — stores the latest test_update line per
+// testCaseId plus the latest counter line during the executing/reporting phase.
+//
+// WHY: Same race as crawl progress — if the user navigates back or the tab
+// loses focus and the EventSource reconnects mid-execution, the new client
+// gets only the synthetic status+counter snapshot, not the individual
+// test_update events that already fired. That means the live execution cards
+// are blank even though half the tests have already run.
+//
+// We store only the LATEST line per testCaseId (keyed as "tc:{id}") and the
+// latest counter (keyed as "counter") so the map stays O(numTests) not O(events).
+// On reconnect we flush all entries in insertion order to give the client the
+// current snapshot of every card.
+// The buffer is cleared when the run completes/fails/cancels.
+const executionBuffers = new Map<string, Map<string, string>>();
+
+// Helper: upsert a line into the execution buffer keyed by a stable key.
+function bufferExecutionLine(testRunId: string, key: string, line: string): void {
+  if (!executionBuffers.has(testRunId)) {
+    executionBuffers.set(testRunId, new Map());
+  }
+  executionBuffers.get(testRunId)!.set(key, line);
+}
+
+// Helper: flush all buffered execution lines to a newly connected client.
+function flushExecutionBuffer(testRunId: string, emit: (line: string) => void): void {
+  const buffer = executionBuffers.get(testRunId);
+  if (!buffer) return;
+  for (const line of buffer.values()) {
+    try { emit(line); } catch { /* stream closed */ }
+  }
+}
+
+// Helper: append a crawl_progress SSE line to the run's crawl buffer.
+function bufferCrawlProgressLine(testRunId: string, line: string): void {
+  if (!crawlProgressBuffers.has(testRunId)) {
+    crawlProgressBuffers.set(testRunId, []);
+  }
+  crawlProgressBuffers.get(testRunId)!.push(line);
+}
+
+// Helper: flush all buffered crawl_progress lines to a single emit function.
+// Used when a new SSE client connects mid-crawl so it catches up immediately.
+function flushCrawlProgressBuffer(testRunId: string, emit: (line: string) => void): void {
+  const buffer = crawlProgressBuffers.get(testRunId);
+  if (!buffer) return;
+  for (const line of buffer) {
+    try { emit(line); } catch { /* stream closed */ }
+  }
+}
+
 function registerEmitter(
   testRunId: string,
   emit: (line: string) => void,
@@ -99,6 +227,45 @@ function registerEmitter(
 }
 
 function broadcastToRun(testRunId: string, line: string): void {
+  // [ADDED] Auto-buffer crawl_progress lines so late-connecting SSE clients
+  // get a full replay of all URLs/pages found before they connected.
+  if (line.includes('"crawl_progress"')) {
+    bufferCrawlProgressLine(testRunId, line);
+  }
+
+  // [ADDED] Auto-buffer test_update lines, keyed by testCaseId so each card
+  // is stored only once (latest state). Late-connecting clients get the current
+  // status of every test card without missing any that already ran.
+  if (line.includes('"test_update"')) {
+    // Extract testCaseId from the raw JSON string without a full parse.
+    // Format is always: ..."testCaseId":"<id>"...
+    const match = /"testCaseId":"([^"]+)"/.exec(line);
+    if (match?.[1]) {
+      bufferExecutionLine(testRunId, `tc:${match[1]}`, line);
+    }
+  }
+
+  // [ADDED] Buffer the latest counter line so reconnecting clients see the
+  // current passed/failed/running counts immediately.
+  if (line.includes('"counter"')) {
+    bufferExecutionLine(testRunId, "counter", line);
+  }
+
+  // [ADDED] When the pipeline moves past crawling (first status event that is
+  // NOT "crawling"), clear the crawl buffer — no longer needed.
+  if (line.includes('"status"') && !line.includes('"crawling"')) {
+    crawlProgressBuffers.delete(testRunId);
+  }
+
+  // [ADDED] When the pipeline completes/fails/cancels, clear the execution
+  // buffer — the run is terminal and no new clients need a replay.
+  if (
+    line.includes('"complete"') ||
+    (line.includes('"error"') && (line.includes('"CANCELLED"') || line.includes('"failed"')))
+  ) {
+    executionBuffers.delete(testRunId);
+  }
+
   pipelineEmitters.get(testRunId)?.forEach((emit) => {
     try {
       emit(line);
@@ -117,9 +284,17 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
+// [CHANGED] runPipeline now accepts optional concurrency and timeouts so they
+// can be forwarded from the original POST /api/test/run request body all the
+// way into crawlSite() and executeTest() inside runPipelineStages().
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
+  userId: string,
+  userMaxPages?: number,
+  userMaxTests?: number,
+  userConcurrency?: number,     // [ADDED]
+  userTimeouts?: TimeoutOverrides, // [ADDED]
 ): Promise<void> {
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
@@ -129,26 +304,69 @@ async function runPipeline(
     broadcastToRun(testRunId, buildSSELine(event));
 
   try {
-    await runPipelineStages(testRunId, targetUrl, send, abortController.signal);
+    await runPipelineStages(
+      testRunId,
+      targetUrl,
+      userId,
+      send,
+      abortController.signal,
+      userMaxPages,
+      userMaxTests,
+      userConcurrency,   // [ADDED]
+      userTimeouts,      // [ADDED]
+    );
   } finally {
     crawlAbortControllers.delete(testRunId);
   }
 }
 
+// [CHANGED] runPipelineStages accepts optional userConcurrency and
+// userTimeouts, passes both into crawlSite via CrawlOptions, and passes
+// userTimeouts into each executeTest call so test-step timeouts are also
+// governed by the user's requested override.
+//
+// [ADDED] runPipelineStages now passes an onProgress callback into crawlSite.
+// When the crawl service fires a CrawlProgressEvent, we wrap it in a
+// crawl_progress PipelineSSEEvent and broadcast it to all connected SSE clients.
+// This is the only change needed in the controller — the service handles
+// all the event logic internally.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
+  userId: string,
   send: (event: PipelineSSEEvent) => void,
   abortSignal: AbortSignal,
+  userMaxPages?: number,
+  userMaxTests?: number,
+  userConcurrency?: number,      // [ADDED]
+  userTimeouts?: TimeoutOverrides, // [ADDED]
 ): Promise<void> {
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "crawling");
+  await updateTestRunStatus(testRunId, "crawling");
   send({ type: "status", status: "crawling", percent: 10 });
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
   try {
-    siteData = await crawlSite(targetUrl, { testRunId, abortSignal });
+    siteData = await crawlSite(targetUrl, {
+      testRunId,
+      abortSignal,
+      budget: {
+        ...(userMaxPages !== undefined && { maxPages: userMaxPages }),
+        ...(userMaxTests !== undefined && { maxTests: userMaxTests }),
+        // [ADDED] Forward user-requested concurrency into the crawl budget.
+        ...(userConcurrency !== undefined && { concurrency: userConcurrency }),
+      },
+      // [ADDED] Forward user-requested timeout overrides into the crawl call.
+      timeouts: userTimeouts,
+      // [ADDED] onProgress bridges CrawlProgressEvent from the service layer
+      // up to SSE clients by wrapping each event in a crawl_progress envelope.
+      // This keeps the service free of SSE/HTTP knowledge while giving the
+      // frontend full visibility into every crawl milestone.
+      onProgress: (event: CrawlProgressEvent) => {
+        send({ type: "crawl_progress", event });
+      },
+    });
   } catch (err) {
     if (abortSignal.aborted || cancelledPipelines.has(testRunId))
       throw new Error(`CANCELLED:${testRunId}`);
@@ -159,7 +377,7 @@ async function runPipelineStages(
 
   // ─── STEP 2: GENERATE TEST CASES + persist crawl data (parallel) ─────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "generating");
+  await updateTestRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
 
   const siteContext: SiteContext = {
@@ -175,7 +393,7 @@ async function runPipelineStages(
   };
 
   // Run AI generation, crawl DB writes, and background screenshots all in parallel
-  const [generatedCases] = await Promise.all([
+  const [generatedCasesRaw] = await Promise.all([
     // AI test case generation
     (async (): Promise<TestCase[]> => {
       checkCancelled(testRunId);
@@ -188,8 +406,7 @@ async function runPipelineStages(
       }
     })(),
 
-    // Persist crawl results to DB
-    db.insert(crawl_results).values({
+    insertCrawlResult({
       id: nanoid(),
       test_run_id: testRunId,
       pages: siteData.pages,
@@ -207,12 +424,48 @@ async function runPipelineStages(
 
   ]);
 
+  // ── Enforce plan-based test-case ceiling ──────────────────────────────────
+  // The crawl budget (testBudget.totalTests) already reflects the user's
+  // requested maxTests value, which is clamped server-side in
+  // startTestRunHandler before the pipeline starts.  However, the AI model
+  // (generateTestCases) does not know the exact numeric ceiling — it targets
+  // the budget heuristically and may overshoot.
+  //
+  // We apply two independent caps and take the minimum:
+  //   1. testBudget.totalTests — budget from allocateTestBudget, already
+  //      hard-capped by HARD_CAPS.MAX_TESTS in tinyfish.service.ts
+  //   2. planLimits.maxTests   — per-plan ceiling looked up from the active
+  //      subscription, so a free user can never exceed FREE_PLAN_LIMITS.maxTests
+  //      even if they tampered the POST /api/test/run request body.
+  //
+  // Cases are ordered by priority in the AI response, so truncating the tail
+  // always drops the lowest-priority ones first.
+  const planId = await getUserPlanId(userId);
+  const planLimits = getServerPlanLimits(planId);
+  const effectiveTestCap = Math.min(
+    siteData.testBudget.totalTests,
+    planLimits.maxTests,
+  );
+
+  const generatedCases =
+    generatedCasesRaw.length > effectiveTestCap
+      ? generatedCasesRaw.slice(0, effectiveTestCap)
+      : generatedCasesRaw;
+
+  if (generatedCasesRaw.length > generatedCases.length) {
+    console.log(
+      `[Pipeline] Clamped AI output: ${generatedCasesRaw.length} → ${generatedCases.length} cases ` +
+        `(plan="${planId ?? "free"}" planMax=${planLimits.maxTests} budgetMax=${siteData.testBudget.totalTests})`,
+    );
+  }
+  // ── End plan-limit enforcement ────────────────────────────────────────────
+
   // Await stage3 so Puppeteer perf metrics are fully populated before we insert
   await siteData.stage3Promise.catch((err) => {
     console.warn("[Pipeline] stage3 screenshots/perf failed (non-fatal):", err);
   });
   if (siteData.performanceMetrics.length > 0) {
-    await db.insert(performance_metrics).values(
+    await insertPerformanceMetrics(
       siteData.performanceMetrics.map((pm: PagePerformanceMetrics) => ({
         id: nanoid(),
         test_run_id: testRunId,
@@ -226,7 +479,7 @@ async function runPipelineStages(
     );
   }
 
-  // Persist test cases
+  // Persist initial test cases
   const testCaseRecords = generatedCases.map((tc) => ({
     id: nanoid(),
     test_run_id: testRunId,
@@ -240,13 +493,13 @@ async function runPipelineStages(
     estimated_duration: tc.estimated_duration,
   }));
 
-  await db.insert(test_cases).values(testCaseRecords);
+  await insertTestCases(testCaseRecords);
   await db
     .update(test_runs)
     .set({ total_tests: testCaseRecords.length })
     .where(eq(test_runs.id, testRunId));
 
-  // Emit all test cases at once so UI can render pending cards immediately
+  // Emit all test cases so the review UI can render them immediately
   send({
     type: "tests_generated",
     testCases: generatedCases.map((tc, i) => ({
@@ -260,35 +513,57 @@ async function runPipelineStages(
     })),
   } as PipelineSSEEvent);
 
-  for (let i = 0; i < generatedCases.length; i++) {
+  // ─── STEP 2.5: PAUSE FOR REVIEW ──────────────────────────────────────────
+  // Transition to awaiting_review and wait for the user to confirm or cancel.
+  checkCancelled(testRunId);
+  await updateTestRunStatus(testRunId, "awaiting_review");
+  send({ type: "status", status: "awaiting_review", percent: 40 });
+
+  const confirmed = await new Promise<boolean>((resolve) => {
+    reviewResolvers.set(testRunId, resolve);
+  });
+  reviewResolvers.delete(testRunId);
+
+  if (!confirmed) {
+    // User cancelled during review
+    throw new Error(`CANCELLED:${testRunId}`);
+  }
+
+  // Re-fetch test cases in case the user edited/added/deleted during review
+  const finalTestCaseRows = await getTestCasesByRunId(testRunId);
+
+  // Update total_tests to reflect any edits made during review
+  await db
+    .update(test_runs)
+    .set({ total_tests: finalTestCaseRows.length })
+    .where(eq(test_runs.id, testRunId));
+
+  // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
+  checkCancelled(testRunId);
+  await updateTestRunStatus(testRunId, "executing");
+  send({ type: "status", status: "executing", percent: 50 });
+
+  // Emit pending cards for all (possibly-edited) test cases
+  for (const row of finalTestCaseRows) {
     send({
       type: "test_update",
       testResultId: "",
-      testCaseId: testCaseRecords[i]!.id,
-      title: generatedCases[i]!.title,
+      testCaseId: row.id,
+      title: row.title ?? "",
       status: "pending",
     });
   }
 
-  // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
-  checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "executing");
-  send({ type: "status", status: "executing", percent: 50 });
+  // Build execution pairs from DB rows (source of truth after review edits)
+  const pairs: { tc: typeof finalTestCaseRows[number]; dbId: string }[] =
+    finalTestCaseRows.map((row) => ({ tc: row, dbId: row.id }));
 
-  const pairs: { tc: TestCase; dbId: string }[] = generatedCases.map(
-    (tc, i) => ({
-      tc,
-      dbId: testCaseRecords[i]!.id,
-    }),
-  );
-
-  // Single source of truth for live counters
   const counters = {
     passed: 0,
     failed: 0,
     running: 0,
     skipped: 0,
-    total: testCaseRecords.length,
+    total: finalTestCaseRows.length,
   };
 
   const sendCounters = () => send({ type: "counter", ...counters });
@@ -310,17 +585,14 @@ async function runPipelineStages(
 
     // Mark entire batch as running upfront
     counters.running += batch.length;
-    await db
-      .update(test_runs)
-      .set({ running: counters.running })
-      .where(eq(test_runs.id, testRunId));
+    await updateTestRunCounters(testRunId, { running: counters.running });
 
     for (const { tc, dbId } of batch) {
       send({
         type: "test_update",
         testResultId: "",
         testCaseId: dbId,
-        title: tc.title,
+        title: tc.title ?? "",
         status: "running",
       });
     }
@@ -328,11 +600,18 @@ async function runPipelineStages(
 
     await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
-        const testUrl = tc.target_url ?? targetUrl;
-        const goal = buildTestGoal(tc);
+        const testUrl = (tc as { target_url?: string }).target_url ?? targetUrl;
 
-        // First attempt
-        let result = await executeTest(testUrl, goal, false, 0);
+        // Build goal from DB row fields (steps + expected_result)
+        const steps = (tc.steps as string[] | null) ?? [];
+        const numberedSteps = steps
+          .map((step, i) => `Step ${i + 1}: ${step}`)
+          .join("\n");
+        const goal = `${numberedSteps}\n\nExpected result: ${tc.expected_result ?? ""}`;
+
+        // [CHANGED] Forward userTimeouts into executeTest so per-run timeout
+        // overrides apply to individual test-step browser sessions as well.
+        let result = await executeTest(testUrl, goal, false, 0, userTimeouts);
         let retryCount = 0;
         let isFlaky = false;
 
@@ -342,7 +621,8 @@ async function runPipelineStages(
           attempt <= MAX_TEST_RETRIES && !result.passed;
           attempt++
         ) {
-          const retryResult = await executeTest(testUrl, goal, false, attempt);
+          // [CHANGED] Pass userTimeouts into retry calls as well.
+          const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
             isFlaky = true;
@@ -371,7 +651,10 @@ async function runPipelineStages(
               });
             }
           } catch (err) {
-            console.warn(`[Testing] Screenshot failed for "${tc.title}":`, err);
+            console.warn(
+              `[Testing] Screenshot failed for "${tc.title}":`,
+              err,
+            );
           }
         }
 
@@ -398,15 +681,11 @@ async function runPipelineStages(
           counters.failed++;
         }
 
-        // DB sync is fire-and-forget — don't block the SSE emit
-        void db
-          .update(test_runs)
-          .set({
-            passed: counters.passed,
-            failed: counters.failed,
-            running: counters.running,
-          })
-          .where(eq(test_runs.id, testRunId));
+        void updateTestRunCounters(testRunId, {
+          passed: counters.passed,
+          failed: counters.failed,
+          running: counters.running,
+        });
 
         // Emit counter BEFORE test_update so the UI number ticks first
         sendCounters();
@@ -415,25 +694,29 @@ async function runPipelineStages(
           type: "test_update",
           testResultId,
           testCaseId: dbId,
-          title: tc.title,
+          title: tc.title ?? "",
           status,
           durationMs: result.durationMs,
         });
 
-        // Category tracking
-        if (!categoryResults[tc.category])
-          categoryResults[tc.category] = { passed: 0, failed: 0, total: 0 };
-        categoryResults[tc.category]!.total++;
+        const category =
+          (tc as { category?: string | null }).category ?? "other";
+
+        if (!categoryResults[category])
+          categoryResults[category] = { passed: 0, failed: 0, total: 0 };
+        categoryResults[category]!.total++;
         if (status === "passed" || status === "flaky")
-          categoryResults[tc.category]!.passed++;
-        else if (status === "failed") categoryResults[tc.category]!.failed++;
+          categoryResults[category]!.passed++;
+        else if (status === "failed") categoryResults[category]!.failed++;
 
         if (status === "failed") {
           const bugId = nanoid();
+          const priority =
+            (tc as { priority?: string | null }).priority ?? "P2";
           const severity =
-            tc.priority === "P0"
+            priority === "P0"
               ? "critical"
-              : tc.priority === "P1"
+              : priority === "P1"
                 ? "high"
                 : "medium";
 
@@ -441,12 +724,12 @@ async function runPipelineStages(
             testResultId: bugId,
             ctx: {
               pageUrl: testUrl,
-              testTitle: tc.title,
-              category: tc.category,
-              steps: tc.steps,
+              testTitle: tc.title ?? "",
+              category,
+              steps,
               actualResult: result.actualResult,
               errorDetails: result.errorDetails,
-              expectedResult: tc.expected_result,
+              expectedResult: tc.expected_result ?? "",
               consoleLogs: result.consoleLogs,
               networkErrors: result.networkLogs
                 .filter((l) => l.status !== null && l.status >= 400)
@@ -464,10 +747,10 @@ async function runPipelineStages(
             test_run_id: testRunId,
             test_result_id: testResultId,
             severity,
-            category: tc.category,
-            title: `${tc.title} — FAILED`,
+            category,
+            title: `${tc.title ?? ""} — FAILED`,
             description: result.actualResult,
-            reproduction_steps: tc.steps,
+            reproduction_steps: steps,
             screenshot_url: screenshotUrl,
             annotation_box: null,
             page_url: testUrl,
@@ -478,9 +761,9 @@ async function runPipelineStages(
             type: "bug_found",
             bug: {
               id: bugId,
-              title: `${tc.title} — FAILED`,
+              title: `${tc.title ?? ""} — FAILED`,
               severity,
-              category: tc.category,
+              category,
               pageUrl: testUrl,
               screenshotUrl,
             },
@@ -489,7 +772,7 @@ async function runPipelineStages(
       }),
     );
 
-    // Count any rejected promises as skipped, send counters immediately
+    // Count rejected promises as skipped
     const batchOutcomes = await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
         void tc;
@@ -505,15 +788,12 @@ async function runPipelineStages(
       }
     }
 
-    await db
-      .update(test_runs)
-      .set({
-        passed: counters.passed,
-        failed: counters.failed,
-        skipped: counters.skipped,
-        running: counters.running,
-      })
-      .where(eq(test_runs.id, testRunId));
+    await updateTestRunCounters(testRunId, {
+      passed: counters.passed,
+      failed: counters.failed,
+      skipped: counters.skipped,
+      running: counters.running,
+    });
 
     // Final counter push after batch DB sync
     sendCounters();
@@ -548,7 +828,7 @@ async function runPipelineStages(
 
   // ─── STEP 4: REPORT ──────────────────────────────────────────────────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "reporting");
+  await updateTestRunStatus(testRunId, "reporting");
   send({ type: "status", status: "reporting", percent: 90 });
 
   const overallScore = calculateScore(
@@ -559,7 +839,7 @@ async function runPipelineStages(
   const summaryInput: TestRunSummaryInput = {
     targetUrl,
     overallScore,
-    totalTests: testCaseRecords.length,
+    totalTests: finalTestCaseRows.length,
     passed: counters.passed,
     failed: counters.failed,
     skipped: counters.skipped,
@@ -599,7 +879,7 @@ async function runPipelineStages(
     file_url: null,
     ai_summary: aiSummary,
     shareable_slug: shareableSlug,
-    // CHANGED: was `is_public: false` — set to true so share links work out of the box
+    // set to true so share links work out of the box
     is_public: true,
     embed_badge_token: embedBadgeToken,
   });
@@ -623,7 +903,7 @@ async function runPipelineStages(
     passed: counters.passed,
     failed: counters.failed,
     skipped: counters.skipped,
-    total: testCaseRecords.length,
+    total: finalTestCaseRows.length,
     aiSummary,
     shareableSlug,
   });
@@ -633,19 +913,76 @@ async function runPipelineStages(
 // POST /api/test/run
 // ---------------------------------------------------------------------------
 
+// [CHANGED] body now accepts optional concurrency and timeout overrides
+// alongside the existing maxPages and maxTests. All new fields are optional
+// and server-side clamped before reaching crawlSite / executeTest.
 export async function startTestRunHandler({
   body,
 }: {
-  body: { url: string; projectId?: string };
+  body: {
+    url: string;
+    projectId?: string;
+    maxPages?: number;
+    maxTests?: number;
+    /** Number of parallel TinyFish extraction calls during Stage 2 crawl. */
+    concurrency?: number;          // [ADDED]
+    /** Per-run timeout overrides (milliseconds). Clamped server-side. */
+    timeouts?: TimeoutOverrides;   // [ADDED]
+  };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-    const { url, projectId } = body;
+    const { url, projectId, maxPages, maxTests, concurrency, timeouts } = body;
     if (!url) return { error: "URL is required", status: 400 };
 
     const targetUrl = normaliseUrl(url);
     const testRunId = nanoid();
+
+    // ── Server-side plan limit validation ─────────────────────────────────
+    // The UI already clamps values to plan limits before sending (see
+    // PLAN_LIMITS / getPlanLimits in testing.page.tsx).  We re-validate here
+    // so a tampered request body can never exceed the user's actual plan.
+    const planId = await getUserPlanId(session.user.id);
+    const planLimits = getServerPlanLimits(planId);
+
+    const effectiveMaxPages = maxPages !== undefined
+      ? Math.min(maxPages, planLimits.maxPages)
+      : undefined;
+    const effectiveMaxTests = maxTests !== undefined
+      ? Math.min(maxTests, planLimits.maxTests)
+      : undefined;
+
+    if (maxPages !== undefined && maxPages > planLimits.maxPages) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested maxPages=${maxPages} but plan "${planId ?? "free"}" allows ${planLimits.maxPages} — clamped.`,
+      );
+    }
+    if (maxTests !== undefined && maxTests > planLimits.maxTests) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested maxTests=${maxTests} but plan "${planId ?? "free"}" allows ${planLimits.maxTests} — clamped.`,
+      );
+    }
+
+    // [ADDED] Concurrency is plan-agnostic: clamp to the hard caps defined in
+    // tinyfish.service (MIN=1, MAX=20).  We log if the user sent an out-of-range
+    // value so it is visible in server logs without throwing an error.
+    const CONCURRENCY_MIN = 1;
+    const CONCURRENCY_MAX = 20;
+    const effectiveConcurrency =
+      concurrency !== undefined
+        ? Math.max(CONCURRENCY_MIN, Math.min(concurrency, CONCURRENCY_MAX))
+        : undefined;
+
+    if (
+      concurrency !== undefined &&
+      (concurrency < CONCURRENCY_MIN || concurrency > CONCURRENCY_MAX)
+    ) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested concurrency=${concurrency} — clamped to ${effectiveConcurrency}.`,
+      );
+    }
+    // ── End server-side validation ─────────────────────────────────────────
 
     await db.insert(test_runs).values({
       id: testRunId,
@@ -662,27 +999,38 @@ export async function startTestRunHandler({
 
     activePipelines.add(testRunId);
 
-    void runPipeline(testRunId, targetUrl)
+    // [CHANGED] Forward (already-clamped) concurrency and timeouts into the pipeline.
+    void runPipeline(
+      testRunId,
+      targetUrl,
+      session.user.id,
+      effectiveMaxPages,
+      effectiveMaxTests,
+      effectiveConcurrency, // [ADDED]
+      timeouts,             // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
+    )
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("CANCELLED:")) {
-          await updateRunStatus(
+          await updateTestRunStatus(
             testRunId,
             "cancelled" as typeof test_runs.$inferInsert.status,
-            {
-              completed_at: new Date(),
-              running: 0,
-            },
+            { completed_at: new Date(), running: 0 },
           );
         } else {
           console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
-          await updateRunStatus(testRunId, "failed");
+          await updateTestRunStatus(testRunId, "failed");
         }
       })
       .finally(() => {
         activePipelines.delete(testRunId);
         cancelledPipelines.delete(testRunId);
+        reviewResolvers.delete(testRunId);
         pipelineEmitters.delete(testRunId);
+        // [ADDED] Clean up both event buffers so we don't leak memory
+        // after the run finishes.
+        crawlProgressBuffers.delete(testRunId);
+        executionBuffers.delete(testRunId);
       });
 
     return { testRunId };
@@ -755,6 +1103,51 @@ export async function streamTestRunHandler({
     return new Response(buildSSELine(event), { headers: SSE_HEADERS });
   }
 
+  // If the run is paused at awaiting_review, emit the current state so a
+  // reconnecting client can restore the review UI immediately.
+  if (run.status === "awaiting_review") {
+    const testCaseRows = await getTestCasesByRunId(params.id);
+    const initEvents: string[] = [
+      buildSSELine({ type: "status", status: "awaiting_review", percent: 40 }),
+      buildSSELine({
+        type: "tests_generated",
+        testCases: testCaseRows.map((tc) => ({
+          id: tc.id,
+          title: tc.title ?? "",
+          category: tc.category ?? "",
+          priority: (tc.priority ?? "P1") as "P0" | "P1" | "P2",
+          steps: (tc.steps as string[]) ?? [],
+          expected_result: tc.expected_result ?? "",
+          target_url: (tc as { target_url?: string }).target_url,
+        })),
+      } as PipelineSSEEvent),
+    ];
+
+    // If there is an active pipeline waiting for review confirmation, attach
+    // this client so it also receives the eventual executing/complete events.
+    let unregister: (() => void) | null = null;
+    const stream = new ReadableStream({
+      start(controller) {
+        const emit = (line: string) => {
+          try {
+            controller.enqueue(new TextEncoder().encode(line));
+          } catch {
+            /* closed */
+          }
+        };
+        // Flush current state immediately
+        for (const line of initEvents) emit(line);
+        // Attach as live listener for subsequent pipeline events
+        unregister = registerEmitter(params.id, emit);
+      },
+      cancel() {
+        unregister?.();
+      },
+    });
+
+    return new Response(stream, { headers: SSE_HEADERS });
+  }
+
   // ── Active or not-yet-started pipeline ────────────────────────────────────
   let unregister: (() => void) | null = null;
 
@@ -803,16 +1196,42 @@ export async function streamTestRunHandler({
                 total: current.total_tests ?? 0,
               }),
             );
+
+            // [ADDED] Replay all buffered crawl_progress events to this client.
+            // This handles the common race where the browser opens the SSE
+            // connection AFTER the pipeline has already discovered/extracted
+            // some URLs. Without this flush the CrawlProgressPanel would be
+            // empty until the next crawl_progress event fires live.
+            // The flush only sends lines if the run is still in the crawling
+            // stage — if it has already moved on the buffer was already cleared.
+            if (current.status === "crawling") {
+              flushCrawlProgressBuffer(params.id, emit);
+            }
+
+            // [ADDED] Replay the latest test_update snapshot for every test card
+            // plus the latest counter, so a reconnecting client mid-execution
+            // sees all cards with their current status immediately instead of
+            // waiting for the next live event to fire.
+            if (current.status === "executing" || current.status === "reporting") {
+              flushExecutionBuffer(params.id, emit);
+            }
           });
 
         unregister = registerEmitter(params.id, emit);
       } else {
-        // Pipeline not running — start it and wire this client as the first emitter
+        // Pipeline not running — start it and wire this client as the first emitter.
+        // NOTE: when restarting via SSE, we do NOT have user-specified maxPages/maxTests
+        // because this path is for reconnecting to an already-persisted run.
+        // The original maxPages/maxTests were already applied when POST /test/run was called.
+        // CHANGED: pass run.user_id so re-started pipelines can still derive plan limits.
+        // NOTE: concurrency and timeouts are also not available here — the run was
+        // already launched with its original settings; we restart without overrides,
+        // which will use the crawler's built-in defaults.
         console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
         activePipelines.add(params.id);
         unregister = registerEmitter(params.id, emit);
 
-        void runPipeline(params.id, run.target_url)
+        void runPipeline(params.id, run.target_url, run.user_id)
           .catch(async (err) => {
             const msg = err instanceof Error ? err.message : String(err);
             broadcastToRun(
@@ -824,7 +1243,7 @@ export async function streamTestRunHandler({
               ),
             );
             const isCancelled = msg.startsWith("CANCELLED:");
-            await updateRunStatus(
+            await updateTestRunStatus(
               params.id,
               isCancelled
                 ? ("cancelled" as typeof test_runs.$inferInsert.status)
@@ -837,6 +1256,7 @@ export async function streamTestRunHandler({
           .finally(() => {
             activePipelines.delete(params.id);
             cancelledPipelines.delete(params.id);
+            reviewResolvers.delete(params.id);
             pipelineEmitters.get(params.id)?.forEach((fn) => {
               try {
                 fn(
@@ -851,6 +1271,10 @@ export async function streamTestRunHandler({
               }
             });
             pipelineEmitters.delete(params.id);
+            // [ADDED] Clean up both event buffers — safety-net alongside
+            // the broadcastToRun auto-clear on complete/error events.
+            crawlProgressBuffers.delete(params.id);
+            executionBuffers.delete(params.id);
           });
       }
     },
@@ -868,6 +1292,7 @@ function statusToPercent(status: string): number {
       {
         crawling: 10,
         generating: 30,
+        awaiting_review: 40,
         executing: 70,
         reporting: 90,
         complete: 100,
@@ -923,6 +1348,218 @@ export async function getTestRunHandler({
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/test/run/[id]/cases  — list all test cases for review
+// ---------------------------------------------------------------------------
+
+export async function getTestCasesHandler({
+  params,
+}: {
+  params: { id: string };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+
+  const cases = await getTestCasesByRunId(params.id);
+  return { testCases: cases };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/test/run/[id]/cases  — create a new test case during review
+// ---------------------------------------------------------------------------
+
+export async function createTestCaseHandler({
+  params,
+  body,
+}: {
+  params: { id: string };
+  body: {
+    title: string;
+    category: string;
+    steps: string[];
+    expectedResult: string;
+    priority?: "P0" | "P1" | "P2";
+    description?: string;
+    tags?: string[];
+  };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be added during review", status: 400 };
+
+  const { title, category, steps, expectedResult, priority, description, tags } =
+    body;
+  if (!title || !category || !steps?.length || !expectedResult)
+    return { error: "title, category, steps, and expectedResult are required", status: 400 };
+
+  // ── Plan limit enforcement during review phase ────────────────────────────
+  // The user can add/edit cases during review, but must not exceed their plan's
+  // maxTests ceiling.  We re-derive the limit from the live subscription here
+  // so this endpoint can never be bypassed via direct API calls.
+  const planId = await getUserPlanId(session.user.id);
+  const planLimits = getServerPlanLimits(planId);
+  const currentCount = await countTestCasesByRunId(params.id);
+
+  if (currentCount >= planLimits.maxTests) {
+    return {
+      error:
+        `Your ${planId ?? "free"} plan allows a maximum of ${planLimits.maxTests} test cases. ` +
+        `Delete an existing case before adding a new one, or upgrade your plan.`,
+      status: 403,
+    };
+  }
+  // ── End plan limit enforcement ────────────────────────────────────────────
+
+  const newCase = await createTestCase({
+    testRunId: params.id,
+    title,
+    category,
+    steps,
+    expectedResult,
+    priority,
+    description,
+    tags,
+  });
+
+  // Keep total_tests in sync
+  const total = await countTestCasesByRunId(params.id);
+  await db
+    .update(test_runs)
+    .set({ total_tests: total })
+    .where(eq(test_runs.id, params.id));
+
+  return { testCase: newCase };
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /api/test/run/[id]/cases/[caseId]  — edit a test case during review
+// ---------------------------------------------------------------------------
+
+export async function updateTestCaseHandler({
+  params,
+  body,
+}: {
+  params: { id: string; caseId: string };
+  body: {
+    title?: string;
+    category?: string;
+    steps?: string[];
+    expectedResult?: string;
+    priority?: "P0" | "P1" | "P2";
+    description?: string;
+  };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be edited during review", status: 400 };
+
+  const updated = await updateTestCase(params.caseId, params.id, body);
+  if (!updated)
+    return { error: "Test case not found or does not belong to this run", status: 404 };
+
+  return { testCase: updated };
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/test/run/[id]/cases/[caseId]  — delete a test case during review
+// ---------------------------------------------------------------------------
+
+export async function deleteTestCaseHandler({
+  params,
+}: {
+  params: { id: string; caseId: string };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be deleted during review", status: 400 };
+
+  // Enforce minimum of one test case
+  const total = await countTestCasesByRunId(params.id);
+  if (total <= 1)
+    return {
+      error: "Cannot delete the last test case — at least one must remain",
+      status: 400,
+    };
+
+  await deleteTestCase(params.caseId, params.id);
+
+  // Keep total_tests in sync
+  const newTotal = await countTestCasesByRunId(params.id);
+  await db
+    .update(test_runs)
+    .set({ total_tests: newTotal })
+    .where(eq(test_runs.id, params.id));
+
+  return { deleted: true };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/test/run/[id]/confirm  — confirm review and begin execution
+// ---------------------------------------------------------------------------
+
+export async function confirmAndExecuteHandler({
+  params,
+}: {
+  params: { id: string };
+}): Promise<{ confirmed: boolean } | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Run is not awaiting review", status: 400 };
+
+  // Final gate: must have at least one test case before executing
+  const total = await countTestCasesByRunId(params.id);
+  if (total === 0)
+    return { error: "Cannot execute — no test cases exist", status: 400 };
+
+  const resolver = reviewResolvers.get(params.id);
+  if (!resolver) {
+    // Pipeline process may have died or restarted — not currently waiting.
+    return { error: "Pipeline is not waiting for review confirmation. Try refreshing.", status: 409 };
+  }
+
+  resolver(true);
+  return { confirmed: true };
+}
+
+// ---------------------------------------------------------------------------
 // DELETE /api/test/run/[id]/cancel
 // ---------------------------------------------------------------------------
 
@@ -946,6 +1583,10 @@ export async function cancelTestRunHandler({
   const isTerminal = (s: string) =>
     s === "complete" || s === "failed" || s === "cancelled";
   if (isTerminal(run.status)) return { cancelled: false };
+
+  // If paused at review, resolve the promise with false to unblock the pipeline
+  const resolver = reviewResolvers.get(params.id);
+  if (resolver) resolver(false);
 
   cancelledPipelines.add(params.id);
   crawlAbortControllers.get(params.id)?.abort();
@@ -1056,34 +1697,67 @@ export async function getTestReportHandler({
   );
 
   const perfRows = await db
-  .select()
-  .from(performance_metrics)
-  .where(eq(performance_metrics.test_run_id, params.id));
+    .select()
+    .from(performance_metrics)
+    .where(eq(performance_metrics.test_run_id, params.id));
 
   const performanceGauges = perfRows.map((pm) => {
     const raw = pm.raw_metrics as Record<string, unknown> | null;
-    const domContentLoadedMs = typeof raw?.domContentLoadedMs === "number" ? raw.domContentLoadedMs : null;
-    const loadEventMs        = typeof raw?.loadEventMs        === "number" ? raw.loadEventMs        : null;
-    console.log("in controller: lcp_ms:", pm.lcp_ms);
+    const domContentLoadedMs =
+      typeof raw?.domContentLoadedMs === "number"
+        ? raw.domContentLoadedMs
+        : null;
+    const loadEventMs =
+      typeof raw?.loadEventMs === "number" ? raw.loadEventMs : null;
 
     return {
       pageUrl: pm.page_url,
-      lcpMs:   pm.lcp_ms,
-      fidMs:   pm.fid_ms,
-      cls:     pm.cls,
-      ttfbMs:  pm.ttfb_ms,
+      lcpMs: pm.lcp_ms,
+      fidMs: pm.fid_ms,
+      cls: pm.cls,
+      ttfbMs: pm.ttfb_ms,
       domContentLoadedMs,
       loadEventMs,
       lcpStatus:
-        pm.lcp_ms  === null ? "unknown" : pm.lcp_ms  < 2500 ? "good" : pm.lcp_ms  < 4000 ? "needs-improvement" : "poor",
+        pm.lcp_ms === null
+          ? "unknown"
+          : pm.lcp_ms < 2500
+            ? "good"
+            : pm.lcp_ms < 4000
+              ? "needs-improvement"
+              : "poor",
       clsStatus:
-        pm.cls     === null ? "unknown" : pm.cls     < 0.1  ? "good" : pm.cls     < 0.25 ? "needs-improvement" : "poor",
+        pm.cls === null
+          ? "unknown"
+          : pm.cls < 0.1
+            ? "good"
+            : pm.cls < 0.25
+              ? "needs-improvement"
+              : "poor",
       ttfbStatus:
-        pm.ttfb_ms === null ? "unknown" : pm.ttfb_ms < 800  ? "good" : pm.ttfb_ms < 1800 ? "needs-improvement" : "poor",
+        pm.ttfb_ms === null
+          ? "unknown"
+          : pm.ttfb_ms < 800
+            ? "good"
+            : pm.ttfb_ms < 1800
+              ? "needs-improvement"
+              : "poor",
       domContentLoadedStatus:
-        domContentLoadedMs === null ? "unknown" : domContentLoadedMs < 1500 ? "good" : domContentLoadedMs < 3000 ? "needs-improvement" : "poor",
+        domContentLoadedMs === null
+          ? "unknown"
+          : domContentLoadedMs < 1500
+            ? "good"
+            : domContentLoadedMs < 3000
+              ? "needs-improvement"
+              : "poor",
       loadEventStatus:
-        loadEventMs === null ? "unknown" : loadEventMs < 2000 ? "good" : loadEventMs < 4000 ? "needs-improvement" : "poor",
+        loadEventMs === null
+          ? "unknown"
+          : loadEventMs < 2000
+            ? "good"
+            : loadEventMs < 4000
+              ? "needs-improvement"
+              : "poor",
     };
   });
 
@@ -1178,9 +1852,7 @@ export async function getPublicReportHandler({
   if (!exportRow) return { error: "Report not found", status: 404 };
   if (!exportRow.is_public)
     return { error: "This report is private", status: 403 };
-  // CHANGED: previously called getTestReportHandler({ params: { id: exportRow.test_run_id } })
-  // which requires a session and returns 401 for unauthenticated users.
-  // Now we pass the run id directly via params so the share link works without login.
+  // we pass the run id directly via params so the share link works without login.
   return getTestReportHandler({ params: { id: exportRow.test_run_id } });
 }
 
@@ -1214,9 +1886,12 @@ export async function getEmbedBadgeHandler({
 
 // ---------------------------------------------------------------------------
 // GET /api/badge/[token]/svg
-// ADDED: Returns an actual SVG image so the badge renders in GitHub READMEs,
-// websites, and any Markdown renderer. The copied badge markdown from the
-// report page points to this endpoint as the image src.
+// ADDED: Returns an actual SVG image (not JSON).
+// This is what the "Copy Badge" button points to as the image src in the
+// markdown string: [![Tested by Buildify](.../svg)](report-link).
+// IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
+// "svg" as the token param on the route above. Elysia matches more-specific
+// (longer) static segments first, so /badge/:token/svg wins correctly.
 // No auth required — token is a nanoid(32) opaque string.
 // ---------------------------------------------------------------------------
 
@@ -1230,7 +1905,7 @@ export async function getEmbedBadgeSvgHandler({
     with: { testRun: true },
   });
 
-  // ADDED: return plain-text 404 (not JSON) so broken image shows cleanly
+  // return plain-text 404 (not JSON) so broken image shows cleanly
   if (!exportRow) {
     return new Response("Badge not found", { status: 404 });
   }
@@ -1239,11 +1914,11 @@ export async function getEmbedBadgeSvgHandler({
     (exportRow as unknown as { testRun: { overall_score: number | null } })
       .testRun?.overall_score ?? 0;
 
-  // ADDED: colour mirrors the score gauge thresholds used in the dashboard UI
+  // colour mirrors the score gauge thresholds used in the dashboard UI
   const color =
     score >= 90 ? "#22c55e" : score >= 70 ? "#eab308" : "#ef4444";
 
-  // UPDATED: single unified label as specified in the plan doc —
+  // single unified label as specified in the plan doc —
   // "Tested by Buildify — Score: 94" as one cohesive badge, not two
   // separate dark-label + colored-score sections.
   const badgeText = `Tested by Buildify — Score: ${score}`;
@@ -1507,7 +2182,8 @@ export async function exportTestReportPdfHandler({
         .map(([cat, data]) => {
           const pct =
             data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0;
-          const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
+          const col =
+            pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
           return `<div class="category-card">
           <div class="category-pct" style="color:${col};">${pct}%</div>
           <div class="category-name">${cat.replace(/_/g, " ")}</div>

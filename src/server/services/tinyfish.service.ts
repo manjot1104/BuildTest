@@ -16,8 +16,6 @@
 //
 // ═══════════════════════════════════════════════════════════════════════════
 
-// currently using 'standard' as default for Budget_presets, but will change it in future.
-
 import { measurePagePerformanceWithPuppeteer } from "./puppeteer.service";
 
 const TINYFISH_API_URL = "https://agent.tinyfish.ai/v1/automation/run-sse";
@@ -31,33 +29,96 @@ export interface CrawlBudget {
   concurrency: number;
 }
 
+// [ADDED] Per-run timeout overrides. All values are in milliseconds.
+// When provided via CrawlOptions these replace the module-level TIMEOUTS
+// defaults for the duration of a single crawlSite() invocation.
+// Fields are optional — omitting a field keeps the default value.
+export interface TimeoutOverrides {
+  /** How long to wait for the Stage-1 discovery TinyFish call (default 300 000 ms). */
+  discoveryMs?: number;
+  /** How long to wait for each Stage-2 per-page extraction call (default 300 000 ms). */
+  extractionMs?: number;
+  /** Base timeout for a single test execution (default 300 000 ms). */
+  executeTestBaseMs?: number;
+}
+
 export interface TestBudgetAllocation {
   testsPerPage: Map<string, number>;
   totalTests: number;
 }
 
-export const BUDGET_PRESETS = {
-  free: { maxPages: 3, maxTests: 5, concurrency: 3 } satisfies CrawlBudget,
-  standard: { maxPages: 5, maxTests: 10, concurrency: 5 } satisfies CrawlBudget,
-  deep: { maxPages: 10, maxTests: 15, concurrency: 10 } satisfies CrawlBudget,
-} as const;
+// Default budget used when the user does not specify maxPages / maxTests.
+// These are the values the server falls back to — not exposed as named presets.
+const DEFAULT_BUDGET: CrawlBudget = {
+  maxPages: 5,
+  maxTests: 10,
+  concurrency: 5,
+};
 
+// Hard server-side caps — the UI enforces its own soft limits before these.
+// These must stay in sync with the Elysia route schema constraints:
+//   maxPages: t.Integer({ minimum: 1, maximum: 20 })
+//   maxTests: t.Integer({ minimum: 1, maximum: 30 })
+// [ADDED] HARD_CAPS.MAX_CONCURRENCY caps the concurrency slider server-side.
+// [ADDED] HARD_CAPS.MIN_CONCURRENCY prevents a value of 0 from deadlocking.
+// [ADDED] HARD_CAPS.MAX_TIMEOUT_MS / MIN_TIMEOUT_MS guard against absurd values.
 const HARD_CAPS = {
-  MAX_PAGES: 10,
-  MAX_TESTS: 15,
-  MAX_TESTS_PER_PAGE: 5,
+  MAX_PAGES: 20,
+  MAX_TESTS: 30,
+  MAX_TESTS_PER_PAGE: 8,
   MIN_TESTS_PER_PAGE: 1,
+  MIN_CONCURRENCY: 1,
+  MAX_CONCURRENCY: 20,
+  MIN_TIMEOUT_MS: 30_000,   // 30 s — below this TinyFish almost always times out
+  MAX_TIMEOUT_MS: 600_000,  // 10 min — sane upper bound
 } as const;
 
+// [CHANGED] TIMEOUTS is now mutable-compatible via a helper (resolveTimeouts)
+// so per-run overrides can be applied without mutating the module constant.
 const TIMEOUTS = {
-  // Discovery: needs time to click nav + wait for URL changes
   DISCOVERY_MS: 300_000,
   EXTRACTION_MS: 300_000,
   EXTRACTION_RETRY_MS: 60_000,
-  // Test execution
   EXECUTE_TEST_BASE_MS: 300_000,
   EXECUTE_TEST_RETRY_BONUS_MS: 60_000,
 } as const;
+
+// [ADDED] ResolvedTimeouts is a plain mutable interface that mirrors the shape
+// of TIMEOUTS but uses `number` instead of literal types. This is necessary
+// because resolveTimeouts() returns values produced by clamp() (type `number`),
+// which is not assignable to the readonly literal types in `typeof TIMEOUTS`.
+interface ResolvedTimeouts {
+  DISCOVERY_MS: number;
+  EXTRACTION_MS: number;
+  EXTRACTION_RETRY_MS: number;
+  EXECUTE_TEST_BASE_MS: number;
+  EXECUTE_TEST_RETRY_BONUS_MS: number;
+}
+
+// [ADDED] resolveTimeouts merges user-supplied overrides onto the module
+// defaults, clamping each value to [MIN_TIMEOUT_MS, MAX_TIMEOUT_MS].
+// Returns a ResolvedTimeouts object (mutable numbers, not readonly literals).
+function resolveTimeouts(overrides?: TimeoutOverrides): ResolvedTimeouts {
+  if (!overrides) return { ...TIMEOUTS };
+  const clamp = (v: number) =>
+    Math.max(HARD_CAPS.MIN_TIMEOUT_MS, Math.min(v, HARD_CAPS.MAX_TIMEOUT_MS));
+  return {
+    DISCOVERY_MS:
+      overrides.discoveryMs !== undefined
+        ? clamp(overrides.discoveryMs)
+        : TIMEOUTS.DISCOVERY_MS,
+    EXTRACTION_MS:
+      overrides.extractionMs !== undefined
+        ? clamp(overrides.extractionMs)
+        : TIMEOUTS.EXTRACTION_MS,
+    EXTRACTION_RETRY_MS: TIMEOUTS.EXTRACTION_RETRY_MS, // not user-overridable
+    EXECUTE_TEST_BASE_MS:
+      overrides.executeTestBaseMs !== undefined
+        ? clamp(overrides.executeTestBaseMs)
+        : TIMEOUTS.EXECUTE_TEST_BASE_MS,
+    EXECUTE_TEST_RETRY_BONUS_MS: TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS, // not user-overridable
+  };
+}
 
 export const MAX_EXTRACTION_RETRIES = 1;
 export const MAX_TEST_RETRIES = 1;
@@ -72,13 +133,76 @@ function makeCrawlContext(): CrawlContext {
   return { creditsExhausted: false };
 }
 
+// ─── [ADDED] Crawl progress callback ─────────────────────────────────────────
+// CrawlProgressCallback is a function the controller passes into crawlSite so
+// the service can emit real-time crawl events back up to the SSE stream without
+// the service needing to know about HTTP or SSE directly.
+//
+// WHY: Previously crawl progress was only logged to the server terminal.
+// Users had no visibility into what was being discovered or extracted.
+// This callback bridges that gap — zero coupling, pure function call.
+//
+// Events emitted through this callback:
+//   crawl_stage_change  — when the pipeline moves between Stage 0/1/2/3
+//   crawl_url_found     — each URL discovered during Stage 1
+//   crawl_page_extracted — each page successfully extracted in Stage 2
+//   crawl_page_failed   — each page that failed extraction (with reason)
+export type CrawlProgressCallback = (event: CrawlProgressEvent) => void;
+
+export type CrawlProgressEvent =
+  | {
+      type: "crawl_stage_change";
+      /** Human-readable stage name, e.g. "Seeding URLs", "Discovering pages" */
+      stage: string;
+      /** Short description shown under the stage name in the UI */
+      description: string;
+    }
+  | {
+      type: "crawl_url_found";
+      url: string;
+      /** Where the URL came from: "sitemap" | "html" | "discovery" */
+      source: "sitemap" | "html" | "discovery";
+    }
+  | {
+      type: "crawl_page_extracted";
+      url: string;
+      title: string;
+      elementsCount: number;
+      formsCount: number;
+      linksCount: number;
+      /** 1-based index so the UI can show "2 / 5 pages extracted" */
+      index: number;
+      total: number;
+    }
+  | {
+      type: "crawl_page_failed";
+      url: string;
+      reason: string;
+      index: number;
+      total: number;
+    };
+
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
+// [CHANGED] CrawlOptions now accepts an optional timeouts field so callers
+// (testing.controller.ts → runPipelineStages) can pass user-requested
+// timeout overrides all the way down to the TinyFish calls.
+//
+// [ADDED] CrawlOptions now also accepts an optional onProgress callback so
+// the controller can forward live crawl events to SSE clients.
 export interface CrawlOptions {
   budget?: Partial<CrawlBudget>;
   allowedDomain?: string;
   testRunId?: string;
   abortSignal?: AbortSignal;
+  /** Optional per-run timeout overrides (milliseconds). Clamped server-side. */
+  timeouts?: TimeoutOverrides;
+  /**
+   * [ADDED] Optional callback fired for each significant crawl event.
+   * Used by testing.controller to fan out real-time progress to SSE clients.
+   * Omit if you don't need live progress (e.g. unit tests, single-page crawls).
+   */
+  onProgress?: CrawlProgressCallback;
 }
 
 export interface TinyFishRequest {
@@ -222,6 +346,14 @@ export type PipelineSSEEvent =
         expected_result: string;
         target_url: string;
       }[];
+    }
+  // [ADDED] crawl_progress is a new SSE event type that wraps CrawlProgressEvent
+  // so the frontend can receive the same typed events the service emits via callback.
+  // Keeping it as a wrapper (rather than inlining each sub-type) means the client
+  // SSE parser only needs one new case, not four.
+  | {
+      type: "crawl_progress";
+      event: CrawlProgressEvent;
     };
 
 export class TinyFishCreditsExhaustedError extends Error {
@@ -543,7 +675,6 @@ function tryParseRawText(raw: string | null): Record<string, unknown> | null {
         /* continue */
       }
     }
-    // Also try array recovery for discovery results
     const arrStart = cleaned.indexOf("[");
     const arrEnd = cleaned.lastIndexOf("]");
     if (arrStart !== -1 && arrEnd > arrStart) {
@@ -650,11 +781,6 @@ async function fetchStaticHtmlLinks(
 }
 
 // ─── Stage 1: Discovery prompt ────────────────────────────────────────────────
-//
-// This is a SINGLE TinyFish call on the root URL.
-// Its only job: navigate the site (including clicking SPA nav items) and
-// return a flat JSON array of all page URLs it found.
-// It does NOT extract page content — that happens in parallel in Stage 2.
 
 function buildDiscoveryGoal(
   rootUrl: string,
@@ -693,9 +819,6 @@ The "urls" field must be an array of absolute URL strings.
 }
 
 // ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
-//
-// Called in parallel for each discovered URL.
-// Passive only — no clicking. Just reads what's on the page.
 
 function buildExtractionGoal(url: string, allowedHostname: string): string {
   return `Navigate to this URL: ${url}
@@ -885,6 +1008,15 @@ export function allocateTestBudget(
 
 // ─── Main crawl ───────────────────────────────────────────────────────────────
 
+// [CHANGED] crawlSite now reads options.budget.concurrency (user-supplied,
+// clamped to HARD_CAPS) and options.timeouts (merged via resolveTimeouts).
+// The resolved concurrency is logged alongside pages/tests so it's visible
+// in server logs when diagnosing slow or failed crawls.
+//
+// [ADDED] crawlSite also reads options.onProgress and fires it at key crawl
+// milestones so the controller can relay live events to SSE clients.
+// All onProgress calls are fire-and-forget (no await) — they must never
+// block or throw inside the crawl hot path.
 export async function crawlSite(
   rootUrl: string,
   options: CrawlOptions = {},
@@ -905,24 +1037,55 @@ export async function crawlSite(
   const abortSignal = options.abortSignal;
   const ctx = makeCrawlContext();
 
+  // [ADDED] Convenience wrapper — fires the progress callback safely.
+  // Using a helper prevents repetition and ensures we never throw from a missing callback.
+  const emitProgress = (event: CrawlProgressEvent) => {
+    try {
+      options.onProgress?.(event);
+    } catch {
+      /* progress callbacks must never crash the crawl */
+    }
+  };
+
+  // [ADDED] Per-run timeout overrides. All values are in milliseconds.
+  const timeouts = resolveTimeouts(options.timeouts);
+
+  // Resolve effective budget: user values → defaults → hard caps.
+  // [CHANGED] concurrency is now clamped to [MIN_CONCURRENCY, MAX_CONCURRENCY]
+  // so a user supplying concurrency=0 or concurrency=999 gets a safe value.
   const budget: CrawlBudget = {
     maxPages: Math.min(
-      options.budget?.maxPages ?? BUDGET_PRESETS.standard.maxPages,
+      options.budget?.maxPages ?? DEFAULT_BUDGET.maxPages,
       HARD_CAPS.MAX_PAGES,
     ),
     maxTests: Math.min(
-      options.budget?.maxTests ?? BUDGET_PRESETS.standard.maxTests,
+      options.budget?.maxTests ?? DEFAULT_BUDGET.maxTests,
       HARD_CAPS.MAX_TESTS,
     ),
-    concurrency:
-      options.budget?.concurrency ?? BUDGET_PRESETS.standard.concurrency,
+    concurrency: Math.max(
+      HARD_CAPS.MIN_CONCURRENCY,
+      Math.min(
+        options.budget?.concurrency ?? DEFAULT_BUDGET.concurrency,
+        HARD_CAPS.MAX_CONCURRENCY,
+      ),
+    ),
   };
 
   console.log(
-    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests}`,
+    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests} concurrency=${budget.concurrency} ` +
+      `discoveryMs=${timeouts.DISCOVERY_MS} extractionMs=${timeouts.EXTRACTION_MS} executeBaseMs=${timeouts.EXECUTE_TEST_BASE_MS} ` +
+      `(user-requested: pages=${options.budget?.maxPages ?? "default"} tests=${options.budget?.maxTests ?? "default"} ` +
+      `concurrency=${options.budget?.concurrency ?? "default"})`,
   );
 
-  // ── Stage 0: Free URL seeding (no TinyFish credits) ───────────────────────
+  // ── Stage 0: Free URL seeding ──────────────────────────────────────────────
+  // [ADDED] Notify the client that we're starting the free seeding stage.
+  emitProgress({
+    type: "crawl_stage_change",
+    stage: "Seeding URLs",
+    description: "Scanning sitemap and static HTML for page URLs",
+  });
+
   const [sitemapUrls, staticHtmlLinks] = await Promise.all([
     fetchSitemapUrls(rootUrl, allowedHostname),
     fetchStaticHtmlLinks(rootUrl, allowedHostname),
@@ -931,32 +1094,49 @@ export async function crawlSite(
   const freeUrls = dedupeUrls(
     [normalizeUrl(rootUrl), ...sitemapUrls, ...staticHtmlLinks],
     allowedHostname,
-    budget.maxPages * 3, // gather more than needed, will trim after discovery
+    budget.maxPages * 3,
   );
 
   console.log(
     `[Stage0] Free seed: ${freeUrls.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
   );
 
-  // ── Stage 1: Discovery via TinyFish ──────────────────────────────────────
-  // One call on the root URL — clicks nav items to find all SPA pages.
-  // Falls back gracefully to Stage 0 free URLs if discovery fails.
+  // [ADDED] Emit each URL found during free seeding so the UI can start
+  // populating the "URLs found" list immediately, before TinyFish even starts.
+  for (const url of freeUrls) {
+    const source = sitemapUrls.includes(url)
+      ? "sitemap"
+      : url === normalizeUrl(rootUrl)
+        ? "html"
+        : "html";
+    emitProgress({ type: "crawl_url_found", url, source });
+  }
+
+  // ── Stage 1: Discovery via TinyFish ───────────────────────────────────────
   let discoveredUrls: string[] = [];
 
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
   console.log(`[Stage1] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
 
+  // [ADDED] Tell the user we're now running the TinyFish discovery call.
+  emitProgress({
+    type: "crawl_stage_change",
+    stage: "Discovering pages",
+    description: `Navigating ${rootUrl} to find all page routes`,
+  });
+
+  // [CHANGED] Use resolved timeouts.DISCOVERY_MS instead of the module constant.
   const discoveryResult = await withTimeout(
     runTinyFish(
       {
         url: rootUrl,
         goal: buildDiscoveryGoal(rootUrl, allowedHostname, budget.maxPages),
-        browser_profile: "stealth", // stealth for nav clicking to avoid bot detection
+        browser_profile: "stealth",
       },
       ctx,
     ),
-    TIMEOUTS.DISCOVERY_MS,
+    timeouts.DISCOVERY_MS,
     {
       success: false,
       resultJson: null,
@@ -967,11 +1147,9 @@ export async function crawlSite(
     `discovery(${rootUrl})`,
   );
 
-  // Extract URLs from discovery result — try every possible shape TinyFish might return
   function extractUrlsFromDiscovery(result: TinyFishResult): string[] {
     const candidates: string[] = [];
 
-    // Strategy 1: resultJson is present — try all known key names
     if (result.resultJson) {
       const raw = result.resultJson;
       const urlList = Array.isArray(raw)
@@ -994,7 +1172,6 @@ export async function crawlSite(
       );
     }
 
-    // Strategy 2: rawText JSON parse
     if (result.rawText && candidates.length === 0) {
       const parsed = tryParseRawText(result.rawText);
       if (parsed) {
@@ -1015,8 +1192,6 @@ export async function crawlSite(
       }
     }
 
-    // Strategy 3: regex scan rawText for any URL matching allowedHostname
-    // This is the last-resort fallback when TinyFish writes prose instead of JSON
     if (result.rawText && candidates.length === 0) {
       const urlRegex = new RegExp(
         `https?://${allowedHostname.replace(/\./g, "\\.")}[^\\s"'<>\\]},]*`,
@@ -1045,17 +1220,23 @@ export async function crawlSite(
 
   if (discoveredUrls.length > 0) {
     console.log(`[Stage1] ✓ Discovery found ${discoveredUrls.length} pages`);
+    // [ADDED] Emit each newly-discovered URL (not already seen from free seeding).
+    // We track which ones are new to avoid double-emitting root URL and sitemap links.
+    const alreadyEmitted = new Set(freeUrls);
+    for (const url of discoveredUrls) {
+      if (!alreadyEmitted.has(url)) {
+        emitProgress({ type: "crawl_url_found", url, source: "discovery" });
+      }
+    }
   } else {
     console.warn(
       `[Stage1] ⚠ Discovery returned 0 URLs. status=${discoveryResult.error ?? "ok"} rawText="${discoveryResult.rawText?.slice(0, 200)}"`,
     );
   }
 
-  // Always ensure root URL is included
   const rootNorm = normalizeUrl(rootUrl);
   if (!discoveredUrls.includes(rootNorm)) discoveredUrls.unshift(rootNorm);
 
-  // Merge with free URLs — discovery takes priority, free URLs fill gaps
   const allCandidateUrls = dedupeUrls(
     [...discoveredUrls, ...freeUrls],
     allowedHostname,
@@ -1073,63 +1254,122 @@ export async function crawlSite(
   );
 
   // ── Stage 2: Parallel extraction ──────────────────────────────────────────
-  // ALL pages extracted simultaneously — no BFS, no waiting on each other.
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
   console.log(
-    `[Stage2] ⚡ Extracting ${allCandidateUrls.length} pages in parallel`,
+    `[Stage2] ⚡ Extracting ${allCandidateUrls.length} pages in parallel (concurrency=${budget.concurrency})`,
   );
 
-  const extractionResults = await Promise.allSettled(
-    allCandidateUrls.map(async (pageUrl) => {
-      for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
-        if (abortSignal?.aborted || ctx.creditsExhausted) break;
-        if (attempt > 0) console.log(`[Stage2] Retry ${attempt}: ${pageUrl}`);
+  // [ADDED] Notify the client that we're moving into page extraction.
+  emitProgress({
+    type: "crawl_stage_change",
+    stage: "Extracting pages",
+    description: `Analyzing ${allCandidateUrls.length} page${allCandidateUrls.length !== 1 ? "s" : ""} for elements, forms and links`,
+  });
 
-        const timeoutMs =
-          TIMEOUTS.EXTRACTION_MS + attempt * TIMEOUTS.EXTRACTION_RETRY_MS;
-        const result = await withTimeout(
-          runTinyFish(
+  // [CHANGED] Previously all pages were fired simultaneously with
+  // Promise.allSettled. Now we respect budget.concurrency by processing
+  // pages in sliding-window batches of size `budget.concurrency`.
+  // This prevents saturating the TinyFish API with too many simultaneous
+  // connections on large crawls.
+  const extractionResults: PromiseSettledResult<CrawledPage | null>[] = [];
+
+  // [ADDED] Track how many pages have settled (succeeded or failed) so we can
+  // include a 1-based index in crawl_page_extracted / crawl_page_failed events.
+  let extractedCount = 0;
+  const totalToExtract = allCandidateUrls.length;
+
+  for (
+    let batchStart = 0;
+    batchStart < allCandidateUrls.length;
+    batchStart += budget.concurrency
+  ) {
+    const batchUrls = allCandidateUrls.slice(
+      batchStart,
+      batchStart + budget.concurrency,
+    );
+
+    const batchResults = await Promise.allSettled(
+      batchUrls.map(async (pageUrl) => {
+        for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
+          if (abortSignal?.aborted || ctx.creditsExhausted) break;
+          if (attempt > 0) console.log(`[Stage2] Retry ${attempt}: ${pageUrl}`);
+
+          // [CHANGED] Use resolved timeouts.EXTRACTION_MS instead of module constant.
+          const timeoutMs =
+            timeouts.EXTRACTION_MS + attempt * timeouts.EXTRACTION_RETRY_MS;
+          const result = await withTimeout(
+            runTinyFish(
+              {
+                url: pageUrl,
+                goal: buildExtractionGoal(pageUrl, allowedHostname),
+                browser_profile: "lite",
+              },
+              ctx,
+            ),
+            timeoutMs,
             {
-              url: pageUrl,
-              goal: buildExtractionGoal(pageUrl, allowedHostname),
-              browser_profile: "lite",
+              success: false,
+              resultJson: null,
+              rawText: null,
+              error: "timeout",
+              jobId: null,
             },
-            ctx,
-          ),
-          timeoutMs,
-          {
-            success: false,
-            resultJson: null,
-            rawText: null,
-            error: "timeout",
-            jobId: null,
-          },
-          `extract(${pageUrl}) attempt=${attempt + 1}`,
-        );
-
-        const raw = result.resultJson ?? tryParseRawText(result.rawText);
-        if (!raw) {
-          console.warn(
-            `[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
+            `extract(${pageUrl}) attempt=${attempt + 1}`,
           );
-          continue;
-        }
 
-        const extracted = extractPageData(pageUrl, raw, allowedHostname);
-        console.log(
-          `[Stage2] ✓ "${extracted.title}" ${pageUrl} | ` +
-            `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
-            `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
-        );
-        return {
-          ...extracted,
-          screenshots: { url375: null, url768: null, url1440: null },
-        } as CrawledPage;
-      }
-      return null; // extraction failed after retries
-    }),
-  );
+          const raw = result.resultJson ?? tryParseRawText(result.rawText);
+          if (!raw) {
+            console.warn(
+              `[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
+            );
+            // [ADDED] Only emit failure after the last retry attempt so the UI
+            // doesn't flicker between "extracting" and "failed" on transient errors.
+            if (attempt === MAX_EXTRACTION_RETRIES) {
+              extractedCount++;
+              emitProgress({
+                type: "crawl_page_failed",
+                url: pageUrl,
+                reason: result.error ?? "No data returned",
+                index: extractedCount,
+                total: totalToExtract,
+              });
+            }
+            continue;
+          }
+
+          const extracted = extractPageData(pageUrl, raw, allowedHostname);
+          console.log(
+            `[Stage2] ✓ "${extracted.title}" ${pageUrl} | ` +
+              `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
+              `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
+          );
+
+          // [ADDED] Emit success event with enough metadata for the UI to render
+          // a rich "N of M pages extracted" card with title + stats.
+          extractedCount++;
+          emitProgress({
+            type: "crawl_page_extracted",
+            url: pageUrl,
+            title: extracted.title || pageUrl,
+            elementsCount: extracted.elements.length,
+            formsCount: extracted.forms.length,
+            linksCount: extracted.internalLinks.length,
+            index: extractedCount,
+            total: totalToExtract,
+          });
+
+          return {
+            ...extracted,
+            screenshots: { url375: null, url768: null, url1440: null },
+          } as CrawledPage;
+        }
+        return null;
+      }),
+    );
+
+    extractionResults.push(...batchResults);
+  }
 
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
@@ -1162,6 +1402,13 @@ export async function crawlSite(
   );
 
   // ── Stage 3: Test budget allocation ───────────────────────────────────────
+  // [ADDED] Notify the client that budget allocation is happening.
+  emitProgress({
+    type: "crawl_stage_change",
+    stage: "Allocating test budget",
+    description: `Planning test distribution across ${pages.length} page${pages.length !== 1 ? "s" : ""}`,
+  });
+
   const testBudget = allocateTestBudget(pages, budget.maxTests);
   const allLinks = [...new Set(pages.flatMap((p) => p.internalLinks))];
   const crawlTimeMs = Date.now() - startTime;
@@ -1333,14 +1580,21 @@ export async function measurePagePerformance(
 
 // ─── Test execution ───────────────────────────────────────────────────────────
 
+// [CHANGED] executeTest now accepts an optional timeouts argument so the
+// controller can pass user-requested timeout overrides into individual test
+// execution calls. When omitted the module-level TIMEOUTS defaults apply.
 export async function executeTest(
   url: string,
   goal: string,
   stealth = false,
   attempt = 0,
+  timeoutOverrides?: TimeoutOverrides,
 ): Promise<TestExecutionResult> {
   const ctx = makeCrawlContext();
   const startTime = Date.now();
+
+  // [ADDED] Resolve timeouts for this execution call.
+  const resolvedTimeouts = resolveTimeouts(timeoutOverrides);
 
   const fullGoal = `You are a QA test automation agent. Execute these test steps in a real browser.
 
@@ -1362,13 +1616,14 @@ Return ONLY this JSON, no markdown, start with { end with }:
 If PASSED: {"passed":true,"actualResult":"<what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
 If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"<specific error>","consoleLogs":[],"networkLogs":[]}`;
 
+  // [CHANGED] Use resolved EXECUTE_TEST_BASE_MS instead of the module constant.
   const result = await withTimeout(
     runTinyFish(
       { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
       ctx,
     ),
-    TIMEOUTS.EXECUTE_TEST_BASE_MS +
-      attempt * TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS,
+    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
+      attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS,
     {
       success: false,
       resultJson: null,
