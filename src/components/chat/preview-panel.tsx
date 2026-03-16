@@ -52,7 +52,7 @@ type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
 const DEVICE_WIDTHS: Record<PreviewDevice, string> = {
   mobile: '375px',
   tablet: '768px',
-  desktop: '100%',
+  desktop: 'calc(100% - 2rem)',
 }
 
 /* -------------------- BUILDING LOADER -------------------- */
@@ -93,7 +93,8 @@ export function PreviewPanel({
   isBuilding = false,
 }: PreviewPanelProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
+  const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
+  console.log('🖼️ PreviewPanel rendered | currentChat.demo:', currentChat?.demo, '| iframeSrc state:', iframeSrc)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
@@ -103,14 +104,22 @@ export function PreviewPanel({
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
+  // Sync iframeSrc when currentChat.demo changes
   useEffect(() => {
     if (currentChat?.demo) {
       setIframeSrc(currentChat.demo)
     }
   }, [currentChat?.demo])
 
-  const showBuildingLoader = isBuilding && !currentChat?.demo
+  const effectiveSrc = iframeSrc || currentChat?.demo
+const showBuildingLoader = isBuilding && !effectiveSrc
 
+
+console.log('🖼️ effectiveSrc:', effectiveSrc)
+console.log('🖼️ showBuildingLoader:', showBuildingLoader)
+if (!effectiveSrc) {
+  console.log('🖼️ No effectiveSrc — will show No preview available')
+}
   // keyboard fullscreen toggle (ignore when typing in inputs)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -176,9 +185,9 @@ export function PreviewPanel({
 
               <WebPreviewNavigationButton
                 tooltip="Refresh preview"
-                disabled={!iframeSrc}
+                disabled={!effectiveSrc}
                 onClick={() => {
-                  if (!iframeSrc) return
+                  if (!effectiveSrc) return
                   setIsReloading(true)
                   setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
                 }}
@@ -226,7 +235,7 @@ export function PreviewPanel({
 
           {/* ---------------- PREVIEW CONTENT ---------------- */}
           <div className="flex-1 min-h-0">
-            {iframeSrc ? (
+            {effectiveSrc ? (
               <div className="h-full bg-gray-100 dark:bg-black overflow-auto">
                 <div className="flex justify-center h-full">
                   <div
@@ -238,9 +247,9 @@ export function PreviewPanel({
                     className="relative bg-white dark:bg-black shadow-md"
                   >
                     <WebPreviewBody
-                      key={iframeSrc}
-                      src={iframeSrc}
-                      className="h-full w-full"
+                      key={effectiveSrc}
+                      src={effectiveSrc}
+                      className="h-full w-full bg-white"
                       onLoad={() => setIsReloading(false)}
                     />
 
@@ -265,6 +274,7 @@ export function PreviewPanel({
               <BuildingLoader />
             ) : (
               <div className="h-full flex items-center justify-center bg-gray-50 dark:bg-black">
+                
                 <p className="text-sm text-gray-600 dark:text-gray-300">
                   No preview available
                 </p>

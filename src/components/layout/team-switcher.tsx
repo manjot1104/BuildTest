@@ -44,32 +44,32 @@ export function PlatformSwitcher({
                     <DropdownMenuTrigger asChild>
                         <SidebarMenuButton
                             size="lg"
-                            className="hk-nav-item data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                         >
-                            <div className="hk-neon-logo-box flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
+                            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary/10">
                                 <activePlatform.logo size="sm" />
                             </div>
                             <div className="grid flex-1 text-left text-sm leading-tight">
                                 <span className="truncate font-semibold">{activePlatform.name}</span>
-                                <span className="truncate font-mono text-[10px] text-muted-foreground">App Builder</span>
+                                <span className="truncate text-[10px] text-muted-foreground">App Builder</span>
                             </div>
                             <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
                         </SidebarMenuButton>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
-                        className="hk-neon-dropdown w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                        className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg shadow-md"
                         align="start"
                         side={isMobile ? "bottom" : "right"}
                         sideOffset={4}
                     >
-                        <DropdownMenuLabel className="hk-group-label text-muted-foreground text-xs">
+                        <DropdownMenuLabel className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
                             Platforms
                         </DropdownMenuLabel>
                         {platforms.map((platform) => (
                             <DropdownMenuItem
                                 key={platform.name}
                                 onClick={() => window.location.href = platform.url}
-                                className="hk-neon-dropdown-item gap-2 p-2"
+                                className="gap-2 p-2"
                             >
                                 <div className="flex size-6 items-center justify-center rounded-md border bg-background">
                                     <platform.logo size="sm" />

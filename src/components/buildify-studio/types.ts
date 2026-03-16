@@ -24,7 +24,7 @@ export type EnterAnimation =
   | 'zoomIn'
   | 'bounce'
 
-export type HoverAnimation = 'none' | 'scale' | 'lift' | 'glow'
+export type HoverAnimation = 'none' | 'scale' | 'lift' | 'outline'
 
 /** @deprecated use EnterAnimation */
 export type AnimationType = EnterAnimation
@@ -125,7 +125,8 @@ export interface CanvasElement {
   socialLinks?: SocialLinkItem[]
   formFields?: FormField[]
   iconName?: string
-  anchorId?: string
+ 
+  sectionKey?: string
   /** Responsive overrides — tablet/mobile values merged on top of base (desktop) */
   responsiveStyles?: {
     tablet?: ResponsiveOverride

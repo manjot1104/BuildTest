@@ -1,6 +1,7 @@
 'use client'
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { ModeSelection } from "./components/mode-selection"
-import React, { useState, useEffect, useRef, Suspense } from 'react'
+
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from "next/navigation"
 import {
@@ -66,13 +67,16 @@ function SearchParamsHandler({
             newUrl.searchParams.delete('reset')
             window.history.replaceState({}, '', newUrl.pathname)
         }
-    }, [searchParams, onReset])
+    }, [searchParams])
 
     // Handle chatId from URL
-    useEffect(() => {
-        const chatId = searchParams.get('chatId')
+   // Handle chatId from URL
+useEffect(() => {
+    const chatId = searchParams.get('chatId')
+    if (chatId !== null) {              
         onChatIdChange(chatId)
-    }, [searchParams, onChatIdChange])
+    }
+}, [searchParams, onChatIdChange])
 
     return null
 }
@@ -84,30 +88,33 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
 
+
+    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const [isDragOver, setIsDragOver] = useState(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
+    const [micError, setMicError] = useState<string | null>(null)
+    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+        return new URLSearchParams(window.location.search).get('chatId')
+    }
+    return null
+})
    useEffect(() => {
   if (chatMode === "AI_CHAT") {
     setShowChatInterface(true)
     setUrlChatId(null)
   }
 }, [chatMode])
-    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
-    const [isDragOver, setIsDragOver] = useState(false)
-    const [isFullscreen, setIsFullscreen] = useState(false)
-    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
-    const [micError, setMicError] = useState<string | null>(null)
-   const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-  if (typeof window !== 'undefined') {
-    return new URLSearchParams(window.location.search).get('chatId')
-  }
-  return null
-})
 
-useEffect(() => {
-  if (urlChatId) {
-    setShowChatInterface(true)
-  }
-}, [urlChatId])
-    const textareaRef = useRef<HTMLTextAreaElement>(null)
+    useEffect(() => {
+        if (urlChatId) {
+            setChatMode("BUILDER");
+            setShowChatInterface(true);
+        }
+    }, [urlChatId]);
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     const {
         currentChat: hookCurrentChat,
@@ -147,41 +154,35 @@ useEffect(() => {
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
     !isStreaming
-
+console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrentChat?.demo, '| isStreaming:', isStreaming)
 
     // Sync loading state
     useEffect(() => {
         setIsLoading(hookIsLoading)
     }, [hookIsLoading])
 
-    const handleReset = () => {
-        // Reset all chat-related state
-        setShowChatInterface(false)
-        setMessage('')
-        setAttachments([])
-        setIsLoading(false)
-        setIsFullscreen(false)
-        setUrlChatId(null)
+  const handleReset = useCallback(() => {
+    setShowChatInterface(false)
+    setChatMode(null)
+    setMessage('')
+    setAttachments([])
+    setIsLoading(false)
+    setIsFullscreen(false)
+    setUrlChatId(null)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('chatId')
+    window.history.replaceState({}, '', newUrl.pathname)
+    clearPromptFromStorage()
+    setTimeout(() => {
+        if (textareaRef.current) {
+            textareaRef.current.focus()
+        }
+    }, 0)
+}, [])
 
-        // Clear chatId from URL
-        const newUrl = new URL(window.location.href)
-        newUrl.searchParams.delete('chatId')
-        window.history.replaceState({}, '', newUrl.pathname)
-
-        // Clear any stored data
-        clearPromptFromStorage()
-
-        // Focus textarea after reset
-        setTimeout(() => {
-            if (textareaRef.current) {
-                textareaRef.current.focus()
-            }
-        }, 0)
-    }
-
-    const handleChatIdChange = (chatId: string | null) => {
-        setUrlChatId(chatId)
-    }
+const handleChatIdChange = (chatId: string | null) => {
+    setUrlChatId(chatId)
+}
 
     // Auto-focus the textarea on page load and restore from sessionStorage
     useEffect(() => {
@@ -435,18 +436,22 @@ useEffect(() => {
 if (!chatMode) {
   return (
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-   <ModeSelection
-  onSelect={(mode) => {
-    if (mode === "AI_CHAT") {
-      router.push("/ai-chat")
-    }
-
-   if (mode === "BUILDER") {
-  setChatMode("BUILDER")
-}
-  }}
-/>
-
+      <Suspense fallback={null}>
+        <SearchParamsHandler
+          onReset={handleReset}
+          onChatIdChange={handleChatIdChange}
+        />
+      </Suspense>
+      <ModeSelection
+        onSelect={(mode) => {
+          if (mode === "AI_CHAT") {
+            router.push("/ai-chat")
+          }
+          if (mode === "BUILDER") {
+            setChatMode("BUILDER")
+          }
+        }}
+      />
     </div>
   )
 }
@@ -483,7 +488,8 @@ if (!chatMode) {
     }
 
     return (
-       <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+       <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+      <div className={cn("bg-background flex flex-col", showChatInterface ? "h-[calc(100vh-48px)] overflow-hidden" : "min-h-[calc(100vh-48px)]")}>
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -519,17 +525,26 @@ if (!chatMode) {
             />
           </div>
 
-          <ChatInput
-            message={message}
-            setMessage={setMessage}
-            onSubmit={handleSendMessage}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            showSuggestions={false}
-            attachments={attachments}
-            onAttachmentsChange={setAttachments}
-            textareaRef={textareaRef}
-          />
+          {isViewingOthersChat ? (
+            <ForkBanner
+              isAuthenticated={!!session?.user}
+              isForking={forkChat.isPending}
+              onFork={handleFork}
+              onSignIn={() => window.location.href = "/login"}
+            />
+          ) : (
+            <ChatInput
+              message={message}
+              setMessage={setMessage}
+              onSubmit={handleSendMessage}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              showSuggestions={false}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              textareaRef={textareaRef}
+            />
+          )}
 
         </div>
       }
@@ -547,7 +562,7 @@ if (!chatMode) {
 
   </div>
 ) : (
-                <div className="max-w-2xl w-full mx-auto">
+                <div className="max-w-2xl w-full mx-auto flex-1 flex flex-col items-center justify-center px-4">
                     {/* Logo + Title */}
                     <div className="flex items-center justify-center gap-3 mb-3">
                         <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/10 flex items-center justify-center">
@@ -650,13 +665,14 @@ if (!chatMode) {
                            </div>
 )}
           {!showChatInterface && (
-  <div className="px-4 sm:px-6 lg:px-8 pb-12">
+<div className="px-4 sm:px-6 lg:px-8 pb-12">
       <div className="max-w-5xl w-full mx-auto">
           <CommunityBuildsGrid />
       </div>
   </div>
 )}
         </div>
+        </ChatActionsProvider>
     )
 
 }

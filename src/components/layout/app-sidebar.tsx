@@ -1,5 +1,5 @@
 "use client"
-
+import { useRouter, usePathname } from "next/navigation"
 import * as React from "react"
 import {
     BookOpen,
@@ -11,6 +11,7 @@ import {
     LayoutTemplate,
     History,
     Star,
+    ShieldCheck,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -51,13 +52,14 @@ export type NavItem = {
 const buildNavSections = (
     onStarredClick: () => void,
     onSettingsClick: (tab: SettingsTab) => void,
+    onNewChat: () => void,  
 ): NavSection[] => [
     {
         label: "Create",
         items: [
             {
                 title: "New Chat",
-                url: "/chat",
+                onClick: onNewChat,
                 icon: MessageSquare,
             },
             {
@@ -76,9 +78,14 @@ const buildNavSections = (
                 icon: FileText,
             },
             {
+                title: "Accessibility Tester",
+                url: "/dashboard/accessibility-tester",
+                icon: ShieldCheck,
+            },
+            {
                 title: "Testing",
                 url: "/testing",
-                icon: Bug
+                icon: Bug,
             },
         ],
     },
@@ -140,14 +147,21 @@ const platforms = [
     },
 ]
 
-export function AppSidebar({
-    onStarredClick,
-    onSettingsClick,
-    ...props
-}: AppSidebarProps) {
+export function AppSidebar({ onStarredClick, onSettingsClick, ...props }: AppSidebarProps) {
+    const router = useRouter()
+    const pathname = usePathname()
+
+    const handleNewChat = React.useCallback(() => {
+        if (pathname === '/chat') {
+            router.push('/chat?reset=true&t=' + Date.now())
+        } else {
+            router.push('/chat')
+        }
+    }, [router, pathname])
+
     const navSections = React.useMemo(
-        () => buildNavSections(onStarredClick, onSettingsClick),
-        [onStarredClick, onSettingsClick],
+        () => buildNavSections(onStarredClick, onSettingsClick, handleNewChat),
+        [onStarredClick, onSettingsClick, handleNewChat],
     )
 
     return (
@@ -155,15 +169,12 @@ export function AppSidebar({
             <SidebarHeader>
                 <PlatformSwitcher platforms={platforms} />
             </SidebarHeader>
-
             <SidebarContent>
                 <NavMain sections={navSections} />
             </SidebarContent>
-
             <SidebarFooter>
                 <NavUser onSettingsClick={onSettingsClick} />
             </SidebarFooter>
-
             <SidebarRail />
         </Sidebar>
     )
