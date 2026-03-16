@@ -1,7 +1,7 @@
 import { BuildifyStudioEditor } from '@/components/buildify-studio/editor'
 
 export const metadata = {
-  title: 'Edit Design – Buildify',
+  title: 'Edit Design',
 }
 
 export default async function EditDesignPage({ params }: { params: Promise<{ id: string }> }) {

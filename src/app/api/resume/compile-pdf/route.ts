@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { compileLaTeXToPDF } from '@/lib/latex-to-pdf'
+import { getSession } from '@/server/better-auth/server'
 
 const compileRequestSchema = z.object({
-  latex: z.string().min(1, 'LaTeX code is required'),
-  fileName: z.string().optional().default('Resume'),
+  latex: z.string().min(1, 'LaTeX code is required').max(200000),
+  fileName: z.string().max(100).optional().default('Resume'),
 })
+
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._\- ]/g, '').replace(/\s+/g, '_').slice(0, 50) || 'Resume'
+}
 
 /**
  * Compile LaTeX code to PDF
@@ -13,18 +18,21 @@ const compileRequestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
-    // Parse and validate request body
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { latex, fileName } = compileRequestSchema.parse(body)
 
-    if (!latex || latex.trim().length === 0) {
+    if (!latex.trim()) {
       return NextResponse.json(
         { error: 'LaTeX code is required' },
         { status: 400 }
       )
     }
 
-    // Compile LaTeX to PDF
     const pdfBuffer = await compileLaTeXToPDF(latex)
 
     if (!pdfBuffer) {
@@ -34,12 +42,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Return PDF file
+    const safeFilename = sanitizeFilename(fileName)
+
     return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${fileName.replace(/\s+/g, '_')}_Resume.pdf"`,
+        'Content-Disposition': `attachment; filename="${safeFilename}_Resume.pdf"`,
       },
     })
   } catch (error) {
@@ -52,15 +61,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message || 'Failed to compile PDF' },
-        { status: 500 }
-      )
-    }
-
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
+      { error: 'Failed to compile PDF' },
       { status: 500 }
     )
   }

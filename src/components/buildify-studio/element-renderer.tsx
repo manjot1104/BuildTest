@@ -5,9 +5,34 @@ import {
   Star, Heart, Zap, Check, Home, User, Mail, Phone, Globe, Camera,
   Code, Music, Coffee, Shield, Rocket, Smile, Diamond, Flame, Leaf, Crown,
   Github, Twitter, Linkedin, Instagram, Youtube, Facebook, MessageSquare,
-  Play,
+  Play, Search, Settings, Bell, BookOpen, Calendar, Clock, Cloud, Database,
+  Download, Edit, Eye, File, Filter, Flag, Gift, Grid, Hash, Image,
+  Inbox, Key, Layers, Link, Lock, Map, MapPin, Monitor, Moon, Package,
+  PenTool, Percent, PieChart, Printer, Radio, RefreshCw, Save, Send,
+  Server, Share2, ShoppingBag, ShoppingCart, Sidebar, Sliders, Smartphone,
+  Speaker, Sun, Tag, Target, Terminal, ThumbsUp, Trash2, TrendingUp,
+  Truck, Tv, Umbrella, Unlock, Upload, Video, Wifi, Wind, Award,
+  BarChart2, Bookmark, Box, Briefcase, Clipboard, Compass, Cpu, CreditCard,
+  Disc, DollarSign, Feather, FileText, Folder, HardDrive, Headphones,
+  HelpCircle, Activity, Airplay, AlertCircle, AlertTriangle, Anchor,
+  Archive, ArrowRight, AtSign, Battery, BellOff, Bluetooth,
+  Bold, Cast, CheckCircle, ChevronRight, Circle, Codepen, Command,
+  Copy, Crosshair, Delete, Dribbble,
+  Droplet, ExternalLink, EyeOff, FastForward,
+  Figma, Film, FolderPlus, Framer, Frown, Aperture,
+  GitBranch, GitCommit, GitMerge, Gitlab,
+  Hexagon, Info, Italic, Layout, LifeBuoy, Loader,
+  LogIn, LogOut, Maximize, Meh, Menu, MessageCircle,
+  Mic, MinusCircle, MoreHorizontal, MousePointer, Move, Navigation,
+  Octagon, Paperclip, Pause, PhoneCall, PlusCircle,
+  Power, Repeat, Rewind, RotateCcw, Rss,
+  Scissors, Shuffle, SkipBack, SkipForward, Slash, Square,
+  StopCircle, Sunrise, Sunset, Tablet, Thermometer, ToggleLeft,
+  Wrench, Triangle, Type, UserCheck, UserMinus, UserPlus, UserX, Users,
+  VolumeX, Volume2, Watch, XCircle, ZoomIn, ZoomOut,
 } from 'lucide-react'
 import { type CanvasElement, type EnterAnimation, type HoverAnimation, type SocialPlatform } from './types'
+import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
 
 const HANDLE_SIZE = 8
 
@@ -26,10 +51,68 @@ type Dir = (typeof RESIZE_HANDLES)[number]['dir']
 
 // --- Icon map ---
 const ICON_MAP: Record<string, React.FC<{ size?: number; color?: string; className?: string }>> = {
+  // Original 20
   star: Star, heart: Heart, zap: Zap, check: Check, home: Home, user: User,
   mail: Mail, phone: Phone, globe: Globe, camera: Camera, code: Code,
   music: Music, coffee: Coffee, shield: Shield, rocket: Rocket, smile: Smile,
   diamond: Diamond, flame: Flame, leaf: Leaf, crown: Crown,
+  // Extended set
+  search: Search, settings: Settings, bell: Bell, 'book-open': BookOpen,
+  calendar: Calendar, clock: Clock, cloud: Cloud, database: Database,
+  download: Download, edit: Edit, eye: Eye, file: File, filter: Filter,
+  flag: Flag, gift: Gift, grid: Grid, hash: Hash, image: Image,
+  inbox: Inbox, key: Key, layers: Layers, link: Link, lock: Lock,
+  map: Map, 'map-pin': MapPin, monitor: Monitor, moon: Moon, package: Package,
+  'pen-tool': PenTool, percent: Percent, 'pie-chart': PieChart, printer: Printer,
+  radio: Radio, 'refresh-cw': RefreshCw, save: Save, send: Send,
+  server: Server, share: Share2, 'shopping-bag': ShoppingBag,
+  'shopping-cart': ShoppingCart, sidebar: Sidebar, sliders: Sliders,
+  smartphone: Smartphone, speaker: Speaker, sun: Sun, tag: Tag,
+  target: Target, terminal: Terminal, 'thumbs-up': ThumbsUp, trash: Trash2,
+  'trending-up': TrendingUp, truck: Truck, tv: Tv, umbrella: Umbrella,
+  unlock: Unlock, upload: Upload, video: Video, wifi: Wifi, wind: Wind,
+  award: Award, 'bar-chart': BarChart2, bookmark: Bookmark, box: Box,
+  briefcase: Briefcase, clipboard: Clipboard, compass: Compass, cpu: Cpu,
+  'credit-card': CreditCard, disc: Disc, 'dollar-sign': DollarSign,
+  feather: Feather, 'file-text': FileText, folder: Folder,
+  'hard-drive': HardDrive, headphones: Headphones, 'help-circle': HelpCircle,
+  activity: Activity, airplay: Airplay, 'alert-circle': AlertCircle,
+  'alert-triangle': AlertTriangle, anchor: Anchor, archive: Archive,
+  'arrow-right': ArrowRight, 'at-sign': AtSign, battery: Battery,
+  'bell-off': BellOff, bluetooth: Bluetooth, bold: Bold, cast: Cast,
+  'check-circle': CheckCircle, 'chevron-right': ChevronRight, circle: Circle,
+  codepen: Codepen, command: Command, copy: Copy, crosshair: Crosshair,
+  delete: Delete, dribbble: Dribbble, droplet: Droplet,
+  'external-link': ExternalLink, 'eye-off': EyeOff, 'fast-forward': FastForward,
+  figma: Figma, film: Film, 'folder-plus': FolderPlus, framer: Framer,
+  frown: Frown, aperture: Aperture, 'git-branch': GitBranch,
+  'git-commit': GitCommit, 'git-merge': GitMerge, gitlab: Gitlab,
+  hexagon: Hexagon, info: Info, italic: Italic, layout: Layout,
+  'life-buoy': LifeBuoy, loader: Loader, 'log-in': LogIn, 'log-out': LogOut,
+  maximize: Maximize, meh: Meh, menu: Menu, 'message-circle': MessageCircle,
+  mic: Mic, 'minus-circle': MinusCircle, 'more-horizontal': MoreHorizontal,
+  'mouse-pointer': MousePointer, move: Move, navigation: Navigation,
+  octagon: Octagon, paperclip: Paperclip, pause: Pause, 'phone-call': PhoneCall,
+  'plus-circle': PlusCircle, power: Power, repeat: Repeat, rewind: Rewind,
+  'rotate-ccw': RotateCcw, rss: Rss, scissors: Scissors, shuffle: Shuffle,
+  'skip-back': SkipBack, 'skip-forward': SkipForward, slash: Slash,
+  square: Square, 'stop-circle': StopCircle, sunrise: Sunrise, sunset: Sunset,
+  tablet: Tablet, thermometer: Thermometer, 'toggle-left': ToggleLeft,
+  tool: Wrench, triangle: Triangle, type: Type, 'user-check': UserCheck,
+  'user-minus': UserMinus, 'user-plus': UserPlus, 'user-x': UserX, users: Users,
+  'volume-x': VolumeX, volume: Volume2, watch: Watch, 'x-circle': XCircle,
+  'zoom-in': ZoomIn, 'zoom-out': ZoomOut, play: Play, github: Github,
+  twitter: Twitter, linkedin: Linkedin, instagram: Instagram, youtube: Youtube,
+  facebook: Facebook, 'message-square': MessageSquare,
+}
+
+/** All available icon names for the picker UI */
+export const ICON_NAMES = Object.keys(ICON_MAP)
+
+/** Render an icon by name — used by the icon picker in the inspector */
+export function RenderIcon({ name, size = 16, className }: { name: string; size?: number; className?: string }) {
+  const IconComponent = ICON_MAP[name] ?? Star
+  return <IconComponent size={size} className={className} />
 }
 
 // --- Social icons ---
@@ -64,13 +147,13 @@ function getEnterAnimClass(anim: EnterAnimation, isPreview: boolean): string {
 
 function getHoverAnimClass(anim: HoverAnimation, isPreview: boolean): string {
   if (!isPreview || anim === 'none') return ''
-  const map: Record<HoverAnimation, string> = {
+  const hoverMap: Record<HoverAnimation, string> = {
     none: '',
     scale: 'pb-hover-scale',
     lift: 'pb-hover-lift',
-    glow: 'pb-hover-glow',
+    outline: 'pb-hover-glow',
   }
-  return map[anim] ?? ''
+  return hoverMap[anim] ?? ''
 }
 
 // --- Background style helper ---
@@ -90,6 +173,9 @@ function getBackgroundStyle(styles: CanvasElement['styles']): React.CSSPropertie
 
 // --- Main element wrapper style ---
 function buildContainerStyle(el: CanvasElement, isSelected: boolean, isMultiSelect: boolean, isPreview: boolean): React.CSSProperties {
+  // Apply overflow:hidden + borderRadius on the outer container for images
+  // so border-radius clips the image properly
+  const needsClip = el.type === 'image'
   return {
     position: 'absolute',
     left: el.x,
@@ -107,6 +193,7 @@ function buildContainerStyle(el: CanvasElement, isSelected: boolean, isMultiSele
     cursor: isPreview ? 'default' : 'move',
     userSelect: isPreview ? undefined : 'none',
     display: el.hidden ? 'none' : undefined,
+    ...(needsClip ? { overflow: 'hidden', borderRadius: el.styles.borderRadius ?? 0 } : {}),
   }
 }
 
@@ -121,41 +208,36 @@ function HeadingRenderer({ element, isSelected, isPreview, onContentChange }: {
   const { styles, headingLevel = 1, content } = element
 const Tag: React.ElementType = `h${headingLevel}`
 
-const headingSizes = {
-  1: 64,
-  2: 48,
-  3: 36,
-  4: 28,
-  5: 22,
-  6: 18,
-}
+  const style: React.CSSProperties = {
+    width: '100%',
+    minHeight: '100%',
+    color: styles.color ?? '#1a1a1a',
+    overflow: 'visible',
+    fontSize: styles.fontSize ?? 48,
+    fontWeight: styles.fontWeight ?? '700',
+    fontFamily: styles.fontFamily ?? 'inherit',
+    textAlign: styles.textAlign ?? 'left',
+    letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
+    lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
+    padding: styles.padding ?? 4,
+    background: styles.backgroundColor,
+    borderRadius: styles.borderRadius ?? 0,
+    textDecoration: styles.textDecoration,
+    wordBreak: 'break-word',
+    whiteSpace: 'pre-wrap',
+    margin: 0,
+  }
 
-const style: React.CSSProperties = {
-  width: '100%',
-  minHeight: '100%',
-  color: styles.color ?? '#1a1a1a',
-overflow: 'hidden',
- fontSize: styles.fontSize ?? 48,
+  const slugId = content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
 
-  fontWeight: styles.fontWeight ?? '700',
-  fontFamily: styles.fontFamily ?? 'inherit',
-  textAlign: styles.textAlign ?? 'left',
-  letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
-  lineHeight: styles.lineHeight ? `${styles.lineHeight}` : '1.2',
-  padding: styles.padding ?? 4,
-  background: styles.backgroundColor,
-  borderRadius: styles.borderRadius ?? 0,
-  textDecoration: styles.textDecoration,
-  wordBreak: 'break-word',
-  whiteSpace: 'pre-wrap',
-  margin: 0,
-}
   return (
     <Tag
+      id={slugId}
+      data-heading={content.toLowerCase()}
       contentEditable={!isPreview && isSelected}
       suppressContentEditableWarning
-      onBlur={(e) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
-      onMouseDown={isSelected && !isPreview ? (e) => e.stopPropagation() : undefined}
+      onBlur={(e: React.FocusEvent<HTMLElement>) => onContentChange(element.id, (e.currentTarget as HTMLElement).textContent ?? '')}
+      onMouseDown={isSelected && !isPreview ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
       style={style}
     >
       {content}
@@ -178,7 +260,7 @@ function ParagraphRenderer({ element, isSelected, isPreview, onContentChange }: 
       onMouseDown={isSelected && !isPreview ? (e) => e.stopPropagation() : undefined}
       style={{
         width: '100%',
-        height: '100%',
+        minHeight: '100%',
         color: styles.color ?? '#374151',
         fontSize: styles.fontSize ?? 16,
         fontWeight: styles.fontWeight ?? '400',
@@ -194,7 +276,7 @@ function ParagraphRenderer({ element, isSelected, isPreview, onContentChange }: 
         whiteSpace: 'pre-wrap',
         cursor: isSelected && !isPreview ? 'text' : 'inherit',
         outline: isSelected ? '1px dashed #93c5fd' : 'none',
-        overflow: 'auto',
+        overflow: 'visible',
       }}
     >
       {content}
@@ -254,9 +336,10 @@ function ButtonRenderer({ element, isPreview }: { element: CanvasElement; isPrev
   )
 }
 
-function SectionRenderer({ element }: { element: CanvasElement }) {
+function SectionRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
   const { styles } = element
   const bgStyle = getBackgroundStyle(styles)
+  const sectionName = element.sectionKey || 'Unnamed Section'
   return (
     <div
       style={{
@@ -268,8 +351,32 @@ function SectionRenderer({ element }: { element: CanvasElement }) {
         padding: styles.padding ?? 24,
         boxShadow: styles.boxShadow,
         overflow: 'hidden',
+        position: 'relative',
       }}
-    />
+    >
+      {/* Section name label (visible only in editor, not preview) */}
+      {!isPreview && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 8,
+            left: 10,
+            fontSize: 10,
+            fontWeight: '600',
+            color: '#94a3b8',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            background: 'rgba(255,255,255,0.85)',
+            padding: '2px 8px',
+            borderRadius: 4,
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        >
+          {sectionName}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -388,7 +495,7 @@ function VideoEmbedRenderer({ element, isPreview }: { element: CanvasElement; is
   const url = element.content
 
   // Extract YouTube video ID
-  const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
+  const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(url)
   const ytId = ytMatch?.[1]
 
   if (isPreview && ytId) {
@@ -454,17 +561,74 @@ function IconRenderer({ element }: { element: CanvasElement }) {
   )
 }
 
-function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPreview: boolean }) {
+function NavbarRenderer({ element, isSelected, isPreview, onContentChange }: {
+  element: CanvasElement
+  isSelected: boolean
+  isPreview: boolean
+  onContentChange: (id: string, content: string) => void
+}) {
   const { styles, content } = element
   const rawItems = content.split('|').filter(Boolean)
   const bgStyle = getBackgroundStyle(styles)
+  const editable = isSelected && !isPreview
+
   // Parse "Label::href" format — backward compatible with plain "Label"
-  const navItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
+  const parsedItems = (rawItems.length > 1 ? rawItems.slice(1) : ['Home', 'About', 'Contact'])
     .map((item) => {
       const sepIdx = item.indexOf('::')
-      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2) }
-      return { label: item, href: '#' }
+      if (sepIdx > -1) return { label: item.slice(0, sepIdx), href: item.slice(sepIdx + 2), raw: item }
+      return { label: item, href: '', raw: item }
     })
+
+  // Rebuild pipe-separated content from edited parts
+  const rebuildContent = (brandText: string | null, itemIdx: number | null, newLabel: string | null) => {
+    const parts = [...rawItems]
+    if (brandText !== null) {
+      parts[0] = brandText
+    }
+    if (itemIdx !== null && newLabel !== null) {
+      // Index in parts is itemIdx + 1 (first part is brand)
+      const partIdx = rawItems.length > 1 ? itemIdx + 1 : itemIdx
+      const existing = parts[partIdx]
+      if (existing) {
+        const sepIdx = existing.indexOf('::')
+        parts[partIdx] = sepIdx > -1 ? `${newLabel}::${existing.slice(sepIdx + 2)}` : newLabel
+      }
+    }
+    onContentChange(element.id, parts.join('|'))
+  }
+
+  const handleNavClick = (e: React.MouseEvent, item: { label: string; href: string }) => {
+    if (editable) {
+      e.preventDefault()
+      e.stopPropagation()
+      return
+    }
+    if (!isPreview) return
+
+    // External URLs (http/https) — let the browser handle naturally
+    if (item.href.startsWith('http://') || item.href.startsWith('https://')) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    // #anchor links — find by ID first, then by heading text
+    if (item.href.startsWith('#') && item.href.length > 1) {
+      const anchorId = item.href.slice(1)
+      const target = document.getElementById(anchorId)
+      if (target) {
+        smoothScrollToElement(target)
+        return
+      }
+    }
+
+    // Fallback: find section heading by label name (fuzzy matching)
+    const targetHeading = findSectionHeading(item.label)
+    if (targetHeading) {
+      smoothScrollToElement(targetHeading)
+    }
+  }
+
   return (
     <nav
       style={{
@@ -483,27 +647,38 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
       }}
     >
       <span
+        contentEditable={editable}
+        suppressContentEditableWarning
+        onMouseDown={editable ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+        onBlur={(e) => {
+          if (editable) rebuildContent((e.currentTarget as HTMLElement).textContent ?? '', null, null)
+        }}
         style={{
           fontWeight: '700',
           fontSize: (styles.fontSize ?? 14) + 2,
           color: styles.color ?? '#ffffff',
           fontFamily: styles.fontFamily,
           flexShrink: 0,
+          cursor: editable ? 'text' : 'inherit',
+          outline: editable ? '1px dashed rgba(147,197,253,0.4)' : 'none',
+          borderRadius: 3,
+          padding: '0 2px',
+          minWidth: 20,
         }}
       >
         {rawItems[0] ?? 'Brand'}
       </span>
       <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-        {navItems.map((item, i) => (
-          <a
+        {parsedItems.map((item, i) => (
+          <span
             key={i}
-            href={isPreview ? item.href : undefined}
-            onClick={isPreview ? (e) => {
-              if (item.href.startsWith('#')) {
-                e.preventDefault()
-                document.getElementById(item.href.slice(1))?.scrollIntoView({ behavior: 'smooth' })
-              }
-            } : undefined}
+            contentEditable={editable}
+            suppressContentEditableWarning
+            onMouseDown={editable ? (e: React.MouseEvent) => e.stopPropagation() : undefined}
+            onBlur={(e) => {
+              if (editable) rebuildContent(null, i, (e.currentTarget as HTMLElement).textContent ?? '')
+            }}
+            onClick={(e) => handleNavClick(e, item)}
             style={{
               fontSize: styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
@@ -511,12 +686,16 @@ function NavbarRenderer({ element, isPreview }: { element: CanvasElement; isPrev
               fontFamily: styles.fontFamily,
               textDecoration: 'none',
               opacity: 0.85,
-              cursor: isPreview ? 'pointer' : 'inherit',
+              cursor: editable ? 'text' : isPreview ? 'pointer' : 'inherit',
               whiteSpace: 'nowrap',
+              outline: editable ? '1px dashed rgba(147,197,253,0.3)' : 'none',
+              borderRadius: 3,
+              padding: '0 2px',
+              minWidth: 20,
             }}
           >
             {item.label}
-          </a>
+          </span>
         ))}
       </div>
     </nav>
@@ -528,7 +707,7 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
   const bgStyle = getBackgroundStyle(styles)
   const fieldStyle: React.CSSProperties = {
     width: '100%',
-    padding: '6px 10px',
+    padding: '8px 12px',
     fontSize: 13,
     border: '1px solid #e2e8f0',
     borderRadius: 6,
@@ -537,18 +716,19 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
     color: '#1a1a1a',
     fontFamily: 'inherit',
     resize: 'none',
+    boxSizing: 'border-box',
   }
   return (
     <div
       style={{
         width: '100%',
-        height: '100%',
+        minHeight: '100%',
         ...bgStyle,
         border: styles.border ?? '1px solid #e2e8f0',
         borderRadius: styles.borderRadius ?? 12,
         padding: styles.padding ?? 24,
         boxShadow: styles.boxShadow,
-        overflow: 'auto',
+        overflow: 'visible',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
@@ -559,7 +739,7 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
           {content}
         </h3>
       )}
-      {formFields.slice(0, 3).map((field) => (
+      {formFields.map((field) => (
         <div key={field.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label style={{ fontSize: 12, fontWeight: '500', color: '#374151' }}>
             {field.label}
@@ -582,11 +762,6 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
           )}
         </div>
       ))}
-      {formFields.length > 3 && (
-        <p style={{ fontSize: 11, color: '#94a3b8', margin: 0 }}>
-          +{formFields.length - 3} more fields
-        </p>
-      )}
       <button
         type={isPreview ? 'submit' : 'button'}
         style={{
@@ -609,8 +784,14 @@ function FormRenderer({ element, isPreview }: { element: CanvasElement; isPrevie
   )
 }
 
-function CodeBlockRenderer({ element }: { element: CanvasElement }) {
+function CodeBlockRenderer({ element, isSelected, isPreview, onContentChange }: {
+  element: CanvasElement
+  isSelected: boolean
+  isPreview: boolean
+  onContentChange: (id: string, content: string) => void
+}) {
   const { styles, content } = element
+  const editable = !isPreview && isSelected
   return (
     <div
       style={{
@@ -621,29 +802,57 @@ function CodeBlockRenderer({ element }: { element: CanvasElement }) {
         overflow: 'hidden',
         border: styles.border ?? '1px solid #313244',
         boxShadow: styles.boxShadow,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       {/* Window chrome */}
-      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderBottom: '1px solid #313244' }}>
+      <div style={{ display: 'flex', gap: 6, padding: '10px 14px', borderBottom: '1px solid #313244', flexShrink: 0 }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#ff5f57', display: 'block' }} />
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#febc2e', display: 'block' }} />
         <span style={{ width: 10, height: 10, borderRadius: '50%', backgroundColor: '#28c840', display: 'block' }} />
       </div>
-      <pre
-        style={{
-          margin: 0,
-          padding: styles.padding ?? 20,
-          fontSize: styles.fontSize ?? 13,
-          fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
-          color: styles.color ?? '#cdd6f4',
-          lineHeight: styles.lineHeight ?? 1.6,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
-        <code>{content}</code>
-      </pre>
+      {editable ? (
+        <textarea
+          defaultValue={content}
+          onBlur={(e) => onContentChange(element.id, e.target.value)}
+          onMouseDown={(e) => e.stopPropagation()}
+          spellCheck={false}
+          style={{
+            flex: 1,
+            margin: 0,
+            padding: styles.padding ?? 20,
+            fontSize: styles.fontSize ?? 13,
+            fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
+            color: styles.color ?? '#cdd6f4',
+            lineHeight: styles.lineHeight ?? 1.6,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            background: 'transparent',
+            border: 'none',
+            outline: '1px dashed rgba(147,197,253,0.4)',
+            resize: 'none',
+            cursor: 'text',
+          }}
+        />
+      ) : (
+        <pre
+          style={{
+            flex: 1,
+            margin: 0,
+            padding: styles.padding ?? 20,
+            fontSize: styles.fontSize ?? 13,
+            fontFamily: styles.fontFamily ?? '"Fira Code", monospace',
+            color: styles.color ?? '#cdd6f4',
+            lineHeight: styles.lineHeight ?? 1.6,
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          <code>{content}</code>
+        </pre>
+      )}
     </div>
   )
 }
@@ -665,7 +874,7 @@ function renderContent(
     case 'button':
       return <ButtonRenderer element={element} isPreview={isPreview} />
     case 'section':
-      return <SectionRenderer element={element} />
+      return <SectionRenderer element={element} isPreview={isPreview} />
     case 'container':
       return <ContainerRenderer element={element} />
     case 'divider':
@@ -679,11 +888,11 @@ function renderContent(
     case 'icon':
       return <IconRenderer element={element} />
     case 'navbar':
-      return <NavbarRenderer element={element} isPreview={isPreview} />
+      return <NavbarRenderer element={element} isSelected={isSelected} isPreview={isPreview} onContentChange={onContentChange} />
     case 'form':
       return <FormRenderer element={element} isPreview={isPreview} />
     case 'code-block':
-      return <CodeBlockRenderer element={element} />
+      return <CodeBlockRenderer element={element} isSelected={isSelected} isPreview={isPreview} onContentChange={onContentChange} />
     default:
       return null
   }
@@ -732,36 +941,142 @@ export function ElementRenderer({
       const startMouseY = e.clientY
       const startElemX = element.x
       const startElemY = element.y
+      let isDragging = false
+      let ghost: HTMLDivElement | null = null
 
-      const ghost = document.createElement('div')
-      ghost.style.cssText = `
-        position: absolute;
-        width: ${element.width}px;
-        height: ${element.height}px;
-        left: ${element.x}px;
-        top: ${element.y}px;
-        border: 2px dashed #3b82f6;
-        background: rgba(59,130,246,0.08);
-        pointer-events: none;
-        z-index: 99999;
-        border-radius: ${element.styles.borderRadius ?? 0}px;
-      `
-      canvasRef.current?.appendChild(ghost)
-      ghostRef.current = ghost
+      // Alignment guide elements
+      const guides: HTMLDivElement[] = []
+      const SNAP_THRESHOLD = 6
+
+      const clearGuides = () => {
+        guides.forEach((g) => g.remove())
+        guides.length = 0
+      }
+
+      const showGuide = (left: number, top: number, width: number, height: number) => {
+        const g = document.createElement('div')
+        g.style.cssText = `position:absolute;background:#f43f5e;pointer-events:none;z-index:100000;left:${left}px;top:${top}px;width:${width}px;height:${height}px;`
+        canvasRef.current?.appendChild(g)
+        guides.push(g)
+      }
 
       const onMouseMove = (ev: MouseEvent) => {
         const dx = (ev.clientX - startMouseX) / zoom
         const dy = (ev.clientY - startMouseY) / zoom
-        ghost.style.left = `${startElemX + dx}px`
-        ghost.style.top = `${startElemY + dy}px`
+
+        // Dead zone: require 3px movement before starting drag
+        if (!isDragging) {
+          if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return
+          isDragging = true
+          ghost = document.createElement('div')
+          ghost.style.cssText = `
+            position: absolute;
+            width: ${element.width}px;
+            height: ${element.height}px;
+            left: ${element.x}px;
+            top: ${element.y}px;
+            border: 2px dashed #3b82f6;
+            background: rgba(59,130,246,0.08);
+            pointer-events: none;
+            z-index: 99999;
+            border-radius: ${element.styles.borderRadius ?? 0}px;
+          `
+          canvasRef.current?.appendChild(ghost)
+          ghostRef.current = ghost
+        }
+
+        let newX = startElemX + dx
+        let newY = startElemY + dy
+        const elCX = newX + element.width / 2
+        const elCY = newY + element.height / 2
+        const elR = newX + element.width
+        const elB = newY + element.height
+
+        // Alignment snapping against other elements
+        clearGuides()
+        const canvasEl = canvasRef.current
+        if (canvasEl) {
+          const siblings = canvasEl.querySelectorAll<HTMLDivElement>('[data-element-id]')
+          const cW = canvasEl.offsetWidth
+          const cH = canvasEl.offsetHeight
+
+          // Canvas center guides
+          if (Math.abs(elCX - cW / 2) < SNAP_THRESHOLD) {
+            newX = cW / 2 - element.width / 2
+            showGuide(cW / 2, 0, 1, cH)
+          }
+          if (Math.abs(elCY - cH / 2) < SNAP_THRESHOLD) {
+            newY = cH / 2 - element.height / 2
+            showGuide(0, cH / 2, cW, 1)
+          }
+
+          siblings.forEach((sib) => {
+            const sibId = sib.getAttribute('data-element-id')
+            if (sibId === element.id) return
+            const sX = parseFloat(sib.style.left) || 0
+            const sY = parseFloat(sib.style.top) || 0
+            const sW = sib.offsetWidth
+            const sH = sib.offsetHeight
+            const sCX = sX + sW / 2
+            const sCY = sY + sH / 2
+
+            // Vertical center alignment
+            if (Math.abs(elCX - sCX) < SNAP_THRESHOLD) {
+              newX = sCX - element.width / 2
+              showGuide(sCX, Math.min(newY, sY), 1, Math.max(elB, sY + sH) - Math.min(newY, sY))
+            }
+            // Left edge
+            if (Math.abs(newX - sX) < SNAP_THRESHOLD) {
+              newX = sX
+              showGuide(sX, Math.min(newY, sY), 1, Math.max(elB, sY + sH) - Math.min(newY, sY))
+            }
+            // Right edge
+            if (Math.abs(elR - (sX + sW)) < SNAP_THRESHOLD) {
+              newX = sX + sW - element.width
+              showGuide(sX + sW, Math.min(newY, sY), 1, Math.max(elB, sY + sH) - Math.min(newY, sY))
+            }
+            // Horizontal center
+            if (Math.abs(elCY - sCY) < SNAP_THRESHOLD) {
+              newY = sCY - element.height / 2
+              showGuide(Math.min(newX, sX), sCY, Math.max(elR, sX + sW) - Math.min(newX, sX), 1)
+            }
+            // Top edge
+            if (Math.abs(newY - sY) < SNAP_THRESHOLD) {
+              newY = sY
+              showGuide(Math.min(newX, sX), sY, Math.max(elR, sX + sW) - Math.min(newX, sX), 1)
+            }
+            // Bottom edge
+            if (Math.abs(elB - (sY + sH)) < SNAP_THRESHOLD) {
+              newY = sY + sH - element.height
+              showGuide(Math.min(newX, sX), sY + sH, Math.max(elR, sX + sW) - Math.min(newX, sX), 1)
+            }
+          })
+        }
+
+        if (ghost) {
+          ghost.style.left = `${newX}px`
+          ghost.style.top = `${newY}px`
+        }
       }
 
       const onMouseUp = (ev: MouseEvent) => {
+        clearGuides()
+        if (!isDragging) {
+          // Was just a click, not a drag
+          document.removeEventListener('mousemove', onMouseMove)
+          document.removeEventListener('mouseup', onMouseUp)
+          return
+        }
         const dx = (ev.clientX - startMouseX) / zoom
         const dy = (ev.clientY - startMouseY) / zoom
-        ghost.remove()
-        ghostRef.current = null
-        onDragEnd(element.id, Math.round(startElemX + dx), Math.round(startElemY + dy))
+        if (ghost) {
+          // Read the snapped position from ghost
+          const finalX = parseFloat(ghost.style.left) || (startElemX + dx)
+          const finalY = parseFloat(ghost.style.top) || (startElemY + dy)
+          ghost.remove()
+          ghostRef.current = null
+          onDragEnd(element.id, Math.round(finalX), Math.round(finalY))
+        }
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
       }
@@ -857,10 +1172,18 @@ export function ElementRenderer({
   return (
     <div
       ref={elementRef}
-      id={element.anchorId || undefined}
+      data-element-id={element.id}
+      id={element.type === 'section' && element.sectionKey ? element.sectionKey : undefined}
+      data-section={
+        element.type === 'section' || element.type === 'container'
+          ? element.id
+          : undefined
+      }
       className={[enterClass, hoverClass].filter(Boolean).join(' ')}
       style={containerStyle}
-      onMouseDown={startDrag}
+     onMouseDown={(e) => {
+  startDrag(e)
+}}
       onClick={(e) => {
         e.stopPropagation()
         if (!isPreview) onSelect(element.id, e.shiftKey || e.metaKey)

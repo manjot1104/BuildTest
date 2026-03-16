@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState } from 'react'
-import { Upload, Plus, Trash2, ExternalLink, ChevronRight } from 'lucide-react'
+import { Upload, Plus, Trash2, ExternalLink, ChevronRight, Search } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import {
   type CanvasElement,
@@ -13,6 +13,7 @@ import {
   type FormField,
   getResponsiveElement,
 } from './types'
+import { ICON_NAMES, RenderIcon } from './element-renderer'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -134,7 +135,7 @@ const HOVER_ANIMATIONS: { value: HoverAnimation; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'scale', label: 'Scale Up' },
   { value: 'lift', label: 'Lift Shadow' },
-  { value: 'glow', label: 'Glow' },
+  { value: 'outline', label: 'Outline' },
 ]
 
 const FONT_WEIGHTS = ['100', '300', '400', '500', '600', '700', '800', '900']
@@ -258,43 +259,6 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                 <NumInput value={eff.styles.borderRadius} onChange={(v) => updStyle({ borderRadius: v })} min={0} max={999} />
               </Field>
             </Row>
-            {element.type === 'heading' && (
-              <Field label="Heading Level" full>
-                <Sel value={String(element.headingLevel ?? 1)}  onChange={(v) => {
-  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
-
-  const headingSizes = {
-    1: 64,
-    2: 48,
-    3: 36,
-    4: 28,
-    5: 22,
-    6: 18,
-  }
-
-  updBase({
-    headingLevel: level,
-    styles: {
-      ...element.styles,
-      fontSize: headingSizes[level],
-    },
-  })
-}}>
-                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
-                </Sel>
-              </Field>
-            )}
-            {(element.type === 'section' || element.type === 'container') && (
-              <Field label="Anchor ID" full>
-                <input
-                  type="text"
-                  value={element.anchorId ?? ''}
-                  onChange={(e) => updBase({ anchorId: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') || undefined })}
-                  placeholder="e.g. about (links as #about)"
-                  className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none"
-                />
-              </Field>
-            )}
           </Section>
         )}
 
@@ -316,8 +280,8 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
               ) : (
                 <>
                   <Row>
-                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#667eea'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
-                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#764ba2'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
+                    <Field label="From"><ColorInput value={eff.styles.gradientFrom ?? '#f8fafc'} onChange={(v) => updStyle({ gradientFrom: v })} /></Field>
+                    <Field label="To"><ColorInput value={eff.styles.gradientTo ?? '#f1f5f9'} onChange={(v) => updStyle({ gradientTo: v })} /></Field>
                   </Row>
                   {eff.styles.gradientType === 'linear' && (
                     <Field label="Angle" full>
@@ -391,6 +355,20 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
         {/* ── TEXT / TYPOGRAPHY ── */}
         {activeTab === 'text' && hasText && (
           <Section title="Typography">
+            {element.type === 'heading' && (
+              <Field label="Heading Level" full>
+                <Sel value={String(element.headingLevel ?? 1)} onChange={(v) => {
+                  const level = Number(v) as 1 | 2 | 3 | 4 | 5 | 6
+                  const headingSizes = { 1: 64, 2: 48, 3: 36, 4: 28, 5: 22, 6: 18 }
+                  updBase({
+                    headingLevel: level,
+                    styles: { ...element.styles, fontSize: headingSizes[level] }
+                  })
+                }}>
+                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={l}>H{l}</option>)}
+                </Sel>
+              </Field>
+            )}
             <Row>
               <Field label="Size">
                 <NumInput value={eff.styles.fontSize} onChange={(v) => updStyle({ fontSize: v })} min={8} max={300} />
@@ -421,7 +399,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updStyle({ textAlign: a })}
                     className={`flex-1 rounded border py-1 text-xs capitalize transition-colors ${
                       eff.styles.textAlign === a
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -461,7 +439,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ enterAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.enterAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -479,7 +457,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
                     onClick={() => updBase({ hoverAnimation: value })}
                     className={`rounded border px-2 py-1 text-[10px] transition-colors ${
                       element.hoverAnimation === value
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-muted text-primary'
                         : 'border-border hover:bg-accent'
                     }`}
                   >
@@ -535,7 +513,7 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
 
         {/* ── CONTENT ── */}
         {activeTab === 'content' && (
-          <ContentTab element={element} upd={updBase} />
+          <ContentTab element={element} upd={updBase} allElements={editor.state.elements} />
         )}
       </div>
     </div>
@@ -544,9 +522,10 @@ export function InspectorPanel({ element, editor }: InspectorPanelProps) {
 
 // ─── Content tab sub-components ───────────────────────────────────────────────
 
-function ContentTab({ element, upd }: {
+function ContentTab({ element, upd, allElements }: {
   element: CanvasElement
   upd: (updates: Partial<CanvasElement>) => void
+  allElements: CanvasElement[]
 }) {
   switch (element.type) {
     case 'heading':
@@ -565,18 +544,7 @@ function ContentTab({ element, upd }: {
       )
 
     case 'navbar':
-      return (
-        <div className="flex flex-col gap-2">
-          <Label className="text-[10px] text-muted-foreground">Nav Items (pipe-separated)</Label>
-          <textarea
-            value={element.content}
-            onChange={(e) => upd({ content: e.target.value })}
-            rows={3}
-            className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <p className="text-[10px] text-muted-foreground">First item = brand. Example: Brand|Home|About|Contact</p>
-        </div>
-      )
+      return <NavbarEditor element={element} upd={upd} allElements={allElements} />
 
     case 'code-block':
       return (
@@ -606,48 +574,36 @@ function ContentTab({ element, upd }: {
       )
 
     case 'icon':
-      return (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Name</Label>
-            <Input
-              value={element.content || element.iconName || ''}
-              onChange={(e) => upd({ content: e.target.value })}
-              className="h-7 text-xs"
-              placeholder="star, heart, zap, home…"
-            />
-            <p className="text-[10px] text-muted-foreground">
-              Available: star, heart, zap, check, home, user, mail, phone, globe, camera, code, music, coffee, shield, rocket, smile, diamond, flame, leaf, crown
-            </p>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Size</Label>
-            <NumInput value={element.styles.iconSize} onChange={(v) => upd({ styles: { ...element.styles, iconSize: v } })} min={12} max={200} />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label className="text-[10px] text-muted-foreground">Icon Color</Label>
-            <div className="flex items-center gap-1.5">
-              <input
-                type="color"
-                value={element.styles.iconColor ?? '#3b82f6'}
-                onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
-                className="size-7 cursor-pointer rounded border border-border"
-              />
-              <Input
-                value={element.styles.iconColor ?? '#3b82f6'}
-                onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
-                className="h-7 font-mono text-xs"
-              />
-            </div>
-          </div>
-        </div>
-      )
+      return <IconEditor element={element} upd={upd} />
 
     case 'social-links':
       return <SocialLinksEditor element={element} upd={upd} />
 
     case 'form':
       return <FormEditor element={element} upd={upd} />
+
+    case 'section':
+      return (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <Label className="text-[10px] text-muted-foreground">Section Name</Label>
+            <Input
+              value={element.sectionKey ?? ''}
+              onChange={(e) => upd({ sectionKey: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-') })}
+              className="h-7 text-xs"
+              placeholder="e.g. about, skills, contact"
+            />
+            <p className="text-[9px] text-muted-foreground">
+              This name is used for navbar linking. Navbar items can scroll to this section via <span className="font-mono">#{element.sectionKey ?? '...'}</span>
+            </p>
+          </div>
+          <div className="rounded-md border border-green-500/20 bg-green-500/5 px-2.5 py-2">
+            <p className="text-[10px] text-green-600 dark:text-green-400">
+              To link a navbar tab to this section, select your navbar element, go to Content tab, and choose this section from the dropdown.
+            </p>
+          </div>
+        </div>
+      )
 
     default:
       return (
@@ -656,6 +612,184 @@ function ContentTab({ element, upd }: {
         </p>
       )
   }
+}
+
+function NavbarEditor({ element, upd, allElements }: {
+  element: CanvasElement
+  upd: (updates: Partial<CanvasElement>) => void
+  allElements: CanvasElement[]
+}) {
+  // Parse current content: "Brand|Home|About::#about|Contact::https://..."
+  const rawItems = element.content.split('|')
+  const brand = rawItems[0] ?? 'Brand'
+  const navItems = rawItems.slice(1).map((item) => {
+    const sep = item.indexOf('::')
+    if (sep > -1) return { label: item.slice(0, sep), href: item.slice(sep + 2) }
+    return { label: item, href: '' }
+  })
+  if (navItems.length === 0) navItems.push({ label: 'Home', href: '' })
+
+  // Gather all linkable targets: sections (by sectionKey) and headings (by slug)
+  const sections = allElements
+    .filter((el) => (el.type === 'section' && el.sectionKey) || el.type === 'heading')
+    .map((el) => {
+      const isSection = el.type === 'section'
+      // Sections use sectionKey as-is (user-defined), headings use slugified content
+      const anchor = isSection
+        ? el.sectionKey!
+        : el.content.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+      const displayLabel = isSection ? el.sectionKey! : el.content
+      return { id: el.id, label: displayLabel, anchor, type: el.type }
+    })
+
+  const rebuildContent = (newBrand: string, items: { label: string; href: string }[]) => {
+    const parts = [newBrand, ...items.map((it) => it.href ? `${it.label}::${it.href}` : it.label)]
+    upd({ content: parts.join('|') })
+  }
+
+  const updateItem = (i: number, patch: Partial<{ label: string; href: string }>) => {
+    const updated = navItems.map((it, idx) => (idx === i ? { ...it, ...patch } : it))
+    rebuildContent(brand, updated)
+  }
+
+  const addItem = () => rebuildContent(brand, [...navItems, { label: 'Link', href: '' }])
+  const removeItem = (i: number) => rebuildContent(brand, navItems.filter((_, idx) => idx !== i))
+
+  // Determine link type for display
+  const getLinkType = (href: string): 'auto' | 'section' | 'url' => {
+    if (!href) return 'auto'
+    if (href.startsWith('#')) return 'section'
+    return 'url'
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Brand */}
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Brand Name</Label>
+        <Input
+          value={brand}
+          onChange={(e) => rebuildContent(e.target.value, navItems)}
+          className="h-7 text-xs"
+          placeholder="Brand"
+        />
+      </div>
+
+      {/* Nav Items */}
+      <div className="flex items-center justify-between">
+        <Label className="text-[10px] text-muted-foreground">Nav Links ({navItems.length})</Label>
+        <Button type="button" variant="outline" size="sm" className="h-6 gap-1 px-2 text-[10px]" onClick={addItem}>
+          <Plus className="size-3" /> Add
+        </Button>
+      </div>
+
+      {navItems.map((item, i) => {
+        const linkType = getLinkType(item.href)
+        return (
+          <div
+            key={i}
+            className={`flex flex-col gap-1.5 rounded-lg border p-2 ${
+              linkType === 'section' ? 'border-green-500/30 bg-green-500/5'
+              : linkType === 'url' ? 'border-blue-500/30 bg-blue-500/5'
+              : 'border-border'
+            }`}
+          >
+            {/* Label + delete */}
+            <div className="flex items-center gap-1">
+              <Input
+                value={item.label}
+                onChange={(e) => updateItem(i, { label: e.target.value })}
+                className="h-7 flex-1 text-xs font-medium"
+                placeholder="Label (e.g. About)"
+              />
+              <button type="button" onClick={() => removeItem(i)} className="shrink-0 rounded p-0.5 text-destructive transition-colors hover:bg-destructive/10">
+                <Trash2 className="size-3.5" />
+              </button>
+            </div>
+
+            {/* Link type selector */}
+            <div className="flex gap-0.5 rounded-md bg-muted/50 p-0.5">
+              {([
+                { type: 'auto', label: 'Auto' },
+                { type: 'section', label: 'Section' },
+                { type: 'url', label: 'URL' },
+              ] as const).map(({ type, label }) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    if (type === 'auto') updateItem(i, { href: '' })
+                    else if (type === 'section') updateItem(i, { href: sections[0] ? `#${sections[0].anchor}` : '#' })
+                    else updateItem(i, { href: 'https://' })
+                  }}
+                  className={`flex-1 rounded px-1.5 py-0.5 text-[9px] font-medium transition-colors ${
+                    linkType === type
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Link target based on type */}
+            {linkType === 'auto' && (
+              <p className="rounded-md bg-muted/30 px-2 py-1 text-[9px] text-muted-foreground">
+                Scrolls to a section matching &quot;{item.label}&quot; automatically
+              </p>
+            )}
+
+            {linkType === 'section' && (
+              <div className="flex flex-col gap-1">
+                <Label className="text-[9px] text-muted-foreground">Link to page section</Label>
+                <select
+                  value={item.href}
+                  onChange={(e) => updateItem(i, { href: e.target.value })}
+                  className="h-7 w-full rounded-md border border-input bg-background px-1.5 text-[10px]"
+                >
+                  <option value="#" disabled>— Choose a section —</option>
+                  {sections.length === 0 && (
+                    <option value="#" disabled>No sections or headings on canvas</option>
+                  )}
+                  {sections.map((s) => (
+                    <option key={s.id} value={`#${s.anchor}`}>
+                      {s.type === 'section' ? '▦ ' : '𝐇 '}
+                      {s.label.length > 28 ? s.label.slice(0, 28) + '…' : s.label}
+                    </option>
+                  ))}
+                </select>
+                {item.href && item.href !== '#' && (
+                  <p className="text-[9px] text-green-600 dark:text-green-400">
+                    Linked to: {item.href}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {linkType === 'url' && (
+              <div className="flex flex-col gap-1">
+                <Label className="text-[9px] text-muted-foreground">External URL</Label>
+                <Input
+                  value={item.href}
+                  onChange={(e) => updateItem(i, { href: e.target.value })}
+                  className="h-7 font-mono text-[10px]"
+                  placeholder="https://example.com"
+                />
+              </div>
+            )}
+          </div>
+        )
+      })}
+
+      {/* Hint */}
+      {sections.length === 0 && (
+        <p className="rounded-md border border-amber-500/20 bg-amber-500/5 px-2.5 py-2 text-[10px] text-amber-600 dark:text-amber-400">
+          Add Section or Heading elements to the canvas so you can link navbar items to them.
+        </p>
+      )}
+    </div>
+  )
 }
 
 function SocialLinksEditor({ element, upd }: {
@@ -738,6 +872,77 @@ function SocialLinksEditor({ element, upd }: {
               className="h-7 font-mono text-xs"
             />
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function IconEditor({ element, upd }: {
+  element: CanvasElement
+  upd: (updates: Partial<CanvasElement>) => void
+}) {
+  const [iconSearch, setIconSearch] = useState('')
+  const currentIcon = element.content || element.iconName || 'star'
+
+  const filtered = iconSearch
+    ? ICON_NAMES.filter((name) => name.includes(iconSearch.toLowerCase()))
+    : ICON_NAMES
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Current: {currentIcon}</Label>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={iconSearch}
+            onChange={(e) => setIconSearch(e.target.value)}
+            className="h-7 pl-7 text-xs"
+            placeholder="Search icons..."
+          />
+        </div>
+      </div>
+      <div className="grid max-h-48 grid-cols-6 gap-1 overflow-y-auto rounded-md border border-border p-1">
+        {filtered.slice(0, 120).map((name) => (
+          <button
+            key={name}
+            type="button"
+            title={name}
+            onClick={() => upd({ content: name })}
+            className={`flex items-center justify-center rounded p-1.5 text-xs transition-colors ${
+              currentIcon === name
+                ? 'bg-primary/20 text-primary ring-1 ring-primary'
+                : 'hover:bg-accent text-muted-foreground'
+            }`}
+          >
+            <RenderIcon name={name} size={18} />
+          </button>
+        ))}
+      </div>
+      {filtered.length > 120 && (
+        <p className="text-[10px] text-muted-foreground">
+          Showing 120 of {filtered.length} — search to find more
+        </p>
+      )}
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Icon Size</Label>
+        <NumInput value={element.styles.iconSize} onChange={(v) => upd({ styles: { ...element.styles, iconSize: v } })} min={12} max={200} />
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label className="text-[10px] text-muted-foreground">Icon Color</Label>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="color"
+            value={element.styles.iconColor ?? '#3b82f6'}
+            onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
+            className="size-7 cursor-pointer rounded border border-border"
+          />
+          <Input
+            value={element.styles.iconColor ?? '#3b82f6'}
+            onChange={(e) => upd({ styles: { ...element.styles, iconColor: e.target.value } })}
+            className="h-7 font-mono text-xs"
+          />
         </div>
       </div>
     </div>

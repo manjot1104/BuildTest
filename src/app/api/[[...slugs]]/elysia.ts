@@ -13,8 +13,9 @@ import {
   getChatCountByUserId,
   getChatCountByIP,
   getChatDemoUrl,
-} from "@/server/db/queries";
-import { createChatHandler } from "@/server/api/controllers/chat.controller";
+  getUserChat,
+} from '@/server/db/queries'
+import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
   getPlansHandler,
   getLocalizedPlansHandler,
@@ -161,7 +162,19 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       // Handle streaming requests inline (skip controller, use fetch directly)
       if (streaming) {
         try {
-          const session = await getSession();
+          const session = await getSession()
+
+          // Ownership check: only the chat owner can send follow-up messages
+          if (chatId && session?.user?.id) {
+            const existingChat = await getUserChat({ v0ChatId: chatId })
+            if (existingChat && existingChat.user_id !== session.user.id) {
+              set.status = 403
+              return {
+                error: 'forbidden',
+                message: 'You cannot send messages to a chat you do not own. Fork the chat first.',
+              }
+            }
+          }
 
           // Rate limiting for streaming
           if (session?.user?.id) {
@@ -473,7 +486,18 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return { error: "Unauthorized" };
     }
 
-    return getStarredChats(session.user.id);
+    const chats = await getStarredChats(session.user.id)
+    return chats.map((chat) => ({
+      id: chat.id,
+      v0ChatId: chat.v0_chat_id || chat.conversation_id || chat.id,
+      title: chat.title,
+      prompt: chat.prompt,
+      demoUrl: chat.demo_url,
+      previewUrl: chat.preview_url,
+      createdAt: chat.created_at.toISOString(),
+      updatedAt: chat.updated_at.toISOString(),
+      type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
+    }))
   })
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user
@@ -1244,15 +1268,77 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   .delete(
     "/design/:id",
     async ({ params, set }) => {
-      const result = await deleteDesignByIdHandler({ params });
-      if ("status" in result) {
-        set.status = result.status;
-        return result;
-      }
+      const result = await deleteDesignByIdHandler({ params })
+      if ('status' in result) { set.status = result.status; return result }
       return result;
     },
     { params: t.Object({ id: t.String() }) },
   )
+
+  // ============================================
+  // Accessibility Tester Endpoints
+  // ============================================
+
+  .post(
+    '/accessibility/test',
+    async ({ body, set }) => {
+      const { startAccessibilityTestHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await startAccessibilityTestHandler({ body })
+      if (result instanceof Response) return result
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    {
+      body: t.Object({
+        url: t.String(),
+        standards: t.Array(t.String()),
+        maxPages: t.Optional(t.Number()),
+        maxDepth: t.Optional(t.Number()),
+      }),
+    },
+  )
+
+  .get('/accessibility/history', async ({ set }) => {
+    const { getTestHistoryHandler } = await import('@/server/api/controllers/accessibility.controller')
+    const result = await getTestHistoryHandler()
+    if (!Array.isArray(result) && 'status' in result) { set.status = result.status; return result }
+    return result
+  })
+
+  .get(
+    '/accessibility/results/:id',
+    async ({ params, set }) => {
+      const { getTestResultsHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await getTestResultsHandler({ params })
+      if ('status' in result && !('testRun' in result)) { set.status = (result as { status: number }).status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  
+  .get(
+    '/accessibility/report/:id',
+    async ({ params, set }) => {
+      const { downloadReportHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await downloadReportHandler({ params })
+      if (result instanceof Response) return result
+      if ('status' in result) { set.status = result.status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
+  .delete(
+    '/accessibility/test/:id',
+    async ({ params, set }) => {
+      const { deleteTestRunHandler } = await import('@/server/api/controllers/accessibility.controller')
+      const result = await deleteTestRunHandler({ params })
+      if ('status' in result && !('success' in result)) { set.status = (result as { status: number }).status; return result }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+
 
   // ============================================
   // Testing Engine Endpoints

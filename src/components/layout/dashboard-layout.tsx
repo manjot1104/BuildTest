@@ -28,6 +28,7 @@ const SEGMENT_LABELS: Record<string, string> = {
     "chat": "New Chat",
     "buildify-studio": "Buildify Studio",
     "ai-resume": "AI Resume Builder",
+    "accessibility-tester": "Accessibility Tester",
     "docs": "Documentation",
 };
 
@@ -64,13 +65,13 @@ export default function DashboardLayout({
                 <AppSidebar
                     onStarredClick={() => setStarredOpen(true)}
                     onSettingsClick={handleSettingsClick}
-                    className="hk-sidebar-border"
+                    className="border-r"
                 />
-                <SidebarInset>
-                    <header className="hk-header-line sticky top-0 z-30 flex h-14 shrink-0 items-center bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <SidebarInset className="min-h-screen">
+                    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
-                                <SidebarTrigger className="-ml-1 hk-nav-item" />
+                                <SidebarTrigger className="-ml-1" />
                                 <Separator
                                     orientation="vertical"
                                     className="mr-2 data-[orientation=vertical]:h-4 opacity-30"
@@ -88,11 +89,11 @@ export default function DashboardLayout({
                                                     {idx !== 0 && <BreadcrumbSeparator />}
                                                     <BreadcrumbItem>
                                                         {isLast ? (
-                                                            <BreadcrumbPage className="hk-breadcrumb-active font-mono text-xs">
+                                                            <BreadcrumbPage className="text-xs font-medium">
                                                                 {title}
                                                             </BreadcrumbPage>
                                                         ) : (
-                                                            <BreadcrumbLink href={buildHref(idx)} className="font-mono text-xs text-muted-foreground transition-colors hover:text-primary">
+                                                            <BreadcrumbLink href={buildHref(idx)} className="text-xs text-muted-foreground transition-colors hover:text-foreground">
                                                                 {title}
                                                             </BreadcrumbLink>
                                                         )}
@@ -107,19 +108,19 @@ export default function DashboardLayout({
                                 {isAdmin && !isOnAdminPage && (
                                     <Link
                                         href="/admin"
-                                        className="hk-neon-badge flex items-center gap-1.5 rounded-none border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-mono font-medium text-primary transition-all hover:bg-primary hover:text-primary-foreground"
+                                        className="flex items-center gap-1.5 rounded-none border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary transition-all hover:bg-primary hover:text-primary-foreground"
                                     >
                                         <Shield className="size-3" />
                                         Admin
                                     </Link>
                                 )}
-                                <div className="hk-neon-badge rounded-full">
+                                <div className="rounded-full">
                                     <CreditsDisplay variant="badge" />
                                 </div>
                             </div>
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
+                  <div className="flex flex-col gap-4 p-4 pt-4">
                         {children}
                     </div>
                 </SidebarInset>

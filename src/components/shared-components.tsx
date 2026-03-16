@@ -637,8 +637,26 @@ export const sharedComponents = {
     className:
       'mb-4 overflow-x-auto rounded-lg bg-gray-100 dark:bg-gray-800 p-4',
   },
-  a: {
-    className: 'text-blue-600 dark:text-blue-400 hover:underline',
+  a: ({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => {
+    // Prevent any v0.dev links from navigating externally
+    if (href && (href.includes('v0.dev') || href.includes('v0.io'))) {
+      return (
+        <span className="text-blue-600 dark:text-blue-400" {...props}>
+          {children}
+        </span>
+      )
+    }
+    return (
+      <a
+        href={href}
+        className="text-blue-600 dark:text-blue-400 hover:underline"
+        target="_blank"
+        rel="noopener noreferrer"
+        {...props}
+      >
+        {children}
+      </a>
+    )
   },
   strong: {
     className: 'font-semibold text-gray-900 dark:text-gray-100',

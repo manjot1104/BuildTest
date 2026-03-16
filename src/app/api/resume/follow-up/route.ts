@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { followUpLaTeX } from '@/lib/openrouter'
 import { env } from '@/env'
+import { getSession } from '@/server/better-auth/server'
 
 const followUpRequestSchema = z.object({
-  currentLatex: z.string().min(1, 'LaTeX code is required'),
-  prompt: z.string().min(1, 'Prompt is required'),
-  model: z.string().optional(),
+  currentLatex: z.string().min(1, 'LaTeX code is required').max(100000),
+  prompt: z.string().min(1, 'Prompt is required').max(2000),
+  model: z.string().max(100).optional(),
 })
 
 /**
@@ -15,13 +16,18 @@ const followUpRequestSchema = z.object({
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getSession()
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { currentLatex, prompt, model } = followUpRequestSchema.parse(body)
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
-        { error: 'OPENROUTER_API_KEY is not configured.' },
-        { status: 500 }
+        { error: 'Resume generation service is not configured.' },
+        { status: 503 }
       )
     }
 
@@ -29,7 +35,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       latex: result.cleaned,
-      rawResponse: result.raw,
       model: result.model,
       isFallback: result.isFallback,
       success: true,
@@ -44,15 +49,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: error.message || 'Failed to process follow-up prompt' },
-        { status: 500 }
-      )
-    }
-
     return NextResponse.json(
-      { error: 'An unexpected error occurred' },
+      { error: 'Failed to process follow-up prompt' },
       { status: 500 }
     )
   }
