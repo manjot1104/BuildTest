@@ -83,10 +83,16 @@ import {
   getTestReportHandler,
   getPublicReportHandler,
   getEmbedBadgeHandler,
-  // ADDED: import the new SVG badge handler so the copied badge markdown
+  // import the new SVG badge handler so the copied badge markdown
   // renders as an actual image in GitHub READMEs and websites
   getEmbedBadgeSvgHandler,
   exportTestReportPdfHandler,
+  // Review phase: test case CRUD + confirm
+  getTestCasesHandler,
+  createTestCaseHandler,
+  updateTestCaseHandler,
+  deleteTestCaseHandler,
+  confirmAndExecuteHandler,
 } from "@/server/api/controllers/testing.controller";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
@@ -1345,7 +1351,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // ============================================
 
   // POST /api/test/run — start a new test run, returns { testRunId } immediately
-  // CHANGED: body schema now includes optional maxPages and maxTests so users
+  // body schema includes optional maxPages and maxTests so users
   // can specify how many pages to crawl and how many test cases to generate.
   // Both fields are optional integers — the server uses its own defaults when omitted.
   // t.Integer() ensures we reject floats/strings at the Elysia validation layer.
@@ -1361,7 +1367,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       body: t.Object({
         url: t.String(),
         projectId: t.Optional(t.String()),
-        // ADDED: user-controlled crawl budget — both optional, server defaults apply when absent
+        // user-controlled crawl budget — both optional, server defaults apply when absent
         maxPages: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
         maxTests: t.Optional(t.Integer({ minimum: 1, maximum: 30 })),
       }),
@@ -1377,9 +1383,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return result;
   })
 
-  // DELETE /api/test/run/:id/cancel — cancel a running test, stops TinyFish calls
+  // DELETE /api/test/run/:id/cancel — cancel a running or reviewing test run
   // IMPORTANT: must be declared BEFORE /test/run/:id to avoid Elysia matching
-  // "cancel" as the :id param on the GET route above.
+  // "cancel" as the :id param on the GET route below.
   .delete(
     "/test/run/:id/cancel",
     async ({ params, set }) => {
@@ -1392,6 +1398,105 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({ id: t.String() }),
     },
   )
+
+  // ── Review phase endpoints ────────────────────────────────────────────────
+  // All three must come before /test/run/:id (GET) so Elysia doesn't treat
+  // "cases" or "confirm" as the :id param on that route.
+
+  // GET /api/test/run/:id/cases — list all generated test cases for the review UI
+  .get(
+    "/test/run/:id/cases",
+    async ({ params, set }) => {
+      const result = await getTestCasesHandler({ params });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String() }),
+    },
+  )
+
+  // POST /api/test/run/:id/cases — create a new test case during review
+  .post(
+    "/test/run/:id/cases",
+    async ({ params, body, set }) => {
+      const result = await createTestCaseHandler({ params, body });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({
+        title: t.String(),
+        category: t.String(),
+        steps: t.Array(t.String()),
+        expectedResult: t.String(),
+        priority: t.Optional(
+          t.Union([t.Literal("P0"), t.Literal("P1"), t.Literal("P2")]),
+        ),
+        description: t.Optional(t.String()),
+        tags: t.Optional(t.Array(t.String())),
+      }),
+    },
+  )
+
+  // PATCH /api/test/run/:id/cases/:caseId — edit a test case during review
+  .patch(
+    "/test/run/:id/cases/:caseId",
+    async ({ params, body, set }) => {
+      const result = await updateTestCaseHandler({ params, body });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String(), caseId: t.String() }),
+      body: t.Object({
+        title: t.Optional(t.String()),
+        category: t.Optional(t.String()),
+        steps: t.Optional(t.Array(t.String())),
+        expectedResult: t.Optional(t.String()),
+        priority: t.Optional(
+          t.Union([t.Literal("P0"), t.Literal("P1"), t.Literal("P2")]),
+        ),
+        description: t.Optional(t.String()),
+      }),
+    },
+  )
+
+  // DELETE /api/test/run/:id/cases/:caseId — delete a test case during review
+  // Returns 400 if deleting would leave zero test cases.
+  .delete(
+    "/test/run/:id/cases/:caseId",
+    async ({ params, set }) => {
+      const result = await deleteTestCaseHandler({ params });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String(), caseId: t.String() }),
+    },
+  )
+
+  // POST /api/test/run/:id/confirm — confirm review and begin execution
+  // Resolves the in-memory promise that the pipeline is awaiting.
+  .post(
+    "/test/run/:id/confirm",
+    async ({ params, set }) => {
+      const result = await confirmAndExecuteHandler({ params });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      params: t.Object({ id: t.String() }),
+    },
+  )
+
+  // ── End review phase endpoints ────────────────────────────────────────────
 
   // GET /api/test/run/:id — polling fallback for run status + live bug list
   .get(
@@ -1436,14 +1541,13 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // POST /api/test/run/:id/export-pdf — generate PDF report, returns { pdfUrl }
-  // POST /api/test/run/:id/export-pdf — generate and stream PDF report directly
-.post(
-  "/test/run/:id/export-pdf",
-  async ({ params }) => {
-    return exportTestReportPdfHandler({ params });
-  },
-  { params: t.Object({ id: t.String() }) },
-)
+  .post(
+    "/test/run/:id/export-pdf",
+    async ({ params }) => {
+      return exportTestReportPdfHandler({ params });
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
 
   // GET /api/test/report/public/:slug — shareable read-only report, no auth required
   // IMPORTANT: declared before /test/run/:id/report to avoid Elysia matching "public" as an id
@@ -1461,9 +1565,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // GET /api/badge/:token — returns badge score as JSON for programmatic use
-// (CI/CD pipelines, Slack bots, custom integrations).
-// NOT the image — for the SVG image used in READMEs see /badge/:token/svg below.
-// No auth required — token is opaque and non-guessable (nanoid(32))
+  // (CI/CD pipelines, Slack bots, custom integrations).
+  // NOT the image — for the SVG image used in READMEs see /badge/:token/svg below.
+  // No auth required — token is opaque and non-guessable (nanoid(32))
   .get(
     "/badge/:token",
     async ({ params, set }) => {

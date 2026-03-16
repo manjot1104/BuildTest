@@ -31,6 +31,18 @@ import {
   type BugContext,
 } from "@/server/services/openRouter.service";
 import type { ApiErrorResponse } from "@/types/api.types";
+import {
+  countTestCasesByRunId,
+  createTestCase,
+  deleteTestCase,
+  getTestCasesByRunId,
+  insertCrawlResult,
+  insertPerformanceMetrics,
+  insertTestCases,
+  updateTestCase,
+  updateTestRunCounters,
+  updateTestRunStatus,
+} from "@/server/db/queries";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -52,17 +64,6 @@ function chunk<T>(arr: T[], size: number): T[][] {
   for (let i = 0; i < arr.length; i += size)
     chunks.push(arr.slice(i, i + size));
   return chunks;
-}
-
-async function updateRunStatus(
-  testRunId: string,
-  status: typeof test_runs.$inferInsert.status,
-  extra?: Partial<typeof test_runs.$inferInsert>,
-) {
-  await db
-    .update(test_runs)
-    .set({ status, ...extra })
-    .where(eq(test_runs.id, testRunId));
 }
 
 function buildSSELine(event: PipelineSSEEvent): string {
@@ -87,6 +88,10 @@ const crawlAbortControllers = new Map<string, AbortController>();
 // Multiple SSE clients can connect to the same running pipeline.
 // We fan-out events to all of them.
 const pipelineEmitters = new Map<string, Set<(line: string) => void>>();
+
+// Stores a resolve function for each run that is paused at awaiting_review.
+// Calling it with true resumes execution; false cancels.
+const reviewResolvers = new Map<string, (confirmed: boolean) => void>();
 
 function registerEmitter(
   testRunId: string,
@@ -117,7 +122,7 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
-// CHANGED: runPipeline now accepts optional userMaxPages and userMaxTests
+// runPipeline now accepts optional userMaxPages and userMaxTests
 // so user-provided values are carried all the way into crawlSite's budget.
 async function runPipeline(
   testRunId: string,
@@ -133,13 +138,20 @@ async function runPipeline(
     broadcastToRun(testRunId, buildSSELine(event));
 
   try {
-    await runPipelineStages(testRunId, targetUrl, send, abortController.signal, userMaxPages, userMaxTests);
+    await runPipelineStages(
+      testRunId,
+      targetUrl,
+      send,
+      abortController.signal,
+      userMaxPages,
+      userMaxTests,
+    );
   } finally {
     crawlAbortControllers.delete(testRunId);
   }
 }
 
-// CHANGED: runPipelineStages accepts optional userMaxPages and userMaxTests
+// runPipelineStages accepts optional userMaxPages and userMaxTests
 // and passes them into crawlSite via the budget option.
 async function runPipelineStages(
   testRunId: string,
@@ -151,7 +163,7 @@ async function runPipelineStages(
 ): Promise<void> {
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "crawling");
+  await updateTestRunStatus(testRunId, "crawling");
   send({ type: "status", status: "crawling", percent: 10 });
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
@@ -159,8 +171,6 @@ async function runPipelineStages(
     siteData = await crawlSite(targetUrl, {
       testRunId,
       abortSignal,
-      // CHANGED: pass user-specified page/test counts into the budget if provided.
-      // Falls back to the service-level defaults when not specified.
       budget: {
         ...(userMaxPages !== undefined && { maxPages: userMaxPages }),
         ...(userMaxTests !== undefined && { maxTests: userMaxTests }),
@@ -176,7 +186,7 @@ async function runPipelineStages(
 
   // ─── STEP 2: GENERATE TEST CASES + persist crawl data (parallel) ─────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "generating");
+  await updateTestRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
 
   const siteContext: SiteContext = {
@@ -205,8 +215,7 @@ async function runPipelineStages(
       }
     })(),
 
-    // Persist crawl results to DB
-    db.insert(crawl_results).values({
+    insertCrawlResult({
       id: nanoid(),
       test_run_id: testRunId,
       pages: siteData.pages,
@@ -229,7 +238,7 @@ async function runPipelineStages(
     console.warn("[Pipeline] stage3 screenshots/perf failed (non-fatal):", err);
   });
   if (siteData.performanceMetrics.length > 0) {
-    await db.insert(performance_metrics).values(
+    await insertPerformanceMetrics(
       siteData.performanceMetrics.map((pm: PagePerformanceMetrics) => ({
         id: nanoid(),
         test_run_id: testRunId,
@@ -243,7 +252,7 @@ async function runPipelineStages(
     );
   }
 
-  // Persist test cases
+  // Persist initial test cases
   const testCaseRecords = generatedCases.map((tc) => ({
     id: nanoid(),
     test_run_id: testRunId,
@@ -257,13 +266,13 @@ async function runPipelineStages(
     estimated_duration: tc.estimated_duration,
   }));
 
-  await db.insert(test_cases).values(testCaseRecords);
+  await insertTestCases(testCaseRecords);
   await db
     .update(test_runs)
     .set({ total_tests: testCaseRecords.length })
     .where(eq(test_runs.id, testRunId));
 
-  // Emit all test cases at once so UI can render pending cards immediately
+  // Emit all test cases so the review UI can render them immediately
   send({
     type: "tests_generated",
     testCases: generatedCases.map((tc, i) => ({
@@ -277,35 +286,57 @@ async function runPipelineStages(
     })),
   } as PipelineSSEEvent);
 
-  for (let i = 0; i < generatedCases.length; i++) {
+  // ─── STEP 2.5: PAUSE FOR REVIEW ──────────────────────────────────────────
+  // Transition to awaiting_review and wait for the user to confirm or cancel.
+  checkCancelled(testRunId);
+  await updateTestRunStatus(testRunId, "awaiting_review");
+  send({ type: "status", status: "awaiting_review", percent: 40 });
+
+  const confirmed = await new Promise<boolean>((resolve) => {
+    reviewResolvers.set(testRunId, resolve);
+  });
+  reviewResolvers.delete(testRunId);
+
+  if (!confirmed) {
+    // User cancelled during review
+    throw new Error(`CANCELLED:${testRunId}`);
+  }
+
+  // Re-fetch test cases in case the user edited/added/deleted during review
+  const finalTestCaseRows = await getTestCasesByRunId(testRunId);
+
+  // Update total_tests to reflect any edits made during review
+  await db
+    .update(test_runs)
+    .set({ total_tests: finalTestCaseRows.length })
+    .where(eq(test_runs.id, testRunId));
+
+  // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
+  checkCancelled(testRunId);
+  await updateTestRunStatus(testRunId, "executing");
+  send({ type: "status", status: "executing", percent: 50 });
+
+  // Emit pending cards for all (possibly-edited) test cases
+  for (const row of finalTestCaseRows) {
     send({
       type: "test_update",
       testResultId: "",
-      testCaseId: testCaseRecords[i]!.id,
-      title: generatedCases[i]!.title,
+      testCaseId: row.id,
+      title: row.title ?? "",
       status: "pending",
     });
   }
 
-  // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
-  checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "executing");
-  send({ type: "status", status: "executing", percent: 50 });
+  // Build execution pairs from DB rows (source of truth after review edits)
+  const pairs: { tc: typeof finalTestCaseRows[number]; dbId: string }[] =
+    finalTestCaseRows.map((row) => ({ tc: row, dbId: row.id }));
 
-  const pairs: { tc: TestCase; dbId: string }[] = generatedCases.map(
-    (tc, i) => ({
-      tc,
-      dbId: testCaseRecords[i]!.id,
-    }),
-  );
-
-  // Single source of truth for live counters
   const counters = {
     passed: 0,
     failed: 0,
     running: 0,
     skipped: 0,
-    total: testCaseRecords.length,
+    total: finalTestCaseRows.length,
   };
 
   const sendCounters = () => send({ type: "counter", ...counters });
@@ -327,17 +358,14 @@ async function runPipelineStages(
 
     // Mark entire batch as running upfront
     counters.running += batch.length;
-    await db
-      .update(test_runs)
-      .set({ running: counters.running })
-      .where(eq(test_runs.id, testRunId));
+    await updateTestRunCounters(testRunId, { running: counters.running });
 
     for (const { tc, dbId } of batch) {
       send({
         type: "test_update",
         testResultId: "",
         testCaseId: dbId,
-        title: tc.title,
+        title: tc.title ?? "",
         status: "running",
       });
     }
@@ -345,10 +373,15 @@ async function runPipelineStages(
 
     await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
-        const testUrl = tc.target_url ?? targetUrl;
-        const goal = buildTestGoal(tc);
+        const testUrl = (tc as { target_url?: string }).target_url ?? targetUrl;
 
-        // First attempt
+        // Build goal from DB row fields (steps + expected_result)
+        const steps = (tc.steps as string[] | null) ?? [];
+        const numberedSteps = steps
+          .map((step, i) => `Step ${i + 1}: ${step}`)
+          .join("\n");
+        const goal = `${numberedSteps}\n\nExpected result: ${tc.expected_result ?? ""}`;
+
         let result = await executeTest(testUrl, goal, false, 0);
         let retryCount = 0;
         let isFlaky = false;
@@ -388,7 +421,10 @@ async function runPipelineStages(
               });
             }
           } catch (err) {
-            console.warn(`[Testing] Screenshot failed for "${tc.title}":`, err);
+            console.warn(
+              `[Testing] Screenshot failed for "${tc.title}":`,
+              err,
+            );
           }
         }
 
@@ -415,15 +451,11 @@ async function runPipelineStages(
           counters.failed++;
         }
 
-        // DB sync is fire-and-forget — don't block the SSE emit
-        void db
-          .update(test_runs)
-          .set({
-            passed: counters.passed,
-            failed: counters.failed,
-            running: counters.running,
-          })
-          .where(eq(test_runs.id, testRunId));
+        void updateTestRunCounters(testRunId, {
+          passed: counters.passed,
+          failed: counters.failed,
+          running: counters.running,
+        });
 
         // Emit counter BEFORE test_update so the UI number ticks first
         sendCounters();
@@ -432,25 +464,29 @@ async function runPipelineStages(
           type: "test_update",
           testResultId,
           testCaseId: dbId,
-          title: tc.title,
+          title: tc.title ?? "",
           status,
           durationMs: result.durationMs,
         });
 
-        // Category tracking
-        if (!categoryResults[tc.category])
-          categoryResults[tc.category] = { passed: 0, failed: 0, total: 0 };
-        categoryResults[tc.category]!.total++;
+        const category =
+          (tc as { category?: string | null }).category ?? "other";
+
+        if (!categoryResults[category])
+          categoryResults[category] = { passed: 0, failed: 0, total: 0 };
+        categoryResults[category]!.total++;
         if (status === "passed" || status === "flaky")
-          categoryResults[tc.category]!.passed++;
-        else if (status === "failed") categoryResults[tc.category]!.failed++;
+          categoryResults[category]!.passed++;
+        else if (status === "failed") categoryResults[category]!.failed++;
 
         if (status === "failed") {
           const bugId = nanoid();
+          const priority =
+            (tc as { priority?: string | null }).priority ?? "P2";
           const severity =
-            tc.priority === "P0"
+            priority === "P0"
               ? "critical"
-              : tc.priority === "P1"
+              : priority === "P1"
                 ? "high"
                 : "medium";
 
@@ -458,12 +494,12 @@ async function runPipelineStages(
             testResultId: bugId,
             ctx: {
               pageUrl: testUrl,
-              testTitle: tc.title,
-              category: tc.category,
-              steps: tc.steps,
+              testTitle: tc.title ?? "",
+              category,
+              steps,
               actualResult: result.actualResult,
               errorDetails: result.errorDetails,
-              expectedResult: tc.expected_result,
+              expectedResult: tc.expected_result ?? "",
               consoleLogs: result.consoleLogs,
               networkErrors: result.networkLogs
                 .filter((l) => l.status !== null && l.status >= 400)
@@ -481,10 +517,10 @@ async function runPipelineStages(
             test_run_id: testRunId,
             test_result_id: testResultId,
             severity,
-            category: tc.category,
-            title: `${tc.title} — FAILED`,
+            category,
+            title: `${tc.title ?? ""} — FAILED`,
             description: result.actualResult,
-            reproduction_steps: tc.steps,
+            reproduction_steps: steps,
             screenshot_url: screenshotUrl,
             annotation_box: null,
             page_url: testUrl,
@@ -495,9 +531,9 @@ async function runPipelineStages(
             type: "bug_found",
             bug: {
               id: bugId,
-              title: `${tc.title} — FAILED`,
+              title: `${tc.title ?? ""} — FAILED`,
               severity,
-              category: tc.category,
+              category,
               pageUrl: testUrl,
               screenshotUrl,
             },
@@ -506,7 +542,7 @@ async function runPipelineStages(
       }),
     );
 
-    // Count any rejected promises as skipped, send counters immediately
+    // Count rejected promises as skipped
     const batchOutcomes = await Promise.allSettled(
       batch.map(async ({ tc, dbId }) => {
         void tc;
@@ -522,15 +558,12 @@ async function runPipelineStages(
       }
     }
 
-    await db
-      .update(test_runs)
-      .set({
-        passed: counters.passed,
-        failed: counters.failed,
-        skipped: counters.skipped,
-        running: counters.running,
-      })
-      .where(eq(test_runs.id, testRunId));
+    await updateTestRunCounters(testRunId, {
+      passed: counters.passed,
+      failed: counters.failed,
+      skipped: counters.skipped,
+      running: counters.running,
+    });
 
     // Final counter push after batch DB sync
     sendCounters();
@@ -565,7 +598,7 @@ async function runPipelineStages(
 
   // ─── STEP 4: REPORT ──────────────────────────────────────────────────────
   checkCancelled(testRunId);
-  await updateRunStatus(testRunId, "reporting");
+  await updateTestRunStatus(testRunId, "reporting");
   send({ type: "status", status: "reporting", percent: 90 });
 
   const overallScore = calculateScore(
@@ -576,7 +609,7 @@ async function runPipelineStages(
   const summaryInput: TestRunSummaryInput = {
     targetUrl,
     overallScore,
-    totalTests: testCaseRecords.length,
+    totalTests: finalTestCaseRows.length,
     passed: counters.passed,
     failed: counters.failed,
     skipped: counters.skipped,
@@ -616,7 +649,7 @@ async function runPipelineStages(
     file_url: null,
     ai_summary: aiSummary,
     shareable_slug: shareableSlug,
-    // CHANGED: was `is_public: false` — set to true so share links work out of the box
+    // set to true so share links work out of the box
     is_public: true,
     embed_badge_token: embedBadgeToken,
   });
@@ -640,7 +673,7 @@ async function runPipelineStages(
     passed: counters.passed,
     failed: counters.failed,
     skipped: counters.skipped,
-    total: testCaseRecords.length,
+    total: finalTestCaseRows.length,
     aiSummary,
     shareableSlug,
   });
@@ -655,7 +688,12 @@ async function runPipelineStages(
 export async function startTestRunHandler({
   body,
 }: {
-  body: { url: string; projectId?: string; maxPages?: number; maxTests?: number };
+  body: {
+    url: string;
+    projectId?: string;
+    maxPages?: number;
+    maxTests?: number;
+  };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
     const session = await getSession();
@@ -686,22 +724,20 @@ export async function startTestRunHandler({
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("CANCELLED:")) {
-          await updateRunStatus(
+          await updateTestRunStatus(
             testRunId,
             "cancelled" as typeof test_runs.$inferInsert.status,
-            {
-              completed_at: new Date(),
-              running: 0,
-            },
+            { completed_at: new Date(), running: 0 },
           );
         } else {
           console.error(`[Testing] Pipeline failed for ${testRunId}:`, err);
-          await updateRunStatus(testRunId, "failed");
+          await updateTestRunStatus(testRunId, "failed");
         }
       })
       .finally(() => {
         activePipelines.delete(testRunId);
         cancelledPipelines.delete(testRunId);
+        reviewResolvers.delete(testRunId);
         pipelineEmitters.delete(testRunId);
       });
 
@@ -773,6 +809,51 @@ export async function streamTestRunHandler({
       };
     }
     return new Response(buildSSELine(event), { headers: SSE_HEADERS });
+  }
+
+  // If the run is paused at awaiting_review, emit the current state so a
+  // reconnecting client can restore the review UI immediately.
+  if (run.status === "awaiting_review") {
+    const testCaseRows = await getTestCasesByRunId(params.id);
+    const initEvents: string[] = [
+      buildSSELine({ type: "status", status: "awaiting_review", percent: 40 }),
+      buildSSELine({
+        type: "tests_generated",
+        testCases: testCaseRows.map((tc) => ({
+          id: tc.id,
+          title: tc.title ?? "",
+          category: tc.category ?? "",
+          priority: (tc.priority ?? "P1") as "P0" | "P1" | "P2",
+          steps: (tc.steps as string[]) ?? [],
+          expected_result: tc.expected_result ?? "",
+          target_url: (tc as { target_url?: string }).target_url,
+        })),
+      } as PipelineSSEEvent),
+    ];
+
+    // If there is an active pipeline waiting for review confirmation, attach
+    // this client so it also receives the eventual executing/complete events.
+    let unregister: (() => void) | null = null;
+    const stream = new ReadableStream({
+      start(controller) {
+        const emit = (line: string) => {
+          try {
+            controller.enqueue(new TextEncoder().encode(line));
+          } catch {
+            /* closed */
+          }
+        };
+        // Flush current state immediately
+        for (const line of initEvents) emit(line);
+        // Attach as live listener for subsequent pipeline events
+        unregister = registerEmitter(params.id, emit);
+      },
+      cancel() {
+        unregister?.();
+      },
+    });
+
+    return new Response(stream, { headers: SSE_HEADERS });
   }
 
   // ── Active or not-yet-started pipeline ────────────────────────────────────
@@ -847,7 +928,7 @@ export async function streamTestRunHandler({
               ),
             );
             const isCancelled = msg.startsWith("CANCELLED:");
-            await updateRunStatus(
+            await updateTestRunStatus(
               params.id,
               isCancelled
                 ? ("cancelled" as typeof test_runs.$inferInsert.status)
@@ -860,6 +941,7 @@ export async function streamTestRunHandler({
           .finally(() => {
             activePipelines.delete(params.id);
             cancelledPipelines.delete(params.id);
+            reviewResolvers.delete(params.id);
             pipelineEmitters.get(params.id)?.forEach((fn) => {
               try {
                 fn(
@@ -891,6 +973,7 @@ function statusToPercent(status: string): number {
       {
         crawling: 10,
         generating: 30,
+        awaiting_review: 40,
         executing: 70,
         reporting: 90,
         complete: 100,
@@ -946,6 +1029,200 @@ export async function getTestRunHandler({
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/test/run/[id]/cases  — list all test cases for review
+// ---------------------------------------------------------------------------
+
+export async function getTestCasesHandler({
+  params,
+}: {
+  params: { id: string };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+
+  const cases = await getTestCasesByRunId(params.id);
+  return { testCases: cases };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/test/run/[id]/cases  — create a new test case during review
+// ---------------------------------------------------------------------------
+
+export async function createTestCaseHandler({
+  params,
+  body,
+}: {
+  params: { id: string };
+  body: {
+    title: string;
+    category: string;
+    steps: string[];
+    expectedResult: string;
+    priority?: "P0" | "P1" | "P2";
+    description?: string;
+    tags?: string[];
+  };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be added during review", status: 400 };
+
+  const { title, category, steps, expectedResult, priority, description, tags } =
+    body;
+  if (!title || !category || !steps?.length || !expectedResult)
+    return { error: "title, category, steps, and expectedResult are required", status: 400 };
+
+  const newCase = await createTestCase({
+    testRunId: params.id,
+    title,
+    category,
+    steps,
+    expectedResult,
+    priority,
+    description,
+    tags,
+  });
+
+  // Keep total_tests in sync
+  const total = await countTestCasesByRunId(params.id);
+  await db
+    .update(test_runs)
+    .set({ total_tests: total })
+    .where(eq(test_runs.id, params.id));
+
+  return { testCase: newCase };
+}
+
+// ---------------------------------------------------------------------------
+// PATCH /api/test/run/[id]/cases/[caseId]  — edit a test case during review
+// ---------------------------------------------------------------------------
+
+export async function updateTestCaseHandler({
+  params,
+  body,
+}: {
+  params: { id: string; caseId: string };
+  body: {
+    title?: string;
+    category?: string;
+    steps?: string[];
+    expectedResult?: string;
+    priority?: "P0" | "P1" | "P2";
+    description?: string;
+  };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be edited during review", status: 400 };
+
+  const updated = await updateTestCase(params.caseId, params.id, body);
+  if (!updated)
+    return { error: "Test case not found or does not belong to this run", status: 404 };
+
+  return { testCase: updated };
+}
+
+// ---------------------------------------------------------------------------
+// DELETE /api/test/run/[id]/cases/[caseId]  — delete a test case during review
+// ---------------------------------------------------------------------------
+
+export async function deleteTestCaseHandler({
+  params,
+}: {
+  params: { id: string; caseId: string };
+}): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Test cases can only be deleted during review", status: 400 };
+
+  // Enforce minimum of one test case
+  const total = await countTestCasesByRunId(params.id);
+  if (total <= 1)
+    return {
+      error: "Cannot delete the last test case — at least one must remain",
+      status: 400,
+    };
+
+  await deleteTestCase(params.caseId, params.id);
+
+  // Keep total_tests in sync
+  const newTotal = await countTestCasesByRunId(params.id);
+  await db
+    .update(test_runs)
+    .set({ total_tests: newTotal })
+    .where(eq(test_runs.id, params.id));
+
+  return { deleted: true };
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/test/run/[id]/confirm  — confirm review and begin execution
+// ---------------------------------------------------------------------------
+
+export async function confirmAndExecuteHandler({
+  params,
+}: {
+  params: { id: string };
+}): Promise<{ confirmed: boolean } | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const run = await db.query.test_runs.findFirst({
+    where: eq(test_runs.id, params.id),
+    columns: { id: true, user_id: true, status: true },
+  });
+  if (!run) return { error: "Test run not found", status: 404 };
+  if (run.user_id !== session.user.id) return { error: "Forbidden", status: 403 };
+  if (run.status !== "awaiting_review")
+    return { error: "Run is not awaiting review", status: 400 };
+
+  // Final gate: must have at least one test case before executing
+  const total = await countTestCasesByRunId(params.id);
+  if (total === 0)
+    return { error: "Cannot execute — no test cases exist", status: 400 };
+
+  const resolver = reviewResolvers.get(params.id);
+  if (!resolver) {
+    // Pipeline process may have died or restarted — not currently waiting.
+    return { error: "Pipeline is not waiting for review confirmation. Try refreshing.", status: 409 };
+  }
+
+  resolver(true);
+  return { confirmed: true };
+}
+
+// ---------------------------------------------------------------------------
 // DELETE /api/test/run/[id]/cancel
 // ---------------------------------------------------------------------------
 
@@ -969,6 +1246,10 @@ export async function cancelTestRunHandler({
   const isTerminal = (s: string) =>
     s === "complete" || s === "failed" || s === "cancelled";
   if (isTerminal(run.status)) return { cancelled: false };
+
+  // If paused at review, resolve the promise with false to unblock the pipeline
+  const resolver = reviewResolvers.get(params.id);
+  if (resolver) resolver(false);
 
   cancelledPipelines.add(params.id);
   crawlAbortControllers.get(params.id)?.abort();
@@ -1079,33 +1360,67 @@ export async function getTestReportHandler({
   );
 
   const perfRows = await db
-  .select()
-  .from(performance_metrics)
-  .where(eq(performance_metrics.test_run_id, params.id));
+    .select()
+    .from(performance_metrics)
+    .where(eq(performance_metrics.test_run_id, params.id));
 
   const performanceGauges = perfRows.map((pm) => {
     const raw = pm.raw_metrics as Record<string, unknown> | null;
-    const domContentLoadedMs = typeof raw?.domContentLoadedMs === "number" ? raw.domContentLoadedMs : null;
-    const loadEventMs        = typeof raw?.loadEventMs        === "number" ? raw.loadEventMs        : null;
+    const domContentLoadedMs =
+      typeof raw?.domContentLoadedMs === "number"
+        ? raw.domContentLoadedMs
+        : null;
+    const loadEventMs =
+      typeof raw?.loadEventMs === "number" ? raw.loadEventMs : null;
 
     return {
       pageUrl: pm.page_url,
-      lcpMs:   pm.lcp_ms,
-      fidMs:   pm.fid_ms,
-      cls:     pm.cls,
-      ttfbMs:  pm.ttfb_ms,
+      lcpMs: pm.lcp_ms,
+      fidMs: pm.fid_ms,
+      cls: pm.cls,
+      ttfbMs: pm.ttfb_ms,
       domContentLoadedMs,
       loadEventMs,
       lcpStatus:
-        pm.lcp_ms  === null ? "unknown" : pm.lcp_ms  < 2500 ? "good" : pm.lcp_ms  < 4000 ? "needs-improvement" : "poor",
+        pm.lcp_ms === null
+          ? "unknown"
+          : pm.lcp_ms < 2500
+            ? "good"
+            : pm.lcp_ms < 4000
+              ? "needs-improvement"
+              : "poor",
       clsStatus:
-        pm.cls     === null ? "unknown" : pm.cls     < 0.1  ? "good" : pm.cls     < 0.25 ? "needs-improvement" : "poor",
+        pm.cls === null
+          ? "unknown"
+          : pm.cls < 0.1
+            ? "good"
+            : pm.cls < 0.25
+              ? "needs-improvement"
+              : "poor",
       ttfbStatus:
-        pm.ttfb_ms === null ? "unknown" : pm.ttfb_ms < 800  ? "good" : pm.ttfb_ms < 1800 ? "needs-improvement" : "poor",
+        pm.ttfb_ms === null
+          ? "unknown"
+          : pm.ttfb_ms < 800
+            ? "good"
+            : pm.ttfb_ms < 1800
+              ? "needs-improvement"
+              : "poor",
       domContentLoadedStatus:
-        domContentLoadedMs === null ? "unknown" : domContentLoadedMs < 1500 ? "good" : domContentLoadedMs < 3000 ? "needs-improvement" : "poor",
+        domContentLoadedMs === null
+          ? "unknown"
+          : domContentLoadedMs < 1500
+            ? "good"
+            : domContentLoadedMs < 3000
+              ? "needs-improvement"
+              : "poor",
       loadEventStatus:
-        loadEventMs === null ? "unknown" : loadEventMs < 2000 ? "good" : loadEventMs < 4000 ? "needs-improvement" : "poor",
+        loadEventMs === null
+          ? "unknown"
+          : loadEventMs < 2000
+            ? "good"
+            : loadEventMs < 4000
+              ? "needs-improvement"
+              : "poor",
     };
   });
 
@@ -1200,9 +1515,7 @@ export async function getPublicReportHandler({
   if (!exportRow) return { error: "Report not found", status: 404 };
   if (!exportRow.is_public)
     return { error: "This report is private", status: 403 };
-  // CHANGED: previously called getTestReportHandler({ params: { id: exportRow.test_run_id } })
-  // which requires a session and returns 401 for unauthenticated users.
-  // Now we pass the run id directly via params so the share link works without login.
+  // we pass the run id directly via params so the share link works without login.
   return getTestReportHandler({ params: { id: exportRow.test_run_id } });
 }
 
@@ -1252,7 +1565,7 @@ export async function getEmbedBadgeSvgHandler({
     with: { testRun: true },
   });
 
-  // ADDED: return plain-text 404 (not JSON) so broken image shows cleanly
+  // return plain-text 404 (not JSON) so broken image shows cleanly
   if (!exportRow) {
     return new Response("Badge not found", { status: 404 });
   }
@@ -1261,11 +1574,11 @@ export async function getEmbedBadgeSvgHandler({
     (exportRow as unknown as { testRun: { overall_score: number | null } })
       .testRun?.overall_score ?? 0;
 
-  // ADDED: colour mirrors the score gauge thresholds used in the dashboard UI
+  // colour mirrors the score gauge thresholds used in the dashboard UI
   const color =
     score >= 90 ? "#22c55e" : score >= 70 ? "#eab308" : "#ef4444";
 
-  // UPDATED: single unified label as specified in the plan doc —
+  // single unified label as specified in the plan doc —
   // "Tested by Buildify — Score: 94" as one cohesive badge, not two
   // separate dark-label + colored-score sections.
   const badgeText = `Tested by Buildify — Score: ${score}`;
@@ -1529,7 +1842,8 @@ export async function exportTestReportPdfHandler({
         .map(([cat, data]) => {
           const pct =
             data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0;
-          const col = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
+          const col =
+            pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
           return `<div class="category-card">
           <div class="category-pct" style="color:${col};">${pct}%</div>
           <div class="category-name">${cat.replace(/_/g, " ")}</div>
