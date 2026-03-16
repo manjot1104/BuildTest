@@ -9,7 +9,8 @@ import {
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
   Code2, X, StopCircle, ImageOff, Minus, Plus, Pencil, Trash2,
-  ListChecks
+  ListChecks,
+  Settings2, // [ADDED] icon for the "Advanced" toggle button
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -87,6 +88,22 @@ function getPlanLimits(planId: string | null | undefined): PlanLimits {
   return PLAN_LIMITS[planId.toLowerCase()] ?? FREE_LIMITS;
 }
 
+// [ADDED] Concurrency — plan-agnostic, same hard caps as tinyfish.service.ts.
+const CONCURRENCY_MIN = 1;
+const CONCURRENCY_MAX = 20;
+const CONCURRENCY_DEFAULT = 5;
+
+// [ADDED] Timeout limits in milliseconds — must match HARD_CAPS in tinyfish.service.ts.
+// Step is 30 s to keep the stepper usable without too many clicks.
+const TIMEOUT_MIN_MS   = 30_000;
+const TIMEOUT_MAX_MS   = 600_000;
+const TIMEOUT_STEP_MS  = 30_000;
+
+// [ADDED] Default values that mirror the TIMEOUTS constant in tinyfish.service.ts.
+const DEFAULT_DISCOVERY_MS  = 300_000;
+const DEFAULT_EXTRACTION_MS = 300_000;
+const DEFAULT_EXECUTE_MS    = 300_000;
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function statusBg(s: string) {
@@ -100,6 +117,14 @@ function statusColor(s: string) {
   if (s === "needs-improvement") return "text-yellow-400";
   if (s === "poor") return "text-red-400";
   return "text-muted-foreground";
+}
+
+// [ADDED] Renders milliseconds as a concise human-readable string.
+// 30000 → "30s", 300000 → "5m", 600000 → "10m"
+function fmtMs(ms: number): string {
+  if (ms < 60_000) return `${ms / 1000}s`;
+  const m = ms / 60_000;
+  return Number.isInteger(m) ? `${m}m` : `${m.toFixed(1)}m`;
 }
 
 // ─── Budget Stepper ───────────────────────────────────────────────────────────
@@ -135,6 +160,50 @@ function BudgetStepper({
         </div>
         <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
           className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+          <Plus className="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// [ADDED] TimeoutStepper — same visual as BudgetStepper but increments by
+// TIMEOUT_STEP_MS (30 s) and displays a human-readable duration label.
+function TimeoutStepper({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex-1 flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono text-muted-foreground">{label}</span>
+        <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(Math.max(TIMEOUT_MIN_MS, value - TIMEOUT_STEP_MS))}
+          disabled={value <= TIMEOUT_MIN_MS}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
+          <Minus className="h-3 w-3" />
+        </button>
+        <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
+          <span className="text-sm font-bold tabular-nums text-foreground">{fmtMs(value)}</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange(Math.min(TIMEOUT_MAX_MS, value + TIMEOUT_STEP_MS))}
+          disabled={value >= TIMEOUT_MAX_MS}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+        >
           <Plus className="h-3 w-3" />
         </button>
       </div>
@@ -481,12 +550,10 @@ function ReviewTestCaseForm({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Title */}
         <div className="sm:col-span-2 space-y-1.5">
           <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Title *</label>
           <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Login form submits correctly" className="h-9 text-sm" />
         </div>
-        {/* Category */}
         <div className="space-y-1.5">
           <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Category *</label>
           <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
@@ -494,7 +561,6 @@ function ReviewTestCaseForm({
             {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-        {/* Priority */}
         <div className="space-y-1.5">
           <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Priority</label>
           <select value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "P0" | "P1" | "P2" }))}
@@ -505,8 +571,6 @@ function ReviewTestCaseForm({
           </select>
         </div>
       </div>
-
-      {/* Steps */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Steps *</label>
@@ -527,23 +591,18 @@ function ReviewTestCaseForm({
           ))}
         </div>
       </div>
-
-      {/* Expected result */}
       <div className="space-y-1.5">
         <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Expected Result *</label>
         <textarea value={form.expectedResult} onChange={(e) => setForm((f) => ({ ...f, expectedResult: e.target.value }))}
           placeholder="What should happen when the test passes?" rows={2}
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
       </div>
-
-      {/* Description (optional) */}
       <div className="space-y-1.5">
         <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Description <span className="text-muted-foreground/40">(optional)</span></label>
         <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           placeholder="Additional context about this test case" rows={2}
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
       </div>
-
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="text-muted-foreground h-8 text-xs">Cancel</Button>
         <Button type="button" size="sm" disabled={isSaving || !form.title.trim() || !form.expectedResult.trim() || form.steps.every((s) => !s.trim())}
@@ -600,7 +659,6 @@ function ReviewTestCaseCard({
 
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden transition-all">
-      {/* Header row */}
       <div className="flex items-start gap-3 p-4">
         <FlaskConical className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
@@ -612,7 +670,6 @@ function ReviewTestCaseCard({
           </div>
           <p className="text-sm font-medium text-foreground">{tc.title ?? "(untitled)"}</p>
         </div>
-        {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => { setEditing(!editing); setExpanded(false); }}
             className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
@@ -630,8 +687,6 @@ function ReviewTestCaseCard({
           )}
         </div>
       </div>
-
-      {/* Expanded read view */}
       {expanded && !editing && (
         <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
           {tc.description && <p className="text-xs text-muted-foreground">{tc.description}</p>}
@@ -649,8 +704,6 @@ function ReviewTestCaseCard({
           )}
         </div>
       )}
-
-      {/* Edit form */}
       {editing && (
         <div className="px-4 pb-4 border-t border-border pt-4">
           <ReviewTestCaseForm
@@ -735,7 +788,6 @@ function ReviewPhase({ testRunId, targetUrl, onCancel }: { testRunId: string; ta
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      {/* Header */}
       <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5">
         <div className="flex items-start gap-4">
           <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
@@ -750,8 +802,6 @@ function ReviewPhase({ testRunId, targetUrl, onCancel }: { testRunId: string; ta
           </div>
         </div>
       </div>
-
-      {/* Test cases list */}
       {isLoading ? (
         <div className="flex items-center justify-center py-10">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -769,11 +819,7 @@ function ReviewPhase({ testRunId, targetUrl, onCancel }: { testRunId: string; ta
           )}
         </div>
       )}
-
-      {/* Add panel */}
       {showAdd && <AddTestCasePanel testRunId={testRunId} onClose={() => setShowAdd(false)} />}
-
-      {/* Actions */}
       <div className="flex items-center gap-3 flex-wrap">
         {!showAdd && (
           <Button variant="outline" size="sm" onClick={() => setShowAdd(true)} className="gap-2 text-sm border-dashed">
@@ -1006,6 +1052,17 @@ export default function TestingPage() {
   const [maxPages, setMaxPages] = useState(5);
   const [maxTests, setMaxTests] = useState(10);
 
+  // [ADDED] Concurrency state — defaults to 5, plan-agnostic.
+  const [concurrency, setConcurrency] = useState(CONCURRENCY_DEFAULT);
+
+  // [ADDED] Timeout state — each mirrors the TIMEOUTS default in tinyfish.service.ts.
+  const [discoveryMs,  setDiscoveryMs]  = useState(DEFAULT_DISCOVERY_MS);
+  const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
+  const [executeMs,    setExecuteMs]    = useState(DEFAULT_EXECUTE_MS);
+
+  // [ADDED] Controls visibility of the Advanced Settings panel.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   // Clamp stored values whenever planLimits resolves or changes (e.g. after
   // the subscription query loads, or the user upgrades mid-session).
   useEffect(() => {
@@ -1084,10 +1141,31 @@ export default function TestingPage() {
 
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL"); return; }
-    startTest({ url: url.trim(), maxPages, maxTests }, {
-      onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
-      onError: (err) => toast.error(err.message ?? "Failed to start test run"),
-    });
+
+    // [ADDED] Build the timeouts object, omitting fields that match the default
+    // so the server can apply its own defaults cleanly. Only non-default values
+    // are sent to avoid polluting logs with unnecessary overrides.
+    const timeouts: Record<string, number> = {};
+    if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs  = discoveryMs;
+    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs = extractionMs;
+    if (executeMs    !== DEFAULT_EXECUTE_MS)    timeouts.executeTestBaseMs = executeMs;
+
+    startTest(
+      {
+        url: url.trim(),
+        maxPages,
+        maxTests,
+        // [ADDED] Only send concurrency if it differs from the server default (5).
+        // The server accepts undefined and falls back to DEFAULT_BUDGET.concurrency.
+        ...(concurrency !== CONCURRENCY_DEFAULT && { concurrency }),
+        // [ADDED] Only include timeouts object if at least one override was set.
+        ...(Object.keys(timeouts).length > 0 && { timeouts }),
+      },
+      {
+        onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
+        onError: (err) => toast.error(err.message ?? "Failed to start test run"),
+      },
+    );
   };
 
   const handleCancel = () => {
@@ -1103,6 +1181,21 @@ export default function TestingPage() {
     setFilterSeverity("all"); setFilterCategory("all");
     setTcFilter("all"); setActiveTab("tests"); setSelectedBug(null);
   };
+
+  // [ADDED] Resets all advanced settings back to their defaults.
+  const handleResetAdvanced = () => {
+    setConcurrency(CONCURRENCY_DEFAULT);
+    setDiscoveryMs(DEFAULT_DISCOVERY_MS);
+    setExtractionMs(DEFAULT_EXTRACTION_MS);
+    setExecuteMs(DEFAULT_EXECUTE_MS);
+  };
+
+  // [ADDED] True when any advanced setting differs from its default.
+  const hasAdvancedChanges =
+    concurrency  !== CONCURRENCY_DEFAULT   ||
+    discoveryMs  !== DEFAULT_DISCOVERY_MS  ||
+    extractionMs !== DEFAULT_EXTRACTION_MS ||
+    executeMs    !== DEFAULT_EXECUTE_MS;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -1195,6 +1288,101 @@ export default function TestingPage() {
                   Tests ≥ pages · more tests = slower but more thorough
                 </p>
               </div>
+
+              {/* [ADDED] Advanced Settings — collapsible panel for concurrency + timeouts.
+                  Hidden by default to avoid overwhelming first-time users.
+                  A dot indicator appears on the toggle button when non-default values are active
+                  so the user knows something has been changed even while the panel is collapsed. */}
+              <div className="rounded-xl border border-border bg-card overflow-hidden">
+                {/* Toggle header */}
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Advanced Settings</span>
+                    {/* [ADDED] Dot badge shown when any advanced value differs from its default */}
+                    {hasAdvancedChanges && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" title="Non-default settings active" />
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {hasAdvancedChanges && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleResetAdvanced(); }}
+                        className="text-[10px] font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded border border-border/40 hover:border-border"
+                      >
+                        reset
+                      </button>
+                    )}
+                    {showAdvanced
+                      ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    }
+                  </div>
+                </button>
+
+                {/* Expanded content */}
+                {showAdvanced && (
+                  <div className="px-4 pb-4 border-t border-border space-y-4 pt-4">
+
+                    {/* Concurrency */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Parallelism</p>
+                      <BudgetStepper
+                        label="Concurrent extractions"
+                        hint={`${CONCURRENCY_MIN}–${CONCURRENCY_MAX}`}
+                        value={concurrency}
+                        min={CONCURRENCY_MIN}
+                        max={CONCURRENCY_MAX}
+                        onChange={setConcurrency}
+                      />
+                      <p className="text-xs text-muted-foreground/50 font-mono">
+                        How many pages are fetched in parallel during crawl Stage 2. Higher = faster but uses more TinyFish credits simultaneously.
+                      </p>
+                    </div>
+
+                    <div className="w-full h-px bg-border" />
+
+                    {/* Timeouts */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Timeouts</p>
+                      <div className="flex gap-4">
+                        {/* Discovery timeout */}
+                        <TimeoutStepper
+                          label="Discovery"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={discoveryMs}
+                          onChange={setDiscoveryMs}
+                        />
+                        <div className="w-px bg-border shrink-0" />
+                        {/* Extraction timeout */}
+                        <TimeoutStepper
+                          label="Extraction"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={extractionMs}
+                          onChange={setExtractionMs}
+                        />
+                        <div className="w-px bg-border shrink-0" />
+                        {/* Test execution timeout */}
+                        <TimeoutStepper
+                          label="Execute"
+                          hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`}
+                          value={executeMs}
+                          onChange={setExecuteMs}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground/50 font-mono">
+                        Per-call TinyFish timeouts. Discovery = Stage 1 site crawl. Extraction = per-page data pull. Execute = per test step. Increase for slow or JS-heavy sites.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* end Advanced Settings */}
 
               <p className="text-xs text-muted-foreground/60 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
             </div>

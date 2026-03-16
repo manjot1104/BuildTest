@@ -29,6 +29,19 @@ export interface CrawlBudget {
   concurrency: number;
 }
 
+// [ADDED] Per-run timeout overrides. All values are in milliseconds.
+// When provided via CrawlOptions these replace the module-level TIMEOUTS
+// defaults for the duration of a single crawlSite() invocation.
+// Fields are optional — omitting a field keeps the default value.
+export interface TimeoutOverrides {
+  /** How long to wait for the Stage-1 discovery TinyFish call (default 300 000 ms). */
+  discoveryMs?: number;
+  /** How long to wait for each Stage-2 per-page extraction call (default 300 000 ms). */
+  extractionMs?: number;
+  /** Base timeout for a single test execution (default 300 000 ms). */
+  executeTestBaseMs?: number;
+}
+
 export interface TestBudgetAllocation {
   testsPerPage: Map<string, number>;
   totalTests: number;
@@ -46,13 +59,22 @@ const DEFAULT_BUDGET: CrawlBudget = {
 // These must stay in sync with the Elysia route schema constraints:
 //   maxPages: t.Integer({ minimum: 1, maximum: 20 })
 //   maxTests: t.Integer({ minimum: 1, maximum: 30 })
+// [ADDED] HARD_CAPS.MAX_CONCURRENCY caps the concurrency slider server-side.
+// [ADDED] HARD_CAPS.MIN_CONCURRENCY prevents a value of 0 from deadlocking.
+// [ADDED] HARD_CAPS.MAX_TIMEOUT_MS / MIN_TIMEOUT_MS guard against absurd values.
 const HARD_CAPS = {
   MAX_PAGES: 20,
   MAX_TESTS: 30,
   MAX_TESTS_PER_PAGE: 8,
   MIN_TESTS_PER_PAGE: 1,
+  MIN_CONCURRENCY: 1,
+  MAX_CONCURRENCY: 20,
+  MIN_TIMEOUT_MS: 30_000,   // 30 s — below this TinyFish almost always times out
+  MAX_TIMEOUT_MS: 600_000,  // 10 min — sane upper bound
 } as const;
 
+// [CHANGED] TIMEOUTS is now mutable-compatible via a helper (resolveTimeouts)
+// so per-run overrides can be applied without mutating the module constant.
 const TIMEOUTS = {
   DISCOVERY_MS: 300_000,
   EXTRACTION_MS: 300_000,
@@ -60,6 +82,43 @@ const TIMEOUTS = {
   EXECUTE_TEST_BASE_MS: 300_000,
   EXECUTE_TEST_RETRY_BONUS_MS: 60_000,
 } as const;
+
+// [ADDED] ResolvedTimeouts is a plain mutable interface that mirrors the shape
+// of TIMEOUTS but uses `number` instead of literal types. This is necessary
+// because resolveTimeouts() returns values produced by clamp() (type `number`),
+// which is not assignable to the readonly literal types in `typeof TIMEOUTS`.
+interface ResolvedTimeouts {
+  DISCOVERY_MS: number;
+  EXTRACTION_MS: number;
+  EXTRACTION_RETRY_MS: number;
+  EXECUTE_TEST_BASE_MS: number;
+  EXECUTE_TEST_RETRY_BONUS_MS: number;
+}
+
+// [ADDED] resolveTimeouts merges user-supplied overrides onto the module
+// defaults, clamping each value to [MIN_TIMEOUT_MS, MAX_TIMEOUT_MS].
+// Returns a ResolvedTimeouts object (mutable numbers, not readonly literals).
+function resolveTimeouts(overrides?: TimeoutOverrides): ResolvedTimeouts {
+  if (!overrides) return { ...TIMEOUTS };
+  const clamp = (v: number) =>
+    Math.max(HARD_CAPS.MIN_TIMEOUT_MS, Math.min(v, HARD_CAPS.MAX_TIMEOUT_MS));
+  return {
+    DISCOVERY_MS:
+      overrides.discoveryMs !== undefined
+        ? clamp(overrides.discoveryMs)
+        : TIMEOUTS.DISCOVERY_MS,
+    EXTRACTION_MS:
+      overrides.extractionMs !== undefined
+        ? clamp(overrides.extractionMs)
+        : TIMEOUTS.EXTRACTION_MS,
+    EXTRACTION_RETRY_MS: TIMEOUTS.EXTRACTION_RETRY_MS, // not user-overridable
+    EXECUTE_TEST_BASE_MS:
+      overrides.executeTestBaseMs !== undefined
+        ? clamp(overrides.executeTestBaseMs)
+        : TIMEOUTS.EXECUTE_TEST_BASE_MS,
+    EXECUTE_TEST_RETRY_BONUS_MS: TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS, // not user-overridable
+  };
+}
 
 export const MAX_EXTRACTION_RETRIES = 1;
 export const MAX_TEST_RETRIES = 1;
@@ -76,11 +135,16 @@ function makeCrawlContext(): CrawlContext {
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
+// [CHANGED] CrawlOptions now accepts an optional timeouts field so callers
+// (testing.controller.ts → runPipelineStages) can pass user-requested
+// timeout overrides all the way down to the TinyFish calls.
 export interface CrawlOptions {
   budget?: Partial<CrawlBudget>;
   allowedDomain?: string;
   testRunId?: string;
   abortSignal?: AbortSignal;
+  /** Optional per-run timeout overrides (milliseconds). Clamped server-side. */
+  timeouts?: TimeoutOverrides;
 }
 
 export interface TinyFishRequest {
@@ -878,6 +942,10 @@ export function allocateTestBudget(
 
 // ─── Main crawl ───────────────────────────────────────────────────────────────
 
+// [CHANGED] crawlSite now reads options.budget.concurrency (user-supplied,
+// clamped to HARD_CAPS) and options.timeouts (merged via resolveTimeouts).
+// The resolved concurrency is logged alongside pages/tests so it's visible
+// in server logs when diagnosing slow or failed crawls.
 export async function crawlSite(
   rootUrl: string,
   options: CrawlOptions = {},
@@ -898,7 +966,13 @@ export async function crawlSite(
   const abortSignal = options.abortSignal;
   const ctx = makeCrawlContext();
 
-  // Resolve effective budget: user values → defaults → hard caps
+  // [ADDED] Resolve timeout overrides for this invocation.
+  // resolveTimeouts clamps each value to [MIN_TIMEOUT_MS, MAX_TIMEOUT_MS].
+  const timeouts = resolveTimeouts(options.timeouts);
+
+  // Resolve effective budget: user values → defaults → hard caps.
+  // [CHANGED] concurrency is now clamped to [MIN_CONCURRENCY, MAX_CONCURRENCY]
+  // so a user supplying concurrency=0 or concurrency=999 gets a safe value.
   const budget: CrawlBudget = {
     maxPages: Math.min(
       options.budget?.maxPages ?? DEFAULT_BUDGET.maxPages,
@@ -908,13 +982,20 @@ export async function crawlSite(
       options.budget?.maxTests ?? DEFAULT_BUDGET.maxTests,
       HARD_CAPS.MAX_TESTS,
     ),
-    concurrency:
-      options.budget?.concurrency ?? DEFAULT_BUDGET.concurrency,
+    concurrency: Math.max(
+      HARD_CAPS.MIN_CONCURRENCY,
+      Math.min(
+        options.budget?.concurrency ?? DEFAULT_BUDGET.concurrency,
+        HARD_CAPS.MAX_CONCURRENCY,
+      ),
+    ),
   };
 
   console.log(
-    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests} ` +
-      `(user-requested: pages=${options.budget?.maxPages ?? "default"} tests=${options.budget?.maxTests ?? "default"})`,
+    `[Crawler] ══ START: ${rootUrl} | maxPages=${budget.maxPages} maxTests=${budget.maxTests} concurrency=${budget.concurrency} ` +
+      `discoveryMs=${timeouts.DISCOVERY_MS} extractionMs=${timeouts.EXTRACTION_MS} executeBaseMs=${timeouts.EXECUTE_TEST_BASE_MS} ` +
+      `(user-requested: pages=${options.budget?.maxPages ?? "default"} tests=${options.budget?.maxTests ?? "default"} ` +
+      `concurrency=${options.budget?.concurrency ?? "default"})`,
   );
 
   // ── Stage 0: Free URL seeding ──────────────────────────────────────────────
@@ -940,6 +1021,7 @@ export async function crawlSite(
 
   console.log(`[Stage1] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
 
+  // [CHANGED] Use resolved timeouts.DISCOVERY_MS instead of the module constant.
   const discoveryResult = await withTimeout(
     runTinyFish(
       {
@@ -949,7 +1031,7 @@ export async function crawlSite(
       },
       ctx,
     ),
-    TIMEOUTS.DISCOVERY_MS,
+    timeouts.DISCOVERY_MS,
     {
       success: false,
       resultJson: null,
@@ -1062,59 +1144,80 @@ export async function crawlSite(
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
   console.log(
-    `[Stage2] ⚡ Extracting ${allCandidateUrls.length} pages in parallel`,
+    `[Stage2] ⚡ Extracting ${allCandidateUrls.length} pages in parallel (concurrency=${budget.concurrency})`,
   );
 
-  const extractionResults = await Promise.allSettled(
-    allCandidateUrls.map(async (pageUrl) => {
-      for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
-        if (abortSignal?.aborted || ctx.creditsExhausted) break;
-        if (attempt > 0) console.log(`[Stage2] Retry ${attempt}: ${pageUrl}`);
+  // [CHANGED] Previously all pages were fired simultaneously with
+  // Promise.allSettled. Now we respect budget.concurrency by processing
+  // pages in sliding-window batches of size `budget.concurrency`.
+  // This prevents saturating the TinyFish API with too many simultaneous
+  // connections on large crawls.
+  const extractionResults: PromiseSettledResult<CrawledPage | null>[] = [];
 
-        const timeoutMs =
-          TIMEOUTS.EXTRACTION_MS + attempt * TIMEOUTS.EXTRACTION_RETRY_MS;
-        const result = await withTimeout(
-          runTinyFish(
+  for (
+    let batchStart = 0;
+    batchStart < allCandidateUrls.length;
+    batchStart += budget.concurrency
+  ) {
+    const batchUrls = allCandidateUrls.slice(
+      batchStart,
+      batchStart + budget.concurrency,
+    );
+
+    const batchResults = await Promise.allSettled(
+      batchUrls.map(async (pageUrl) => {
+        for (let attempt = 0; attempt <= MAX_EXTRACTION_RETRIES; attempt++) {
+          if (abortSignal?.aborted || ctx.creditsExhausted) break;
+          if (attempt > 0) console.log(`[Stage2] Retry ${attempt}: ${pageUrl}`);
+
+          // [CHANGED] Use resolved timeouts.EXTRACTION_MS instead of module constant.
+          const timeoutMs =
+            timeouts.EXTRACTION_MS + attempt * timeouts.EXTRACTION_RETRY_MS;
+          const result = await withTimeout(
+            runTinyFish(
+              {
+                url: pageUrl,
+                goal: buildExtractionGoal(pageUrl, allowedHostname),
+                browser_profile: "lite",
+              },
+              ctx,
+            ),
+            timeoutMs,
             {
-              url: pageUrl,
-              goal: buildExtractionGoal(pageUrl, allowedHostname),
-              browser_profile: "lite",
+              success: false,
+              resultJson: null,
+              rawText: null,
+              error: "timeout",
+              jobId: null,
             },
-            ctx,
-          ),
-          timeoutMs,
-          {
-            success: false,
-            resultJson: null,
-            rawText: null,
-            error: "timeout",
-            jobId: null,
-          },
-          `extract(${pageUrl}) attempt=${attempt + 1}`,
-        );
-
-        const raw = result.resultJson ?? tryParseRawText(result.rawText);
-        if (!raw) {
-          console.warn(
-            `[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
+            `extract(${pageUrl}) attempt=${attempt + 1}`,
           );
-          continue;
-        }
 
-        const extracted = extractPageData(pageUrl, raw, allowedHostname);
-        console.log(
-          `[Stage2] ✓ "${extracted.title}" ${pageUrl} | ` +
-            `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
-            `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
-        );
-        return {
-          ...extracted,
-          screenshots: { url375: null, url768: null, url1440: null },
-        } as CrawledPage;
-      }
-      return null;
-    }),
-  );
+          const raw = result.resultJson ?? tryParseRawText(result.rawText);
+          if (!raw) {
+            console.warn(
+              `[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
+            );
+            continue;
+          }
+
+          const extracted = extractPageData(pageUrl, raw, allowedHostname);
+          console.log(
+            `[Stage2] ✓ "${extracted.title}" ${pageUrl} | ` +
+              `elements:${extracted.elements.length} forms:${extracted.forms.length} ` +
+              `links:${extracted.internalLinks.length} complexity:${extracted.complexityScore.toFixed(1)}`,
+          );
+          return {
+            ...extracted,
+            screenshots: { url375: null, url768: null, url1440: null },
+          } as CrawledPage;
+        }
+        return null;
+      }),
+    );
+
+    extractionResults.push(...batchResults);
+  }
 
   if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
@@ -1318,14 +1421,21 @@ export async function measurePagePerformance(
 
 // ─── Test execution ───────────────────────────────────────────────────────────
 
+// [CHANGED] executeTest now accepts an optional timeouts argument so the
+// controller can pass user-requested timeout overrides into individual test
+// execution calls. When omitted the module-level TIMEOUTS defaults apply.
 export async function executeTest(
   url: string,
   goal: string,
   stealth = false,
   attempt = 0,
+  timeoutOverrides?: TimeoutOverrides,
 ): Promise<TestExecutionResult> {
   const ctx = makeCrawlContext();
   const startTime = Date.now();
+
+  // [ADDED] Resolve timeouts for this execution call.
+  const resolvedTimeouts = resolveTimeouts(timeoutOverrides);
 
   const fullGoal = `You are a QA test automation agent. Execute these test steps in a real browser.
 
@@ -1347,13 +1457,14 @@ Return ONLY this JSON, no markdown, start with { end with }:
 If PASSED: {"passed":true,"actualResult":"<what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
 If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"<specific error>","consoleLogs":[],"networkLogs":[]}`;
 
+  // [CHANGED] Use resolved EXECUTE_TEST_BASE_MS instead of the module constant.
   const result = await withTimeout(
     runTinyFish(
       { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
       ctx,
     ),
-    TIMEOUTS.EXECUTE_TEST_BASE_MS +
-      attempt * TIMEOUTS.EXECUTE_TEST_RETRY_BONUS_MS,
+    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
+      attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS,
     {
       success: false,
       resultJson: null,

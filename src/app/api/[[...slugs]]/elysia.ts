@@ -1355,6 +1355,17 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // can specify how many pages to crawl and how many test cases to generate.
   // Both fields are optional integers — the server uses its own defaults when omitted.
   // t.Integer() ensures we reject floats/strings at the Elysia validation layer.
+  //
+  // [ADDED] concurrency — number of parallel TinyFish extraction calls during
+  //   Stage 2 crawl. Clamped server-side to [1, 20]. Optional; server default is 5.
+  //
+  // [ADDED] timeouts — per-run timeout overrides in milliseconds. Each field is
+  //   optional; omitted fields keep their server-side defaults (300 000 ms each).
+  //   Clamped server-side to [30 000, 600 000] per field.
+  //   Fields:
+  //     discoveryMs      — Stage-1 site discovery TinyFish call timeout
+  //     extractionMs     — per-page Stage-2 extraction TinyFish call timeout
+  //     executeTestBaseMs — base timeout for a single test-execution TinyFish call
   .post(
     "/test/run",
     async ({ body, set }) => {
@@ -1370,6 +1381,16 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         // user-controlled crawl budget — both optional, server defaults apply when absent
         maxPages: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
         maxTests: t.Optional(t.Integer({ minimum: 1, maximum: 30 })),
+        // [ADDED] number of parallel page-extraction calls during Stage 2 crawl
+        concurrency: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
+        // [ADDED] per-run timeout overrides (milliseconds); each field is optional
+        timeouts: t.Optional(
+          t.Object({
+            discoveryMs:       t.Optional(t.Integer({ minimum: 30_000, maximum: 600_000 })),
+            extractionMs:      t.Optional(t.Integer({ minimum: 30_000, maximum: 600_000 })),
+            executeTestBaseMs: t.Optional(t.Integer({ minimum: 30_000, maximum: 600_000 })),
+          }),
+        ),
       }),
     },
   )

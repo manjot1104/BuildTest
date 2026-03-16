@@ -19,6 +19,7 @@ import {
   MAX_TEST_RETRIES,
   type PagePerformanceMetrics,
   type PipelineSSEEvent,
+  type TimeoutOverrides, // [ADDED] import for per-run timeout override type
 } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import {
@@ -178,14 +179,17 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
-// runPipeline accepts userId so plan limits can be enforced inside the pipeline.
-// userMaxPages and userMaxTests carry the user's slider values from the request.
+// [CHANGED] runPipeline now accepts optional concurrency and timeouts so they
+// can be forwarded from the original POST /api/test/run request body all the
+// way into crawlSite() and executeTest() inside runPipelineStages().
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
   userId: string,
   userMaxPages?: number,
   userMaxTests?: number,
+  userConcurrency?: number,     // [ADDED]
+  userTimeouts?: TimeoutOverrides, // [ADDED]
 ): Promise<void> {
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
@@ -203,14 +207,18 @@ async function runPipeline(
       abortController.signal,
       userMaxPages,
       userMaxTests,
+      userConcurrency,   // [ADDED]
+      userTimeouts,      // [ADDED]
     );
   } finally {
     crawlAbortControllers.delete(testRunId);
   }
 }
 
-// runPipelineStages accepts userId (required for plan-limit lookups) and
-// optional userMaxPages / userMaxTests passed into crawlSite's budget.
+// [CHANGED] runPipelineStages accepts optional userConcurrency and
+// userTimeouts, passes both into crawlSite via CrawlOptions, and passes
+// userTimeouts into each executeTest call so test-step timeouts are also
+// governed by the user's requested override.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
@@ -219,6 +227,8 @@ async function runPipelineStages(
   abortSignal: AbortSignal,
   userMaxPages?: number,
   userMaxTests?: number,
+  userConcurrency?: number,      // [ADDED]
+  userTimeouts?: TimeoutOverrides, // [ADDED]
 ): Promise<void> {
   // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
   checkCancelled(testRunId);
@@ -233,7 +243,11 @@ async function runPipelineStages(
       budget: {
         ...(userMaxPages !== undefined && { maxPages: userMaxPages }),
         ...(userMaxTests !== undefined && { maxTests: userMaxTests }),
+        // [ADDED] Forward user-requested concurrency into the crawl budget.
+        ...(userConcurrency !== undefined && { concurrency: userConcurrency }),
       },
+      // [ADDED] Forward user-requested timeout overrides into the crawl call.
+      timeouts: userTimeouts,
     });
   } catch (err) {
     if (abortSignal.aborted || cancelledPipelines.has(testRunId))
@@ -477,7 +491,9 @@ async function runPipelineStages(
           .join("\n");
         const goal = `${numberedSteps}\n\nExpected result: ${tc.expected_result ?? ""}`;
 
-        let result = await executeTest(testUrl, goal, false, 0);
+        // [CHANGED] Forward userTimeouts into executeTest so per-run timeout
+        // overrides apply to individual test-step browser sessions as well.
+        let result = await executeTest(testUrl, goal, false, 0, userTimeouts);
         let retryCount = 0;
         let isFlaky = false;
 
@@ -487,7 +503,8 @@ async function runPipelineStages(
           attempt <= MAX_TEST_RETRIES && !result.passed;
           attempt++
         ) {
-          const retryResult = await executeTest(testUrl, goal, false, attempt);
+          // [CHANGED] Pass userTimeouts into retry calls as well.
+          const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
             isFlaky = true;
@@ -778,8 +795,9 @@ async function runPipelineStages(
 // POST /api/test/run
 // ---------------------------------------------------------------------------
 
-// CHANGED: body now accepts optional maxPages and maxTests from the user.
-// These are passed through to runPipeline → runPipelineStages → crawlSite.
+// [CHANGED] body now accepts optional concurrency and timeout overrides
+// alongside the existing maxPages and maxTests. All new fields are optional
+// and server-side clamped before reaching crawlSite / executeTest.
 export async function startTestRunHandler({
   body,
 }: {
@@ -788,12 +806,16 @@ export async function startTestRunHandler({
     projectId?: string;
     maxPages?: number;
     maxTests?: number;
+    /** Number of parallel TinyFish extraction calls during Stage 2 crawl. */
+    concurrency?: number;          // [ADDED]
+    /** Per-run timeout overrides (milliseconds). Clamped server-side. */
+    timeouts?: TimeoutOverrides;   // [ADDED]
   };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-    const { url, projectId, maxPages, maxTests } = body;
+    const { url, projectId, maxPages, maxTests, concurrency, timeouts } = body;
     if (!url) return { error: "URL is required", status: 400 };
 
     const targetUrl = normaliseUrl(url);
@@ -823,6 +845,25 @@ export async function startTestRunHandler({
         `[Testing] User ${session.user.id} requested maxTests=${maxTests} but plan "${planId ?? "free"}" allows ${planLimits.maxTests} — clamped.`,
       );
     }
+
+    // [ADDED] Concurrency is plan-agnostic: clamp to the hard caps defined in
+    // tinyfish.service (MIN=1, MAX=20).  We log if the user sent an out-of-range
+    // value so it is visible in server logs without throwing an error.
+    const CONCURRENCY_MIN = 1;
+    const CONCURRENCY_MAX = 20;
+    const effectiveConcurrency =
+      concurrency !== undefined
+        ? Math.max(CONCURRENCY_MIN, Math.min(concurrency, CONCURRENCY_MAX))
+        : undefined;
+
+    if (
+      concurrency !== undefined &&
+      (concurrency < CONCURRENCY_MIN || concurrency > CONCURRENCY_MAX)
+    ) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested concurrency=${concurrency} — clamped to ${effectiveConcurrency}.`,
+      );
+    }
     // ── End server-side validation ─────────────────────────────────────────
 
     await db.insert(test_runs).values({
@@ -840,9 +881,16 @@ export async function startTestRunHandler({
 
     activePipelines.add(testRunId);
 
-    // CHANGED: forward userId so the pipeline can derive plan limits internally,
-    // and forward (already-clamped) maxPages/maxTests into the crawl budget.
-    void runPipeline(testRunId, targetUrl, session.user.id, effectiveMaxPages, effectiveMaxTests)
+    // [CHANGED] Forward (already-clamped) concurrency and timeouts into the pipeline.
+    void runPipeline(
+      testRunId,
+      targetUrl,
+      session.user.id,
+      effectiveMaxPages,
+      effectiveMaxTests,
+      effectiveConcurrency, // [ADDED]
+      timeouts,             // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
+    )
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("CANCELLED:")) {
@@ -1035,6 +1083,9 @@ export async function streamTestRunHandler({
         // because this path is for reconnecting to an already-persisted run.
         // The original maxPages/maxTests were already applied when POST /test/run was called.
         // CHANGED: pass run.user_id so re-started pipelines can still derive plan limits.
+        // NOTE: concurrency and timeouts are also not available here — the run was
+        // already launched with its original settings; we restart without overrides,
+        // which will use the crawler's built-in defaults.
         console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
         activePipelines.add(params.id);
         unregister = registerEmitter(params.id, emit);

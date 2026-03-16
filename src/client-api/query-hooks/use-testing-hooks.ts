@@ -635,10 +635,21 @@ export function useTestRunSSE(
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-// mutation input accepts optional maxPages and maxTests.
-// These are forwarded to POST /api/test/run and flow into the crawl budget.
-// Defaults are intentionally omitted here so the server's own defaults apply
-// when the user hasn't changed the sliders.
+// [ADDED] TimeoutOverrides mirrors the server-side interface from
+// tinyfish.service.ts so the UI can pass typed timeout values through
+// useStartTestRun → POST /api/test/run without manual casting.
+export interface TimeoutOverrides {
+  /** Discovery TinyFish call timeout in milliseconds (default 300 000). */
+  discoveryMs?: number;
+  /** Per-page extraction TinyFish call timeout in milliseconds (default 300 000). */
+  extractionMs?: number;
+  /** Base timeout for a single test-execution TinyFish call in milliseconds (default 300 000). */
+  executeTestBaseMs?: number;
+}
+
+// [CHANGED] mutation input now also accepts optional concurrency and timeouts.
+// These map 1-to-1 to the new fields in POST /api/test/run.
+// All fields remain optional — omitting them keeps server defaults.
 export function useStartTestRun() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -649,6 +660,16 @@ export function useStartTestRun() {
       maxPages?: number;
       /** Maximum number of test cases to generate. Omit to use server default. */
       maxTests?: number;
+      /**
+       * Number of parallel TinyFish extraction calls during Stage 2 crawl.
+       * Clamped server-side to [1, 20]. Omit to use server default (5).
+       */
+      concurrency?: number;        // [ADDED]
+      /**
+       * Per-run timeout overrides in milliseconds. Clamped server-side to
+       * [30 000, 600 000] per field. Omit individual fields to keep defaults.
+       */
+      timeouts?: TimeoutOverrides; // [ADDED]
     }): Promise<{ testRunId: string }> => {
       const res = await fetch("/api/test/run", {
         method: "POST",
