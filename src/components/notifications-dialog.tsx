@@ -20,22 +20,22 @@ export function NotificationsDialog({
 }: NotificationsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="hk-neon-dialog sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-none" showCloseButton={false}>
-                <div className="hk-neon-dialog-header px-5 pt-5 pb-4">
+            <DialogContent className="sm:max-w-[380px] p-0 gap-0 overflow-hidden rounded-xl border shadow-lg" showCloseButton={false}>
+                <div className="px-5 pt-5 pb-4 border-b bg-muted/30">
                     <DialogHeader>
-                        <DialogTitle className="hk-neon-dialog-title text-base font-semibold tracking-tight">Notifications</DialogTitle>
-                        <DialogDescription className="font-mono text-[11px] text-muted-foreground">
-                            // account activity and updates
+                        <DialogTitle className="text-base font-semibold tracking-tight">Notifications</DialogTitle>
+                        <DialogDescription className="text-[11px] text-muted-foreground">
+                            Account activity and updates
                         </DialogDescription>
                     </DialogHeader>
                 </div>
                 <div className="flex flex-col items-center justify-center py-14 px-5 text-center">
-                    <div className="hk-neon-empty-icon size-10 flex items-center justify-center mb-3">
+                    <div className="size-10 flex items-center justify-center mb-3 bg-muted rounded-full">
                         <Bell className="size-5 text-muted-foreground" />
                     </div>
-                    <h3 className="font-mono text-sm font-medium">No notifications yet</h3>
-                    <p className="font-mono text-[10px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
-                        // payment confirmations, credit alerts, and updates will appear here
+                    <h3 className="text-sm font-medium">No notifications yet</h3>
+                    <p className="text-[10px] text-muted-foreground mt-1 max-w-xs leading-relaxed">
+                        Payment confirmations, credit alerts, and updates will appear here
                     </p>
                 </div>
             </DialogContent>

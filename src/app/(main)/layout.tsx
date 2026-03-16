@@ -1,4 +1,5 @@
 import React from 'react'
+import type { Metadata } from 'next'
 import { eq } from 'drizzle-orm'
 import { headers } from "next/headers";
 
@@ -8,6 +9,11 @@ import { user } from "@/server/db/schema";
 import MainLayoutClient from './main-layout-client';
 
 export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: "Chat",
+  description: "Build apps through conversation. Describe what you want and Buildify generates production-ready code.",
+};
 
 export default async function Layout({ children }: { children: React.ReactNode }) {
   const requestHeaders = await headers();

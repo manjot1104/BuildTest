@@ -95,7 +95,7 @@ function LayerItem({ element, index, total, isSelected, isDragOver, editor, onDr
         isDragOver ? 'border-t-2 border-primary' : ''
       } ${
         isSelected
-          ? 'bg-primary/12 text-primary ring-1 ring-primary/20'
+          ? 'bg-muted text-primary border-primary/20'
           : 'text-foreground hover:bg-accent'
       } ${element.hidden ? 'opacity-50' : ''}`}
     >

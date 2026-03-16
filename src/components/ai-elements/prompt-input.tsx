@@ -220,7 +220,7 @@ export const PromptInput = ({
     <form
       className={cn(
         'w-full divide-y overflow-hidden rounded-xl border bg-background shadow-sm transition-colors',
-        isDragOver && 'border-primary bg-primary/5',
+        isDragOver && 'border-primary bg-muted',
         className,
       )}
       onDragOver={handleDragOver}
@@ -331,7 +331,7 @@ export const PromptInputButton = ({
   return (
     <Button
       className={cn(
-        'shrink-0 gap-1.5 rounded-lg',
+        'h-8 w-8 shrink-0 gap-1.5 rounded-lg',
         variant === 'ghost' && 'text-muted-foreground',
         newSize === 'default' && 'px-3',
         className,
@@ -368,7 +368,7 @@ export const PromptInputSubmit = ({
 
   return (
     <Button
-      className={cn('gap-1.5 rounded-lg', className)}
+      className={cn('h-8 w-8 shrink-0 rounded-lg', className)}
       size={size}
       type="submit"
       variant={variant}
@@ -571,7 +571,7 @@ export const PromptInputMicButton = ({
       {isListening ? (
         <>
           <MicIcon className="size-4 text-green-600 dark:text-green-400 relative z-10" />
-          <span className="absolute inset-0 rounded-lg bg-green-500/20 animate-pulse" />
+          <span className="absolute inset-0 rounded-lg bg-green-500/10" />
         </>
       ) : (
         <MicIcon className="size-4" />

@@ -48,7 +48,7 @@ function AuthorAvatar({ name, image }: { name: string; image?: string | null }) 
 
   const initial = name.charAt(0).toUpperCase()
   return (
-    <div className="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[10px] font-medium">
+    <div className="w-5 h-5 rounded-full bg-muted text-foreground flex items-center justify-center text-[10px] font-medium">
       {initial}
     </div>
   )
@@ -75,7 +75,7 @@ function DemoThumbnail({ demoUrl, title }: { demoUrl: string; title?: string | n
 
   if (iframeError) {
     return (
-      <div ref={containerRef} className="w-full h-full bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 flex items-center justify-center">
+      <div ref={containerRef} className="w-full h-full bg-muted flex items-center justify-center">
         <Globe className="w-8 h-8 text-muted-foreground/30" />
       </div>
     )

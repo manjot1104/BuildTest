@@ -23,7 +23,7 @@ export const ConversationContent = ({
   className,
   ...props
 }: ConversationContentProps) => (
-  <div className={cn('p-4', className)} {...props} />
+  <div className={cn('p-4 max-w-3xl mx-auto w-full', className)} {...props} />
 )
 
 export type ConversationScrollButtonProps = ComponentProps<typeof Button> & {

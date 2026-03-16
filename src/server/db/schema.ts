@@ -132,6 +132,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   paymentTransactions: many(payment_transactions),
   creditUsageLogs: many(credit_usage_logs),
   githubRepos: many(github_repos),
+  accessibilityTestRuns: many(accessibility_test_runs),
   testRuns: many(test_runs),
 }));
 
@@ -424,6 +425,88 @@ export const credit_usage_logs = createTable(
     index("credit_usage_logs_created_at_idx").on(t.created_at),
   ],
 );
+
+// Accessibility Tester
+export const a11yTestStatusEnum = pgEnum("a11y_test_status", [
+  "pending", "crawling", "testing", "generating_report", "completed", "failed",
+])
+
+export const accessibility_test_runs = createTable(
+  "accessibility_test_runs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    target_url: d.text("target_url").notNull(),
+    standards: d.text("standards").notNull(), // JSON string array
+    status: a11yTestStatusEnum("status").notNull().default("pending"),
+    max_pages: d.integer("max_pages").notNull().default(20),
+    max_depth: d.integer("max_depth").notNull().default(3),
+    total_pages_tested: d.integer("total_pages_tested").default(0),
+    total_violations: d.integer("total_violations").default(0),
+    total_passes: d.integer("total_passes").default(0),
+    total_incomplete: d.integer("total_incomplete").default(0),
+    logs: d.text("logs"), // JSON array of SSEEvent objects
+    pdf_report_base64: d.text("pdf_report_base64"),
+    error_message: d.text("error_message"),
+    started_at: d.timestamp("started_at", { withTimezone: true }),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("a11y_test_runs_user_id_idx").on(t.user_id),
+    index("a11y_test_runs_created_at_idx").on(t.created_at),
+    index("a11y_test_runs_status_idx").on(t.status),
+  ],
+)
+
+export const accessibility_page_results = createTable(
+  "accessibility_page_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => accessibility_test_runs.id, { onDelete: "cascade" }),
+    page_url: d.text("page_url").notNull(),
+    page_title: d.text("page_title"),
+    violation_count: d.integer("violation_count").notNull().default(0),
+    pass_count: d.integer("pass_count").notNull().default(0),
+    incomplete_count: d.integer("incomplete_count").notNull().default(0),
+    inapplicable_count: d.integer("inapplicable_count").notNull().default(0),
+    violations: d.text("violations").notNull().default("[]"), // JSON
+    passes: d.text("passes").notNull().default("[]"), // JSON
+    incomplete: d.text("incomplete").notNull().default("[]"), // JSON
+    tested_at: d
+      .timestamp("tested_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("a11y_page_results_test_run_id_idx").on(t.test_run_id),
+  ],
+)
+
+export const accessibilityTestRunsRelations = relations(accessibility_test_runs, ({ one, many }) => ({
+  user: one(user, { fields: [accessibility_test_runs.user_id], references: [user.id] }),
+  pageResults: many(accessibility_page_results),
+}))
+
+export const accessibilityPageResultsRelations = relations(accessibility_page_results, ({ one }) => ({
+  testRun: one(accessibility_test_runs, {
+    fields: [accessibility_page_results.test_run_id],
+    references: [accessibility_test_runs.id],
+  }),
+}))
 
 export const demoTypeEnum = pgEnum("demo_type", ["featured", "community"]);
 
