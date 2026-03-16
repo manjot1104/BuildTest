@@ -78,6 +78,62 @@ function buildTestGoal(tc: TestCase): string {
 }
 
 // ---------------------------------------------------------------------------
+// Plan limit helpers
+// ---------------------------------------------------------------------------
+
+// Plan IDs match subscriptions.plan_id in schema.ts: "starter" | "pro" | "enterprise"
+// No subscription row → null → FREE_PLAN_LIMITS applies.
+// These MUST stay in sync with PLAN_LIMITS / FREE_LIMITS in testing.page.tsx.
+// The UI enforces soft limits before sending; these are the server-side hard gates.
+interface PlanLimits {
+  maxPages: number;
+  maxTests: number;
+}
+
+const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5 };
+
+const SERVER_PLAN_LIMITS: Record<string, PlanLimits> = {
+  starter:    { maxPages:  5, maxTests: 10 },
+  pro:        { maxPages: 10, maxTests: 20 },
+  enterprise: { maxPages: 20, maxTests: 30 },
+};
+
+/**
+ * Resolves the hard server-side test-generation cap for a given subscription.
+ * Called in runPipelineStages to clamp AI-generated case count and in
+ * createTestCaseHandler to enforce the add-case ceiling during review.
+ *
+ * @param planId - value of subscriptions.plan_id, or null/undefined for free tier.
+ */
+function getServerPlanLimits(planId: string | null | undefined): PlanLimits {
+  if (!planId) return FREE_PLAN_LIMITS;
+  return SERVER_PLAN_LIMITS[planId.toLowerCase()] ?? FREE_PLAN_LIMITS;
+}
+
+/**
+ * Fetches the active subscription plan_id for a user, or null if none exists.
+ * Used by the pipeline and createTestCaseHandler to look up per-plan limits.
+ */
+async function getUserPlanId(userId: string): Promise<string | null> {
+  // Import subscriptions table inline to avoid potential circular module issues
+  const { subscriptions } = await import("@/server/db/schema");
+  const { and } = await import("drizzle-orm");
+
+  const [sub] = await db
+    .select({ plan_id: subscriptions.plan_id })
+    .from(subscriptions)
+    .where(
+      and(
+        eq(subscriptions.user_id, userId),
+        eq(subscriptions.status, "active"),
+      ),
+    )
+    .limit(1);
+
+  return sub?.plan_id ?? null;
+}
+
+// ---------------------------------------------------------------------------
 // In-memory pipeline state
 // ---------------------------------------------------------------------------
 
@@ -122,11 +178,12 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
-// runPipeline now accepts optional userMaxPages and userMaxTests
-// so user-provided values are carried all the way into crawlSite's budget.
+// runPipeline accepts userId so plan limits can be enforced inside the pipeline.
+// userMaxPages and userMaxTests carry the user's slider values from the request.
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
+  userId: string,
   userMaxPages?: number,
   userMaxTests?: number,
 ): Promise<void> {
@@ -141,6 +198,7 @@ async function runPipeline(
     await runPipelineStages(
       testRunId,
       targetUrl,
+      userId,
       send,
       abortController.signal,
       userMaxPages,
@@ -151,11 +209,12 @@ async function runPipeline(
   }
 }
 
-// runPipelineStages accepts optional userMaxPages and userMaxTests
-// and passes them into crawlSite via the budget option.
+// runPipelineStages accepts userId (required for plan-limit lookups) and
+// optional userMaxPages / userMaxTests passed into crawlSite's budget.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
+  userId: string,
   send: (event: PipelineSSEEvent) => void,
   abortSignal: AbortSignal,
   userMaxPages?: number,
@@ -202,7 +261,7 @@ async function runPipelineStages(
   };
 
   // Run AI generation, crawl DB writes, and background screenshots all in parallel
-  const [generatedCases] = await Promise.all([
+  const [generatedCasesRaw] = await Promise.all([
     // AI test case generation
     (async (): Promise<TestCase[]> => {
       checkCancelled(testRunId);
@@ -232,6 +291,42 @@ async function runPipelineStages(
     }),
 
   ]);
+
+  // ── Enforce plan-based test-case ceiling ──────────────────────────────────
+  // The crawl budget (testBudget.totalTests) already reflects the user's
+  // requested maxTests value, which is clamped server-side in
+  // startTestRunHandler before the pipeline starts.  However, the AI model
+  // (generateTestCases) does not know the exact numeric ceiling — it targets
+  // the budget heuristically and may overshoot.
+  //
+  // We apply two independent caps and take the minimum:
+  //   1. testBudget.totalTests — budget from allocateTestBudget, already
+  //      hard-capped by HARD_CAPS.MAX_TESTS in tinyfish.service.ts
+  //   2. planLimits.maxTests   — per-plan ceiling looked up from the active
+  //      subscription, so a free user can never exceed FREE_PLAN_LIMITS.maxTests
+  //      even if they tampered the POST /api/test/run request body.
+  //
+  // Cases are ordered by priority in the AI response, so truncating the tail
+  // always drops the lowest-priority ones first.
+  const planId = await getUserPlanId(userId);
+  const planLimits = getServerPlanLimits(planId);
+  const effectiveTestCap = Math.min(
+    siteData.testBudget.totalTests,
+    planLimits.maxTests,
+  );
+
+  const generatedCases =
+    generatedCasesRaw.length > effectiveTestCap
+      ? generatedCasesRaw.slice(0, effectiveTestCap)
+      : generatedCasesRaw;
+
+  if (generatedCasesRaw.length > generatedCases.length) {
+    console.log(
+      `[Pipeline] Clamped AI output: ${generatedCasesRaw.length} → ${generatedCases.length} cases ` +
+        `(plan="${planId ?? "free"}" planMax=${planLimits.maxTests} budgetMax=${siteData.testBudget.totalTests})`,
+    );
+  }
+  // ── End plan-limit enforcement ────────────────────────────────────────────
 
   // Await stage3 so Puppeteer perf metrics are fully populated before we insert
   await siteData.stage3Promise.catch((err) => {
@@ -704,6 +799,32 @@ export async function startTestRunHandler({
     const targetUrl = normaliseUrl(url);
     const testRunId = nanoid();
 
+    // ── Server-side plan limit validation ─────────────────────────────────
+    // The UI already clamps values to plan limits before sending (see
+    // PLAN_LIMITS / getPlanLimits in testing.page.tsx).  We re-validate here
+    // so a tampered request body can never exceed the user's actual plan.
+    const planId = await getUserPlanId(session.user.id);
+    const planLimits = getServerPlanLimits(planId);
+
+    const effectiveMaxPages = maxPages !== undefined
+      ? Math.min(maxPages, planLimits.maxPages)
+      : undefined;
+    const effectiveMaxTests = maxTests !== undefined
+      ? Math.min(maxTests, planLimits.maxTests)
+      : undefined;
+
+    if (maxPages !== undefined && maxPages > planLimits.maxPages) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested maxPages=${maxPages} but plan "${planId ?? "free"}" allows ${planLimits.maxPages} — clamped.`,
+      );
+    }
+    if (maxTests !== undefined && maxTests > planLimits.maxTests) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested maxTests=${maxTests} but plan "${planId ?? "free"}" allows ${planLimits.maxTests} — clamped.`,
+      );
+    }
+    // ── End server-side validation ─────────────────────────────────────────
+
     await db.insert(test_runs).values({
       id: testRunId,
       user_id: session.user.id,
@@ -719,8 +840,9 @@ export async function startTestRunHandler({
 
     activePipelines.add(testRunId);
 
-    // CHANGED: forward user-specified maxPages/maxTests into the pipeline
-    void runPipeline(testRunId, targetUrl, maxPages, maxTests)
+    // CHANGED: forward userId so the pipeline can derive plan limits internally,
+    // and forward (already-clamped) maxPages/maxTests into the crawl budget.
+    void runPipeline(testRunId, targetUrl, session.user.id, effectiveMaxPages, effectiveMaxTests)
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.startsWith("CANCELLED:")) {
@@ -908,15 +1030,16 @@ export async function streamTestRunHandler({
 
         unregister = registerEmitter(params.id, emit);
       } else {
-        // Pipeline not running — start it and wire this client as the first emitter
+        // Pipeline not running — start it and wire this client as the first emitter.
         // NOTE: when restarting via SSE, we do NOT have user-specified maxPages/maxTests
         // because this path is for reconnecting to an already-persisted run.
         // The original maxPages/maxTests were already applied when POST /test/run was called.
+        // CHANGED: pass run.user_id so re-started pipelines can still derive plan limits.
         console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
         activePipelines.add(params.id);
         unregister = registerEmitter(params.id, emit);
 
-        void runPipeline(params.id, run.target_url)
+        void runPipeline(params.id, run.target_url, run.user_id)
           .catch(async (err) => {
             const msg = err instanceof Error ? err.message : String(err);
             broadcastToRun(
@@ -1086,6 +1209,24 @@ export async function createTestCaseHandler({
     body;
   if (!title || !category || !steps?.length || !expectedResult)
     return { error: "title, category, steps, and expectedResult are required", status: 400 };
+
+  // ── Plan limit enforcement during review phase ────────────────────────────
+  // The user can add/edit cases during review, but must not exceed their plan's
+  // maxTests ceiling.  We re-derive the limit from the live subscription here
+  // so this endpoint can never be bypassed via direct API calls.
+  const planId = await getUserPlanId(session.user.id);
+  const planLimits = getServerPlanLimits(planId);
+  const currentCount = await countTestCasesByRunId(params.id);
+
+  if (currentCount >= planLimits.maxTests) {
+    return {
+      error:
+        `Your ${planId ?? "free"} plan allows a maximum of ${planLimits.maxTests} test cases. ` +
+        `Delete an existing case before adding a new one, or upgrade your plan.`,
+      status: 403,
+    };
+  }
+  // ── End plan limit enforcement ────────────────────────────────────────────
 
   const newCase = await createTestCase({
     testRunId: params.id,
@@ -1549,9 +1690,12 @@ export async function getEmbedBadgeHandler({
 
 // ---------------------------------------------------------------------------
 // GET /api/badge/[token]/svg
-// ADDED: Returns an actual SVG image so the badge renders in GitHub READMEs,
-// websites, and any Markdown renderer. The copied badge markdown from the
-// report page points to this endpoint as the image src.
+// ADDED: Returns an actual SVG image (not JSON).
+// This is what the "Copy Badge" button points to as the image src in the
+// markdown string: [![Tested by Buildify](.../svg)](report-link).
+// IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
+// "svg" as the token param on the route above. Elysia matches more-specific
+// (longer) static segments first, so /badge/:token/svg wins correctly.
 // No auth required — token is a nanoid(32) opaque string.
 // ---------------------------------------------------------------------------
 
