@@ -20,7 +20,7 @@ import {
   addAdditionalCredits,
 } from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
-import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatRequestBody,
   type ChatMessage,
@@ -263,11 +263,11 @@ export async function createChatHandler({
     if (chatId) {
       try {
         // Continue existing chat (non-streaming)
-        chatResult = await v0.chats.sendMessage({
-          chatId,
-          message,
-          ...(attachments && attachments.length > 0 && { attachments }),
-        })
+       chatResult = await v0.chats.sendMessage({
+  chatId,
+  message: enhanceFollowUpPrompt(message),
+  ...(attachments && attachments.length > 0 && { attachments }),
+})
       } catch (error) {
         // If chat doesn't exist (404), create a new chat instead
         const errorMessage =

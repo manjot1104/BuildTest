@@ -1,11 +1,11 @@
 /**
- * Enhances the first user prompt with additional system-level instructions
- * to improve the quality of AI-generated responses.
- *
- * Only applied to new chats (first message), not follow-up messages.
+ * Enhances user prompts with system-level instructions before sending to v0.
  */
-export function enhanceFirstPrompt(userMessage: string): string {
-  const systemPrefix = `You are an expert full-stack software engineer and UI builder.
+
+const SYSTEM_PROMPT_MARKER = 'USER REQUEST:\n'
+const FOLLOWUP_PROMPT_MARKER = 'USER FOLLOWUP:\n'
+
+const FIRST_PROMPT_SYSTEM = `You are an expert full-stack software engineer and UI builder.
 
 Your job is to immediately generate working production-quality code based on the user's request.
 
@@ -32,19 +32,43 @@ In globals.css NEVER use:
 Instead define CSS variables directly inside :root {}.
 `
 
-  return `${systemPrefix}\n\nUSER REQUEST:\n${userMessage}`
+const FOLLOWUP_PROMPT_SYSTEM = `You are continuing work on an existing project.
+
+IMPORTANT RULES:
+- Modify, don't rebuild. Make targeted changes to existing code only.
+- Preserve all working functionality — do not break what already works.
+- Stay consistent with the existing file structure, component names and styling.
+- Do NOT ask clarification questions — implement directly.
+- If fixing a bug, find the root cause and apply the minimal fix.
+- If adding a feature, integrate it into the existing architecture.
+
+CRITICAL CSS RULE:
+In globals.css NEVER use:
+@import 'shadcn/tailwind.css'
+
+Instead define CSS variables directly inside :root {}.
+`
+
+export function enhanceFirstPrompt(userMessage: string): string {
+  return `${FIRST_PROMPT_SYSTEM}\n\n${SYSTEM_PROMPT_MARKER}${userMessage}`
 }
 
-const SYSTEM_PROMPT_MARKER = "User's Request:\n"
+export function enhanceFollowUpPrompt(userMessage: string): string {
+  return `${FOLLOWUP_PROMPT_SYSTEM}\n\n${FOLLOWUP_PROMPT_MARKER}${userMessage}`
+}
 
-/**
- * Strips the system prompt prefix from an enhanced message,
- * returning only the original user message.
- */
 export function stripSystemPrompt(message: string): string {
-  const idx = message.indexOf(SYSTEM_PROMPT_MARKER)
-  if (idx !== -1) {
-    return message.slice(idx + SYSTEM_PROMPT_MARKER.length)
+  for (const marker of [SYSTEM_PROMPT_MARKER, FOLLOWUP_PROMPT_MARKER]) {
+    const idx = message.indexOf(marker)
+    if (idx !== -1) {
+      return message.slice(idx + marker.length)
+    }
+  }
+  // Legacy support — old marker from previous version
+  const legacyMarker = "User's Request:\n"
+  const legacyIdx = message.indexOf(legacyMarker)
+  if (legacyIdx !== -1) {
+    return message.slice(legacyIdx + legacyMarker.length)
   }
   return message
 }

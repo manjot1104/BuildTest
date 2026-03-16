@@ -40,7 +40,7 @@ import {
 import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
 import { openRouterChatHandler, openRouterStreamHandler } from '@/server/api/controllers/openrouter.controller'
 import { getV0Client } from '@/lib/v0-client'
-import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatAttachment,
   type ApiErrorResponse,
@@ -231,12 +231,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           if (chatId) {
             try {
               // Continue existing chat with streaming
-              stream = (await v0.chats.sendMessage({
-                chatId,
-                message,
-                responseMode: 'experimental_stream',
-                ...(attachments && attachments.length > 0 && { attachments }),
-              })) as ReadableStream<Uint8Array>
+             stream = (await v0.chats.sendMessage({
+  chatId,
+  message: enhanceFollowUpPrompt(message),
+  responseMode: 'experimental_stream',
+  ...(attachments && attachments.length > 0 && { attachments }),
+})) as ReadableStream<Uint8Array>
             } catch (error) {
               // If chat doesn't exist (404), create a new chat instead
               const errorMessage =
