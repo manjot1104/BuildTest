@@ -8,7 +8,8 @@ import {
   Eye, Navigation, FileText, Lock, Bug, ArrowRight, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download, Copy, Check,
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
-  Code2, X, Network, StopCircle, ImageOff, Minus, Plus,
+  Code2, X, StopCircle, ImageOff, Minus, Plus, Pencil, Trash2,
+  ListChecks
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,17 +18,21 @@ import { toast } from "sonner";
 import {
   useStartTestRun, useTestRunStatus, useTestReport,
   useTestHistory, useTestRunSSE, useCancelTestRun, useExportReportPdf,
+  useReviewTestCases, useCreateTestCase, useUpdateTestCase,
+  useDeleteTestCase, useConfirmAndExecute,
   type Bug as BugType, type TestCase, type PerformanceGauge,
-  type TrendDataPoint, type SSEState, type TestHistoryItem, type LiveTestCase,
+  type TrendDataPoint, type TestHistoryItem,
+  type LiveTestCase, type ReviewTestCase,
 } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PIPELINE_STEPS = [
-  { key: "crawling",   label: "Crawling",   desc: "Mapping all pages and elements",   icon: Globe     },
-  { key: "generating", label: "Generating", desc: "AI creating test cases",            icon: Sparkles  },
-  { key: "executing",  label: "Executing",  desc: "Running parallel browser sessions", icon: Zap       },
-  { key: "reporting",  label: "Reporting",  desc: "Compiling results and AI summary",  icon: BarChart3 },
+  { key: "crawling",        label: "Crawling",   desc: "Mapping all pages and elements",      icon: Globe        },
+  { key: "generating",      label: "Generating", desc: "AI creating test cases",              icon: Sparkles    },
+  { key: "awaiting_review", label: "Review",     desc: "Confirm or edit test cases",          icon: ListChecks  },
+  { key: "executing",       label: "Executing",  desc: "Running parallel browser sessions",   icon: Zap         },
+  { key: "reporting",       label: "Reporting",  desc: "Compiling results and AI summary",    icon: BarChart3   },
 ];
 
 const CATEGORY_ICONS: Record<string, React.ElementType> = {
@@ -50,17 +55,19 @@ const PRIORITY_CONFIG = {
 };
 
 const STATUS_CONFIG = {
-  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Pending"  },
-  running:  { icon: Loader2,       color: "text-blue-400",          bg: "bg-blue-500/10 border-blue-500/20",               label: "Running"  },
-  passed:   { icon: CheckCircle2,  color: "text-emerald-400",       bg: "bg-emerald-500/10 border-emerald-500/20",         label: "Passed"   },
-  failed:   { icon: XCircle,       color: "text-red-400",           bg: "bg-red-500/10 border-red-500/20",                 label: "Failed"   },
-  flaky:    { icon: AlertTriangle, color: "text-yellow-400",        bg: "bg-yellow-500/10 border-yellow-500/20",           label: "Flaky"    },
-  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                       label: "Skipped"  },
+  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                 label: "Pending"  },
+  running:  { icon: Loader2,       color: "text-blue-400",          bg: "bg-blue-500/10 border-blue-500/20",         label: "Running"  },
+  passed:   { icon: CheckCircle2,  color: "text-emerald-400",       bg: "bg-emerald-500/10 border-emerald-500/20",   label: "Passed"   },
+  failed:   { icon: XCircle,       color: "text-red-400",           bg: "bg-red-500/10 border-red-500/20",           label: "Failed"   },
+  flaky:    { icon: AlertTriangle, color: "text-yellow-400",        bg: "bg-yellow-500/10 border-yellow-500/20",     label: "Flaky"    },
+  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",                 label: "Skipped"  },
 };
 
 const PIPELINE_ORDER: Record<string, number> = {
-  crawling: 0, generating: 1, executing: 2, reporting: 3, complete: 4,
+  crawling: 0, generating: 1, awaiting_review: 2, executing: 3, reporting: 4, complete: 5,
 };
+
+const CATEGORIES = ["navigation", "forms", "visual", "performance", "a11y", "security"];
 
 // ─── Plan-aware budget limits ─────────────────────────────────────────────────
 // Plan IDs match subscriptions.plan_id in schema.ts: "starter" | "pro" | "enterprise"
@@ -119,23 +126,15 @@ function BudgetStepper({
         <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => onChange(Math.max(min, value - 1))}
-          disabled={value <= min}
-          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        >
+        <button type="button" onClick={() => onChange(Math.max(min, value - 1))} disabled={value <= min}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
           <Minus className="h-3 w-3" />
         </button>
         <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
           <span className="text-sm font-bold tabular-nums text-foreground">{value}</span>
         </div>
-        <button
-          type="button"
-          onClick={() => onChange(Math.min(max, value + 1))}
-          disabled={value >= max}
-          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        >
+        <button type="button" onClick={() => onChange(Math.min(max, value + 1))} disabled={value >= max}
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
           <Plus className="h-3 w-3" />
         </button>
       </div>
@@ -144,7 +143,6 @@ function BudgetStepper({
 }
 
 // ─── Bug Screenshot ────────────────────────────────────────────────────────────
-
 function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: string }) {
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -451,6 +449,356 @@ function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { status:
   );
 }
 
+// ─── Review Test Case Edit Form ───────────────────────────────────────────────
+interface EditFormState {
+  title: string;
+  category: string;
+  priority: "P0" | "P1" | "P2";
+  steps: string[];
+  expectedResult: string;
+  description: string;
+}
+
+function ReviewTestCaseForm({
+  initial,
+  onSave,
+  onCancel,
+  isSaving,
+}: {
+  initial: EditFormState;
+  onSave: (data: EditFormState) => void;
+  onCancel: () => void;
+  isSaving: boolean;
+}) {
+  const [form, setForm] = useState<EditFormState>(initial);
+
+  const setStep = (i: number, val: string) =>
+    setForm((f) => ({ ...f, steps: f.steps.map((s, idx) => (idx === i ? val : s)) }));
+  const addStep = () => setForm((f) => ({ ...f, steps: [...f.steps, ""] }));
+  const removeStep = (i: number) =>
+    setForm((f) => ({ ...f, steps: f.steps.filter((_, idx) => idx !== i) }));
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Title */}
+        <div className="sm:col-span-2 space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Title *</label>
+          <Input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Login form submits correctly" className="h-9 text-sm" />
+        </div>
+        {/* Category */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Category *</label>
+          <select value={form.category} onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+            className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+            {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        {/* Priority */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Priority</label>
+          <select value={form.priority} onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as "P0" | "P1" | "P2" }))}
+            className="w-full h-9 rounded-md border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
+            <option value="P0">P0 — Critical</option>
+            <option value="P1">P1 — High</option>
+            <option value="P2">P2 — Normal</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Steps */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Steps *</label>
+          <button type="button" onClick={addStep} className="text-xs text-emerald-400 hover:text-emerald-300 flex items-center gap-1 transition-colors">
+            <Plus className="h-3 w-3" /> Add step
+          </button>
+        </div>
+        <div className="space-y-2">
+          {form.steps.map((step, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-xs font-mono text-muted-foreground/50 w-5 shrink-0 text-right">{i + 1}.</span>
+              <Input value={step} onChange={(e) => setStep(i, e.target.value)} placeholder={`Step ${i + 1}`} className="h-8 text-xs flex-1" />
+              <button type="button" onClick={() => removeStep(i)} disabled={form.steps.length <= 1}
+                className="h-8 w-8 rounded-md flex items-center justify-center text-muted-foreground hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors shrink-0">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Expected result */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Expected Result *</label>
+        <textarea value={form.expectedResult} onChange={(e) => setForm((f) => ({ ...f, expectedResult: e.target.value }))}
+          placeholder="What should happen when the test passes?" rows={2}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+      </div>
+
+      {/* Description (optional) */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Description <span className="text-muted-foreground/40">(optional)</span></label>
+        <textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+          placeholder="Additional context about this test case" rows={2}
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring resize-none" />
+      </div>
+
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel} className="text-muted-foreground h-8 text-xs">Cancel</Button>
+        <Button type="button" size="sm" disabled={isSaving || !form.title.trim() || !form.expectedResult.trim() || form.steps.every((s) => !s.trim())}
+          onClick={() => onSave(form)}
+          className="h-8 text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5">
+          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          {isSaving ? "Saving…" : "Save"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Review Test Case Card ────────────────────────────────────────────────────
+function ReviewTestCaseCard({
+  tc, testRunId, totalCount,
+}: {
+  tc: ReviewTestCase; testRunId: string; totalCount: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [editing,  setEditing]  = useState(false);
+
+  const { mutate: updateFn, isPending: isUpdating } = useUpdateTestCase(testRunId);
+  const { mutate: deleteFn, isPending: isDeleting } = useDeleteTestCase(testRunId);
+
+  const Icon       = CATEGORY_ICONS[tc.category ?? ""] ?? FlaskConical;
+  const priorityCfg = PRIORITY_CONFIG[(tc.priority ?? "P2") as keyof typeof PRIORITY_CONFIG] ?? PRIORITY_CONFIG.P2;
+
+  const handleSave = (data: EditFormState) => {
+    updateFn(
+      {
+        caseId: tc.id,
+        title: data.title,
+        category: data.category,
+        priority: data.priority,
+        steps: data.steps.filter((s) => s.trim()),
+        expectedResult: data.expectedResult,
+        description: data.description || undefined,
+      },
+      {
+        onSuccess: () => { setEditing(false); toast.success("Test case updated"); },
+        onError: (err) => toast.error(err.message ?? "Failed to update"),
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    if (totalCount <= 1) { toast.error("Can't delete the last test case"); return; }
+    deleteFn(tc.id, {
+      onSuccess: () => toast.info("Test case removed"),
+      onError: (err) => toast.error(err.message ?? "Failed to delete"),
+    });
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card overflow-hidden transition-all">
+      {/* Header row */}
+      <div className="flex items-start gap-3 p-4">
+        <FlaskConical className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full border font-mono ${priorityCfg.color}`}>{tc.priority ?? "P2"}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+              <Icon className="h-3 w-3" />{(tc.category ?? "general").replace("_", " ")}
+            </span>
+          </div>
+          <p className="text-sm font-medium text-foreground">{tc.title ?? "(untitled)"}</p>
+        </div>
+        {/* Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => { setEditing(!editing); setExpanded(false); }}
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+            {editing ? <X className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          </button>
+          <button onClick={handleDelete} disabled={isDeleting || totalCount <= 1}
+            className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+          </button>
+          {!editing && (
+            <button onClick={() => setExpanded(!expanded)}
+              className="h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded read view */}
+      {expanded && !editing && (
+        <div className="px-4 pb-4 border-t border-border pt-4 space-y-3">
+          {tc.description && <p className="text-xs text-muted-foreground">{tc.description}</p>}
+          {(tc.steps?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-xs font-mono text-muted-foreground mb-1.5 uppercase tracking-wider">Steps</p>
+              <ol className="space-y-1">{(tc.steps ?? []).map((s, i) => <li key={i} className="text-xs text-muted-foreground flex gap-2"><span className="text-muted-foreground/40 font-mono shrink-0">{i + 1}.</span>{s}</li>)}</ol>
+            </div>
+          )}
+          {tc.expected_result && (
+            <div>
+              <p className="text-xs font-mono text-muted-foreground mb-1 uppercase tracking-wider">Expected</p>
+              <p className="text-xs text-muted-foreground">{tc.expected_result}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Edit form */}
+      {editing && (
+        <div className="px-4 pb-4 border-t border-border pt-4">
+          <ReviewTestCaseForm
+            initial={{
+              title:          tc.title ?? "",
+              category:       tc.category ?? "navigation",
+              priority:       (tc.priority ?? "P2") as "P0" | "P1" | "P2",
+              steps:          (tc.steps ?? [""]).length > 0 ? (tc.steps ?? [""]) : [""],
+              expectedResult: tc.expected_result ?? "",
+              description:    tc.description ?? "",
+            }}
+            onSave={handleSave}
+            onCancel={() => setEditing(false)}
+            isSaving={isUpdating}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Add Test Case Panel ──────────────────────────────────────────────────────
+function AddTestCasePanel({ testRunId, onClose }: { testRunId: string; onClose: () => void }) {
+  const { mutate: createFn, isPending } = useCreateTestCase(testRunId);
+
+  const handleSave = (data: EditFormState) => {
+    createFn(
+      {
+        title: data.title,
+        category: data.category,
+        priority: data.priority,
+        steps: data.steps.filter((s) => s.trim()),
+        expectedResult: data.expectedResult,
+        description: data.description || undefined,
+      },
+      {
+        onSuccess: () => { toast.success("Test case added"); onClose(); },
+        onError: (err) => toast.error(err.message ?? "Failed to add test case"),
+      },
+    );
+  };
+
+  return (
+    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+      <div className="flex items-center gap-2 mb-4">
+        <Plus className="h-4 w-4 text-emerald-400" />
+        <p className="text-sm font-medium text-emerald-400">Add Test Case</p>
+      </div>
+      <ReviewTestCaseForm
+        initial={{ title: "", category: "navigation", priority: "P1", steps: [""], expectedResult: "", description: "" }}
+        onSave={handleSave}
+        onCancel={onClose}
+        isSaving={isPending}
+      />
+    </div>
+  );
+}
+
+// ─── Review Phase UI ──────────────────────────────────────────────────────────
+function ReviewPhase({ testRunId, targetUrl, onCancel }: { testRunId: string; targetUrl: string; onCancel: () => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+
+  const { data: cases, isLoading } = useReviewTestCases(testRunId, true);
+  const { mutate: confirmFn, isPending: isConfirming } = useConfirmAndExecute(testRunId);
+  const { mutate: cancelFn, isPending: isCancelling } = useCancelTestRun();
+
+  const handleConfirm = () => {
+    confirmFn(undefined, {
+      onSuccess: () => toast.success("Running tests…"),
+      onError: (err) => toast.error(err.message ?? "Failed to confirm"),
+    });
+  };
+
+  const handleCancel = () => {
+    cancelFn(testRunId, {
+      onSuccess: (data) => { if (data.cancelled) { toast.info("Test run cancelled."); onCancel(); } },
+      onError: (err) => toast.error(err.message ?? "Failed to cancel"),
+    });
+  };
+
+  const count = cases?.length ?? 0;
+
+  return (
+    <div className="space-y-6 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-5">
+        <div className="flex items-start gap-4">
+          <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+            <ListChecks className="h-5 w-5 text-amber-400" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-foreground">Review Generated Test Cases</h3>
+            <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate">{targetUrl}</p>
+            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+              AI generated <span className="text-foreground font-medium">{count} test case{count !== 1 ? "s" : ""}</span>. Review, edit, delete or add before execution. You need at least one test case to proceed.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Test cases list */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-10">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(cases ?? []).map((tc) => (
+            <ReviewTestCaseCard key={tc.id} tc={tc} testRunId={testRunId} totalCount={count} />
+          ))}
+          {count === 0 && (
+            <div className="rounded-xl border border-border bg-card p-8 text-center">
+              <FlaskConical className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">No test cases — add at least one to proceed</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Add panel */}
+      {showAdd && <AddTestCasePanel testRunId={testRunId} onClose={() => setShowAdd(false)} />}
+
+      {/* Actions */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {!showAdd && (
+          <Button variant="outline" size="sm" onClick={() => setShowAdd(true)} className="gap-2 text-sm border-dashed">
+            <Plus className="h-3.5 w-3.5" /> Add Test Case
+          </Button>
+        )}
+        <div className="flex items-center gap-2 ml-auto">
+          <Button variant="outline" size="sm" onClick={handleCancel} disabled={isCancelling}
+            className="border-red-900/60 text-red-400 hover:bg-red-950/40 hover:border-red-700 gap-2 text-sm">
+            {isCancelling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <StopCircle className="h-3.5 w-3.5" />}
+            Cancel
+          </Button>
+          <Button size="sm" disabled={isConfirming || count === 0} onClick={handleConfirm}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2 text-sm min-w-[140px]">
+            {isConfirming
+              ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Starting…</>
+              : <><Zap className="h-3.5 w-3.5" /> Run {count} Test{count !== 1 ? "s" : ""}</>
+            }
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Bug Detail Modal ─────────────────────────────────────────────────────────
 function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => void }) {
   const cfg = SEVERITY_CONFIG[bug.severity] ?? SEVERITY_CONFIG.medium;
@@ -681,14 +1029,15 @@ export default function TestingPage() {
   const { data: run } = useTestRunStatus(testRunId);
 
   const initialStatusForSSE = run?.status && ["complete", "failed", "cancelled"].includes(run.status)
-    ? run.status : undefined;
+    ? run.status : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
 
   const { sseState } = useTestRunSSE(testRunId, initialStatusForSSE);
 
-  const isComplete  = sseState.isComplete  || run?.status === "complete";
-  const isFailed    = sseState.pipelineStatus === "failed" || run?.status === "failed";
+  const isComplete = sseState.isComplete  || run?.status === "complete";
+  const isFailed = sseState.pipelineStatus === "failed"   || run?.status === "failed";
   const isCancelled = sseState.isCancelled || run?.status === "cancelled";
-  const isRunning   = !!testRunId && !isComplete && !isFailed && !isCancelled;
+  const isAwaitingReview = sseState.isAwaitingReview || run?.status === "awaiting_review";
+  const isRunning = !!testRunId && !isComplete && !isFailed && !isCancelled && !isAwaitingReview;
 
   const { data: report } = useTestReport(testRunId, isComplete);
 
@@ -698,9 +1047,9 @@ export default function TestingPage() {
   };
 
   const sseStatus = sseState.pipelineStatus;
-  const dbStatus  = run?.status ?? "crawling";
-  const sseOrder  = PIPELINE_ORDER[sseStatus] ?? 0;
-  const dbOrder   = PIPELINE_ORDER[dbStatus]  ?? 0;
+  const dbStatus = run?.status ?? "crawling";
+  const sseOrder = PIPELINE_ORDER[sseStatus] ?? 0;
+  const dbOrder = PIPELINE_ORDER[dbStatus] ?? 0;
   const pipelineStatus = sseOrder >= dbOrder ? sseStatus : dbStatus;
   const percent = sseState.percent > 0 ? sseState.percent : (run?.percent ?? 10);
   const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.key === pipelineStatus);
@@ -730,8 +1079,7 @@ export default function TestingPage() {
   };
 
   const handleMaxTestsChange = (next: number) => {
-    const tests = Math.max(maxPages, Math.min(next, planLimits.maxTests));
-    setMaxTests(tests);
+    setMaxTests(Math.max(maxPages, Math.min(next, planLimits.maxTests)));
   };
 
   const handleStart = () => {
@@ -770,7 +1118,7 @@ export default function TestingPage() {
             </div>
             <div>
               <h1 className="text-sm font-semibold tracking-tight">Testing Engine</h1>
-              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Execute → Report</p>
+              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Review → Execute → Report</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -853,6 +1201,27 @@ export default function TestingPage() {
           </div>
         )}
 
+        {/* ── REVIEW PHASE ── */}
+        {isAwaitingReview && testRunId && (
+          <div className="space-y-6">
+            {/* Mini pipeline header so user knows where they are */}
+            <div className="w-full max-w-2xl mx-auto">
+              <div className="flex items-center justify-between text-xs font-mono text-muted-foreground mb-3">
+                <span className="flex items-center gap-1.5 text-amber-400 font-medium">
+                  <ListChecks className="h-3.5 w-3.5" /> Review &amp; edit test cases before running
+                </span>
+                <span className="text-muted-foreground/50">{url || run?.targetUrl}</span>
+              </div>
+              <Progress value={40} className="h-1" />
+            </div>
+            <ReviewPhase
+              testRunId={testRunId}
+              targetUrl={url || (run?.targetUrl ?? "")}
+              onCancel={handleReset}
+            />
+          </div>
+        )}
+
         {/* ── RUNNING ── */}
         {isRunning && (
           <div className="space-y-6">
@@ -918,8 +1287,8 @@ export default function TestingPage() {
               <div className="grid grid-cols-4 gap-3 w-full max-w-xl mx-auto">
                 {[
                   { value: counter.passed,  label: "passed",  color: "text-emerald-400" },
-                  { value: counter.failed,  label: "failed",  color: "text-red-400"     },
-                  { value: counter.running, label: "running", color: "text-blue-400"    },
+                  { value: counter.failed,  label: "failed",  color: "text-red-400" },
+                  { value: counter.running, label: "running", color: "text-blue-400" },
                   { value: counter.skipped, label: "skipped", color: "text-muted-foreground" },
                 ].map(({ value, label, color }) => (
                   <div key={label} className="rounded-xl border border-border bg-card p-3 text-center">

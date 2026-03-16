@@ -758,11 +758,12 @@ export const sandbox_executions = createTable(
 export const testRunStatusEnum = pgEnum("test_run_status", [
   "crawling",
   "generating",
+  "awaiting_review",  // — pipeline paused for user edits
   "executing",
   "reporting",
   "complete",
   "failed",
-  "cancelled",  // I-01 / I-09: required by cancel handler + pipeline catch block
+  "cancelled",  // required by cancel handler + pipeline catch block
 ]);
 
 export const testPriorityEnum = pgEnum("test_priority", ["P0", "P1", "P2"]);
