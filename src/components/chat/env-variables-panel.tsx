@@ -153,6 +153,7 @@ export function EnvVariablesPanel({ open, onOpenChange }: EnvVariablesPanelProps
               placeholder="VARIABLE_NAME"
               className="h-9 font-mono text-xs"
               spellCheck={false}
+              autoComplete="off" 
             />
             <div className="relative">
               <Input
@@ -163,6 +164,7 @@ export function EnvVariablesPanel({ open, onOpenChange }: EnvVariablesPanelProps
                 placeholder="value"
                 className="h-9 pr-9 font-mono text-xs"
                 spellCheck={false}
+                autoComplete="new-password"
               />
               <button
                 type="button"
