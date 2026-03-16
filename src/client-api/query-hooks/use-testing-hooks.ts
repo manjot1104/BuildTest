@@ -194,6 +194,39 @@ export interface LiveTestCase {
   durationMs?: number;
 }
 
+// ─── [ADDED] Crawl progress types ─────────────────────────────────────────────
+// These mirror the CrawlProgressEvent union in tinyfish.service.ts so the
+// frontend has fully typed access to the real-time crawl state.
+// We redefine them here (rather than importing from the server module) to keep
+// the client bundle free of server-only dependencies.
+
+/** A single URL found during crawling, with its discovery source. */
+export interface CrawlFoundUrl {
+  url: string;
+  /** Where this URL came from: sitemap, static HTML parse, or TinyFish discovery */
+  source: "sitemap" | "html" | "discovery";
+}
+
+/** A page that was successfully extracted by TinyFish. */
+export interface CrawlExtractedPage {
+  url: string;
+  title: string;
+  elementsCount: number;
+  formsCount: number;
+  linksCount: number;
+  /** 1-based position in the extraction queue */
+  index: number;
+  total: number;
+}
+
+/** A page that failed to extract after all retries. */
+export interface CrawlFailedPage {
+  url: string;
+  reason: string;
+  index: number;
+  total: number;
+}
+
 // ─── SSE event shapes ─────────────────────────────────────────────────────────
 
 export type PipelineSSEEvent =
@@ -247,7 +280,18 @@ export type PipelineSSEEvent =
       aiSummary: string;
       shareableSlug: string | null;
     }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  // [ADDED] crawl_progress wraps one of the four crawl sub-events emitted by
+  // tinyfish.service via the onProgress callback. We handle each sub-type in
+  // the SSE hook switch below and store the relevant data in SSEState.
+  | {
+      type: "crawl_progress";
+      event:
+        | { type: "crawl_stage_change"; stage: string; description: string }
+        | { type: "crawl_url_found"; url: string; source: "sitemap" | "html" | "discovery" }
+        | { type: "crawl_page_extracted"; url: string; title: string; elementsCount: number; formsCount: number; linksCount: number; index: number; total: number }
+        | { type: "crawl_page_failed"; url: string; reason: string; index: number; total: number };
+    };
 
 export interface LiveBug {
   id: string;
@@ -293,6 +337,21 @@ export interface SSEState {
   /** True while the run is paused at awaiting_review waiting for user confirmation */
   isAwaitingReview: boolean;
   errorMessage: string | null;
+
+  // ── [ADDED] Crawl progress state ─────────────────────────────────────────
+  // These fields are populated by crawl_progress SSE events during the
+  // "crawling" pipeline stage and cleared when execution begins.
+
+  /** Current crawl sub-stage label, e.g. "Discovering pages" */
+  crawlStage: string | null;
+  /** Description of what the current stage is doing */
+  crawlStageDescription: string | null;
+  /** All URLs found so far during crawling (deduplicated by URL string) */
+  crawlFoundUrls: CrawlFoundUrl[];
+  /** Pages successfully extracted so far */
+  crawlExtractedPages: CrawlExtractedPage[];
+  /** Pages that failed to extract (after all retries) */
+  crawlFailedPages: CrawlFailedPage[];
 }
 
 const INITIAL_SSE_STATE: SSEState = {
@@ -306,6 +365,12 @@ const INITIAL_SSE_STATE: SSEState = {
   isCancelled: false,
   isAwaitingReview: false,
   errorMessage: null,
+  // [ADDED] Crawl progress initial values
+  crawlStage: null,
+  crawlStageDescription: null,
+  crawlFoundUrls: [],
+  crawlExtractedPages: [],
+  crawlFailedPages: [],
 };
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
@@ -523,7 +588,7 @@ export function useTestRunSSE(
         }
 
         case "test_update": {
-          // Update testUpdates map (backward compat)
+          // Update testUpdates map (backward compat — used by the report tab)
           const updatedUpdates = {
             ...prev.testUpdates,
             [event.testCaseId]: {
@@ -533,16 +598,51 @@ export function useTestRunSSE(
               durationMs: event.durationMs,
             },
           };
-          // Also update generatedTestCases in-place so live cards reflect new status
-          const updatedCases = prev.generatedTestCases.map((tc) =>
-            tc.id === event.testCaseId
-              ? {
-                  ...tc,
-                  status: event.status,
-                  durationMs: event.durationMs ?? tc.durationMs,
-                }
-              : tc,
+
+          // [FIXED] Upsert into generatedTestCases rather than only updating.
+          //
+          // WHY: test_update events fire for every test case during execution,
+          // but generatedTestCases is only populated by the tests_generated event
+          // (sent during the generating/review phase). If the user refreshed the
+          // page after review confirmed, or reconnected mid-execution, or added
+          // cases during review that changed IDs, generatedTestCases is empty and
+          // the .map() below would find no matching ID — nothing ever appears in
+          // the live execution panel.
+          //
+          // FIX: check whether the ID already exists. If yes, update in-place.
+          // If no, append a minimal new card so the panel always shows activity.
+          // category/priority/steps are unknown here so we use safe defaults —
+          // they're cosmetic-only in the running view.
+          const existingIndex = prev.generatedTestCases.findIndex(
+            (tc) => tc.id === event.testCaseId,
           );
+
+          let updatedCases: typeof prev.generatedTestCases;
+          if (existingIndex >= 0) {
+            // Card already exists — update status and duration in-place
+            updatedCases = prev.generatedTestCases.map((tc) =>
+              tc.id === event.testCaseId
+                ? { ...tc, status: event.status, durationMs: event.durationMs ?? tc.durationMs }
+                : tc,
+            );
+          } else {
+            // Card is new — build a minimal LiveTestCase and append it.
+            // This fires when generatedTestCases is empty (page refresh /
+            // reconnect after review) and execution has already started.
+            const newCard: LiveTestCase = {
+              id: event.testCaseId,
+              title: event.title,
+              category: "navigation", // cosmetic default — unknown here
+              priority: "P1",          // cosmetic default — unknown here
+              steps: [],
+              expected_result: "",
+              target_url: "",
+              status: event.status,
+              durationMs: event.durationMs,
+            };
+            updatedCases = [...prev.generatedTestCases, newCard];
+          }
+
           next = {
             ...prev,
             testUpdates: updatedUpdates,
@@ -567,6 +667,79 @@ export function useTestRunSSE(
         case "bug_found":
           next = { ...prev, liveBugs: [...prev.liveBugs, event.bug] };
           break;
+
+        // [ADDED] Handle the four crawl sub-events that arrive inside crawl_progress.
+        // Each sub-event updates a different slice of the crawl progress state.
+        // We use immutable spread so React always re-renders correctly.
+        case "crawl_progress": {
+          const crawlEvent = event.event;
+          switch (crawlEvent.type) {
+            case "crawl_stage_change":
+              // Update the current crawl stage label and description shown in the UI.
+              next = {
+                ...prev,
+                crawlStage: crawlEvent.stage,
+                crawlStageDescription: crawlEvent.description,
+              };
+              break;
+
+            case "crawl_url_found": {
+              // Add a new URL to the found list, deduplicating by URL string.
+              // We deduplicate client-side as a safety net — the service already
+              // avoids emitting the same URL twice, but network retries could
+              // cause duplicate SSE events.
+              const alreadyFound = prev.crawlFoundUrls.some(
+                (u) => u.url === crawlEvent.url,
+              );
+              if (alreadyFound) {
+                next = prev;
+              } else {
+                next = {
+                  ...prev,
+                  crawlFoundUrls: [
+                    ...prev.crawlFoundUrls,
+                    { url: crawlEvent.url, source: crawlEvent.source },
+                  ],
+                };
+              }
+              break;
+            }
+
+            case "crawl_page_extracted": {
+              // Replace an existing entry (by URL) or append.
+              // This handles the case where a retry succeeds after a previous failure.
+              const existingIdx = prev.crawlExtractedPages.findIndex(
+                (p) => p.url === crawlEvent.url,
+              );
+              const updatedExtracted =
+                existingIdx >= 0
+                  ? prev.crawlExtractedPages.map((p, i) =>
+                      i === existingIdx ? crawlEvent : p,
+                    )
+                  : [...prev.crawlExtractedPages, crawlEvent];
+              next = { ...prev, crawlExtractedPages: updatedExtracted };
+              break;
+            }
+
+            case "crawl_page_failed": {
+              // Append failure only if not already recorded for this URL.
+              const alreadyFailed = prev.crawlFailedPages.some(
+                (p) => p.url === crawlEvent.url,
+              );
+              next = alreadyFailed
+                ? prev
+                : {
+                    ...prev,
+                    crawlFailedPages: [...prev.crawlFailedPages, crawlEvent],
+                  };
+              break;
+            }
+
+            default:
+              next = prev;
+          }
+          break;
+        }
 
         case "complete":
           next = {

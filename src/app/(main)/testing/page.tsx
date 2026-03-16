@@ -10,7 +10,9 @@ import {
   Terminal, Wifi, TrendingUp, Activity, History, ChevronRight,
   Code2, X, StopCircle, ImageOff, Minus, Plus, Pencil, Trash2,
   ListChecks,
-  Settings2, // [ADDED] icon for the "Advanced" toggle button
+  Settings2, // [EXISTING] icon for the "Advanced" toggle button
+  Search,    // [ADDED] used in CrawlProgressPanel "URLs Found" tab label
+  FileSearch, // [ADDED] used in CrawlProgressPanel "Pages Extracted" tab label
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +26,8 @@ import {
   type Bug as BugType, type TestCase, type PerformanceGauge,
   type TrendDataPoint, type TestHistoryItem,
   type LiveTestCase, type ReviewTestCase,
+  // [ADDED] crawl-progress types for the new live panel
+  type CrawlFoundUrl, type CrawlExtractedPage, type CrawlFailedPage,
 } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -127,22 +131,23 @@ function fmtMs(ms: number): string {
   return Number.isInteger(m) ? `${m}m` : `${m.toFixed(1)}m`;
 }
 
+// [ADDED] Returns just the pathname from a URL for compact display in the crawl panel.
+// "https://example.com/about/team" → "/about/team"
+// "https://example.com/" → "/"
+function urlPath(url: string): string {
+  try {
+    return new URL(url).pathname || "/";
+  } catch {
+    return url;
+  }
+}
+
 // ─── Budget Stepper ───────────────────────────────────────────────────────────
 
 function BudgetStepper({
-  label,
-  hint,
-  value,
-  min,
-  max,
-  onChange,
+  label, hint, value, min, max, onChange,
 }: {
-  label: string;
-  hint: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (next: number) => void;
+  label: string; hint: string; value: number; min: number; max: number; onChange: (next: number) => void;
 }) {
   return (
     <div className="flex-1 flex flex-col gap-1.5">
@@ -170,15 +175,9 @@ function BudgetStepper({
 // [ADDED] TimeoutStepper — same visual as BudgetStepper but increments by
 // TIMEOUT_STEP_MS (30 s) and displays a human-readable duration label.
 function TimeoutStepper({
-  label,
-  hint,
-  value,
-  onChange,
+  label, hint, value, onChange,
 }: {
-  label: string;
-  hint: string;
-  value: number;
-  onChange: (next: number) => void;
+  label: string; hint: string; value: number; onChange: (next: number) => void;
 }) {
   return (
     <div className="flex-1 flex flex-col gap-1.5">
@@ -187,26 +186,250 @@ function TimeoutStepper({
         <span className="text-xs font-mono text-muted-foreground/50">{hint}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
+        <button type="button"
           onClick={() => onChange(Math.max(TIMEOUT_MIN_MS, value - TIMEOUT_STEP_MS))}
           disabled={value <= TIMEOUT_MIN_MS}
-          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        >
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
           <Minus className="h-3 w-3" />
         </button>
         <div className="flex-1 h-7 rounded-lg border border-border bg-muted flex items-center justify-center">
           <span className="text-sm font-bold tabular-nums text-foreground">{fmtMs(value)}</span>
         </div>
-        <button
-          type="button"
+        <button type="button"
           onClick={() => onChange(Math.min(TIMEOUT_MAX_MS, value + TIMEOUT_STEP_MS))}
           disabled={value >= TIMEOUT_MAX_MS}
-          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-        >
+          className="h-7 w-7 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border/80 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
           <Plus className="h-3 w-3" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── [ADDED] CrawlProgressPanel ───────────────────────────────────────────────
+// Shows real-time crawl activity during the "crawling" pipeline stage.
+//
+// WHY: Previously users stared at a blank spinner for 30–120 s during crawling.
+// Now they see exactly what stage the crawler is in, which URLs were discovered,
+// and which pages were successfully extracted — making the wait feel productive.
+//
+// Structure:
+//   • Header  — current sub-stage label + live URL / page counters
+//   • Tabs    — "URLs Found" | "Pages Extracted" (with failed sub-list)
+//   • Body    — scrollable list capped at max-h-52 so it never crowds the pipeline steps
+//
+// The component renders nothing until the first crawl_progress SSE event arrives
+// (stage === null && no data), avoiding layout shift on initial mount.
+function CrawlProgressPanel({
+  stage,
+  stageDescription,
+  foundUrls,
+  extractedPages,
+  failedPages,
+}: {
+  stage: string | null;
+  stageDescription: string | null;
+  foundUrls: CrawlFoundUrl[];
+  extractedPages: CrawlExtractedPage[];
+  failedPages: CrawlFailedPage[];
+}) {
+  // [ADDED] Tab state — default to "urls" because URLs appear first chronologically.
+  const [activeTab, setActiveTab] = useState<"urls" | "pages">("urls");
+
+  // [ADDED] Auto-switch to the pages tab once extraction starts so the user
+  // sees meaningful data without having to click.
+  useEffect(() => {
+    if (extractedPages.length > 0) setActiveTab("pages");
+  }, [extractedPages.length]);
+
+  // [ADDED] Source badge colour coding:
+  //   discovery (TinyFish) → emerald  — most interesting, TinyFish found it
+  //   sitemap               → blue    — found via robots.txt / sitemap.xml
+  //   html                  → muted   — found via static HTML parse (free)
+  const sourceBadge = (source: CrawlFoundUrl["source"]) => {
+    if (source === "discovery") return "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+    if (source === "sitemap")   return "text-blue-400 bg-blue-500/10 border-blue-500/20";
+    return "text-muted-foreground bg-muted/50 border-border";
+  };
+
+  const hasData = foundUrls.length > 0 || extractedPages.length > 0 || failedPages.length > 0;
+
+  // Don't render until we have something to show — avoids layout shift.
+  if (!stage && !hasData) return null;
+
+  return (
+    <div className="w-full max-w-xl mx-auto rounded-xl border border-border bg-card overflow-hidden">
+
+      {/* ── Header: current crawl sub-stage + live counters ── */}
+      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border bg-muted/20">
+        <Loader2 className="h-3.5 w-3.5 text-emerald-400 animate-spin shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground truncate">
+            {stage ?? "Starting crawl…"}
+          </p>
+          {stageDescription && (
+            <p className="text-xs text-muted-foreground/70 truncate mt-0.5">
+              {stageDescription}
+            </p>
+          )}
+        </div>
+        {/* [ADDED] Live counters — always visible regardless of active tab */}
+        <div className="flex items-center gap-2 shrink-0 text-xs font-mono">
+          <span className="text-muted-foreground/60">
+            <span className="text-foreground font-semibold">{foundUrls.length}</span> URLs
+          </span>
+          <span className="text-muted-foreground/30">·</span>
+          <span className="text-muted-foreground/60">
+            <span className="text-emerald-400 font-semibold">{extractedPages.length}</span> pages
+          </span>
+          {failedPages.length > 0 && (
+            <>
+              <span className="text-muted-foreground/30">·</span>
+              <span className="text-red-400 font-semibold">{failedPages.length} failed</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Tabs ── */}
+      {hasData && (
+        <>
+          <div className="flex border-b border-border text-xs font-mono">
+            <button
+              onClick={() => setActiveTab("urls")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                activeTab === "urls"
+                  ? "text-foreground border-b-2 border-emerald-500 -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Search className="h-3 w-3" />
+              URLs Found
+              {foundUrls.length > 0 && (
+                <span className="text-muted-foreground/50">({foundUrls.length})</span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("pages")}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors ${
+                activeTab === "pages"
+                  ? "text-foreground border-b-2 border-emerald-500 -mb-px"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileSearch className="h-3 w-3" />
+              Pages Extracted
+              {extractedPages.length > 0 && (
+                <span className="text-muted-foreground/50">({extractedPages.length})</span>
+              )}
+            </button>
+          </div>
+
+          {/* ── Tab body ── */}
+          <div className="max-h-52 overflow-y-auto">
+
+            {/* URLs tab */}
+            {activeTab === "urls" && (
+              <div className="p-2 space-y-0.5">
+                {foundUrls.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/40 font-mono text-center py-5">
+                    Waiting for URL discovery…
+                  </p>
+                ) : (
+                  foundUrls.map((u, i) => (
+                    <div key={`${u.url}-${i}`}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/40 transition-colors group">
+                      {/* [ADDED] Coloured dot mirrors the source badge colour */}
+                      <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
+                        u.source === "discovery" ? "bg-emerald-500"
+                        : u.source === "sitemap" ? "bg-blue-500"
+                        : "bg-muted-foreground/30"
+                      }`} />
+                      <span className="text-xs font-mono text-muted-foreground flex-1 truncate group-hover:text-foreground transition-colors">
+                        {urlPath(u.url)}
+                      </span>
+                      <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-full border shrink-0 ${sourceBadge(u.source)}`}>
+                        {u.source}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {/* Pages tab */}
+            {activeTab === "pages" && (
+              <div className="p-2 space-y-0.5">
+                {extractedPages.length === 0 && failedPages.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/40 font-mono text-center py-5">
+                    Extraction in progress…
+                  </p>
+                ) : (
+                  <>
+                    {/* Successful extractions */}
+                    {extractedPages.map((p, i) => (
+                      <div key={`${p.url}-${i}`}
+                        className="flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-muted/40 transition-colors">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">
+                            {p.title || urlPath(p.url)}
+                          </p>
+                          <p className="text-[10px] font-mono text-muted-foreground/50 truncate">
+                            {urlPath(p.url)}
+                          </p>
+                          {/* [ADDED] Per-page stats help users understand how much content was found */}
+                          <div className="flex gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground/40">
+                            <span>{p.elementsCount} elements</span>
+                            {p.formsCount > 0 && <span>· {p.formsCount} forms</span>}
+                            <span>· {p.linksCount} links</span>
+                          </div>
+                        </div>
+                        {/* [ADDED] "N / total" counter so progress is always legible */}
+                        <span className="text-[10px] font-mono text-muted-foreground/30 shrink-0 mt-0.5">
+                          {p.index}/{p.total}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* Failed extractions — rendered below successes so they don't dominate */}
+                    {failedPages.length > 0 && (
+                      <>
+                        <div className="px-2 pt-2 pb-0.5">
+                          <p className="text-[10px] font-mono text-red-400/50 uppercase tracking-wider">
+                            Failed ({failedPages.length})
+                          </p>
+                        </div>
+                        {failedPages.map((p, i) => (
+                          <div key={`${p.url}-fail-${i}`}
+                            className="flex items-start gap-2 px-2 py-1.5 rounded-lg">
+                            <XCircle className="h-3.5 w-3.5 text-red-400/60 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-mono text-muted-foreground/50 truncate">
+                                {urlPath(p.url)}
+                              </p>
+                              <p className="text-[10px] font-mono text-red-400/50 truncate">
+                                {p.reason}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* [ADDED] Shown only before the first event — brief transient state */}
+      {!hasData && (
+        <div className="flex items-center justify-center py-5">
+          <p className="text-xs text-muted-foreground/40 font-mono">Initialising crawler…</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -246,12 +469,8 @@ function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; alt?: str
         onError={() => setFailed(true)}
       />
       {loaded && (
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-background/80 text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg backdrop-blur-sm"
-        >
+        <a href={url} target="_blank" rel="noopener noreferrer"
+          className="absolute top-2 right-2 flex items-center gap-1 text-xs bg-background/80 text-muted-foreground hover:text-foreground px-2 py-1 rounded-lg backdrop-blur-sm">
           <ExternalLink className="h-3 w-3" />
           Full size
         </a>
@@ -308,43 +527,26 @@ function CategoryDonut({ passed, total, category, onClick, active }: { passed: n
 
 // ─── Perf Gauge Row ───────────────────────────────────────────────────────────
 const PERF_MAX: Record<string, number> = {
-  LCP:  6000,
-  TTFB: 3000,
-  DCL:  5000,
-  Load: 6000,
-  CLS:  0.5,
+  LCP: 6000, TTFB: 3000, DCL: 5000, Load: 6000, CLS: 0.5,
 };
 
-function PerfGaugeRow({
-  label, value, unit, status,
-}: {
-  label: string;
-  value: number | null;
-  unit: string;
-  status: string;
-}) {
+function PerfGaugeRow({ label, value, unit, status }: { label: string; value: number | null; unit: string; status: string; }) {
   const max = PERF_MAX[label] ?? 1000;
   const pct = value === null ? 0 : Math.min(100, (value / max) * 100);
-
   const display =
     value === null ? "—"
     : unit === "ms" ? `${Math.round(value).toLocaleString()}ms`
     : value.toFixed(3);
-
   return (
     <div className="flex items-center gap-3">
       <div className="w-12 text-xs font-mono text-muted-foreground shrink-0">{label}</div>
       <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
         {value !== null && (
-          <div
-            className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
-            style={{ width: `${pct}%`, opacity: 0.85 }}
-          />
+          <div className={`h-full rounded-full transition-all duration-700 ${statusBg(status)}`}
+            style={{ width: `${pct}%`, opacity: 0.85 }} />
         )}
       </div>
-      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>
-        {display}
-      </div>
+      <div className={`w-20 text-right text-xs font-mono font-bold ${statusColor(status)}`}>{display}</div>
       <div className={`h-2 w-2 rounded-full shrink-0 ${statusBg(status)}`} />
     </div>
   );
@@ -529,10 +731,7 @@ interface EditFormState {
 }
 
 function ReviewTestCaseForm({
-  initial,
-  onSave,
-  onCancel,
-  isSaving,
+  initial, onSave, onCancel, isSaving,
 }: {
   initial: EditFormState;
   onSave: (data: EditFormState) => void;
@@ -540,7 +739,6 @@ function ReviewTestCaseForm({
   isSaving: boolean;
 }) {
   const [form, setForm] = useState<EditFormState>(initial);
-
   const setStep = (i: number, val: string) =>
     setForm((f) => ({ ...f, steps: f.steps.map((s, idx) => (idx === i ? val : s)) }));
   const addStep = () => setForm((f) => ({ ...f, steps: [...f.steps, ""] }));
@@ -633,15 +831,7 @@ function ReviewTestCaseCard({
 
   const handleSave = (data: EditFormState) => {
     updateFn(
-      {
-        caseId: tc.id,
-        title: data.title,
-        category: data.category,
-        priority: data.priority,
-        steps: data.steps.filter((s) => s.trim()),
-        expectedResult: data.expectedResult,
-        description: data.description || undefined,
-      },
+      { caseId: tc.id, title: data.title, category: data.category, priority: data.priority, steps: data.steps.filter((s) => s.trim()), expectedResult: data.expectedResult, description: data.description || undefined },
       {
         onSuccess: () => { setEditing(false); toast.success("Test case updated"); },
         onError: (err) => toast.error(err.message ?? "Failed to update"),
@@ -707,14 +897,7 @@ function ReviewTestCaseCard({
       {editing && (
         <div className="px-4 pb-4 border-t border-border pt-4">
           <ReviewTestCaseForm
-            initial={{
-              title:          tc.title ?? "",
-              category:       tc.category ?? "navigation",
-              priority:       (tc.priority ?? "P2") as "P0" | "P1" | "P2",
-              steps:          (tc.steps ?? [""]).length > 0 ? (tc.steps ?? [""]) : [""],
-              expectedResult: tc.expected_result ?? "",
-              description:    tc.description ?? "",
-            }}
+            initial={{ title: tc.title ?? "", category: tc.category ?? "navigation", priority: (tc.priority ?? "P2") as "P0" | "P1" | "P2", steps: (tc.steps ?? [""]).length > 0 ? (tc.steps ?? [""]) : [""], expectedResult: tc.expected_result ?? "", description: tc.description ?? "" }}
             onSave={handleSave}
             onCancel={() => setEditing(false)}
             isSaving={isUpdating}
@@ -731,14 +914,7 @@ function AddTestCasePanel({ testRunId, onClose }: { testRunId: string; onClose: 
 
   const handleSave = (data: EditFormState) => {
     createFn(
-      {
-        title: data.title,
-        category: data.category,
-        priority: data.priority,
-        steps: data.steps.filter((s) => s.trim()),
-        expectedResult: data.expectedResult,
-        description: data.description || undefined,
-      },
+      { title: data.title, category: data.category, priority: data.priority, steps: data.steps.filter((s) => s.trim()), expectedResult: data.expectedResult, description: data.description || undefined },
       {
         onSuccess: () => { toast.success("Test case added"); onClose(); },
         onError: (err) => toast.error(err.message ?? "Failed to add test case"),
@@ -957,14 +1133,8 @@ function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void }) {
       </div>
       {bug.screenshot_url && !thumbFailed && (
         <div className="shrink-0 h-14 w-24 rounded-lg overflow-hidden border border-border bg-muted">
-          <img
-            src={bug.screenshot_url}
-            alt=""
-            crossOrigin="anonymous"
-            referrerPolicy="no-referrer"
-            className="h-full w-full object-cover object-top"
-            onError={() => setThumbFailed(true)}
-          />
+          <img src={bug.screenshot_url} alt="" crossOrigin="anonymous" referrerPolicy="no-referrer"
+            className="h-full w-full object-cover object-top" onError={() => setThumbFailed(true)} />
         </div>
       )}
       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-foreground transition-colors" />
@@ -1125,6 +1295,10 @@ export default function TestingPage() {
 
   const liveTestCases = sseState.generatedTestCases;
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
+
+  // [ADDED] Whether the pipeline is currently in the crawling stage.
+  // Used to decide whether to show the CrawlProgressPanel.
+  const isCrawlingPhase = pipelineStatus === "crawling";
 
   // ── Budget constraint handlers ─────────────────────────────────────────────
   // Invariant: maxPages >= 1, maxTests >= maxPages, both within plan limits.
@@ -1461,6 +1635,21 @@ export default function TestingPage() {
               </div>
             </div>
 
+            {/* [ADDED] CrawlProgressPanel — rendered only during the crawling stage.
+                It reads the crawl_progress SSE events stored in sseState and displays
+                them as a live two-tab panel (URLs Found + Pages Extracted).
+                We pass falsy default values so the panel renders nothing until the
+                first SSE event arrives, avoiding a layout-shift flash on mount. */}
+            {isCrawlingPhase && (
+              <CrawlProgressPanel
+                stage={sseState.crawlStage}
+                stageDescription={sseState.crawlStageDescription}
+                foundUrls={sseState.crawlFoundUrls}
+                extractedPages={sseState.crawlExtractedPages}
+                failedPages={sseState.crawlFailedPages}
+              />
+            )}
+
             {/* Cancel */}
             <div className="flex justify-center w-full max-w-xl mx-auto">
               <Button onClick={handleCancel} disabled={isCancelling} variant="outline"
@@ -1470,7 +1659,10 @@ export default function TestingPage() {
               </Button>
             </div>
 
-            {/* Counters */}
+            {/* Counters — shown as soon as executing begins, even at 0,
+                so the user knows execution has started and results are coming.
+                [CHANGED] was previously gated on isExecutingPhase which meant
+                no feedback during the first few seconds of execution. */}
             {isExecutingPhase && (
               <div className="grid grid-cols-4 gap-3 w-full max-w-xl mx-auto">
                 {[
@@ -1487,23 +1679,48 @@ export default function TestingPage() {
               </div>
             )}
 
-            {/* Live test cases */}
-            {liveTestCases.length > 0 && (
+            {/* Live test cases — shown during executing/reporting.
+                [CHANGED] Also shows a "waiting" placeholder during execution
+                when generatedTestCases is empty (reconnect / page refresh)
+                so the user always knows tests are running. */}
+            {isExecutingPhase && (
               <div className="w-full max-w-2xl mx-auto space-y-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <FlaskConical className="h-3.5 w-3.5" />Test Cases — {liveTestCases.length} generated
+                    <FlaskConical className="h-3.5 w-3.5" />
+                    {liveTestCases.length > 0
+                      ? `Test Cases — ${liveTestCases.length} running`
+                      : "Test Cases — waiting for first result…"}
                   </p>
-                  <div className="flex gap-3 text-xs font-mono">
-                    <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
-                    <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
-                    <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
-                    <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                  {liveTestCases.length > 0 && (
+                    <div className="flex gap-3 text-xs font-mono">
+                      <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
+                      <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
+                      <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
+                      <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                    </div>
+                  )}
+                </div>
+                {liveTestCases.length === 0 ? (
+                  // Placeholder shown on reconnect / first moments of execution
+                  // before any test_update events have arrived yet
+                  <div className="rounded-xl border border-border bg-card/40 p-6 flex items-center justify-center gap-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground font-mono">Executing tests in parallel…</p>
                   </div>
-                </div>
-                <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                  {liveTestCases.map((tc) => <LiveTestCaseCard key={tc.id} tc={tc} />)}
-                </div>
+                ) : (
+                  <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
+                    {liveTestCases.map((tc) => <LiveTestCaseCard key={tc.id} tc={tc} />)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* During generating phase — show a compact note so user knows AI is building test cases */}
+            {pipelineStatus === "generating" && (
+              <div className="w-full max-w-xl mx-auto rounded-xl border border-border bg-card/40 p-4 flex items-center gap-3">
+                <Sparkles className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-sm text-muted-foreground">AI is generating test cases from the crawled pages…</p>
               </div>
             )}
 
@@ -1718,20 +1935,17 @@ export default function TestingPage() {
                         <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
                         <p className="text-xs font-mono text-muted-foreground truncate">{pg.pageUrl}</p>
                       </div>
-
                       <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Core Web Vitals</p>
                       <div className="space-y-3 mb-5">
                         <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
                         <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
                         <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
                       </div>
-
                       <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Load Timing</p>
                       <div className="space-y-3">
                         <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
                         <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"} />
                       </div>
-
                       <div className="flex gap-4 mt-4 pt-3 border-t border-border flex-wrap">
                         {[
                           { label: "Good",              color: "bg-emerald-500" },
@@ -1745,7 +1959,6 @@ export default function TestingPage() {
                           </div>
                         ))}
                       </div>
-
                       <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-x-6 gap-y-1">
                         {[
                           { label: "LCP",  desc: "Largest Contentful Paint — render time of largest element"  },

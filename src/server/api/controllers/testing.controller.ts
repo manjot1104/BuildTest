@@ -20,6 +20,7 @@ import {
   type PagePerformanceMetrics,
   type PipelineSSEEvent,
   type TimeoutOverrides, // [ADDED] import for per-run timeout override type
+  type CrawlProgressEvent, // [ADDED] import for live crawl progress event type
 } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import {
@@ -150,6 +151,71 @@ const pipelineEmitters = new Map<string, Set<(line: string) => void>>();
 // Calling it with true resumes execution; false cancels.
 const reviewResolvers = new Map<string, (confirmed: boolean) => void>();
 
+// [ADDED] crawl_progress event buffer — stores all crawl_progress SSE lines
+// emitted so far for each active run.
+//
+// WHY: The pipeline starts immediately after POST /api/test/run, so Stage 0
+// (URL seeding, ~instant) and early Stage 1 events fire before the browser
+// even opens the SSE connection. Without a buffer those events are lost and
+// the CrawlProgressPanel stays blank even though the server already found URLs.
+//
+// When a new SSE client connects during the crawling phase, we flush the entire
+// buffer to it before attaching as a live listener, giving an instant catch-up.
+// The buffer is cleared when the pipeline moves out of the crawling stage
+// (i.e. on the first non-crawl "status" event) so it never grows unbounded.
+const crawlProgressBuffers = new Map<string, string[]>();
+
+// [ADDED] Execution event buffer — stores the latest test_update line per
+// testCaseId plus the latest counter line during the executing/reporting phase.
+//
+// WHY: Same race as crawl progress — if the user navigates back or the tab
+// loses focus and the EventSource reconnects mid-execution, the new client
+// gets only the synthetic status+counter snapshot, not the individual
+// test_update events that already fired. That means the live execution cards
+// are blank even though half the tests have already run.
+//
+// We store only the LATEST line per testCaseId (keyed as "tc:{id}") and the
+// latest counter (keyed as "counter") so the map stays O(numTests) not O(events).
+// On reconnect we flush all entries in insertion order to give the client the
+// current snapshot of every card.
+// The buffer is cleared when the run completes/fails/cancels.
+const executionBuffers = new Map<string, Map<string, string>>();
+
+// Helper: upsert a line into the execution buffer keyed by a stable key.
+function bufferExecutionLine(testRunId: string, key: string, line: string): void {
+  if (!executionBuffers.has(testRunId)) {
+    executionBuffers.set(testRunId, new Map());
+  }
+  executionBuffers.get(testRunId)!.set(key, line);
+}
+
+// Helper: flush all buffered execution lines to a newly connected client.
+function flushExecutionBuffer(testRunId: string, emit: (line: string) => void): void {
+  const buffer = executionBuffers.get(testRunId);
+  if (!buffer) return;
+  for (const line of buffer.values()) {
+    try { emit(line); } catch { /* stream closed */ }
+  }
+}
+
+// Helper: append a crawl_progress SSE line to the run's crawl buffer.
+function bufferCrawlProgressLine(testRunId: string, line: string): void {
+  if (!crawlProgressBuffers.has(testRunId)) {
+    crawlProgressBuffers.set(testRunId, []);
+  }
+  crawlProgressBuffers.get(testRunId)!.push(line);
+}
+
+// Helper: flush all buffered crawl_progress lines to a single emit function.
+// Used when a new SSE client connects mid-crawl so it catches up immediately.
+function flushCrawlProgressBuffer(testRunId: string, emit: (line: string) => void): void {
+  const buffer = crawlProgressBuffers.get(testRunId);
+  if (!buffer) return;
+  for (const line of buffer) {
+    try { emit(line); } catch { /* stream closed */ }
+  }
+}
+
 function registerEmitter(
   testRunId: string,
   emit: (line: string) => void,
@@ -161,6 +227,45 @@ function registerEmitter(
 }
 
 function broadcastToRun(testRunId: string, line: string): void {
+  // [ADDED] Auto-buffer crawl_progress lines so late-connecting SSE clients
+  // get a full replay of all URLs/pages found before they connected.
+  if (line.includes('"crawl_progress"')) {
+    bufferCrawlProgressLine(testRunId, line);
+  }
+
+  // [ADDED] Auto-buffer test_update lines, keyed by testCaseId so each card
+  // is stored only once (latest state). Late-connecting clients get the current
+  // status of every test card without missing any that already ran.
+  if (line.includes('"test_update"')) {
+    // Extract testCaseId from the raw JSON string without a full parse.
+    // Format is always: ..."testCaseId":"<id>"...
+    const match = /"testCaseId":"([^"]+)"/.exec(line);
+    if (match?.[1]) {
+      bufferExecutionLine(testRunId, `tc:${match[1]}`, line);
+    }
+  }
+
+  // [ADDED] Buffer the latest counter line so reconnecting clients see the
+  // current passed/failed/running counts immediately.
+  if (line.includes('"counter"')) {
+    bufferExecutionLine(testRunId, "counter", line);
+  }
+
+  // [ADDED] When the pipeline moves past crawling (first status event that is
+  // NOT "crawling"), clear the crawl buffer — no longer needed.
+  if (line.includes('"status"') && !line.includes('"crawling"')) {
+    crawlProgressBuffers.delete(testRunId);
+  }
+
+  // [ADDED] When the pipeline completes/fails/cancels, clear the execution
+  // buffer — the run is terminal and no new clients need a replay.
+  if (
+    line.includes('"complete"') ||
+    (line.includes('"error"') && (line.includes('"CANCELLED"') || line.includes('"failed"')))
+  ) {
+    executionBuffers.delete(testRunId);
+  }
+
   pipelineEmitters.get(testRunId)?.forEach((emit) => {
     try {
       emit(line);
@@ -219,6 +324,12 @@ async function runPipeline(
 // userTimeouts, passes both into crawlSite via CrawlOptions, and passes
 // userTimeouts into each executeTest call so test-step timeouts are also
 // governed by the user's requested override.
+//
+// [ADDED] runPipelineStages now passes an onProgress callback into crawlSite.
+// When the crawl service fires a CrawlProgressEvent, we wrap it in a
+// crawl_progress PipelineSSEEvent and broadcast it to all connected SSE clients.
+// This is the only change needed in the controller — the service handles
+// all the event logic internally.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
@@ -248,6 +359,13 @@ async function runPipelineStages(
       },
       // [ADDED] Forward user-requested timeout overrides into the crawl call.
       timeouts: userTimeouts,
+      // [ADDED] onProgress bridges CrawlProgressEvent from the service layer
+      // up to SSE clients by wrapping each event in a crawl_progress envelope.
+      // This keeps the service free of SSE/HTTP knowledge while giving the
+      // frontend full visibility into every crawl milestone.
+      onProgress: (event: CrawlProgressEvent) => {
+        send({ type: "crawl_progress", event });
+      },
     });
   } catch (err) {
     if (abortSignal.aborted || cancelledPipelines.has(testRunId))
@@ -909,6 +1027,10 @@ export async function startTestRunHandler({
         cancelledPipelines.delete(testRunId);
         reviewResolvers.delete(testRunId);
         pipelineEmitters.delete(testRunId);
+        // [ADDED] Clean up both event buffers so we don't leak memory
+        // after the run finishes.
+        crawlProgressBuffers.delete(testRunId);
+        executionBuffers.delete(testRunId);
       });
 
     return { testRunId };
@@ -1074,6 +1196,25 @@ export async function streamTestRunHandler({
                 total: current.total_tests ?? 0,
               }),
             );
+
+            // [ADDED] Replay all buffered crawl_progress events to this client.
+            // This handles the common race where the browser opens the SSE
+            // connection AFTER the pipeline has already discovered/extracted
+            // some URLs. Without this flush the CrawlProgressPanel would be
+            // empty until the next crawl_progress event fires live.
+            // The flush only sends lines if the run is still in the crawling
+            // stage — if it has already moved on the buffer was already cleared.
+            if (current.status === "crawling") {
+              flushCrawlProgressBuffer(params.id, emit);
+            }
+
+            // [ADDED] Replay the latest test_update snapshot for every test card
+            // plus the latest counter, so a reconnecting client mid-execution
+            // sees all cards with their current status immediately instead of
+            // waiting for the next live event to fire.
+            if (current.status === "executing" || current.status === "reporting") {
+              flushExecutionBuffer(params.id, emit);
+            }
           });
 
         unregister = registerEmitter(params.id, emit);
@@ -1130,6 +1271,10 @@ export async function streamTestRunHandler({
               }
             });
             pipelineEmitters.delete(params.id);
+            // [ADDED] Clean up both event buffers — safety-net alongside
+            // the broadcastToRun auto-clear on complete/error events.
+            crawlProgressBuffers.delete(params.id);
+            executionBuffers.delete(params.id);
           });
       }
     },
