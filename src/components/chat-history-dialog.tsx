@@ -15,10 +15,11 @@ import {
 import {
     AlertDialog,
     AlertDialogContent,
+    AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Star, Loader2 } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Search } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
@@ -29,6 +30,7 @@ export function ChatHistoryDialog({
 }: React.ComponentProps<'div'>) {
     const { historyModal, toggleHistoryModal } = useStateMachine()
     const [filter, setFilter] = React.useState<"all" | "builder" | "openrouter">("all")
+    const [searchQuery, setSearchQuery] = React.useState("")
     const router = useRouter()
     const { data: chats, isLoading, error } = useChatHistory(filter)
     const [localChats, setLocalChats] = React.useState<any[]>([])
@@ -85,6 +87,7 @@ export function ChatHistoryDialog({
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
                 style={{ width: '95vw', maxWidth: '40rem' }}
             >
+                <AlertDialogTitle className="sr-only">Chat History</AlertDialogTitle>
                 <div className={cn('flex flex-col', className)} {...props}>
                     {/* Header */}
                     <div className="flex items-center justify-between px-6 pt-6 pb-5 border-b bg-muted/20">
@@ -118,6 +121,20 @@ export function ChatHistoryDialog({
   </Select>
 </div>
 
+                    {/* Search */}
+                    <div className="px-6 py-3 border-b bg-muted/5">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground/50" />
+                            <input
+                                type="text"
+                                placeholder="Search conversations..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full h-9 pl-9 pr-3 text-xs rounded-lg bg-background border border-border/50 hover:border-border focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring transition-colors placeholder:text-muted-foreground/40"
+                            />
+                        </div>
+                    </div>
+
                     {/* Content */}
                     <div className="px-2 py-3">
                         {isLoading && (
@@ -147,11 +164,21 @@ export function ChatHistoryDialog({
 
                         {!isLoading && !error && chats && chats.length > 0 && (
                             <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto px-2 custom-scrollbar">
-                                {localChats.map((chat) => (
-                                    <button
+                                {localChats
+                                    .filter((chat) => {
+                                        if (!searchQuery.trim()) return true
+                                        const query = searchQuery.toLowerCase()
+                                        const title = (chat.title ?? chat.prompt ?? chat.v0ChatId ?? '').toLowerCase()
+                                        return title.includes(query)
+                                    })
+                                    .map((chat) => (
+                                    <div
                                         key={chat.id}
-                                       onClick={() => handleChatClick(chat)}
-                                        className="flex items-center gap-4 px-4 py-3 hover:bg-accent/40 transition-all text-left group rounded-xl border border-transparent hover:border-border/40"
+                                        role="button"
+                                        tabIndex={0}
+                                        onClick={() => handleChatClick(chat)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleChatClick(chat) }}
+                                        className="flex items-center gap-4 px-4 py-3 hover:bg-accent/40 transition-all text-left group rounded-xl border border-transparent hover:border-border/40 cursor-pointer"
                                     >
                                         <div className="size-8 rounded-lg bg-muted/40 flex items-center justify-center shrink-0 group-hover:bg-background transition-colors border border-border/20">
                                             <MessageSquare className="size-3.5 text-muted-foreground/60 group-hover:text-primary transition-colors" />
@@ -204,7 +231,7 @@ export function ChatHistoryDialog({
                                                 />
                                             </button>
                                         </div>
-                                    </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
