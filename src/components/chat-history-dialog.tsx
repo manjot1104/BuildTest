@@ -19,10 +19,12 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Star, Loader2, Search } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
+
+const ITEMS_PER_PAGE = 10
 
 export function ChatHistoryDialog({
     className,
@@ -31,8 +33,12 @@ export function ChatHistoryDialog({
     const { historyModal, toggleHistoryModal } = useStateMachine()
     const [filter, setFilter] = React.useState<"all" | "builder" | "openrouter">("all")
     const [searchQuery, setSearchQuery] = React.useState("")
+    const [page, setPage] = React.useState(1)
     const router = useRouter()
-    const { data: chats, isLoading, error } = useChatHistory(filter)
+    const { data: result, isLoading, error } = useChatHistory(filter, page, ITEMS_PER_PAGE)
+    const chats = result?.data
+    const totalPages = result?.totalPages ?? 1
+    const totalItems = result?.totalItems ?? 0
     const [localChats, setLocalChats] = React.useState<any[]>([])
 
     React.useEffect(() => {
@@ -45,6 +51,11 @@ export function ChatHistoryDialog({
             )
         }
     }, [chats])
+
+    // Reset page when filter changes
+    React.useEffect(() => {
+        setPage(1)
+    }, [filter])
 
     const handleChatClick = (chat: any) => {
   if (chat.type === 'builder') {
@@ -80,6 +91,13 @@ export function ChatHistoryDialog({
             )
         )
     }
+
+    const filteredChats = localChats.filter((chat) => {
+        if (!searchQuery.trim()) return true
+        const query = searchQuery.toLowerCase()
+        const title = (chat.title ?? chat.prompt ?? chat.v0ChatId ?? '').toLowerCase()
+        return title.includes(query)
+    })
 
     return (
         <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
@@ -151,7 +169,7 @@ export function ChatHistoryDialog({
                             </div>
                         )}
 
-                        {!isLoading && !error && chats?.length === 0 && (
+                        {!isLoading && !error && totalItems === 0 && (
                             <div className="flex flex-col items-center justify-center py-20 gap-3">
                                 <div className="size-12 flex items-center justify-center bg-muted/30 rounded-2xl border border-border/50">
                                     <MessageSquare className="size-6 text-muted-foreground/40" />
@@ -162,16 +180,9 @@ export function ChatHistoryDialog({
                             </div>
                         )}
 
-                        {!isLoading && !error && chats && chats.length > 0 && (
+                        {!isLoading && !error && filteredChats.length > 0 && (
                             <div className="flex flex-col gap-1 max-h-[60vh] overflow-y-auto px-2 custom-scrollbar">
-                                {localChats
-                                    .filter((chat) => {
-                                        if (!searchQuery.trim()) return true
-                                        const query = searchQuery.toLowerCase()
-                                        const title = (chat.title ?? chat.prompt ?? chat.v0ChatId ?? '').toLowerCase()
-                                        return title.includes(query)
-                                    })
-                                    .map((chat) => (
+                                {filteredChats.map((chat) => (
                                     <div
                                         key={chat.id}
                                         role="button"
@@ -235,7 +246,45 @@ export function ChatHistoryDialog({
                                 ))}
                             </div>
                         )}
+
+                        {!isLoading && !error && searchQuery.trim() && filteredChats.length === 0 && totalItems > 0 && (
+                            <div className="flex flex-col items-center justify-center py-12 gap-2">
+                                <Search className="size-5 text-muted-foreground/30" />
+                                <p className="text-xs text-muted-foreground/60 font-medium">
+                                    No matches found
+                                </p>
+                            </div>
+                        )}
                     </div>
+
+                    {/* Pagination */}
+                    {!isLoading && !error && totalPages > 1 && (
+                        <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/10">
+                            <p className="text-[10px] text-muted-foreground/60 font-medium">
+                                Page {page} of {totalPages}
+                            </p>
+                            <div className="flex items-center gap-1">
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 rounded-md"
+                                    disabled={page <= 1}
+                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                                >
+                                    <ChevronLeft className="size-3.5" />
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="size-7 rounded-md"
+                                    disabled={page >= totalPages}
+                                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                                >
+                                    <ChevronRight className="size-3.5" />
+                                </Button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </AlertDialogContent>
         </AlertDialog>

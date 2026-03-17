@@ -19,6 +19,17 @@ interface EdenError {
 /** Eden response with data wrapper */
 interface ChatHistoryDataResponse {
   data?: ChatHistoryItem[]
+  page?: number
+  totalPages?: number
+  totalItems?: number
+}
+
+/** Paginated chat history result */
+export interface PaginatedChatHistory {
+  data: ChatHistoryItem[]
+  page: number
+  totalPages: number
+  totalItems: number
 }
 
 /** Paginated community builds response from API */
@@ -74,13 +85,13 @@ export function useChatDetails(chatId: string | undefined) {
  * Query hook for fetching chat history
  * Uses Eden client for type-safe API calls
  */
-export function useChatHistory(type: "all" | "builder" | "openrouter" = "all") {
+export function useChatHistory(type: "all" | "builder" | "openrouter" = "all", page = 1, limit = 10) {
   return useQuery({
-    queryKey: ['chat-history', type],
-    queryFn: async (): Promise<ChatHistoryItem[]> => {
+    queryKey: ['chat-history', type, page, limit],
+    queryFn: async (): Promise<PaginatedChatHistory> => {
       try {
         const response = await api.chats.get({
-          query: { type },
+          query: { type, page: String(page), limit: String(limit) },
         })
 
         if (response.error) {
@@ -95,7 +106,12 @@ export function useChatHistory(type: "all" | "builder" | "openrouter" = "all") {
         }
 
         const responseData = response.data as ChatHistoryDataResponse
-        return responseData?.data ?? []
+        return {
+          data: responseData?.data ?? [],
+          page: responseData?.page ?? 1,
+          totalPages: responseData?.totalPages ?? 1,
+          totalItems: responseData?.totalItems ?? 0,
+        }
       } catch {
         throw new Error('Failed to fetch chat history')
       }
