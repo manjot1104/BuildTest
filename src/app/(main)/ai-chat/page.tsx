@@ -831,6 +831,10 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
   if (codeBlocks.length === 0) return null;
 
   const webApp = isWebApp(codeBlocks);
+  const canRunBackend = !webApp && buildBackendCode(codeBlocks) !== null;
+
+  // Don't show Run App for code that can't be previewed or executed
+  if (!webApp && !canRunBackend) return null;
 
   const handleRun = async () => {
     if (execution.isRunning) return;
@@ -1911,6 +1915,9 @@ export default function OpenRouterChatPage() {
 
   const clearChat = useCallback(() => {
     setMessages([]);
+    setActiveFiles([]);
+    setSelectedFileIndex(0);
+    setActiveConversationId(null);
     textareaRef.current?.focus();
   }, []);
 
@@ -1925,9 +1932,9 @@ export default function OpenRouterChatPage() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] -m-4">
+    <div className="flex h-[calc(100svh-4rem)] -m-4 overflow-hidden max-w-[100vw]">
       {/* RIGHT SIDE — CHAT UI */}
-      <div className="flex-1 flex flex-col">
+      <div className="min-w-0 flex-1 flex flex-col">
         <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
@@ -2058,8 +2065,8 @@ export default function OpenRouterChatPage() {
 
           {/* Sidebar */}
           <div
-            className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
-            style={{ width: `${panelWidth}px` }}
+            className="shrink-0 border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+            style={{ width: `${panelWidth}px`, maxWidth: '50vw' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">

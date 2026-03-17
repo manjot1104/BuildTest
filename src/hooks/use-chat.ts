@@ -5,6 +5,24 @@ import { useChatDetails } from './use-chat-api'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
 import { stripSystemPrompt } from '@/lib/prompt-enhancer'
 import { useEnvVariables } from '@/hooks/use-env-variables'
+
+/**
+ * Returns undefined if the URL looks like a chat/editor page rather than a real
+ * demo preview.  V0 demo URLs look like `/t/...` or contain `/chat/b/...`
+ * (the preview build URL); plain `/chat/...` is the editor, not the preview.
+ */
+function sanitizeDemoUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined
+  try {
+    const u = new URL(url)
+    // v0.dev chat page → not a demo
+    if (u.hostname.includes('v0.dev') && /^\/chat\/[^b]/.test(u.pathname)) {
+      return undefined
+    }
+  } catch { /* not a URL, leave as-is */ }
+  return url
+}
+
 interface Chat {
   id: string
   demo?: string
@@ -56,18 +74,14 @@ const { getVariableNames } = useEnvVariables()
   useEffect(() => {
     if (chatData && chatData.id === chatId) {
 
-      console.log('🔍 chatData received:', {
-      id: chatData.id,
-      demo: chatData.demo,
-      latestVersionDemoUrl: chatData.latestVersion?.demoUrl,
-    })
 
-      const demoUrl =
+
+      const demoUrl = sanitizeDemoUrl(
   chatData.latestVersion?.demoUrl ??
   (chatData as any).demoUrl ??
   chatData.demo
+)
 
-  console.log('🔍 demoUrl resolved to:', demoUrl)
       const files = chatData.latestVersion?.files?.map((f) => ({
         name: f.name,
         content: f.content,
@@ -356,10 +370,11 @@ if (Array.isArray(finalContent)) {
   latestVersion?: { demoUrl?: string }
 } | undefined
 
-const demoUrl =
+const demoUrl = sanitizeDemoUrl(
   data?.latestVersion?.demoUrl ??
   data?.demoUrl ??
   data?.demo
+)
 
         if (demoUrl) {
           setCurrentChat((prev) => {

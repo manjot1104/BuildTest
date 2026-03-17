@@ -157,7 +157,7 @@ const { variables } = useEnvVariables()
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
     !isStreaming
-console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrentChat?.demo, '| isStreaming:', isStreaming)
+
 
     // Sync loading state
     useEffect(() => {
