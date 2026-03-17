@@ -4,6 +4,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -18,7 +19,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Star, Loader2 } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
@@ -78,7 +79,21 @@ export function ChatHistoryDialog({
             )
         )
     }
+const handleDeleteChat = async (chatId: string) => {
+  try {
+    await fetch('/api/chat/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId }),
+    })
 
+    setLocalChats((prev) => prev.filter((chat) => chat.v0ChatId !== chatId))
+    toast.success('Chat deleted successfully')
+  } catch (error) {
+    console.error('Failed to delete chat:', error)
+    toast.error('Failed to delete chat')
+  }
+}
     return (
         <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
             <AlertDialogContent
@@ -168,7 +183,7 @@ export function ChatHistoryDialog({
                                                 </p>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                       <div className="flex items-center gap-2 shrink-0">
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -202,8 +217,27 @@ export function ChatHistoryDialog({
                                                         chat.isStarred ? 'fill-amber-400' : ''
                                                     )}
                                                 />
+
+
+                                                
                                             </button>
+                                            <button
+    type="button"
+    onClick={(e) => {
+      e.stopPropagation()
+      handleDeleteChat(chat.v0ChatId)
+    }}
+    className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+    title="Delete chat"
+  >
+    <Trash2 className="size-3.5" />
+  </button>
+                                            
                                         </div>
+
+
+
+
                                     </button>
                                 ))}
                             </div>

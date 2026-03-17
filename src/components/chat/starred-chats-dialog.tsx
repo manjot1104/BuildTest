@@ -1,12 +1,12 @@
 'use client'
-
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
     AlertDialog,
     AlertDialogContent,
 } from '@/components/ui/alert-dialog'
-import { X, Star, ExternalLink, Loader2 } from 'lucide-react'
+import { X, Star, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import { useQuery } from '@tanstack/react-query'
@@ -26,7 +26,7 @@ async function fetchStarredChats(): Promise<StarredChat[]> {
     if (!res.ok) throw new Error('Failed to fetch starred chats')
     return res.json() as Promise<StarredChat[]>
 }
-
+import { useQueryClient } from '@tanstack/react-query'
 export function StarredChatsDialog({
     open,
     onOpenChange,
@@ -35,7 +35,7 @@ export function StarredChatsDialog({
     onOpenChange: (v: boolean) => void
 }) {
     const router = useRouter()
-
+const queryClient = useQueryClient()
     const { data: chats, isLoading, error } = useQuery({
         queryKey: ['starred-chats'],
         queryFn: fetchStarredChats,
@@ -50,6 +50,21 @@ export function StarredChatsDialog({
     }
 
     onOpenChange(false)
+}
+const handleDeleteChat = async (chatId: string) => {
+  try {
+    await fetch('/api/chat/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId }),
+    })
+
+    queryClient.invalidateQueries({ queryKey: ['starred-chats'] })
+    toast.success('Chat deleted successfully')
+  } catch (error) {
+    console.error('Failed to delete chat:', error)
+    toast.error('Failed to delete chat')
+  }
 }
 
     return (
@@ -107,14 +122,15 @@ export function StarredChatsDialog({
                         {!isLoading && !error && chats && chats.length > 0 && (
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                                 {chats.map((chat) => (
-                                    <button
-                                      key={chat.v0ChatId}
-                                        onClick={() => handleChatClick(chat)}
-                                        className={cn(
-                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg",
-                                            "hover:bg-accent/50 transition-colors text-left group"
-                                        )}
-                                    >
+                                    <div
+  key={chat.v0ChatId}
+  className={cn(
+    "flex items-center gap-3 px-3 py-2.5 rounded-lg",
+    "hover:bg-accent/50 transition-colors text-left group cursor-pointer"
+  )}
+  onClick={() => handleChatClick(chat)}
+>
+        
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">
@@ -128,10 +144,35 @@ export function StarredChatsDialog({
                                                 </p>
                                             )}
                                         </div>
-                                        {chat.demoUrl && (
-                                            <ExternalLink className="size-3.5 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
-                                        )}
-                                    </button>
+                                       
+                                     <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation()
+    handleChatClick(chat)
+  }}
+  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+  title="Open chat"
+>
+  <ExternalLink className="size-3.5" />
+</button>
+
+                                    
+<button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation()
+    handleDeleteChat(chat.v0ChatId)
+  }}
+  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+  title="Delete chat"
+>
+  <Trash2 className="size-3.5" />
+</button>
+
+
+                                    </div>
+                                    
                                 ))}
                             </div>
                         )}
