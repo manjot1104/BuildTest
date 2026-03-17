@@ -9,16 +9,18 @@ import {
 import { X, Star, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 interface StarredChat {
     id: string
     v0ChatId: string
+    conversationId?: string
     title: string | null
     prompt?: string | null
     demoUrl: string | null
     createdAt: string
     type: 'builder' | 'openrouter'
+    is_starred?: boolean
 }
 
 async function fetchStarredChats(): Promise<StarredChat[]> {
@@ -26,7 +28,7 @@ async function fetchStarredChats(): Promise<StarredChat[]> {
     if (!res.ok) throw new Error('Failed to fetch starred chats')
     return res.json() as Promise<StarredChat[]>
 }
-import { useQueryClient } from '@tanstack/react-query'
+
 export function StarredChatsDialog({
     open,
     onOpenChange,
@@ -35,7 +37,7 @@ export function StarredChatsDialog({
     onOpenChange: (v: boolean) => void
 }) {
     const router = useRouter()
-const queryClient = useQueryClient()
+    const queryClient = useQueryClient()
     const { data: chats, isLoading, error } = useQuery({
         queryKey: ['starred-chats'],
         queryFn: fetchStarredChats,
@@ -43,29 +45,75 @@ const queryClient = useQueryClient()
     })
 
     const handleChatClick = (chat: StarredChat) => {
-    if (chat.type === "openrouter") {
-        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
-    } else {
-        router.push(`/chat?chatId=${chat.v0ChatId}`)
+        if (chat.type === "openrouter") {
+            router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+        } else {
+            router.push(`/chat?chatId=${chat.v0ChatId}`)
+        }
+        onOpenChange(false)
     }
 
-    onOpenChange(false)
-}
-const handleDeleteChat = async (chatId: string) => {
-  try {
-    await fetch('/api/chat/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId }),
-    })
+    const handleStarToggle = async (
+        e: React.MouseEvent,
+        chat: StarredChat
+    ) => {
+        e.stopPropagation()
 
-    queryClient.invalidateQueries({ queryKey: ['starred-chats'] })
-    toast.success('Chat deleted successfully')
-  } catch (error) {
-    console.error('Failed to delete chat:', error)
-    toast.error('Failed to delete chat')
-  }
-}
+        try {
+            if (chat.type === 'openrouter') {
+                // OpenRouter ke liye /api/openrouter/star use karo
+                await fetch('/api/openrouter/star', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conversationId: chat.conversationId || chat.v0ChatId,
+                        starred: false,  // ✅ UNSTAR KARO
+                    }),
+                })
+            } else {
+                // Builder ke liye /api/chat/star use karo
+                await fetch('/api/chat/star', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chatId: chat.v0ChatId,
+                        isStarred: false,
+                    }),
+                })
+            }
+
+            // Refresh
+            await queryClient.invalidateQueries({
+                queryKey: ['starred-chats'],
+                refetchType: 'all'
+            })
+            toast.success('Chat unstarred')
+        } catch (error) {
+            console.error('Failed to unstar:', error)
+            toast.error('Failed to unstar chat')
+        }
+    }
+
+    const handleDeleteChat = async (e: React.MouseEvent, chat: StarredChat) => {
+        e.stopPropagation()
+        try {
+            const idToDelete = chat.conversationId || chat.v0ChatId
+            await fetch('/api/chat/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatId: idToDelete }),
+            })
+
+            await queryClient.invalidateQueries({
+                queryKey: ['starred-chats'],
+                refetchType: 'all'
+            })
+            toast.success('Chat deleted successfully')
+        } catch (error) {
+            console.error('Failed to delete chat:', error)
+            toast.error('Failed to delete chat')
+        }
+    }
 
     return (
         <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -123,14 +171,13 @@ const handleDeleteChat = async (chatId: string) => {
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                                 {chats.map((chat) => (
                                     <div
-  key={chat.v0ChatId}
-  className={cn(
-    "flex items-center gap-3 px-3 py-2.5 rounded-lg",
-    "hover:bg-accent/50 transition-colors text-left group cursor-pointer"
-  )}
-  onClick={() => handleChatClick(chat)}
->
-        
+                                        key={chat.v0ChatId}
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg",
+                                            "hover:bg-accent/50 transition-colors text-left group cursor-pointer"
+                                        )}
+                                        onClick={() => handleChatClick(chat)}
+                                    >
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium truncate">
@@ -144,35 +191,37 @@ const handleDeleteChat = async (chatId: string) => {
                                                 </p>
                                             )}
                                         </div>
-                                       
-                                     <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation()
-    handleChatClick(chat)
-  }}
-  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
-  title="Open chat"
->
-  <ExternalLink className="size-3.5" />
-</button>
 
-                                    
-<button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation()
-    handleDeleteChat(chat.v0ChatId)
-  }}
-  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
-  title="Delete chat"
->
-  <Trash2 className="size-3.5" />
-</button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handleChatClick(chat)
+                                            }}
+                                            className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+                                            title="Open chat"
+                                        >
+                                            <ExternalLink className="size-3.5" />
+                                        </button>
 
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleStarToggle(e, chat)}
+                                            className="p-1.5 rounded-md transition-colors text-amber-400 hover:text-amber-500 hover:bg-amber-400/10 border border-transparent hover:border-amber-400/30"
+                                            title="Unstar chat"
+                                        >
+                                            <Star className="size-3.5 fill-amber-400" />
+                                        </button>
 
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteChat(e, chat)}
+                                            className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+                                            title="Delete chat"
+                                        >
+                                            <Trash2 className="size-3.5" />
+                                        </button>
                                     </div>
-                                    
                                 ))}
                             </div>
                         )}
