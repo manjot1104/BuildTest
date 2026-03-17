@@ -58,6 +58,7 @@ import {
   SlidersHorizontal,
   RotateCw,
 } from "lucide-react";
+import { ChatExportMenu } from "@/components/chat/chat-export-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -1944,6 +1945,17 @@ export default function OpenRouterChatPage() {
           </div>
           {hasMessages && (
             <div className="flex items-center gap-1">
+              <ChatExportMenu
+                chatId={activeConversationId ?? ""}
+                chatType="OPENROUTER"
+                title={messages[0]?.content.slice(0, 60)}
+                messages={messages.map((m) => ({
+                  role: m.role,
+                  content: m.content,
+                  timestamp: m.timestamp.toISOString(),
+                }))}
+                disabled={isLoading || !activeConversationId}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon-xs" onClick={retryLast} disabled={isLoading}>

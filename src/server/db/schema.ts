@@ -700,6 +700,35 @@ export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
   user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
 }));
 
+// ─── Shared Chat Links ──────────────────────────────────────────────────────
+
+export const shared_chat_links = createTable(
+  "shared_chat_links",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    token: d.varchar("token", { length: 64 }).notNull().unique(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chat_type: chatTypeEnum("chat_type").notNull(),
+    // For BUILDER chats: v0_chat_id; For OPENROUTER chats: conversation_id
+    chat_id: d.text("chat_id").notNull(),
+    title: d.text("title"),
+    // Snapshot of messages at share time (JSON array)
+    messages: d.text("messages").notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    expires_at: d.timestamp("expires_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("shared_chat_links_token_idx").on(t.token),
+    index("shared_chat_links_user_id_idx").on(t.user_id),
+  ],
+);
+
 // ─── Sandbox Executions ──────────────────────────────────────────────────────
 
 export const sandbox_executions = createTable(
