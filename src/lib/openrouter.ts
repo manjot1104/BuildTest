@@ -55,6 +55,11 @@ async function callOpenRouterSingle(
     throw new Error('OPENROUTER_API_KEY is not configured.')
   }
 
+  // Add timeout with AbortController for faster failure
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 90000) // 90 seconds timeout
+
+  try {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -69,7 +74,10 @@ async function callOpenRouterSingle(
       temperature: 0.3,
       max_tokens: 4000,
     }),
+      signal: controller.signal,
   })
+
+    clearTimeout(timeoutId)
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}))
@@ -85,6 +93,13 @@ async function callOpenRouterSingle(
   }
 
   return content
+  } catch (error) {
+    clearTimeout(timeoutId)
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Request timeout after 90 seconds for model: ${model}`)
+    }
+    throw error
+  }
 }
 
 /**
@@ -454,22 +469,12 @@ STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
       - Relevance: Focus on information relevant to the role or industry
       - ATS-friendly: Use standard terminology and keywords naturally
 
-STEP 4.5: REQUIRED SECTIONS (MANDATORY FOR ALL OUTPUTS):
-   - The resume MUST include these sections when the user provided data:
-     - Skills
-     - Experience
-     - Education
-     - Projects
-   - If the selected template's "MANDATORY STRUCTURE" is missing any of these sections, you MUST add the missing section(s)
-     using the SAME visual style (headings/dividers/typography) and the SAME layout method (minipage vs multicols).
-   - Do NOT invent fake content. Use only the user's data fields. If a field is empty, omit that section.
-
 STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change packages (\\usepackage commands)
    ❌ DO NOT change layout (minipage, center, multicol, etc.)
    ❌ DO NOT change colors or styling
    ❌ DO NOT change section order
-   ✅ You MAY add ONLY missing required sections (Skills/Experience/Education/Projects) if the template omitted them; otherwise do not add/remove sections
+   ❌ DO NOT add or remove sections
    ❌ DO NOT modify LaTeX structure
    ❌ DO NOT add skill categories - skills must be simple bullet points only
    ❌ DO NOT group or categorize skills - just list them as items
@@ -698,11 +703,51 @@ Return the complete modified LaTeX document code now. Return ONLY the LaTeX code
 
 /**
  * Cleans AI response by removing markdown code blocks (for HTML)
+ * Also handles cases where AI returns instructions instead of code
  */
 function cleanHtmlResponse(raw: string): string {
   let cleaned = raw.trim()
+  
+  // Remove markdown code blocks
   cleaned = cleaned.replace(/^```(?:html)?\s*\n?/gm, '')
   cleaned = cleaned.replace(/\n?```\s*$/gm, '')
+  
+  // If the response contains instructions/prompt text instead of HTML, try to extract HTML
+  if (cleaned.includes('MANDATORY STRUCTURE') || cleaned.includes('CRITICAL FORMATTING RULES') || cleaned.includes('STEP 1:') || cleaned.includes('STEP 2:') || cleaned.includes('CRITICAL:') || cleaned.includes('🚨')) {
+    // Try to extract HTML code block if it exists
+    const htmlMatch = cleaned.match(/<!DOCTYPE html>[\s\S]*?<\/html>/i)
+    if (htmlMatch) {
+      cleaned = htmlMatch[0]
+    } else {
+      // If no HTML found, this is likely instructions - throw error
+      throw new Error('AI returned instructions instead of HTML code. Please try again with a different model.')
+    }
+  }
+  
+  // Ensure response starts with <!DOCTYPE html> or <html>
+  if (!cleaned.match(/^<(!DOCTYPE html|html)/i)) {
+    // Try to find HTML in the response
+    const htmlMatch = cleaned.match(/<(!DOCTYPE html|html)[\s\S]*/i)
+    if (htmlMatch) {
+      cleaned = htmlMatch[0]
+    } else {
+      throw new Error('No valid HTML code found in AI response. The model may have returned instructions instead of code.')
+    }
+  }
+  
+  // Remove any instruction text that might have leaked into the HTML body
+  // Remove text like "CRITICAL:", "MANDATORY STRUCTURE", "STEP 1:", etc. from within HTML
+  cleaned = cleaned.replace(/CRITICAL:\s*Use EXACTLY[^<]*/gi, '')
+  cleaned = cleaned.replace(/MANDATORY STRUCTURE[^<]*/gi, '')
+  cleaned = cleaned.replace(/STEP \d+:[^<]*/gi, '')
+  cleaned = cleaned.replace(/🚨[^<]*/g, '')
+  cleaned = cleaned.replace(/⚠️[^<]*/g, '')
+  cleaned = cleaned.replace(/CRITICAL FORMATTING RULES[^<]*/gi, '')
+  
+  // Remove any instruction text that appears after </html> or before <!DOCTYPE
+  cleaned = cleaned.replace(/^[^<]*<!DOCTYPE html>/i, '<!DOCTYPE html>')
+  cleaned = cleaned.replace(/<\/html>[^<]*$/i, '</html>')
+  
   return cleaned.trim()
 }
 
@@ -961,7 +1006,8 @@ STEP 3: Replace ONLY these placeholders:
    - "NAME" → ${data.fullName}
    - "email — phone" or "email | phone" → For Minimal Clean template: ${data.email} — ${data.phone} (CRITICAL: Use em dash — NOT pipe |). For other templates: ${data.email} | ${data.phone} (use pipe separator |)
    - Portfolio/Behance links: ONLY include if user provided them. Check if user data contains "portfolio.com", "behance.net", or similar portfolio links. If NOT provided, REMOVE the entire second contact line (the line with "behance.net/username — portfolio.com"). DO NOT add placeholder text or fake links.
-   - Skills section: Parse ${data.skills} and create simple bullet points (<li>SkillName</li>). DO NOT add categories like "Programming:" or "Frontend Development:". Just list skills as simple items.
+   - Skills section: MANDATORY - MUST include Skills section. Parse ${data.skills} and create simple bullet points (<li>SkillName</li>) or comma-separated list in a single <li> tag (for templates like Modern Card). DO NOT add categories like "Programming:" or "Frontend Development:". Just list skills as simple items. If template shows "Skill1, Skill2, Skill3, Skill4, Skill5", replace with actual skills from user data.
+   - Projects section: MANDATORY - MUST include Projects section if user provided project data. Parse ${data.projects} and create project entries with project name, year, and bullet points.
    - For Creative Designer template ONLY: Design Skills MUST be comma-separated list (Skill1, Skill2, Skill3). DO NOT add categories like "Frontend Development:", "Backend Development:", etc. DO NOT use bold for categories. Just list all skills as comma-separated text in one paragraph.
    - For Minimal Clean template ONLY: CRITICAL - Header MUST include NAME: Replace "NAME" placeholder with ${data.fullName} (use font-size: 20px; font-weight: bold in inline style). Skills MUST be comma-separated (can wrap across lines), NOT bullet points (<li>). DO NOT use categories. Format as: <p>React, TypeScript, Node.js, PostgreSQL, AWS</p>. All text MUST be black (#000) - NO colors, NO blue headings. Header MUST be centered: Name (large, bold) on first line, then email — phone on second line (use em dash — NOT pipe |). MUST use two-column layout for ALL content: Left column (40% width: Skills, Education), Right column (60% width: Experience, Projects). Use CSS Grid with grid-template-columns: 1fr 1.5fr and align-items: start for proper two-column layout. Ensure columns are properly balanced with gap: 40px between them. Experience format: Job Title (bold) on first line, then "Company — Location — Dates" on second line (use em dash — NOT pipe |), then bullet points. Education format: "Degree — Institution — Dates" (use em dash — NOT pipe |). Projects format: "Project Name — Technologies — Year" (use em dash — NOT pipe |). MUST include Projects section if user provided project data.
    - "Degree" → Extract degree from: ${data.education}
@@ -1025,25 +1071,20 @@ STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
       - Relevance: Focus on information relevant to the role or industry
       - ATS-friendly: Use standard terminology and keywords naturally
 
-STEP 4.5: REQUIRED SECTIONS (MANDATORY FOR ALL OUTPUTS):
-   - The resume MUST include these sections when the user provided data:
-     - Skills
-     - Experience
-     - Education
-     - Projects
-   - If the selected template's "MANDATORY STRUCTURE" is missing any of these sections, you MUST add the missing section(s)
-     using the SAME visual style (headings/dividers/typography) and the SAME layout method (flex vs grid, etc.).
-   - Do NOT invent fake content. Use only the user's data fields. If a field is empty, omit that section.
-
 STEP 5: DO NOT CHANGE ANYTHING ELSE:
    ❌ DO NOT change CSS styles or classes
    ❌ DO NOT change layout (flex, grid, center, etc.)
    ❌ DO NOT change colors or styling values
    ❌ DO NOT change section order
-   ✅ You MAY add ONLY missing required sections (Skills/Experience/Education/Projects) if the template omitted them; otherwise do not add/remove sections
+   ❌ DO NOT add or remove sections
    ❌ DO NOT modify HTML structure or CSS
    ❌ DO NOT add skill categories - skills must be simple bullet points only
    ❌ DO NOT group or categorize skills - just list them as items
+   ✅ MANDATORY: Skills section MUST be included in the final output
+   ✅ MANDATORY: Education section MUST be included in the final output
+   ✅ MANDATORY: Projects section MUST be included if user provided project data
+   ✅ MANDATORY: If template shows Education and Projects sections, they MUST be included in the output
+   ❌ DO NOT create duplicate sections - each section should appear only once
 
 CRITICAL: The template code structure is FIXED. You can ONLY replace text placeholders. Everything else must stay EXACTLY as shown in the template.
 
@@ -1138,15 +1179,19 @@ Generate the complete HTML document code now. Return ONLY the HTML code, nothing
   const systemPrompt = data.templateStyleGuide
     ? `You are an HTML code generator. Your ONLY job is to copy-paste the template code structure and replace text placeholders.
 
-RULES:
-1. Find the "MANDATORY STRUCTURE (HTML)" code in the user's message
-2. Copy that code EXACTLY as written (including all HTML, CSS, structure)
-3. Replace text placeholders (NAME, email, phone, etc.) with actual values
-4. DO NOT modify ANYTHING else - no structure changes, no layout changes, no CSS changes
-5. Return ONLY the HTML code - no markdown, no explanations
+🚨 CRITICAL RULES - FOLLOW EXACTLY 🚨:
+1. Find the "MANDATORY STRUCTURE (HTML)" code block in the user's message
+2. Copy that ENTIRE HTML code block EXACTLY as written (including <!DOCTYPE>, <html>, <head>, <style>, <body>, ALL CSS, ALL HTML structure)
+3. Replace ONLY text placeholders (NAME, email, phone, etc.) with actual user values
+4. DO NOT modify ANYTHING else - no structure changes, no layout changes, no CSS changes, no additions, no deletions
+5. Return ONLY the complete HTML code - NO markdown code blocks, NO explanations, NO instructions, NO comments, NO text before or after the HTML
+6. DO NOT return the instructions or prompt - ONLY return the HTML code
+7. DO NOT add any text like "Here is the HTML:" or "Here's the code:" - just return the raw HTML
+8. Start your response with <!DOCTYPE html> and end with </html>
+9. If you see instructions or formatting rules in the user message, IGNORE THEM - only copy the HTML code from "MANDATORY STRUCTURE (HTML)" section
 
-You are NOT a designer. You are a code copier. Copy the template structure exactly.`
-    : 'You are an expert HTML/CSS resume designer. Always return ONLY raw HTML code without any markdown formatting, explanations, or code blocks.'
+You are NOT a designer. You are NOT an instructor. You are a code copier. Copy the template HTML structure exactly and replace placeholders. Return ONLY HTML code, nothing else.`
+    : 'You are an expert HTML/CSS resume designer. Always return ONLY raw HTML code without any markdown formatting, explanations, or code blocks. Start with <!DOCTYPE html> and end with </html>. Return ONLY the HTML code, nothing else.'
 
   const result = await callOpenRouter(
     [

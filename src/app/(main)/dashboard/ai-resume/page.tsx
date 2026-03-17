@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import type { ResumeTemplate } from './templates'
@@ -137,6 +137,13 @@ export default function AIResumeBuilderPage() {
   const [isProcessingFollowUp, setIsProcessingFollowUp] = useState(false)
   const [usedModel, setUsedModel] = useState<string | null>(null)
   const [isFallback, setIsFallback] = useState(false)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [jdFile, setJdFile] = useState<File | null>(null)
+  const [isParsingFiles, setIsParsingFiles] = useState(false)
+  const [parsedData, setParsedData] = useState<{
+    resumeData?: any
+    jdRequirements?: any
+  } | null>(null)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -358,7 +365,78 @@ export default function AIResumeBuilderPage() {
     setShowRawResponse(false)
     setUsedModel(null)
     setIsFallback(false)
+    setResumeFile(null)
+    setJdFile(null)
+    setParsedData(null)
     form.reset()
+  }
+
+  // Handle file uploads and parsing
+  const handleFileUpload = async (type: 'resume' | 'jd', file: File) => {
+    if (type === 'resume') {
+      setResumeFile(file)
+    } else {
+      setJdFile(file)
+    }
+
+    // Auto-parse if both files are uploaded or if single file is uploaded
+    if ((type === 'resume' && file) || (type === 'jd' && file)) {
+      await parseUploadedFiles(type === 'resume' ? file : resumeFile, type === 'jd' ? file : jdFile)
+    }
+  }
+
+  const parseUploadedFiles = async (resume: File | null, jd: File | null) => {
+    if (!resume && !jd) return
+
+    setIsParsingFiles(true)
+    toast.loading('Parsing uploaded files...', { id: 'parse-files' })
+
+    try {
+      const formData = new FormData()
+      if (resume) formData.append('resume', resume)
+      if (jd) formData.append('jd', jd)
+
+      const response = await fetch('/api/resume/parse-files', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to parse files')
+      }
+
+      const result = await response.json()
+      setParsedData({
+        resumeData: result.extractedResumeData,
+        jdRequirements: result.jdRequirements,
+      })
+
+      // Auto-fill form if resume data is extracted
+      if (result.extractedResumeData) {
+        const data = result.extractedResumeData
+        if (data.fullName) form.setValue('fullName', data.fullName)
+        if (data.email) form.setValue('email', data.email)
+        if (data.phone) form.setValue('phone', data.phone)
+        if (data.skills) form.setValue('skills', data.skills)
+        if (data.experience) form.setValue('experience', data.experience)
+        if (data.education) form.setValue('education', data.education)
+        if (data.projects) form.setValue('projects', data.projects)
+      }
+
+      // Add JD requirements to additional instructions if JD is provided
+      if (result.jdRequirements && jd) {
+        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${result.jdRequirements.requiredSkills?.join(', ') || 'N/A'}\n- Qualifications: ${result.jdRequirements.qualifications || 'N/A'}\n- Key Requirements: ${result.jdRequirements.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
+        const currentInstructions = form.getValues('additionalInstructions') || ''
+        form.setValue('additionalInstructions', currentInstructions + jdInstructions)
+      }
+
+      toast.success('Files parsed successfully! Form auto-filled.', { id: 'parse-files' })
+    } catch (error) {
+      console.error('Error parsing files:', error)
+      toast.error('Failed to parse files. Please try again.', { id: 'parse-files' })
+    } finally {
+      setIsParsingFiles(false)
+    }
   }
 
   const handleResumeTemplateSelect = (template: ResumeTemplate) => {
@@ -639,6 +717,126 @@ export default function AIResumeBuilderPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onGenerateResume)} className="space-y-6">
+          {/* File Upload Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.01, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Upload className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Quick Upload (Optional)</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Resume Upload */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">Upload Your Resume</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload('resume', file)
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isParsingFiles}
+                    />
+                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                      {resumeFile ? (
+                        <>
+                          <FileCheck className="size-4 text-green-600" />
+                          <span className="text-xs font-medium truncate flex-1">{resumeFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setResumeFile(null)
+                              setParsedData(null)
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* JD Upload */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">Upload Job Description</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload('jd', file)
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isParsingFiles}
+                    />
+                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                      {jdFile ? (
+                        <>
+                          <FileCheck className="size-4 text-green-600" />
+                          <span className="text-xs font-medium truncate flex-1">{jdFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setJdFile(null)
+                              if (parsedData) {
+                                const currentInstructions = form.getValues('additionalInstructions') || ''
+                                // Remove JD instructions if they exist
+                                const cleaned = currentInstructions.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '')
+                                form.setValue('additionalInstructions', cleaned)
+                              }
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {isParsingFiles && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Parsing files and extracting data...</span>
+                </div>
+              )}
+              {parsedData && !isParsingFiles && (
+                <div className="mt-3 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2">
+                  <p className="text-xs text-green-600 font-medium">
+                    ✓ Files parsed successfully! Form fields auto-filled and JD requirements added to instructions.
+                  </p>
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Upload your existing resume to auto-fill the form, or upload a job description to tailor your resume to specific requirements.
+              </p>
+            </div>
+          </motion.div>
+
           {/* Selected Template & Format Display */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}

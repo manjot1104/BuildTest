@@ -2478,6 +2478,8 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <div class="contact">email | phone | location</div>
   </div>
   <div class="content">
+    <h2>Skills</h2>
+    <p style="color: #333; font-size: 13px; line-height: 1.8;">Skills list</p>
     <h2>Experience</h2>
     <div class="job-title">Job Title</div>
     <div class="company">Company | Dates</div>
@@ -2485,6 +2487,9 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <h2>Education</h2>
     <div class="job-title">Degree</div>
     <div class="company">Institution | Dates</div>
+    <h2>Projects</h2>
+    <div class="job-title">Project Name | Year</div>
+    <ul><li>Project description with detailed information spanning multiple lines</li></ul>
   </div>
 </div>
 </body>
@@ -2494,6 +2499,9 @@ CRITICAL FORMATTING RULES:
 - Contact info: "email | phone | location" (use pipe separator |)
 - Gradient header background (purple to blue)
 - Modern sans-serif font
+- MUST include Skills, Experience, Education, and Projects sections
+- Skills section: Use paragraph format with comma-separated skills
+- Projects section: Use job-title class for project name, then bullet points
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
   },
@@ -2547,6 +2555,12 @@ li { color: #333; font-size: 13px; margin-bottom: 7px; }
     <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
     <h2>Skills</h2>
     <p style="color: #333; font-size: 13px; line-height: 1.8;">Skills list</p>
+    <h2>Education</h2>
+    <div class="job-title">Degree</div>
+    <div class="company">Institution | Dates</div>
+    <h2>Projects</h2>
+    <div class="job-title">Project Name | Year</div>
+    <ul><li>Project description with detailed information spanning multiple lines</li></ul>
   </div>
 </div>
 </body>
@@ -2556,6 +2570,8 @@ CRITICAL FORMATTING RULES:
 - Contact info: "email | phone | location" (use pipe separator |)
 - Bold red accent color (#ff6b6b)
 - Strong typography with uppercase headings
+- MUST include Skills, Experience, Education, and Projects sections
+- Projects section: Use job-title class for project name, then bullet points
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
   },
@@ -2688,6 +2704,12 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <div class="job-title">Job Title</div>
     <div class="company">Company | Dates</div>
     <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+    <div class="job-title">Degree</div>
+    <div class="company">Institution | Dates</div>
+    <h2>Projects</h2>
+    <div class="job-title">Project Name | Year</div>
+    <ul><li>Project description with detailed information spanning multiple lines</li></ul>
   </div>
 </div>
 </body>
@@ -2697,6 +2719,7 @@ CRITICAL FORMATTING RULES:
 - Contact info: "email | phone | github" (use pipe separator |)
 - Blue gradient header background
 - Skills displayed as badge grid (4 columns)
+- MUST include Skills, Experience, Education, and Projects sections
 - Modern tech startup aesthetic
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
@@ -2876,6 +2899,10 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <div class="contact">email | phone | location</div>
   </div>
   <div class="card">
+    <h2>Skills</h2>
+    <ul><li>Skill1, Skill2, Skill3, Skill4, Skill5</li></ul>
+  </div>
+  <div class="card">
     <h2>Experience</h2>
     <div class="job-title">Job Title</div>
     <div class="company">Company | Dates</div>
@@ -2886,6 +2913,11 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <div class="job-title">Degree</div>
     <div class="company">Institution | Dates</div>
   </div>
+  <div class="card">
+    <h2>Projects</h2>
+    <div class="job-title">Project Name | Year</div>
+    <ul><li>Project description with detailed information spanning multiple lines</li></ul>
+  </div>
 </div>
 </body>
 </html>
@@ -2894,6 +2926,9 @@ CRITICAL FORMATTING RULES:
 - Contact info: "email | phone | location" (use pipe separator |)
 - Card-based layout with rounded corners and shadows
 - Each section in a separate card
+- MUST include Skills and Projects sections
+- Skills section: List skills as comma-separated items in bullet points
+- Projects section: Project name with year, followed by bullet points
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
   },
