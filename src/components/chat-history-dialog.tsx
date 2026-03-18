@@ -19,7 +19,8 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight, FolderOpen } from 'lucide-react'
+import { MoveToFolderPopover } from '@/components/chat/move-to-folder-popover'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
@@ -223,6 +224,16 @@ export function ChatHistoryDialog({
                                             >
                                                 <ExternalLink className="size-3.5" />
                                             </button>
+                                            <MoveToFolderPopover chatId={chat.v0ChatId} currentFolderId={chat.folderId}>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+                                                title="Move to folder"
+                                              >
+                                                <FolderOpen className="size-3.5" />
+                                              </button>
+                                            </MoveToFolderPopover>
                                             <button
                                                 type="button"
                                                 onClick={(e) =>

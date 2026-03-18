@@ -57,6 +57,14 @@ import {
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
 import {
+  createFolderHandler,
+  getFoldersHandler,
+  updateFolderHandler,
+  deleteFolderHandler,
+  assignChatToFolderHandler,
+  getFolderChatsHandler,
+} from '@/server/api/controllers/folder.controller'
+import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
@@ -471,6 +479,78 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
     }))
   })
+  // ── Chat Folders ──────────────────────────────────────────────────────────
+  .post(
+    '/chat/folders',
+    async ({ body, set }) => {
+      const result = await createFolderHandler({ body: body as { name: string; color?: string } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { body: t.Object({ name: t.String(), color: t.Optional(t.String()) }) },
+  )
+  .get('/chat/folders', async ({ set }) => {
+    const result = await getFoldersHandler()
+    if ('error' in result && 'status' in result) {
+      set.status = result.status as number
+      return { error: result.error }
+    }
+    return result
+  })
+  .put(
+    '/chat/folders/:id',
+    async ({ params, body, set }) => {
+      const result = await updateFolderHandler({ params, body: body as { name?: string; color?: string | null; position?: number } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ name: t.Optional(t.String()), color: t.Optional(t.Nullable(t.String())), position: t.Optional(t.Number()) }),
+    },
+  )
+  .delete(
+    '/chat/folders/:id',
+    async ({ params, set }) => {
+      const result = await deleteFolderHandler({ params })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  .post(
+    '/chat/folders/assign',
+    async ({ body, set }) => {
+      const result = await assignChatToFolderHandler({ body: body as { chatId: string; folderId: string | null } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { body: t.Object({ chatId: t.String(), folderId: t.Nullable(t.String()) }) },
+  )
+  .get(
+    '/chat/folders/:id/chats',
+    async ({ params, set }) => {
+      const result = await getFolderChatsHandler({ params })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user
   .post(
