@@ -45,6 +45,11 @@ import {
   updateTestRunCounters,
   updateTestRunStatus,
 } from "@/server/db/queries";
+// [GITHUB] Import source context fetcher and token guard
+import {
+  fetchGithubSourceContext,
+  getGithubToken,
+} from "@/server/services/github.service";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -287,14 +292,18 @@ function checkCancelled(testRunId: string): void {
 // [CHANGED] runPipeline now accepts optional concurrency and timeouts so they
 // can be forwarded from the original POST /api/test/run request body all the
 // way into crawlSite() and executeTest() inside runPipelineStages().
+// [GITHUB] Also accepts optional github owner/repo/branch for source enrichment.
 async function runPipeline(
   testRunId: string,
   targetUrl: string,
   userId: string,
   userMaxPages?: number,
   userMaxTests?: number,
-  userConcurrency?: number,     // [ADDED]
+  userConcurrency?: number,        // [ADDED]
   userTimeouts?: TimeoutOverrides, // [ADDED]
+  githubOwner?: string | null,     // [GITHUB]
+  githubRepo?: string | null,      // [GITHUB]
+  githubBranch?: string | null,    // [GITHUB]
 ): Promise<void> {
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
@@ -314,6 +323,9 @@ async function runPipeline(
       userMaxTests,
       userConcurrency,   // [ADDED]
       userTimeouts,      // [ADDED]
+      githubOwner,       // [GITHUB]
+      githubRepo,        // [GITHUB]
+      githubBranch,      // [GITHUB]
     );
   } finally {
     crawlAbortControllers.delete(testRunId);
@@ -330,6 +342,12 @@ async function runPipeline(
 // crawl_progress PipelineSSEEvent and broadcast it to all connected SSE clients.
 // This is the only change needed in the controller — the service handles
 // all the event logic internally.
+//
+// [GITHUB] runPipelineStages now fetches GitHub source context (if provided)
+// in parallel with crawlSite and injects it into SiteContext before calling
+// generateTestCases. The fetch is non-fatal — if it fails for any reason
+// (bad token, wrong repo/branch, network error) the pipeline continues
+// without source enrichment. No DB writes are made for the GitHub fields.
 async function runPipelineStages(
   testRunId: string,
   targetUrl: string,
@@ -338,13 +356,31 @@ async function runPipelineStages(
   abortSignal: AbortSignal,
   userMaxPages?: number,
   userMaxTests?: number,
-  userConcurrency?: number,      // [ADDED]
+  userConcurrency?: number,        // [ADDED]
   userTimeouts?: TimeoutOverrides, // [ADDED]
+  githubOwner?: string | null,     // [GITHUB]
+  githubRepo?: string | null,      // [GITHUB]
+  githubBranch?: string | null,    // [GITHUB]
 ): Promise<void> {
-  // ─── STEP 1: CRAWL ───────────────────────────────────────────────────────
+  // ─── STEP 1: CRAWL + GITHUB SOURCE CONTEXT (parallel) ───────────────────
   checkCancelled(testRunId);
   await updateTestRunStatus(testRunId, "crawling");
   send({ type: "status", status: "crawling", percent: 10 });
+
+  // [GITHUB] Fetch source context in parallel with crawlSite.
+  // fetchGithubSourceContext already guards internally:
+  //   - returns null if userId has no GitHub token (email-only users)
+  //   - returns null if repo/branch don't exist or any network error
+  // We never block the crawl on this — it races alongside it.
+  const githubSourcePromise =
+    githubOwner && githubRepo && githubBranch
+      ? fetchGithubSourceContext(userId, githubOwner, githubRepo, githubBranch).catch(
+          (err) => {
+            console.warn("[Pipeline] GitHub source fetch error (non-fatal):", err);
+            return null;
+          },
+        )
+      : Promise.resolve(null);
 
   let siteData: Awaited<ReturnType<typeof crawlSite>>;
   try {
@@ -375,11 +411,23 @@ async function runPipelineStages(
     throw new Error(msg);
   }
 
+  // Await the GitHub source context — it was racing alongside the crawl,
+  // so by now it is almost certainly already resolved.
+  const githubSourceContext = await githubSourcePromise;
+
+  if (githubSourceContext) {
+    console.log(`[Pipeline] GitHub source context loaded: ${githubOwner}/${githubRepo}@${githubBranch}`);
+  } else if (githubOwner && githubRepo && githubBranch) {
+    console.warn("[Pipeline] GitHub source context unavailable — continuing without it");
+  }
+
   // ─── STEP 2: GENERATE TEST CASES + persist crawl data (parallel) ─────────
   checkCancelled(testRunId);
   await updateTestRunStatus(testRunId, "generating");
   send({ type: "status", status: "generating", percent: 30 });
 
+  // [GITHUB] Inject githubSource into SiteContext so generateTestCases can
+  // append real route names, form fields, and validation rules to the AI prompt.
   const siteContext: SiteContext = {
     rootUrl: targetUrl,
     pages: siteData.pages,
@@ -390,6 +438,7 @@ async function runPipelineStages(
         siteData.hasLogin || siteData.hasSignup || siteData.hasProtectedRoutes,
       apiEndpoints: siteData.pages.flatMap((p) => p.apiEndpoints),
     },
+    githubSource: githubSourceContext ?? undefined, // [GITHUB]
   };
 
   // Run AI generation, crawl DB writes, and background screenshots all in parallel
@@ -913,9 +962,12 @@ async function runPipelineStages(
 // POST /api/test/run
 // ---------------------------------------------------------------------------
 
-// [CHANGED] body now accepts optional concurrency and timeout overrides
-// alongside the existing maxPages and maxTests. All new fields are optional
+// body accepts optional concurrency and timeout overrides
+// alongside the maxPages and maxTests. All new fields are optional
 // and server-side clamped before reaching crawlSite / executeTest.
+// [GITHUB] Also accepts optional githubOwner/githubRepo/githubBranch for
+// source code enrichment. All three are stripped server-side if the user
+// has no GitHub token — email-only users cannot trigger the source fetch.
 export async function startTestRunHandler({
   body,
 }: {
@@ -925,15 +977,31 @@ export async function startTestRunHandler({
     maxPages?: number;
     maxTests?: number;
     /** Number of parallel TinyFish extraction calls during Stage 2 crawl. */
-    concurrency?: number;          // [ADDED]
+    concurrency?: number;
     /** Per-run timeout overrides (milliseconds). Clamped server-side. */
-    timeouts?: TimeoutOverrides;   // [ADDED]
+    timeouts?: TimeoutOverrides;
+    /** [GITHUB] Optional source repo for test enrichment. e.g. "vercel" */
+    githubOwner?: string;
+    /** [GITHUB] Optional source repo name. e.g. "next.js" */
+    githubRepo?: string;
+    /** [GITHUB] Optional branch. e.g. "main" */
+    githubBranch?: string;
   };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-    const { url, projectId, maxPages, maxTests, concurrency, timeouts } = body;
+    const {
+      url,
+      projectId,
+      maxPages,
+      maxTests,
+      concurrency,
+      timeouts,
+      githubOwner,
+      githubRepo,
+      githubBranch,
+    } = body;
     if (!url) return { error: "URL is required", status: 400 };
 
     const targetUrl = normaliseUrl(url);
@@ -984,6 +1052,21 @@ export async function startTestRunHandler({
     }
     // ── End server-side validation ─────────────────────────────────────────
 
+    // [GITHUB] Strip GitHub fields if the user has no GitHub token.
+    // This is the server-side safety net — the UI already hides/disables the
+    // panel for email-only users, but a crafted request must never cause an
+    // error or silently attempt an unauthenticated GitHub API call.
+    const hasGithubToken = !!(await getGithubToken(session.user.id));
+    const effectiveGithubOwner  = hasGithubToken ? (githubOwner  ?? null) : null;
+    const effectiveGithubRepo   = hasGithubToken ? (githubRepo   ?? null) : null;
+    const effectiveGithubBranch = hasGithubToken ? (githubBranch ?? null) : null;
+
+    if ((githubOwner || githubRepo || githubBranch) && !hasGithubToken) {
+      console.warn(
+        `[Testing] User ${session.user.id} sent GitHub fields but has no token — stripped.`,
+      );
+    }
+
     await db.insert(test_runs).values({
       id: testRunId,
       user_id: session.user.id,
@@ -1000,14 +1083,18 @@ export async function startTestRunHandler({
     activePipelines.add(testRunId);
 
     // [CHANGED] Forward (already-clamped) concurrency and timeouts into the pipeline.
+    // [GITHUB] Forward (already-guarded) GitHub fields into the pipeline.
     void runPipeline(
       testRunId,
       targetUrl,
       session.user.id,
       effectiveMaxPages,
       effectiveMaxTests,
-      effectiveConcurrency, // [ADDED]
-      timeouts,             // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
+      effectiveConcurrency,      // [ADDED]
+      timeouts,                  // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
+      effectiveGithubOwner,      // [GITHUB]
+      effectiveGithubRepo,       // [GITHUB]
+      effectiveGithubBranch,     // [GITHUB]
     )
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1227,6 +1314,8 @@ export async function streamTestRunHandler({
         // NOTE: concurrency and timeouts are also not available here — the run was
         // already launched with its original settings; we restart without overrides,
         // which will use the crawler's built-in defaults.
+        // NOTE: [GITHUB] GitHub fields are also not available on reconnect — source
+        // enrichment only runs on the initial pipeline launch via POST /api/test/run.
         console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
         activePipelines.add(params.id);
         unregister = registerEmitter(params.id, emit);

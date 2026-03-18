@@ -820,8 +820,8 @@ export interface TimeoutOverrides {
   executeTestBaseMs?: number;
 }
 
-// [CHANGED] mutation input now also accepts optional concurrency and timeouts.
-// These map 1-to-1 to the new fields in POST /api/test/run.
+// [CHANGED] mutation input now also accepts optional concurrency, timeouts,
+// and [GITHUB] optional github source fields.
 // All fields remain optional — omitting them keeps server defaults.
 export function useStartTestRun() {
   const queryClient = useQueryClient();
@@ -837,12 +837,26 @@ export function useStartTestRun() {
        * Number of parallel TinyFish extraction calls during Stage 2 crawl.
        * Clamped server-side to [1, 20]. Omit to use server default (5).
        */
-      concurrency?: number;        // [ADDED]
+      concurrency?: number;
       /**
        * Per-run timeout overrides in milliseconds. Clamped server-side to
        * [30 000, 600 000] per field. Omit individual fields to keep defaults.
        */
-      timeouts?: TimeoutOverrides; // [ADDED]
+      timeouts?: TimeoutOverrides;
+      /**
+       * [GITHUB] GitHub repo owner for source code analysis (e.g. "vercel").
+       * All three github fields must be present for enrichment to apply.
+       * Stripped server-side when the user has no GitHub token.
+       */
+      githubOwner?: string;
+      /**
+       * [GITHUB] GitHub repo name for source code analysis (e.g. "next.js").
+       */
+      githubRepo?: string;
+      /**
+       * [GITHUB] Branch to analyse (e.g. "main").
+       */
+      githubBranch?: string;
     }): Promise<{ testRunId: string }> => {
       const res = await fetch("/api/test/run", {
         method: "POST",

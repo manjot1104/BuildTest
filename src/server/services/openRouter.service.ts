@@ -8,6 +8,8 @@
 
 
 import type { CrawledPage, TestBudgetAllocation } from "./tinyfish.service";
+// [GITHUB] Import source context type for optional AI prompt enrichment
+import type { GithubSourceContext } from "./github.service";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
@@ -71,6 +73,12 @@ export interface SiteContext {
       durationMs: number | null;
     }[];
   };
+  // [GITHUB] Optional source code context fetched from GitHub.
+  // When present, rawSummaryLines are appended to the AI prompt so test
+  // cases reference real route paths, form field names, and validation rules
+  // from the actual codebase rather than inferring them from crawl data alone.
+  // undefined when no GitHub repo was provided or the fetch failed.
+  githubSource?: GithubSourceContext;
 }
 
 export interface TestRunSummaryInput {
@@ -300,6 +308,22 @@ function buildPageContext(page: CrawledPage): string {
     .join("\n");
 }
 
+// [GITHUB] Builds the source code section appended to AI prompts when a
+// GitHub repo was provided. Uses rawSummaryLines from GithubSourceContext
+// which were already formatted for prompt injection by fetchGithubSourceContext.
+// Returns an empty string when githubSource is undefined — no effect on prompt.
+function buildGithubSourceSection(githubSource: GithubSourceContext): string {
+  if (!githubSource.rawSummaryLines.length) return "";
+  return `
+
+## Source Code Analysis
+The following was extracted directly from the repository source code.
+Use this to write more precise test steps — reference real field names, route paths,
+and component names rather than inferring them from crawl data alone.
+
+${githubSource.rawSummaryLines.join("\n")}`;
+}
+
 const TEST_GENERATION_SYSTEM_PROMPT = `You are a senior QA automation engineer. You write browser test cases for an AI agent called TinyFish that executes steps in a real Chromium browser.
 
 CRITICAL RULES FOR WRITING STEPS:
@@ -359,6 +383,7 @@ async function generateTestsForPage(
   pageIndex: number,
   totalPages: number,
   targetTestCount: number,
+  githubSource?: GithubSourceContext, // [GITHUB]
 ): Promise<TestCase[]> {
   const pageCtx = buildPageContext(page);
   const hasLinks  = page.elements.filter((e) => e.type === "link").length > 0;
@@ -374,6 +399,11 @@ async function generateTestsForPage(
     hasForms                ? "security"    : null,
   ].filter(Boolean);
 
+  // [GITHUB] Append source section to the per-page prompt when available.
+  // This lets the AI reference real form field names (e.g. "email", "password")
+  // and validation rules (e.g. "password: min length") instead of guessing.
+  const githubSection = githubSource ? buildGithubSourceSection(githubSource) : "";
+
   const userPrompt =
 `Generate exactly ${targetTestCount} browser test cases for this page.
 
@@ -384,7 +414,7 @@ Root URL of the site: ${rootUrl}
 This is page ${pageIndex + 1} of ${totalPages}.
 
 Categories to cover (only include categories where you have real elements to test):
-${relevantCategories.map((c) => `- ${c}`).join("\n")}
+${relevantCategories.map((c) => `- ${c}`).join("\n")}${githubSection}
 
 Each test case JSON object:
 {
@@ -426,7 +456,10 @@ IMPORTANT:
   }
 }
 
-async function generateGlobalTests(context: SiteContext, globalBudget: number): Promise<TestCase[]> {
+async function generateGlobalTests(
+  context: SiteContext,
+  globalBudget: number,
+): Promise<TestCase[]> {
   if (context.pages.length < 3 || globalBudget <= 0) {
     console.log(`[OpenRouter] Skipping global tests (pages=${context.pages.length} budget=${globalBudget})`);
     return [];
@@ -460,11 +493,18 @@ async function generateGlobalTests(context: SiteContext, globalBudget: number): 
     }`,
   ].join("\n");
 
+  // [GITHUB] Append source section to global tests prompt when available.
+  // Particularly useful here for cross-page nav tests which benefit from
+  // knowing the real route structure.
+  const githubSection = context.githubSource
+    ? buildGithubSourceSection(context.githubSource)
+    : "";
+
   const userPrompt =
 `Generate ${globalCount} cross-page site-wide browser test cases.
 
 SITE DATA:
-${siteSummary}
+${siteSummary}${githubSection}
 
 Focus on navigation between pages, visual consistency, a11y, and performance.
 Use exact link text from "All navigation links found" and exact URLs from "All discovered URLs".
@@ -496,11 +536,16 @@ async function generateGapFillTests(
     .map((p, i) => `--- Page ${i + 1}: ${p.url} ---\n${buildPageContext(p)}`)
     .join("\n\n");
 
+  // [GITHUB] Append source section to gap-fill prompt when available.
+  const githubSection = context.githubSource
+    ? buildGithubSourceSection(context.githubSource)
+    : "";
+
   const userPrompt =
 `We have ${existingCount} test cases. We need ${needed} MORE that are different.
 
 SITE DATA (${context.pages.length} pages):
-${allPagesCtx}
+${allPagesCtx}${githubSection}
 
 Site URL: ${context.rootUrl}
 
@@ -529,13 +574,21 @@ export async function generateTestCases(context: SiteContext): Promise<TestCase[
 
   console.log(
     `[OpenRouter] Generating tests | pages=${context.pages.length} | totalTarget=${totalTarget} | globalBudget=${globalBudget} | ` +
+    `githubSource=${context.githubSource ? "yes" : "no"} | ` +
     `perPage: ${context.pages.map((p) => `${new URL(p.url).pathname}×${getPageCount(p.url)}`).join(", ")}`,
   );
 
   const [perPageResults, globalTests] = await Promise.all([
     Promise.all(
       context.pages.map((page, i) =>
-        generateTestsForPage(page, context.rootUrl, i, context.pages.length, getPageCount(page.url)),
+        generateTestsForPage(
+          page,
+          context.rootUrl,
+          i,
+          context.pages.length,
+          getPageCount(page.url),
+          context.githubSource, // [GITHUB] passed through to each per-page call
+        ),
       ),
     ),
     generateGlobalTests(context, globalBudget),

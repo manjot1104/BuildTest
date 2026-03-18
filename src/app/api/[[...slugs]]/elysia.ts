@@ -63,6 +63,7 @@ import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
+  validateGithubSourceHandler, // [GITHUB] new validate endpoint for test run form
 } from "@/server/api/controllers/github.controller";
 import {
   createDesignHandler,
@@ -1142,6 +1143,37 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
+  // ============================================
+  // GitHub Endpoints
+  // ============================================
+
+  // GET /api/github/status — returns whether the current user has GitHub connected
+  .get("/github/status", async ({ set }) => {
+    const result = await getGithubStatusHandler()
+    if (result && "status" in result && result.status) set.status = result.status
+    return result
+  })
+
+  // GET /api/github/validate — live-validates a repo+branch for source code analysis.
+  // [GITHUB] Used by the debounced input in the test run form. Requires auth +
+  // a GitHub token; returns no_github_account for email-only users.
+  // IMPORTANT: declared before /github/repo/:chatId to avoid route collision.
+  .get(
+    "/github/validate",
+    async ({ query, set }) => {
+      const result = await validateGithubSourceHandler({ query })
+      if (!result.valid) set.status = 400
+      return result
+    },
+    {
+      query: t.Object({
+        owner:  t.Optional(t.String()),
+        repo:   t.Optional(t.String()),
+        branch: t.Optional(t.String()),
+      }),
+    },
+  )
+
   .get(
     "/github/repo/:chatId",
     async ({ params, set }) => {
@@ -1152,6 +1184,27 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // POST /api/github/push — push generated files to GitHub
+  .post(
+    "/github/push",
+    async ({ body, set }) => {
+      const result = await pushToGithubHandler({ body })
+      if (result && "status" in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:                 t.String(),
+        branchName:             t.String(),
+        commitMessage:          t.Optional(t.String()),
+        confirmExistingBranch:  t.Optional(t.Boolean()),
+        repoName:               t.Optional(t.String()),
+        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
+        replaceRepo:            t.Optional(t.Boolean()),
+      }),
     },
   )
 
@@ -1366,6 +1419,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   //     discoveryMs      — Stage-1 site discovery TinyFish call timeout
   //     extractionMs     — per-page Stage-2 extraction TinyFish call timeout
   //     executeTestBaseMs — base timeout for a single test-execution TinyFish call
+  //
+  // [GITHUB] githubOwner/githubRepo/githubBranch — optional source code analysis.
+  //   When provided, the pipeline fetches the repo's source files and injects
+  //   real route paths, form field names, and validation rules into the AI prompt.
+  //   All three are stripped server-side if the user has no GitHub token.
   .post(
     "/test/run",
     async ({ body, set }) => {
@@ -1391,6 +1449,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
             executeTestBaseMs: t.Optional(t.Integer({ minimum: 30_000, maximum: 600_000 })),
           }),
         ),
+        // [GITHUB] optional source code analysis — all three must be provided together
+        githubOwner:  t.Optional(t.String()),
+        githubRepo:   t.Optional(t.String()),
+        githubBranch: t.Optional(t.String()),
       }),
     },
   )
