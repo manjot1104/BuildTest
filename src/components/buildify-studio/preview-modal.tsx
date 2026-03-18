@@ -162,13 +162,17 @@ function StaticEl({ el }: { el: CanvasElement }) {
           </div>
         )
       }
-      case 'video-embed': {
-        const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(el.content)
-        const ytId = ytMatch?.[1]
-        return ytId
-          ? <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-          : <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Paste a YouTube URL</div>
-      }
+     case 'video-embed': {
+  const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(el.content)
+  const ytId = ytMatch?.[1]
+  const isCustomVideo = el.content && !ytMatch && (el.content.includes('blob:') || el.content.startsWith('/') || el.content.includes('.mp4') || el.content.includes('.webm') || el.content.includes('.ogg'))
+  
+  return ytId
+    ? <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+    : isCustomVideo
+    ? <video src={el.content} style={{ width: '100%', height: '100%', borderRadius: styles.borderRadius ?? 8, objectFit: 'cover' }} controls autoPlay muted />
+    : <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Paste a YouTube URL or upload a video</div>
+}
       case 'navbar': {
         const rawItems = el.content.split('|').filter(Boolean)
         const navLinks = rawItems.slice(1).map((item) => {

@@ -1,4 +1,4 @@
-import type { Browser } from 'puppeteer'
+import type { Browser } from 'puppeteer-core'
 
 const IS_SERVERLESS = !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.VERCEL
 
@@ -23,15 +23,15 @@ export async function launchBrowser(): Promise<Browser> {
   }
 
   const puppeteer = await import('puppeteer')
-  return puppeteer.default.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-    ],
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    timeout: 30000,
-  })
+ return (await puppeteer.default.launch({
+  headless: true,
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+  ],
+  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+  timeout: 30000,
+})) as unknown as Browser
 }

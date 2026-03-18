@@ -1,5 +1,6 @@
 'use client'
-
+import { toast } from 'sonner'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -7,19 +8,21 @@ import {
     AlertDialogContent,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { X, Star, ExternalLink, Loader2 } from 'lucide-react'
+import { X, Star, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 
 interface StarredChat {
     id: string
     v0ChatId: string
+    conversationId?: string
     title: string | null
     prompt?: string | null
     demoUrl: string | null
     createdAt: string
     type: 'builder' | 'openrouter'
+    is_starred?: boolean
 }
 
 async function fetchStarredChats(): Promise<StarredChat[]> {
@@ -35,8 +38,11 @@ export function StarredChatsDialog({
     open: boolean
     onOpenChange: (v: boolean) => void
 }) {
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [chatToDelete, setChatToDelete] = useState<StarredChat | null>(null)
     const router = useRouter()
-
+    const queryClient = useQueryClient()
     const { data: chats, isLoading, error } = useQuery({
         queryKey: ['starred-chats'],
         queryFn: fetchStarredChats,
@@ -44,16 +50,93 @@ export function StarredChatsDialog({
     })
 
     const handleChatClick = (chat: StarredChat) => {
-    if (chat.type === "openrouter") {
-        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
-    } else {
-        router.push(`/chat?chatId=${chat.v0ChatId}`)
+        if (chat.type === "openrouter") {
+            router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+        } else {
+            router.push(`/chat?chatId=${chat.v0ChatId}`)
+        }
+        onOpenChange(false)
     }
 
-    onOpenChange(false)
+    const handleStarToggle = async (
+        e: React.MouseEvent,
+        chat: StarredChat
+    ) => {
+        e.stopPropagation()
+
+        try {
+            if (chat.type === 'openrouter') {
+                
+                await fetch('/api/openrouter/star', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        conversationId: chat.conversationId || chat.v0ChatId,
+                        starred: false,  
+                    }),
+                })
+            } else {
+                
+                await fetch('/api/chat/star', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                       chatId: chat.v0ChatId, 
+                        isStarred: false,
+                    }),
+                })
+            }
+
+            // Refresh
+            await queryClient.invalidateQueries({
+                queryKey: ['starred-chats'],
+                refetchType: 'all'
+            })
+            toast.success('Chat unstarred')
+        } catch (error) {
+            console.error('Failed to unstar:', error)
+            toast.error('Failed to unstar chat')
+        }
+    }
+
+ const handleDeleteClick = (e: React.MouseEvent, chat: StarredChat) => {
+    e.stopPropagation()
+    setChatToDelete(chat)
+    setConfirmOpen(true)
+}
+
+const confirmDelete = async () => {
+    if (!chatToDelete) return
+
+    try {
+        const idToDelete = chatToDelete.conversationId || chatToDelete.v0ChatId
+        setDeletingId(idToDelete)
+
+        await fetch('/api/chat/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: idToDelete }),
+        })
+
+        await queryClient.invalidateQueries({
+            queryKey: ['starred-chats'],
+            refetchType: 'all'
+        })
+
+        toast.success('Chat deleted successfully')
+    } catch (error) {
+        console.error('Failed to delete chat:', error)
+        toast.error('Failed to delete chat')
+    } finally {
+        setDeletingId(null)
+        setConfirmOpen(false)
+        setChatToDelete(null)
+    }
 }
 
     return (
+<>
+
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
@@ -109,13 +192,13 @@ export function StarredChatsDialog({
                         {!isLoading && !error && chats && chats.length > 0 && (
                             <div className="flex flex-col gap-0.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
                                 {chats.map((chat) => (
-                                    <button
-                                      key={chat.v0ChatId}
-                                        onClick={() => handleChatClick(chat)}
+                                    <div
+                                        key={chat.v0ChatId}
                                         className={cn(
                                             "flex items-center gap-3 px-3 py-2.5 rounded-lg",
-                                            "hover:bg-accent/50 transition-colors text-left group"
+                                            "hover:bg-accent/50 transition-colors text-left group cursor-pointer"
                                         )}
+                                        onClick={() => handleChatClick(chat)}
                                     >
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
@@ -130,10 +213,41 @@ export function StarredChatsDialog({
                                                 </p>
                                             )}
                                         </div>
-                                        {chat.demoUrl && (
-                                            <ExternalLink className="size-3.5 text-muted-foreground/40 group-hover:text-foreground transition-colors" />
-                                        )}
-                                    </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                handleChatClick(chat)
+                                            }}
+                                            className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+                                            title="Open chat"
+                                        >
+                                            <ExternalLink className="size-3.5" />
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleStarToggle(e, chat)}
+                                            className="p-1.5 rounded-md transition-colors text-amber-400 hover:text-amber-500 hover:bg-amber-400/10 border border-transparent hover:border-amber-400/30"
+                                            title="Unstar chat"
+                                        >
+                                            <Star className="size-3.5 fill-amber-400" />
+                                        </button>
+
+                                        <button
+                                            type="button"
+                                            onClick={(e) => handleDeleteClick(e, chat)}
+                                            className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+                                            title="Delete chat"
+                                        >
+                                           {deletingId === (chat.conversationId || chat.v0ChatId) ? (
+    <Loader2 className="size-3.5 animate-spin" />
+) : (
+    <Trash2 className="size-3.5" />
+)}
+                                        </button>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -141,5 +255,42 @@ export function StarredChatsDialog({
                 </div>
             </AlertDialogContent>
         </AlertDialog>
+        
+<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+    <AlertDialogContent className="max-w-xs">
+        <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Delete chat?</h3>
+            <p className="text-xs text-muted-foreground">
+                This action cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmOpen(false)}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={confirmDelete}
+                    disabled={!!deletingId}
+                >
+                    {deletingId ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                        "Delete"
+                    )}
+                </Button>
+            </div>
+        </div>
+    </AlertDialogContent>
+</AlertDialog>
+
+
+        </>
+        
     )
 }

@@ -342,11 +342,11 @@ export function Canvas({ editor }: CanvasProps) {
               className="pointer-events-none absolute inset-0"
               style={{
                 backgroundImage: `
-                  linear-gradient(rgba(99,102,241,0.15) 1px, transparent 1px),
-                  linear-gradient(90deg, rgba(99,102,241,0.15) 1px, transparent 1px)
+                  linear-gradient(rgba(99,102,241,0.25) 1px, transparent 1px),
+                  linear-gradient(90deg, rgba(99,102,241,0.25) 1px, transparent 1px)
                 `,
                 backgroundSize: `${state.grid.size}px ${state.grid.size}px`,
-                zIndex: 1,
+                zIndex: 9998,
               }}
             />
           )}

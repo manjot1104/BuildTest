@@ -1,7 +1,9 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { ModeSelection } from "./components/mode-selection"
-
+import { KeyRound } from 'lucide-react'
+import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
+import { useEnvVariables } from '@/hooks/use-env-variables'
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from "next/navigation"
 import {
@@ -89,7 +91,8 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
 
-
+const [envPanelOpen, setEnvPanelOpen] = useState(false)
+const { variables } = useEnvVariables()
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
     const [isDragOver, setIsDragOver] = useState(false)
     const [isFullscreen, setIsFullscreen] = useState(false)
@@ -155,7 +158,7 @@ export default function ChatPage() {
     !!hookCurrentChat?.demo &&
     !!hookCurrentChat?.id &&
     !isStreaming
-console.log('🔍 shouldShowPreview:', shouldShowPreview, '| demo:', hookCurrentChat?.demo, '| isStreaming:', isStreaming)
+
 
     // Sync loading state
     useEffect(() => {
@@ -305,6 +308,7 @@ const handleChatIdChange = (chatId: string | null) => {
     if (chatMode === "AI_CHAT") {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                
                 <SubscriptionModal
                     open={showSubscriptionModal}
                     onOpenChange={setShowSubscriptionModal}
@@ -431,7 +435,7 @@ const handleChatIdChange = (chatId: string | null) => {
             currentChat={hookCurrentChat}
             isFullscreen={isFullscreen}
             setIsFullscreen={setIsFullscreen}
-            isBuilding={false}
+            isBuilding={isLoading || isStreaming}
         />
     ) : null
 }
@@ -475,27 +479,111 @@ if (!chatMode) {
     const suggestions = [
         {
             label: 'Landing Page',
-            text: 'Design a modern SaaS landing page with strong visual hierarchy: a bold hero section with headline, supporting subtext, and primary call-to-action; feature sections arranged in clean content grids; tiered pricing cards with visual emphasis on the recommended plan; testimonial carousels for social proof; and a conversion-focused footer. Use a 12-column grid, generous whitespace, soft gradients, rounded surfaces, subtle shadows, and smooth hover and scroll animations. Ensure mobile-first responsiveness, accessible contrast ratios, and clear CTA affordances.',
+         text: `
+Create a modern SaaS landing page.
+
+Sections:
+- Hero section with headline, subtext and primary CTA
+- Product screenshot or illustration
+- Features grid (3–6 cards with icons)
+- Pricing section with highlighted recommended plan
+- Testimonials section
+- Conversion-focused footer with links and CTA
+
+Design Requirements:
+- Clean modern UI
+- Generous whitespace
+- Smooth hover and scroll animations
+- Mobile-first responsive layout
+`, 
             icon: Layout,
         },
         {
             label: 'Task Management',
-            text: 'Build a productivity-focused task management application using a Kanban-style layout with draggable task cards, status columns, and a collapsible sidebar for projects and filters. Include inline editing, due-date indicators, priority color cues, and completion feedback animations. Define clear hover, active, drag, empty, and loading states, support keyboard navigation, and reduce cognitive load through consistent spacing and grouping.',
+           text: `
+Build a task management web application with a Kanban-style interface.
+
+Features:
+- Sidebar with projects and filters
+- Columns: Todo, In Progress, Done
+- Draggable task cards between columns
+- Task details with title, description and due date
+- Ability to add, edit and delete tasks
+
+UI Requirements:
+- Clean dashboard layout
+- Card based design
+- Responsive interface
+`,
             icon: CheckSquare,
         },
         {
             label: 'Dashboard',
-            text: 'Create a structured analytics dashboard featuring KPI summary cards, interactive charts, and persistent filter controls. Apply strong visual hierarchy to guide attention, consistent color semantics for data interpretation, and contextual tooltips for clarity. Use a dark UI theme with high contrast, subtle dividers, loading skeletons, and smooth transitions for real-time updates without overwhelming the user.',
+        text: `
+Create an analytics dashboard.
+
+Layout:
+- Left sidebar navigation
+- Top header with search and profile
+
+Main Content:
+- KPI stats cards (Users, Revenue, Growth)
+- Line chart for trends
+- Bar chart for category performance
+- Table for recent activity
+
+Design:
+- Dark modern UI
+- Clear visual hierarchy
+- Responsive layout
+`,
             icon: BarChart3,
         },
         {
             label: 'Blog',
-            text: 'Develop a content-first blog platform with a typography-driven layout optimized for reading comfort. Include markdown-based authoring, category and tag filtering, sticky table of contents for long-form articles, and reading-progress indicators. Focus on accessibility, readable font scales, rhythmic spacing, and distraction-free article pages.',
+        text: `
+Create a modern blog platform.
+
+Pages:
+- Homepage with article cards
+- Article detail page
+- Author profile page
+
+Features:
+- Category and tag filtering
+- Search functionality
+- Reading progress indicator
+- Pagination for posts
+
+Design:
+- Typography-focused layout
+- Clean reading experience
+- Responsive design
+`,
             icon: FileText,
         },
         {
             label: 'Shop',
-            text: 'Design a high-conversion e-commerce experience with scannable product cards, clear pricing, ratings, and prominent call-to-action placement. Build detailed product pages with image galleries, variant selectors, reviews, and trust signals. Streamline cart and checkout flows using step indicators, inline validation, minimal form friction, responsive layouts, and subtle feedback animations.',
+          text: `
+Create an e-commerce store.
+
+Pages:
+- Product listing page
+- Product detail page
+- Shopping cart
+- Checkout page
+
+Features:
+- Product cards with image, price and rating
+- Add to cart functionality
+- Product variants and quantity selector
+- Order summary and checkout flow
+
+Design:
+- Clean product grid
+- Mobile responsive layout
+- High-conversion UI patterns
+`,
             icon: ShoppingCart,
         },
     ]
@@ -506,7 +594,9 @@ if (!chatMode) {
 
     return (
        <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+         <EnvVariablesPanel open={envPanelOpen} onOpenChange={setEnvPanelOpen} />
       <div className={cn("bg-background flex flex-col", showChatInterface ? "h-[calc(100vh-48px)] overflow-hidden" : "min-h-[calc(100vh-48px)]")}>
+           
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -622,6 +712,19 @@ if (!chatMode) {
                                         onImageSelect={handleImageFiles}
                                         disabled={isLoading}
                                     />
+                                    <button
+        type="button"
+        onClick={() => setEnvPanelOpen(true)}
+        title="Environment variables"
+        className="relative flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+        <KeyRound className="size-4" />
+        {variables.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+                {variables.length}
+            </span>
+        )}
+    </button>
                                 </PromptInputTools>
                                 <PromptInputTools>
                                     <PromptInputMicButton

@@ -92,6 +92,10 @@ export interface ElementStyles {
   flexDirection?: 'row' | 'column'
   justifyContent?: 'flex-start' | 'center' | 'flex-end' | 'space-between'
   alignItems?: 'flex-start' | 'center' | 'flex-end'
+  // Video element properties
+  videoAutoplay?: boolean
+  videoLoop?: boolean
+  videoMuted?: boolean
 }
 
 /** Per-device overrides for responsive design. Only specified properties override the base (desktop) values. */

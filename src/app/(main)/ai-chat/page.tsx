@@ -346,7 +346,10 @@ function isWebApp(blocks: SegmentCode[]): boolean {
   const hasScript = langs.some((l) => SCRIPT_LANGUAGES.has(l));
   const hasCss = langs.some((l) => WEB_LANGUAGES.has(l));
   const hasServerOnly = langs.some((l) => SERVER_ONLY_LANGUAGES.has(l));
-  if ((hasScript || hasCss) && !hasServerOnly) return true;
+  const hasNodeBackend = blocks.some((b) =>
+  /express|app\.listen|require\(|module\.exports/.test(b.code)
+);
+ if ((hasScript || hasCss) && !hasServerOnly && !hasNodeBackend) return true;
   return false;
 }
 
@@ -827,16 +830,22 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
     isRunning: false, htmlPreview: null, consoleOutput: null,
     error: null, exitCode: null, executionTimeMs: null, status: null,
   });
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (codeBlocks.length === 0) return null;
 
-  const webApp = isWebApp(codeBlocks);
+const webApp = isWebApp(codeBlocks);
+const hasBackendCode = buildBackendCode(codeBlocks) !== null;
+
+ // Show only if frontend exists
+if (!webApp) return null;
 
   const handleRun = async () => {
     if (execution.isRunning) return;
 
     if (webApp) {
+      setIsPreviewLoading(true) 
       const html = buildHtmlApp(codeBlocks);
       setExecution({
         isRunning: false, htmlPreview: html, consoleOutput: null,
@@ -959,40 +968,64 @@ function AppRunner({ content, files }: { content: string; files?: ChatMessage["f
         <div className="mt-2 overflow-hidden rounded-xl border shadow-sm">
           {/* HTML preview */}
           {execution.htmlPreview && (
-            <>
-              <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="size-2.5 rounded-full bg-red-400" />
-                    <span className="size-2.5 rounded-full bg-yellow-400" />
-                    <span className="size-2.5 rounded-full bg-green-400" />
-                  </div>
-                  <span className="text-[11px] font-medium text-muted-foreground">Live Preview</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-medium text-green-600 dark:text-green-400">Live</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0"
-                    onClick={() => setIsExpanded(!isExpanded)}
-                    title={isExpanded ? "Minimize" : "Expand"}
-                  >
-                    {isExpanded ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
-                  </Button>
-                </div>
-              </div>
-              <iframe
-                srcDoc={execution.htmlPreview}
-                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                className={cn(
-                  "w-full bg-white transition-all duration-300",
-                  isExpanded ? "h-[500px]" : "h-72",
-                )}
-                title="App Preview"
-              />
-            </>
-          )}
+  <>
+   <div className="flex items-center justify-between border-b bg-muted/60 px-4 py-1.5">
+  <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-1.5">
+      <span className="size-2.5 rounded-full bg-red-400" />
+      <span className="size-2.5 rounded-full bg-yellow-400" />
+      <span className="size-2.5 rounded-full bg-green-400" />
+    </div>
+    <span className="text-[11px] font-medium text-muted-foreground">
+      Live Preview
+    </span>
+  </div>
+<div className="flex items-center gap-2">
+
+  <span className="text-[11px] font-medium text-green-500">
+    Live
+  </span>
+  <Button
+    variant="ghost"
+    size="icon-xs"
+    onClick={() => setIsExpanded(!isExpanded)}
+  >
+    {isExpanded ? (
+      <Minimize2 className="size-3" />
+    ) : (
+      <Maximize2 className="size-3" />
+    )}
+  </Button>
+</div>
+</div>
+    
+
+    <div className="relative">
+      {/*  LOADING OVERLAY */}
+      {isPreviewLoading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2">
+            <Loader2 className="size-5 animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">
+              Rendering preview...
+            </p>
+          </div>
+        </div>
+      )}
+
+      <iframe
+        srcDoc={execution.htmlPreview}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        className={cn(
+          "w-full bg-white transition-all duration-300",
+          isExpanded ? "h-[500px]" : "h-72",
+        )}
+        title="App Preview"
+        onLoad={() => setIsPreviewLoading(false)}
+      />
+    </div>
+  </>
+)}
 
           {/* Console output (backend code) */}
           {(execution.consoleOutput !== null || execution.error !== null) && !execution.htmlPreview && (
@@ -1315,7 +1348,21 @@ const SUGGESTIONS = [
   {
     icon: Blocks,
     label: "Dashboard",
-    prompt: "Build a modern admin dashboard using React. The layout should include a dark sidebar with icons, a top navigation bar with a search field and user avatar, and a main content area. Display statistic cards (users, revenue, orders, growth) with clean styling, rounded cards, subtle shadows, and color accents. Include a simple chart or activity list with sample data so the dashboard looks realistic. The UI should be visually appealing, well spaced, and responsive so it renders nicely in the preview.",
+    prompt: `Build a modern admin dashboard using React ONLY (no external libraries like shadcn/ui or MUI).
+
+Requirements:
+- Dark sidebar with icons
+- Top navbar with search and user avatar
+- Stats cards (users, revenue, orders, growth)
+- Simple chart (use Recharts only if needed)
+- Include sample data
+
+Constraints:
+- No external imports except React
+- Everything should run in a single file
+- Use Tailwind classes for styling
+
+Make the UI clean, modern, and responsive.`,
   },
   {
     icon: Code2,
@@ -1912,6 +1959,9 @@ export default function OpenRouterChatPage() {
 
   const clearChat = useCallback(() => {
     setMessages([]);
+    setActiveFiles([]);
+    setSelectedFileIndex(0);
+    setActiveConversationId(null);
     textareaRef.current?.focus();
   }, []);
 
@@ -1926,9 +1976,9 @@ export default function OpenRouterChatPage() {
   const hasMessages = messages.length > 0;
 
   return (
-    <div className="flex h-[calc(100svh-4rem)] -m-4">
+    <div className="flex h-[calc(100svh-4rem)] -m-4 overflow-hidden max-w-[100vw]">
       {/* RIGHT SIDE — CHAT UI */}
-      <div className="flex-1 flex flex-col">
+      <div className="min-w-0 flex-1 flex flex-col">
         <div className="flex shrink-0 items-center justify-between border-b bg-background/80 px-5 py-2.5 backdrop-blur-sm">
           <div className="flex items-center gap-2.5">
             <div className="flex size-7 items-center justify-center rounded-lg bg-primary/10">
@@ -2070,8 +2120,8 @@ export default function OpenRouterChatPage() {
 
           {/* Sidebar */}
           <div
-            className="border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
-            style={{ width: `${panelWidth}px` }}
+            className="shrink-0 border-l bg-background/95 backdrop-blur-md flex flex-col shadow-2xl"
+            style={{ width: `${panelWidth}px`, maxWidth: '50vw' }}
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b px-5 py-3 bg-muted/40">

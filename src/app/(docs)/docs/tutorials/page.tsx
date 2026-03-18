@@ -17,19 +17,68 @@ const tutorials = [
     {
         icon: Layout,
         title: "Building a Landing Page",
-        prompt: "Create a modern SaaS landing page with a hero section, features grid, pricing table, and footer. Use a blue/white color scheme.",
-        tip: "Then iterate with follow-ups to add animations, refine copy, or adjust the layout.",
+       prompt: `
+Create a modern SaaS landing page.
+
+Sections:
+- Hero section with headline, subtext, CTA button and product screenshot
+- Features grid with 3–6 feature cards and icons
+- Pricing section with 3 pricing tiers (highlight one plan)
+- Testimonials section with user reviews
+- Footer with navigation links and social icons
+
+Requirements:
+- Responsive layout for mobile and desktop
+- Clean modern UI with blue and white color scheme
+- Use reusable React components
+`,
+        tip: "Then iterate with follow-ups to add animations or refine layout.",
     },
     {
         icon: FormInput,
         title: "Creating a Form with Validation",
-        prompt: "Build a multi-step signup form with email validation, password strength indicator, and profile setup. Include error handling.",
+    prompt: `
+Build a multi-step signup form.
+
+Steps:
+- Step 1: Email and password input
+- Step 2: Personal details (name, profile photo)
+- Step 3: Account preferences
+
+Features:
+- Email format validation
+- Password strength indicator
+- Inline error messages
+- Next / Previous step navigation
+- Progress indicator
+
+UI Requirements:
+- Clean centered card layout
+- Responsive design
+`,
         tip: "Follow up to add specific validations, connect to an API, or style individual fields.",
     },
     {
         icon: ShoppingCart,
         title: "Building a Dashboard",
-        prompt: "Create an analytics dashboard with a sidebar, stats cards, a line chart, and a data table. Use a clean, minimal design.",
+      prompt: `
+Create a professional analytics dashboard.
+
+Layout:
+- Left sidebar navigation with icons
+- Top header with search and profile menu
+
+Main Content:
+- Statistics cards (Users, Revenue, Growth)
+- Line chart showing analytics trends
+- Bar chart for category performance
+- Table displaying recent activity
+
+Requirements:
+- Responsive layout
+- Clean modern UI
+- Card based design
+`,
         tip: "Iterate to add interactivity, filtering, date range pickers, or export functionality.",
     },
 ]

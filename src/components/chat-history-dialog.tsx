@@ -3,7 +3,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -25,6 +27,7 @@ import { MoveToFolderPopover } from '@/components/chat/move-to-folder-popover'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
+import { useState } from 'react'
 
 const ITEMS_PER_PAGE = 10
 
@@ -32,6 +35,10 @@ export function ChatHistoryDialog({
     className,
     ...props
 }: React.ComponentProps<'div'>) {
+    const queryClient = useQueryClient()
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [chatToDelete, setChatToDelete] = useState<string | null>(null)
     const { historyModal, toggleHistoryModal } = useStateMachine()
     const [filter, setFilter] = React.useState<"all" | "builder" | "openrouter">("all")
     const [searchQuery, setSearchQuery] = React.useState("")
@@ -95,6 +102,30 @@ export function ChatHistoryDialog({
             )
         )
     }
+const handleDeleteClick = (e: React.MouseEvent, chat: any) => {
+  e.stopPropagation()
+  setChatToDelete(chat.v0ChatId || chat.id)
+  setConfirmOpen(true)
+}
+
+const confirmDelete = async () => {
+  if (!chatToDelete) return
+
+  try {
+    setDeletingId(chatToDelete)
+
+    await fetch('/api/chat/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId: chatToDelete }),
+    })
+
+    setLocalChats((prev) =>
+      prev.filter((chat) => chat.v0ChatId !== chatToDelete)
+    )
+ await queryClient.refetchQueries({
+  queryKey: ['chat-history']
+})
 
     const handleRenameStart = (e: React.MouseEvent, chat: any) => {
         e.stopPropagation()
@@ -132,6 +163,7 @@ export function ChatHistoryDialog({
     })
 
     return (
+        <>
         <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
             <AlertDialogContent
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
@@ -270,7 +302,7 @@ export function ChatHistoryDialog({
                                                 </>
                                             )}
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button
                                                 type="button"
                                                 onClick={(e) => handleRenameStart(e, chat)}
@@ -283,6 +315,8 @@ export function ChatHistoryDialog({
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
+                                                    console.log('Chat object:', chat) 
+    console.log('ID being sent:', chat.v0ChatId || chat.id)  
                                                     if (chat.type === 'builder') {
                                                         router.push(`/chat?chatId=${chat.v0ChatId}`)
                                                     } else {
@@ -322,7 +356,24 @@ export function ChatHistoryDialog({
                                                         chat.isStarred ? 'fill-amber-400' : ''
                                                     )}
                                                 />
+
+
+                                                
                                             </button>
+                                       <button
+  type="button"
+  
+  onClick={(e) => handleDeleteClick(e, chat)}  
+  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+  title="Delete chat"
+>
+  {deletingId === (chat.v0ChatId || chat.id) ? (
+    <Loader2 className="size-3.5 animate-spin" />
+  ) : (
+    <Trash2 className="size-3.5" />
+  )}
+</button>
+                                            
                                         </div>
                                     </div>
                                 ))}
@@ -370,5 +421,41 @@ export function ChatHistoryDialog({
                 </div>
             </AlertDialogContent>
         </AlertDialog>
+
+<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+  <AlertDialogContent className="max-w-xs">
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">Delete chat?</h3>
+      <p className="text-xs text-muted-foreground">
+        This action cannot be undone.
+      </p>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirmOpen(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={confirmDelete}
+          disabled={!!deletingId}
+        >
+          {deletingId ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            "Delete"
+          )}
+        </Button>
+      </div>
+    </div>
+  </AlertDialogContent>
+</AlertDialog>
+
+
+        </>
     )
 }

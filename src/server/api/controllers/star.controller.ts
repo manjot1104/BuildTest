@@ -24,11 +24,13 @@ export async function toggleStarChat({
       and(
         eq(user_chats.user_id, userId),
         or(
+          eq(user_chats.id, chatId),
           eq(user_chats.v0_chat_id, chatId),
           eq(user_chats.conversation_id, chatId),
         )
       )
     )
+ 
 }
 
 //  get all starred chats
@@ -46,7 +48,7 @@ export async function toggleStarChat({
 
 // }
 export async function getStarredChats(userId: string) {
-  return db
+  const chats = await db
     .select()
     .from(user_chats)
     .where(
@@ -56,7 +58,15 @@ export async function getStarredChats(userId: string) {
       ),
     )
     .orderBy(desc(user_chats.updated_at))
-}
 
+  console.log('Starred chats:', chats.map(c => ({
+    id: c.id,
+    v0_chat_id: c.v0_chat_id,
+    conversation_id: c.conversation_id,
+    is_starred: c.is_starred,
+  })))
+
+  return chats
+}
   
 

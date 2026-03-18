@@ -20,7 +20,7 @@ import {
   addAdditionalCredits,
 } from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
-import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatRequestBody,
   type ChatMessage,
@@ -197,7 +197,7 @@ export async function createChatHandler({
   try {
     const session = await getSession()
     sessionUserId = session?.user?.id
-    const { message, chatId, attachments } = body
+  const { message, chatId, attachments, envVarNames = [] } = body
 
     if (!message) {
       return { error: 'Message is required' }
@@ -263,11 +263,11 @@ export async function createChatHandler({
     if (chatId) {
       try {
         // Continue existing chat (non-streaming)
-        chatResult = await v0.chats.sendMessage({
-          chatId,
-          message,
-          ...(attachments && attachments.length > 0 && { attachments }),
-        })
+       chatResult = await v0.chats.sendMessage({
+  chatId,
+message: enhanceFollowUpPrompt(message, envVarNames),
+  ...(attachments && attachments.length > 0 && { attachments }),
+})
       } catch (error) {
         // If chat doesn't exist (404), create a new chat instead
         const errorMessage =
@@ -279,7 +279,7 @@ export async function createChatHandler({
         ) {
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
-            message: enhanceFirstPrompt(message),
+           message: enhanceFirstPrompt(message, envVarNames),
             responseMode: 'sync',
             ...(attachments && attachments.length > 0 && { attachments }),
           })
@@ -292,7 +292,7 @@ export async function createChatHandler({
     } else {
       // Create new chat with enhanced first prompt (non-streaming)
       chatResult = await v0.chats.create({
-        message: enhanceFirstPrompt(message),
+     message: enhanceFirstPrompt(message, envVarNames),
         responseMode: 'sync',
         ...(attachments && attachments.length > 0 && { attachments }),
       })

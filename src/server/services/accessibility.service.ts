@@ -1,5 +1,6 @@
-import { type Browser, type Page } from 'puppeteer'
+import type { Page } from 'puppeteer-core'
 import { launchBrowser } from '@/lib/browser'
+import type { Browser } from 'puppeteer-core'
 import type {
   AccessibilityTestConfig,
   SSEEvent,
@@ -211,7 +212,7 @@ export async function runAccessibilityTest(
         // Give JS frameworks time to hydrate / render
         await new Promise((r) => setTimeout(r, 2000))
 
-        const results = await new AxePuppeteer(page, axeSource).withTags(tags).analyze()
+       const results = await new AxePuppeteer(page as any, axeSource).withTags(tags).analyze()
         const title = await page.title()
 
         const violations: AxeViolation[] = results.violations.map((v) => ({
