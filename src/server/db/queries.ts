@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull, inArray, or } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts, chat_folders } from './schema'
@@ -130,6 +130,36 @@ export async function updateUserChat({
   } catch (error: unknown) {
     throw error
   }
+}
+
+/**
+ * Renames a chat title with ownership verification.
+ * Matches by id, v0_chat_id, or conversation_id.
+ */
+export async function renameUserChat({
+  chatId,
+  userId,
+  title,
+}: {
+  chatId: string
+  userId: string
+  title: string
+}): Promise<boolean> {
+  const result = await db
+    .update(user_chats)
+    .set({ title: title.trim(), updated_at: new Date() })
+    .where(
+      and(
+        eq(user_chats.user_id, userId),
+        or(
+          eq(user_chats.id, chatId),
+          eq(user_chats.v0_chat_id, chatId),
+          eq(user_chats.conversation_id, chatId),
+        ),
+      ),
+    )
+    .returning({ id: user_chats.id })
+  return result.length > 0
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   getChatCountByIP,
   getChatDemoUrl,
   getUserChat,
+  renameUserChat,
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
@@ -479,6 +480,38 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
     }))
   })
+  // Rename chat
+  .post(
+    '/chat/rename',
+    async ({ body, set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+      const { chatId, title } = body as { chatId: string; title: string }
+      if (!title?.trim()) {
+        set.status = 400
+        return { error: 'Title is required' }
+      }
+      const updated = await renameUserChat({
+        chatId,
+        userId: session.user.id,
+        title: title.trim(),
+      })
+      if (!updated) {
+        set.status = 404
+        return { error: 'Chat not found' }
+      }
+      return { success: true }
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        title: t.String(),
+      }),
+    },
+  )
   // ── Chat Folders ──────────────────────────────────────────────────────────
   .post(
     '/chat/folders',
