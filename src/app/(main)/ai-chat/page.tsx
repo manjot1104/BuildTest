@@ -984,8 +984,6 @@ if (!webApp) return null;
   <span className="text-[11px] font-medium text-green-500">
     Live
   </span>
-
- 
   <Button
     variant="ghost"
     size="icon-xs"
