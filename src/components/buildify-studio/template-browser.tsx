@@ -22,6 +22,7 @@ const CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
   { id: 'minimal', label: 'Minimal' },
   { id: 'creative', label: 'Creative' },
   { id: 'photography', label: 'Photo' },
+  { id: 'futuristic', label: 'Futuristic' },
 ]
 
 // ─── Thumbnail helpers ────────────────────────────────────────────────────────

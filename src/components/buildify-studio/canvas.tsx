@@ -333,6 +333,7 @@ export function Canvas({ editor }: CanvasProps) {
             transformOrigin: '0 0',
             ...canvasBgStyle,
             boxShadow: '0 4px 24px rgba(0,0,0,0.3), 0 20px 80px rgba(0,0,0,0.5)',
+            overflow: 'hidden',
           }}
         >
           {/* Grid overlay */}
@@ -436,7 +437,7 @@ export function Canvas({ editor }: CanvasProps) {
 
         {/* Canvas size / device label */}
         <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 font-mono text-xs text-white/70">
-          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} — {canvasWidth}×{Math.round(canvasHeight)}
+          {DEVICE_LABELS[state.device.preset] ?? 'Custom'} · {canvasWidth}×{Math.round(canvasHeight)} · {Math.round(state.zoom * 100)}% zoom
         </div>
       </div>
 
