@@ -2634,6 +2634,7 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
     <div class="job-title">Job Title</div>
     <div class="company">Company | Dates</div>
     <ul><li>Leadership achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Projects</h2>
   </div>
 </div>
 </body>
@@ -2644,6 +2645,7 @@ CRITICAL FORMATTING RULES:
 - Dark header background (#1a1a1a)
 - Executive summary box with left border
 - Focus on leadership and strategic achievements
+- Projects section must use a single "Projects" heading with multiple project entries underneath (no repeated headings per project)
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
   },
@@ -3063,6 +3065,1273 @@ CRITICAL FORMATTING RULES:
 - Purple gradient header background
 - Section headings with left accent bar
 - Contemporary modern design
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // ── Additional HTML Templates (19-25) ────────────────────────────────────────
+
+  // 19. Corporate Blue HTML Resume
+  {
+    id: 'html-corporate-blue',
+    name: 'Corporate Blue',
+    category: 'professional',
+    description: 'Professional corporate design with blue accents',
+    preview: 'Corporate blue HTML resume with professional styling and blue color scheme',
+    format: 'html',
+    styleGuide: `CORPORATE BLUE HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Arial', 'Helvetica', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+.resume { max-width: 900px; margin: 0 auto; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+.header { background: #1e3a8a; color: white; padding: 40px 50px; }
+h1 { font-size: 36px; margin-bottom: 10px; font-weight: 700; }
+.subtitle { font-size: 16px; margin-bottom: 15px; opacity: 0.9; }
+.contact { font-size: 13px; line-height: 1.8; }
+.content { padding: 40px 50px; }
+h2 { color: #1e3a8a; font-size: 18px; margin-top: 30px; margin-bottom: 15px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; }
+.job-title { color: #1e3a8a; font-weight: 600; font-size: 15px; margin-top: 20px; }
+.company { color: #4b5563; font-size: 13px; font-style: italic; margin-bottom: 8px; }
+.dates { color: #6b7280; font-size: 12px; float: right; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 25px; line-height: 1.7; }
+li { color: #374151; font-size: 13px; margin-bottom: 6px; }
+.skills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.skill { background: #eff6ff; color: #1e3a8a; padding: 5px 12px; border-radius: 4px; font-size: 12px; }
+@media print {
+  body { background: white; padding: 0; }
+  .header { background: #1e3a8a; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines describing impact and results</li><li>Another achievement with specific metrics and outcomes that demonstrate value delivered</li></ul>
+    <h2>Education</h2>
+    <h2>Skills</h2>
+    <div class="skills">
+      <span class="skill">Skill1</span>
+      <span class="skill">Skill2</span>
+      <span class="skill">Skill3</span>
+      <span class="skill">Skill4</span>
+      <span class="skill">Skill5</span>
+    </div>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Corporate blue header (#1e3a8a)
+- Skills displayed as colored badges
+- Professional corporate styling
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 20. Modern Executive HTML Resume
+  {
+    id: 'html-modern-executive',
+    name: 'Modern Executive',
+    category: 'executive',
+    description: 'Executive-level design with modern aesthetics',
+    preview: 'Modern executive HTML resume with sophisticated layout',
+    format: 'html',
+    styleGuide: `MODERN EXECUTIVE HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 0; background: #fafafa; }
+.resume { max-width: 950px; margin: 30px auto; background: white; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
+.header { padding: 50px 60px 40px; border-bottom: 4px solid #2c3e50; }
+h1 { font-size: 42px; color: #2c3e50; margin-bottom: 12px; font-weight: 300; letter-spacing: 2px; }
+.subtitle { font-size: 18px; color: #7f8c8d; margin-bottom: 20px; font-weight: 300; }
+.contact { font-size: 13px; color: #34495e; line-height: 2; }
+.content { padding: 45px 60px; }
+h2 { color: #2c3e50; font-size: 20px; margin-top: 35px; margin-bottom: 18px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; }
+.job-title { color: #2c3e50; font-weight: 500; font-size: 16px; margin-top: 22px; }
+.company { color: #7f8c8d; font-size: 14px; font-style: italic; margin-bottom: 10px; }
+.dates { color: #95a5a6; font-size: 12px; float: right; font-weight: 300; }
+ul { margin-top: 12px; margin-bottom: 22px; padding-left: 28px; line-height: 1.8; }
+li { color: #34495e; font-size: 13px; margin-bottom: 8px; }
+.summary { color: #34495e; font-size: 14px; line-height: 1.8; margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-left: 3px solid #2c3e50; }
+@media print {
+  body { background: white; }
+  .resume { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Executive Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <div class="summary">Professional summary in 2-3 lines describing executive background and key achievements.</div>
+    <h2>Professional Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines describing impact and results</li><li>Another achievement with specific metrics and outcomes that demonstrate value delivered</li></ul>
+    <h2>Education</h2>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Executive serif font styling
+- Professional summary section with styled box
+- Elegant typography and spacing
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 21. Tech Startup HTML Resume
+  {
+    id: 'html-tech-startup-v2',
+    name: 'Tech Startup V2',
+    category: 'modern',
+    description: 'Modern tech startup design with vibrant colors',
+    preview: 'Tech startup HTML resume with modern design and vibrant styling',
+    format: 'html',
+    styleGuide: `TECH STARTUP V2 HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; margin: 0; padding: 0; background: #0a0e27; }
+.resume { max-width: 920px; margin: 20px auto; background: white; }
+.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 45px 50px; color: white; }
+h1 { font-size: 38px; margin-bottom: 8px; font-weight: 700; }
+.subtitle { font-size: 17px; opacity: 0.95; margin-bottom: 15px; }
+.contact { font-size: 13px; opacity: 0.9; line-height: 1.8; }
+.content { padding: 40px 50px; }
+h2 { color: #667eea; font-size: 19px; margin-top: 28px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; position: relative; padding-left: 12px; }
+h2::before { content: '▸'; position: absolute; left: 0; color: #667eea; }
+.job-title { color: #2d3748; font-weight: 600; font-size: 15px; margin-top: 20px; }
+.company { color: #667eea; font-size: 13px; margin-bottom: 9px; }
+.dates { color: #718096; font-size: 12px; float: right; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 22px; line-height: 1.7; }
+li { color: #4a5568; font-size: 13px; margin-bottom: 6px; }
+@media print {
+  body { background: white; }
+  .header { background: #667eea; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Purple gradient header
+- Section headings with arrow indicator
+- Modern tech startup aesthetic
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 22. Minimalist Professional HTML Resume
+  {
+    id: 'html-minimalist-professional',
+    name: 'Minimalist Professional',
+    category: 'minimal',
+    description: 'Ultra-clean minimalist design with maximum readability',
+    preview: 'Minimalist professional HTML resume with clean design',
+    format: 'html',
+    styleGuide: `MINIMALIST PROFESSIONAL HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Helvetica Neue', 'Arial', sans-serif; margin: 0; padding: 30px; background: #ffffff; }
+.resume { max-width: 850px; margin: 0 auto; background: white; }
+.header { padding: 50px 0 30px; border-bottom: 1px solid #e5e5e5; }
+h1 { font-size: 32px; color: #1a1a1a; margin-bottom: 8px; font-weight: 300; letter-spacing: -0.5px; }
+.subtitle { font-size: 15px; color: #666; margin-bottom: 15px; font-weight: 300; }
+.contact { font-size: 12px; color: #888; line-height: 2; }
+.content { padding: 35px 0; }
+h2 { color: #1a1a1a; font-size: 14px; margin-top: 32px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; }
+.job-title { color: #1a1a1a; font-weight: 500; font-size: 14px; margin-top: 20px; }
+.company { color: #666; font-size: 12px; margin-bottom: 8px; }
+.dates { color: #999; font-size: 11px; float: right; font-weight: 300; }
+ul { margin-top: 10px; margin-bottom: 18px; padding-left: 20px; line-height: 1.7; }
+li { color: #333; font-size: 12px; margin-bottom: 5px; }
+@media print {
+  body { padding: 0; }
+  .header { border-bottom: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Ultra-minimalist design with thin borders
+- Light typography and spacing
+- Maximum readability focus
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 23. Bold Creative HTML Resume
+  {
+    id: 'html-bold-creative-v2',
+    name: 'Bold Creative V2',
+    category: 'creative',
+    description: 'Bold creative design with striking visual elements',
+    preview: 'Bold creative HTML resume with striking design elements',
+    format: 'html',
+    styleGuide: `BOLD CREATIVE V2 HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Arial Black', 'Arial', sans-serif; margin: 0; padding: 0; background: #f0f0f0; }
+.resume { max-width: 940px; margin: 25px auto; background: white; box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+.header { background: #000000; color: white; padding: 50px 55px; position: relative; }
+.header::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 8px; background: #ff6b6b; }
+h1 { font-size: 44px; margin-bottom: 10px; font-weight: 900; letter-spacing: 1px; }
+.subtitle { font-size: 18px; color: #ff6b6b; margin-bottom: 18px; font-weight: 600; }
+.contact { font-size: 13px; opacity: 0.9; line-height: 1.9; }
+.content { padding: 45px 55px; }
+h2 { color: #000000; font-size: 22px; margin-top: 32px; margin-bottom: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; border-left: 6px solid #ff6b6b; padding-left: 12px; }
+.job-title { color: #000000; font-weight: 700; font-size: 16px; margin-top: 22px; }
+.company { color: #666666; font-size: 13px; margin-bottom: 10px; }
+.dates { color: #999999; font-size: 12px; float: right; font-weight: 600; }
+ul { margin-top: 12px; margin-bottom: 22px; padding-left: 25px; line-height: 1.8; }
+li { color: #333333; font-size: 13px; margin-bottom: 7px; }
+@media print {
+  body { background: white; }
+  .header { background: #000000; }
+  .header::after { background: #ff6b6b; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Black header with red accent bar
+- Bold typography and strong visual hierarchy
+- Creative and striking design
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 24. Academic Research HTML Resume
+  {
+    id: 'html-academic-research-v2',
+    name: 'Academic Research V2',
+    category: 'academic',
+    description: 'Academic research-focused design with scholarly aesthetics',
+    preview: 'Academic research HTML resume with scholarly design',
+    format: 'html',
+    styleGuide: `ACADEMIC RESEARCH V2 HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Times New Roman', 'Georgia', serif; margin: 0; padding: 0; background: #f9f9f9; }
+.resume { max-width: 900px; margin: 30px auto; background: white; box-shadow: 0 3px 15px rgba(0,0,0,0.1); }
+.header { padding: 45px 50px; border-bottom: 3px double #2c3e50; background: #fafafa; }
+h1 { font-size: 36px; color: #2c3e50; margin-bottom: 10px; font-weight: 400; font-variant: small-caps; }
+.subtitle { font-size: 16px; color: #5d6d7e; margin-bottom: 18px; font-style: italic; }
+.contact { font-size: 13px; color: #34495e; line-height: 2; }
+.content { padding: 40px 50px; }
+h2 { color: #2c3e50; font-size: 17px; margin-top: 30px; margin-bottom: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
+.job-title { color: #2c3e50; font-weight: 600; font-size: 15px; margin-top: 20px; }
+.company { color: #5d6d7e; font-size: 13px; font-style: italic; margin-bottom: 8px; }
+.dates { color: #7f8c8d; font-size: 12px; float: right; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 28px; line-height: 1.8; }
+li { color: #34495e; font-size: 13px; margin-bottom: 6px; }
+.publication { margin-top: 15px; padding: 12px; background: #f8f9fa; border-left: 3px solid #2c3e50; font-size: 12px; line-height: 1.7; }
+@media print {
+  body { background: white; }
+  .header { background: white; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Research Position Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Research Experience</h2>
+    <div class="job-title">Position Title <span class="dates">Dates</span></div>
+    <div class="company">Institution, Location</div>
+    <ul><li>Research achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+    <h2>Skills</h2>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Academic serif font styling
+- Double border header
+- Publication section with styled boxes
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 25. Professional Gradient HTML Resume
+  {
+    id: 'html-professional-gradient',
+    name: 'Professional Gradient',
+    category: 'professional',
+    description: 'Professional design with subtle gradient accents',
+    preview: 'Professional gradient HTML resume with modern styling',
+    format: 'html',
+    styleGuide: `PROFESSIONAL GRADIENT HTML TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (HTML):
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; margin: 0; padding: 0; background: #f4f6f8; }
+.resume { max-width: 910px; margin: 25px auto; background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+.header { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 45px 50px; color: white; }
+h1 { font-size: 38px; margin-bottom: 10px; font-weight: 600; }
+.subtitle { font-size: 17px; opacity: 0.95; margin-bottom: 16px; }
+.contact { font-size: 13px; opacity: 0.9; line-height: 1.8; }
+.content { padding: 42px 50px; }
+h2 { color: #2563eb; font-size: 19px; margin-top: 30px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; position: relative; padding-bottom: 8px; }
+h2::after { content: ''; position: absolute; bottom: 0; left: 0; width: 50px; height: 3px; background: linear-gradient(90deg, #2563eb, #1e40af); }
+.job-title { color: #1e293b; font-weight: 600; font-size: 15px; margin-top: 20px; }
+.company { color: #475569; font-size: 13px; margin-bottom: 9px; }
+.dates { color: #64748b; font-size: 12px; float: right; }
+ul { margin-top: 10px; margin-bottom: 20px; padding-left: 24px; line-height: 1.7; }
+li { color: #334155; font-size: 13px; margin-bottom: 6px; }
+@media print {
+  body { background: white; }
+  .header { background: #2563eb; }
+}
+</style>
+</head>
+<body>
+<div class="resume">
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="subtitle">Job Title</div>
+    <div class="contact">email | phone | location</div>
+  </div>
+  <div class="content">
+    <h2>Experience</h2>
+    <div class="job-title">Job Title <span class="dates">Dates</span></div>
+    <div class="company">Company Name, Location</div>
+    <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
+    <h2>Education</h2>
+    <h2>Projects</h2>
+  </div>
+</div>
+</body>
+</html>
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Blue gradient header
+- Section headings with gradient underline
+- Professional modern design
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // ── Additional LaTeX Templates (17-25) ────────────────────────────────────────
+
+  // 17. Executive Summary LaTeX Resume
+  {
+    id: 'latex-executive-summary',
+    name: 'Executive Summary',
+    category: 'executive',
+    description: 'Executive-level format with comprehensive summary',
+    preview: 'Executive summary LaTeX resume with detailed professional summary',
+    format: 'latex',
+    styleGuide: `EXECUTIVE SUMMARY LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{14pt}{7pt}
+\\titleformat{\\section}{\\Large\\bfseries\\uppercase}{}{0em}{}[\\color{blue!70!black}\\titlerule[1.5pt]]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.2em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{\\textcolor{blue!80!black}{NAME}}}\\\\[0.4cm]
+{\\Large\\textcolor{blue!60!black}{Executive Job Title}}\\\\[0.3cm]
+{\\normalsize email | phone | location}\\\\
+{\\normalsize linkedin | portfolio}
+\\end{center}
+
+\\vspace{0.5cm}
+
+\\section*{EXECUTIVE SUMMARY}
+\\begin{minipage}{\\textwidth}
+\\textcolor{gray!50!black}{Comprehensive executive summary in 4-5 lines describing leadership experience, strategic vision, key achievements, and value proposition. This section should highlight years of experience, industry expertise, and track record of success.}
+\\end{minipage}
+
+\\vspace{0.3cm}
+
+\\section*{CORE COMPETENCIES}
+\\begin{itemize}
+\\item \\textbf{Leadership:} Strategic Planning, Team Management, Organizational Development
+\\item \\textbf{Business:} P\\&L Management, Business Development, Market Analysis
+\\item \\textbf{Technical:} Technology Strategy, Digital Transformation, Innovation
+\\end{itemize}
+
+\\section*{PROFESSIONAL EXPERIENCE}
+
+\\textbf{\\textcolor{blue!70!black}{Senior Executive Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Strategic achievement with detailed information spanning multiple lines describing leadership impact and business results
+\\item Another executive achievement with specific metrics, team size, and organizational impact
+\\item Additional leadership responsibility with scope and scale of operations
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{\\textcolor{blue!70!black}{Executive Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Leadership achievement with detailed information spanning multiple lines
+\\item Strategic initiative with business impact and outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{\\textcolor{blue!70!black}{Advanced Degree}} \\hfill \\textit{Date}\\\\
+\\textit{Institution Name, Location}\\\\
+Relevant honors, certifications, or executive education
+
+\\section*{CERTIFICATIONS \\& AWARDS}
+
+\\textbf{Certification Name} \\hfill \\textit{Date}\\\\
+\\textit{Issuing Organization}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" on first line, "linkedin | portfolio" on second line (use pipe separator |)
+- Executive summary section with 4-5 lines
+- Core competencies grouped by category
+- Blue color scheme for headings
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 18. Modern Tech LaTeX Resume
+  {
+    id: 'latex-modern-tech',
+    name: 'Modern Tech',
+    category: 'modern',
+    description: 'Modern tech-focused design with clean layout',
+    preview: 'Modern tech LaTeX resume with contemporary styling',
+    format: 'latex',
+    styleGuide: `MODERN TECH LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+
+\\begin{document}
+
+\\noindent
+{\\Huge\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.2cm]
+{\\large\\textcolor{blue!65!black}{Tech Job Title}}\\\\[0.15cm]
+{\\small email | phone | location | github}
+
+\\vspace{0.4cm}
+
+\\section*{SUMMARY}
+\\textcolor{gray!40!black}{Tech-focused summary in 2-3 lines highlighting technical expertise, key technologies, and career focus.}
+
+\\section*{TECHNICAL SKILLS}
+\\begin{itemize}
+\\item \\textbf{Programming:} Language1, Language2, Language3, Language4
+\\item \\textbf{Frameworks:} Framework1, Framework2, Framework3
+\\item \\textbf{Tools:} Tool1, Tool2, Tool3, Tool4
+\\item \\textbf{Cloud/DevOps:} Platform1, Platform2, Platform3
+\\end{itemize}
+
+\\section*{EXPERIENCE}
+
+\\textbf{\\textcolor{blue!70!black}{Tech Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Technical achievement with detailed information spanning multiple lines describing technologies used, impact, and scale
+\\item Another technical accomplishment with specific metrics, performance improvements, and user impact
+\\item Additional technical responsibility with architecture details and system improvements
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{\\textcolor{blue!70!black}{Tech Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Technical achievement with detailed information spanning multiple lines
+\\item Another technical accomplishment with specific outcomes
+\\end{itemize}
+
+\\section*{PROJECTS}
+
+\\textbf{\\textcolor{blue!70!black}{Project Name}} \\hfill \\textit{Year}\\\\
+\\textit{Technologies: Tech1, Tech2, Tech3}
+\\begin{itemize}
+\\item Project description with detailed information about architecture, features, and impact spanning multiple lines
+\\item Key technical achievements and outcomes with specific metrics
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{\\textcolor{blue!70!black}{Degree}} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location | github" (use pipe separator |)
+- Technical skills grouped by category
+- Tech-focused summary section
+- Blue color scheme for headings
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 19. Compact Professional LaTeX Resume
+  {
+    id: 'latex-compact-professional',
+    name: 'Compact Professional',
+    category: 'professional',
+    description: 'Space-efficient professional layout',
+    preview: 'Compact professional LaTeX resume optimized for content density',
+    format: 'latex',
+    styleGuide: `COMPACT PROFESSIONAL LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[10pt]{article}
+\\usepackage[margin=0.65in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\textcolor{blue!75!black}}{}{0em}{}
+
+\\setlength{\\parskip}{0.2em}
+\\setlist[itemize]{leftmargin=*,topsep=0.1em,itemsep=0.08em,labelsep=0.15em}
+
+\\begin{document}
+
+\\noindent
+{\\Large\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\
+{\\normalsize email | phone | location}
+
+\\vspace{0.3cm}
+
+\\section*{SKILLS}
+\\begin{itemize}
+\\item Skill1, Skill2, Skill3, Skill4, Skill5
+\\item Skill6, Skill7, Skill8, Skill9, Skill10
+\\end{itemize}
+
+\\section*{EXPERIENCE}
+
+\\textbf{\\textcolor{blue!70!black}{Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific metrics and outcomes
+\\end{itemize}
+
+\\vspace{0.15cm}
+
+\\textbf{\\textcolor{blue!70!black}{Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{\\textcolor{blue!70!black}{Degree}} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\section*{PROJECTS}
+
+\\textbf{\\textcolor{blue!70!black}{Project}} \\hfill \\textit{Year}\\\\
+\\textit{Tech Stack}
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features and outcomes
+\\end{itemize}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Compact spacing and smaller margins
+- Skills in comma-separated lists
+- Efficient use of space
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 20. Academic Scholar LaTeX Resume
+  {
+    id: 'latex-academic-scholar',
+    name: 'Academic Scholar',
+    category: 'academic',
+    description: 'Academic scholar format with publications focus',
+    preview: 'Academic scholar LaTeX resume with publications and research emphasis',
+    format: 'latex',
+    styleGuide: `ACADEMIC SCHOLAR LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{NAME}}\\\\[0.3cm]
+{\\large Research Position Title}\\\\[0.2cm]
+{\\normalsize email | phone | location}\\\\
+{\\normalsize website | orcid}
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{RESEARCH INTERESTS}
+Research area 1, Research area 2, Research area 3, Research area 4
+
+\\section*{EDUCATION}
+
+\\textbf{Ph.D. in Field} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}\\\\
+Dissertation: "Dissertation Title"\\\\
+Advisor: Advisor Name
+
+\\vspace{0.2cm}
+
+\\textbf{M.S. in Field} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\section*{RESEARCH EXPERIENCE}
+
+\\textbf{\\textcolor{blue!70!black}{Research Position}} \\hfill \\textit{Dates}\\\\
+\\textit{Institution, Location}
+\\begin{itemize}
+\\item Research achievement with detailed information spanning multiple lines describing methodology, findings, and impact
+\\item Another research contribution with specific results and publications
+\\item Additional research responsibility with collaboration details
+\\end{itemize}
+
+\\section*{PUBLICATIONS}
+
+\\textbf{Peer-Reviewed Journals}
+\\begin{itemize}
+\\item Author, A., \\& Author, B. (Year). "Title of Publication." \\textit{Journal Name}, Volume(Issue), Pages. DOI
+\\item Author, A., et al. (Year). "Title of Publication." \\textit{Journal Name}, Volume(Issue), Pages.
+\\end{itemize}
+
+\\textbf{Conference Proceedings}
+\\begin{itemize}
+\\item Author, A., \\& Author, B. (Year). "Title of Paper." \\textit{Conference Name}, Location, Pages.
+\\end{itemize}
+
+\\section*{AWARDS \\& HONORS}
+
+\\textbf{Award Name} \\hfill \\textit{Year}\\\\
+\\textit{Organization}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" on first line, "website | orcid" on second line (use pipe separator |)
+- Research interests section
+- Publications formatted in academic style
+- Academic serif styling
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 21. Two-Column Balanced LaTeX Resume
+  {
+    id: 'latex-two-column-balanced',
+    name: 'Two-Column Balanced',
+    category: 'professional',
+    description: 'Balanced two-column layout with optimal spacing',
+    preview: 'Two-column balanced LaTeX resume with equal column distribution',
+    format: 'latex',
+    styleGuide: `TWO-COLUMN BALANCED LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{multicol}
+
+\\setlength{\\parskip}{0.3em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.12em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{\\textcolor{blue!90!black}{NAME}}}\\\\[0.2cm]
+{\\large email | phone | location}
+\\end{center}
+
+\\vspace{0.3cm}
+
+\\begin{multicols}{2}
+
+\\section*{\\textcolor{blue!75!black}{\\large Skills}}
+\\begin{itemize}
+\\item Skill1, Skill2, Skill3
+\\item Skill4, Skill5, Skill6
+\\item Skill7, Skill8, Skill9
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\section*{\\textcolor{blue!75!black}{\\large Education}}
+\\textbf{\\textcolor{blue!60!black}{Degree}}\\\\
+\\textit{\\textcolor{blue!50!black}{Institution | Date}}
+
+\\vspace{0.2cm}
+
+\\section*{\\textcolor{blue!75!black}{\\large Certifications}}
+\\textbf{Certification}\\\\
+\\textit{Organization | Date}
+
+\\columnbreak
+
+\\section*{\\textcolor{blue!75!black}{\\large Experience}}
+\\textbf{\\textcolor{blue!60!black}{Job Title}}\\\\
+\\textit{\\textcolor{blue!50!black}{Company | Dates}}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific metrics
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\section*{\\textcolor{blue!75!black}{\\large Projects}}
+\\textbf{\\textcolor{blue!60!black}{Project Name}}\\\\
+\\textit{\\textcolor{blue!50!black}{Technologies | Year}}
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features and outcomes
+\\end{itemize}
+
+\\end{multicols}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Two-column layout using multicol package
+- Left column: Skills, Education, Certifications
+- Right column: Experience, Projects
+- Balanced column distribution
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 22. Modern Minimalist LaTeX Resume
+  {
+    id: 'latex-modern-minimalist',
+    name: 'Modern Minimalist',
+    category: 'minimal',
+    description: 'Ultra-clean minimalist design with maximum whitespace',
+    preview: 'Modern minimalist LaTeX resume with clean design',
+    format: 'latex',
+    styleGuide: `MODERN MINIMALIST LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=1in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{16pt}{8pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\textcolor{gray!30}\\titlerule[0.5pt]]
+
+\\setlength{\\parskip}{0.5em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.2em}
+
+\\begin{document}
+
+\\begin{center}
+{\\LARGE\\textbf{NAME}}\\\\[0.4cm]
+{\\small email | phone | location}
+\\end{center}
+
+\\vspace{0.6cm}
+
+\\section*{EXPERIENCE}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines describing impact and outcomes
+\\item Another achievement with specific metrics and results
+\\end{itemize}
+
+\\vspace{0.4cm}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{Degree} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\section*{SKILLS}
+
+Skill1, Skill2, Skill3, Skill4, Skill5, Skill6
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Large margins for whitespace
+- Minimal styling with thin gray rules
+- Simple typography
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 23. Professional Blue LaTeX Resume
+  {
+    id: 'latex-professional-blue',
+    name: 'Professional Blue',
+    category: 'professional',
+    description: 'Professional design with blue color scheme',
+    preview: 'Professional blue LaTeX resume with blue accents',
+    format: 'latex',
+    styleGuide: `PROFESSIONAL BLUE LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule[1pt]]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.3cm]
+{\\large\\textcolor{blue!65!black}{Job Title}}\\\\[0.2cm]
+{\\normalsize email | phone | location}
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{PROFESSIONAL SUMMARY}
+\\textcolor{gray!40!black}{Professional summary in 2-3 lines highlighting key qualifications and career focus.}
+
+\\section*{SKILLS}
+\\begin{itemize}
+\\item \\textbf{Category1:} Skill1, Skill2, Skill3
+\\item \\textbf{Category2:} Skill4, Skill5, Skill6
+\\item \\textbf{Category3:} Skill7, Skill8, Skill9
+\\end{itemize}
+
+\\section*{EXPERIENCE}
+
+\\textbf{\\textcolor{blue!70!black}{Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines describing impact and results
+\\item Another achievement with specific metrics and outcomes
+\\item Additional responsibility with scope and scale
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{\\textcolor{blue!70!black}{Job Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{\\textcolor{blue!70!black}{Degree}} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\section*{PROJECTS}
+
+\\textbf{\\textcolor{blue!70!black}{Project Name}} \\hfill \\textit{Year}\\\\
+\\textit{Technologies}
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines
+\\item Key features and outcomes
+\\end{itemize}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" (use pipe separator |)
+- Professional summary section
+- Skills grouped by category
+- Blue color scheme throughout
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 24. Creative Designer LaTeX Resume
+  {
+    id: 'latex-creative-designer',
+    name: 'Creative Designer',
+    category: 'creative',
+    description: 'Creative design-focused layout with visual appeal',
+    preview: 'Creative designer LaTeX resume with artistic styling',
+    format: 'latex',
+    styleGuide: `CREATIVE DESIGNER LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{14pt}{7pt}
+\\titleformat{\\section}{\\Large\\bfseries\\textcolor{black}}{}{0em}{}[\\textcolor{red!70!black}\\titlerule[2pt]]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.18em}
+
+\\begin{document}
+
+\\noindent
+{\\Huge\\textbf{NAME}}\\\\[0.2cm]
+{\\Large\\textcolor{red!70!black}{Designer Job Title}}\\\\[0.15cm]
+{\\normalsize email | phone | location | portfolio}
+
+\\vspace{0.5cm}
+
+\\section*{ABOUT}
+\\textcolor{gray!40!black}{Creative professional summary in 2-3 lines describing design philosophy, expertise, and creative vision.}
+
+\\section*{SKILLS}
+\\begin{itemize}
+\\item \\textbf{Design:} Tool1, Tool2, Tool3, Tool4
+\\item \\textbf{Technical:} Skill1, Skill2, Skill3
+\\item \\textbf{Creative:} Skill1, Skill2, Skill3
+\\end{itemize}
+
+\\section*{EXPERIENCE}
+
+\\textbf{\\textcolor{black}{Designer Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Creative achievement with detailed information spanning multiple lines describing design impact and visual outcomes
+\\item Another design accomplishment with specific projects, clients, and creative results
+\\item Additional creative responsibility with portfolio pieces and design process
+\\end{itemize}
+
+\\vspace{0.3cm}
+
+\\textbf{\\textcolor{black}{Designer Title}} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Creative achievement with detailed information spanning multiple lines
+\\item Another design accomplishment with specific outcomes
+\\end{itemize}
+
+\\section*{PORTFOLIO PROJECTS}
+
+\\textbf{\\textcolor{black}{Project Name}} \\hfill \\textit{Year}\\\\
+\\textit{Client/Type: Description}
+\\begin{itemize}
+\\item Project description with detailed information about design process, creative decisions, and visual outcomes spanning multiple lines
+\\item Key design features and client impact
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{\\textcolor{black}{Degree}} \\hfill \\textit{Date}\\\\
+\\textit{Institution, Location}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location | portfolio" (use pipe separator |)
+- Red accent color for creative elements
+- Portfolio projects section
+- Creative about section
+- Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
+
+  },
+
+  // 25. ATS-Optimized LaTeX Resume
+  {
+    id: 'latex-ats-optimized',
+    name: 'ATS-Optimized',
+    category: 'professional',
+    description: 'ATS-friendly format with standard structure',
+    preview: 'ATS-optimized LaTeX resume with maximum compatibility',
+    format: 'latex',
+    styleGuide: `ATS-OPTIMIZED LATEX TEMPLATE - YOU MUST USE THIS EXACT LAYOUT:
+
+🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
+
+MANDATORY STRUCTURE (LaTeX):
+\\documentclass[11pt]{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+\\usepackage{titlesec}
+
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
+\\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
+
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+
+\\begin{document}
+
+\\begin{center}
+{\\Huge\\textbf{NAME}}\\\\[0.3cm]
+{\\normalsize email | phone | location}\\\\
+{\\normalsize linkedin | portfolio}
+\\end{center}
+
+\\vspace{0.4cm}
+
+\\section*{PROFESSIONAL SUMMARY}
+Professional summary in 2-3 lines using standard keywords and industry terminology. Highlight key skills, years of experience, and career focus.
+
+\\section*{TECHNICAL SKILLS}
+\\begin{itemize}
+\\item \\textbf{Programming Languages:} Language1, Language2, Language3, Language4
+\\item \\textbf{Frameworks \\& Libraries:} Framework1, Framework2, Framework3
+\\item \\textbf{Tools \\& Technologies:} Tool1, Tool2, Tool3, Tool4
+\\item \\textbf{Software \\& Platforms:} Platform1, Platform2, Platform3
+\\end{itemize}
+
+\\section*{PROFESSIONAL EXPERIENCE}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines using industry-standard keywords and action verbs
+\\item Another achievement with specific metrics, technologies, and quantifiable results
+\\item Additional responsibility with standard job title terminology and professional language
+\\end{itemize}
+
+\\vspace{0.2cm}
+
+\\textbf{Job Title} \\hfill \\textit{Dates}\\\\
+\\textit{Company Name, Location}
+\\begin{itemize}
+\\item Achievement with detailed information spanning multiple lines
+\\item Another achievement with specific outcomes
+\\end{itemize}
+
+\\section*{EDUCATION}
+
+\\textbf{Degree Name} \\hfill \\textit{Graduation Date}\\\\
+\\textit{Institution Name, Location}\\\\
+Relevant coursework, honors, or GPA if applicable
+
+\\section*{CERTIFICATIONS}
+
+\\textbf{Certification Name} \\hfill \\textit{Date}\\\\
+\\textit{Issuing Organization}
+
+\\section*{PROJECTS}
+
+\\textbf{Project Name} \\hfill \\textit{Year}\\\\
+\\textit{Technologies Used}
+\\begin{itemize}
+\\item Project description with detailed information spanning multiple lines using standard technical terminology
+\\item Key features and outcomes with measurable results
+\\end{itemize}
+
+\\end{document}
+
+CRITICAL FORMATTING RULES:
+- Contact info: "email | phone | location" on first line, "linkedin | portfolio" on second line (use pipe separator |)
+- Standard section names for ATS compatibility
+- Industry-standard keywords and terminology
+- Professional summary with keywords
+- Skills grouped with standard category names
 - Each bullet point MUST be 2-5 lines (ideally 3 lines) with detailed descriptions`,
 
   },

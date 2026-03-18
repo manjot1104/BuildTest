@@ -221,19 +221,28 @@ function injectSampleDataIntoHtml(html: string): string {
   out = out.replace(/>\s*Institution\s*\|\s*Dates\s*</gi, `>${eduData.institution} | ${eduData.dates}<`)
   out = out.replace(/\bInstitution\b/gi, eduData.institution)
   
-  // Replace education section
-  const eduPattern = /(<h2[^>]*>Education<\/h2>[\s\S]*?)(?=<h2|<h3|<\/div>|<\/section>|<\/body>)/i
+  // Replace education section - check if already has content to avoid duplication
+  const eduPattern = /(<h2[^>]*>Education<\/h2>)([\s\S]*?)(?=<h2|<h3|<\/div>|<\/section>|<\/body>)/i
   const eduMatch = out.match(eduPattern)
   if (eduMatch) {
-    const eduDetailsHtml = eduData.details.length > 0 
-      ? `<ul style="margin-top: 8px; padding-left: 20px; line-height: 1.6;">\n          ${eduData.details.map(d => `<li>${d}</li>`).join('\n          ')}\n        </ul>`
-      : ''
-    const eduHtml = `<div class="education-entry" style="margin-bottom: 15px;">
+    const sectionContent = (eduMatch[2] || '').trim()
+    // Check if section already has real content (not just placeholder text)
+    const hasRealContent = sectionContent && 
+      sectionContent.includes('education-entry') ||
+      (sectionContent.includes('job-title') && !sectionContent.match(/>\s*Degree\s*</i) && !sectionContent.match(/>\s*Date\s*</i))
+    
+    // Only add content if section is empty or has only placeholder text
+    if (!hasRealContent) {
+      const eduDetailsHtml = eduData.details.length > 0 
+        ? `<ul style="margin-top: 8px; padding-left: 20px; line-height: 1.6;">\n          ${eduData.details.map(d => `<li>${d}</li>`).join('\n          ')}\n        </ul>`
+        : ''
+      const eduHtml = `<div class="education-entry" style="margin-bottom: 15px;">
         <div class="job-title" style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">${eduData.degree}</div>
         <div class="job-meta" style="color: #666; font-size: 14px; margin-bottom: 8px;">${eduData.institution} | ${eduData.dates}</div>
         ${eduDetailsHtml}
       </div>`
-    out = out.replace(eduPattern, `$1\n      ${eduHtml}\n    `)
+      out = out.replace(eduPattern, `$1\n      ${eduHtml}\n    `)
+    }
   }
 
   // Projects injection
@@ -284,18 +293,23 @@ function injectSampleDataIntoHtml(html: string): string {
       const cleanedSection = sectionContent.replace(/(<h2[^>]*>Projects?<\/h2>)[\s\S]*/i, `$1\n      ${allProjHtml}\n    `)
       out = out.replace(projPattern, cleanedSection)
     } else {
-      // If Projects section doesn't exist but should be there, add it before closing tags
+      // If Projects section doesn't exist but should be there, add a single heading with all projects before closing tags
       const beforeClose = out.match(/([\s\S]*)(<\/div>\s*<\/body>)/)
       if (beforeClose && !out.includes('<h2>Projects')) {
-        const allProjHtml = projEntries.map(proj => {
+        const projectEntries = projEntries.map(proj => {
           const bulletsHtml = proj.bullets.map(b => `<li>${b}</li>`).join('\n          ')
-          return `<h2>Projects</h2>
+          return `<div class="project-entry" style="margin-bottom: 20px;">
     <div class="job-title">${proj.name} | ${proj.year}</div>
     <ul>
       ${bulletsHtml}
-    </ul>`
+    </ul>
+  </div>`
         }).join('\n  ')
-        out = out.replace(/(<\/div>\s*<\/body>)/, `  ${allProjHtml}\n$1`)
+
+        const sectionHtml = `<h2>Projects</h2>
+  ${projectEntries}`
+
+        out = out.replace(/(<\/div>\s*<\/body>)/, `  ${sectionHtml}\n$1`)
       }
     }
   }
