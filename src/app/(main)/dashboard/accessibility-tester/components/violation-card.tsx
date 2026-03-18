@@ -2,15 +2,22 @@
 
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { ChevronDown, ExternalLink } from 'lucide-react'
+import { ChevronDown, ExternalLink, Code2 } from 'lucide-react'
 import type { AxeViolation } from '@/types/accessibility.types'
+import { cn } from '@/lib/utils'
 
-const impactColors: Record<string, string> = {
-  critical: 'bg-red-600 text-white hover:bg-red-700',
-  serious: 'bg-orange-500 text-white hover:bg-orange-600',
-  moderate: 'bg-yellow-500 text-white hover:bg-yellow-600',
-  minor: 'bg-gray-400 text-white hover:bg-gray-500',
+const impactStyles: Record<string, string> = {
+  critical: 'text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-950/50',
+  serious: 'text-orange-700 bg-orange-50 dark:text-orange-400 dark:bg-orange-950/50',
+  moderate: 'text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-950/50',
+  minor: 'text-gray-600 bg-gray-100 dark:text-gray-400 dark:bg-gray-800',
+}
+
+const impactBorder: Record<string, string> = {
+  critical: 'border-red-200 dark:border-red-900/50',
+  serious: 'border-orange-200 dark:border-orange-900/50',
+  moderate: 'border-amber-200 dark:border-amber-900/50',
+  minor: 'border-border',
 }
 
 interface ViolationCardProps {
@@ -23,45 +30,59 @@ export function ViolationCard({ violation }: ViolationCardProps) {
   const remaining = violation.nodes.length - 3
 
   return (
-    <div className="rounded-md border p-3 space-y-2">
+    <div
+      className={cn(
+        'rounded-xl border bg-card p-4 shadow-sm space-y-2.5',
+        'transition-all duration-200 hover:shadow-md',
+        impactBorder[violation.impact] ?? impactBorder.minor,
+      )}
+    >
       <div className="flex flex-wrap items-center gap-2">
-        <Badge className={impactColors[violation.impact] ?? impactColors.minor}>
+        <span
+          className={cn(
+            'rounded-md px-2 py-0.5 text-[11px] font-semibold capitalize',
+            impactStyles[violation.impact] ?? impactStyles.minor,
+          )}
+        >
           {violation.impact}
-        </Badge>
-        <code className="text-xs text-muted-foreground">{violation.id}</code>
+        </span>
+        <code className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+          {violation.id}
+        </code>
         {violation.tags.slice(0, 3).map((tag) => (
-          <Badge key={tag} variant="outline" className="text-[10px]">
+          <Badge key={tag} variant="secondary" className="rounded-md text-[10px] font-mono px-1.5 py-0">
             {tag}
           </Badge>
         ))}
       </div>
 
-      <p className="text-sm">{violation.description}</p>
-      <p className="text-xs text-muted-foreground">{violation.help}</p>
+      <p className="text-sm leading-relaxed">{violation.description}</p>
+      {violation.help && (
+        <p className="text-xs leading-relaxed text-muted-foreground">{violation.help}</p>
+      )}
 
       {violation.nodes.length > 0 && (
         <div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1 px-0 text-xs text-muted-foreground"
+          <button
             onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors duration-150 hover:text-foreground"
           >
+            <Code2 className="size-3" />
             <ChevronDown
-              className={`size-3 transition-transform ${expanded ? 'rotate-180' : ''}`}
+              className={cn('size-3 transition-transform duration-300 ease-out', expanded && 'rotate-180')}
             />
             {violation.nodes.length} affected element{violation.nodes.length !== 1 ? 's' : ''}
-          </Button>
+          </button>
 
           {expanded && (
-            <div className="mt-1 space-y-2">
+            <div className="mt-2.5 space-y-2">
               {displayNodes.map((node, i) => (
-                <div key={i} className="rounded bg-muted p-2 text-xs">
-                  <code className="block max-h-20 overflow-auto break-all font-mono">
+                <div key={i} className="rounded-lg border bg-muted/40 p-3">
+                  <code className="block max-h-20 overflow-auto break-all text-xs text-foreground/80 leading-relaxed">
                     {node.html}
                   </code>
                   {node.failureSummary && (
-                    <p className="mt-1 text-muted-foreground">{node.failureSummary}</p>
+                    <p className="mt-2 text-xs text-muted-foreground">{node.failureSummary}</p>
                   )}
                 </div>
               ))}
@@ -75,14 +96,16 @@ export function ViolationCard({ violation }: ViolationCardProps) {
         </div>
       )}
 
-      <a
-        href={violation.helpUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-      >
-        Learn more <ExternalLink className="size-3" />
-      </a>
+      {violation.helpUrl && (
+        <a
+          href={violation.helpUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-primary transition-colors duration-150 hover:text-primary/80 hover:underline"
+        >
+          Learn more <ExternalLink className="size-3" />
+        </a>
+      )}
     </div>
   )
 }
