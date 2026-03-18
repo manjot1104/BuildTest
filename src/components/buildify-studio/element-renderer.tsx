@@ -694,7 +694,7 @@ function NavbarRenderer({ element, isSelected, isPreview, onContentChange }: {
       >
         {rawItems[0] ?? 'Brand'}
       </span>
-      <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: element.width < 500 ? 8 : element.width < 800 ? 14 : 24, alignItems: 'center', flexWrap: 'wrap', overflow: 'hidden', maxHeight: '100%' }}>
         {parsedItems.map((item, i) => (
           <span
             key={i}
@@ -706,7 +706,7 @@ function NavbarRenderer({ element, isSelected, isPreview, onContentChange }: {
             }}
             onClick={(e) => handleNavClick(e, item)}
             style={{
-              fontSize: styles.fontSize ?? 14,
+              fontSize: element.width < 500 ? Math.min(styles.fontSize ?? 14, 11) : styles.fontSize ?? 14,
               fontWeight: styles.fontWeight ?? '500',
               color: styles.color ?? '#ffffff',
               fontFamily: styles.fontFamily,
