@@ -40,7 +40,7 @@ import {
 import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
 import { openRouterChatHandler, openRouterStreamHandler } from '@/server/api/controllers/openrouter.controller'
 import { getV0Client } from '@/lib/v0-client'
-import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatAttachment,
   type ApiErrorResponse,
@@ -56,6 +56,7 @@ import {
   toggleStarChat,
   getStarredChats,
 } from '@/server/api/controllers/star.controller'
+
 import {
   getGithubStatusHandler,
   pushToGithubHandler,
@@ -109,6 +110,7 @@ interface ChatRequestBody {
   chatId?: string
   streaming?: boolean
   attachments?: ChatAttachment[]
+  envVarNames?: string[] 
 }
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
@@ -131,7 +133,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   .post(
     '/chat',
     async ({ body, request, set }) => {
-      const { message, chatId, streaming, attachments } = body as ChatRequestBody
+     const { message, chatId, streaming, attachments, envVarNames = [] } = body as ChatRequestBody
 
       const v0 = await getV0Client()
 
@@ -231,14 +233,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           if (chatId) {
             try {
               // Continue existing chat with streaming
-              stream = (await v0.chats.sendMessage({
-                chatId,
-                message,
-                responseMode: 'experimental_stream',
-                ...(attachments && attachments.length > 0 && { attachments }),
-              })) as ReadableStream<Uint8Array>
+          stream = (await v0.chats.sendMessage({
+  chatId,
+  message: enhanceFollowUpPrompt(message, envVarNames),
+  responseMode: 'experimental_stream',
+  ...(attachments && attachments.length > 0 && { attachments }),
+})) as ReadableStream<Uint8Array>
             } catch (error) {
-              // If chat doesn't exist (404), create a new chat instead
+              // If cha t doesn't exist (404), create a new chat instead
               const errorMessage =
                 error instanceof Error ? error.message : String(error)
               if (
@@ -248,7 +250,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               ) {
                 // Chat not found on v0, create new chat instead
                 stream = (await v0.chats.create({
-                  message: enhanceFirstPrompt(message),
+                  message: enhanceFirstPrompt(message, envVarNames),
                   responseMode: 'experimental_stream',
                   ...(attachments && attachments.length > 0 && { attachments }),
                 })) as ReadableStream<Uint8Array>
@@ -260,7 +262,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           } else {
             // Create new chat with streaming (enhanced first prompt)
             stream = (await v0.chats.create({
-              message: enhanceFirstPrompt(message),
+             message: enhanceFirstPrompt(message, envVarNames),
               responseMode: 'experimental_stream',
               ...(attachments && attachments.length > 0 && { attachments }),
             })) as ReadableStream<Uint8Array>
@@ -434,7 +436,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         chatId: string
         isStarred: boolean
       }
-
+ console.log('Star API - userId:', session.user.id)  
+    console.log('Star API - chatId:', chatId)           
+    console.log('Star API - isStarred:', isStarred)     
       await toggleStarChat({
         userId: session.user.id,
         chatId,
@@ -528,7 +532,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
  .get(
   '/chats',
   async ({ query, set }) => {
-    const result = await getChatHistoryHandler({ query })
+    const result = await getChatHistoryHandler({ query: { ...query, page: query.page ? Number(query.page) : undefined, limit: query.limit ? Number(query.limit) : undefined } })
 
     if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
@@ -547,6 +551,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           t.Literal("openrouter"),
         ])
       ),
+      page: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
     }),
   },
 )

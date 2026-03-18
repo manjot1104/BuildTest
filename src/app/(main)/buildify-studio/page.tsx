@@ -5,8 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import {
   Plus, Pencil, Trash2, Globe, GlobeLock, Loader2,
-  LayoutTemplate, Palette, Zap, ExternalLink, Clock,
-  Sparkles, Layers, ArrowRight,
+  LayoutTemplate, ExternalLink, Clock,
+  Sparkles, ArrowRight, MousePointerClick, Rocket, PenTool,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -27,14 +27,14 @@ interface DesignCard {
 }
 
 const THUMB_GRADIENTS = [
-  'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', // Slate 50 -> 100
-  'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)', // Slate 100 -> 200
-  'linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%)', // Soft Beige
-  'linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%)', // Sky 100 -> 200
-  'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)', // Sky 50 -> 100
-  'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', // Violet 50 -> 100
-  'linear-gradient(135deg, #fafaf9 0%, #f5f5f4 100%)', // Stone 50 -> 100
-  'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', // Green 50 -> 100
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+  'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+  'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)',
+  'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
 ]
 
 function formatDate(iso: string) {
@@ -44,7 +44,7 @@ function formatDate(iso: string) {
   if (diffDays === 0) return 'Today'
   if (diffDays === 1) return 'Yesterday'
   if (diffDays < 7) return `${diffDays}d ago`
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 export default function BuildifyStudioPage() {
@@ -85,62 +85,56 @@ export default function BuildifyStudioPage() {
   if (loading) {
     return (
       <div className="flex h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="size-6 animate-spin text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">Loading your designs...</p>
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="size-10 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+          </div>
+          <p className="text-sm font-medium text-muted-foreground">Loading designs...</p>
         </div>
       </div>
     )
   }
 
   const liveCount = designs.filter((p) => p.isPublished).length
+  const draftCount = designs.length - liveCount
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 pb-20">
+    <div className="mx-auto max-w-6xl space-y-8 px-6 py-8 pb-20">
 
-      {/* Hero header */}
-      <div className="relative overflow-hidden rounded-2xl border bg-card">
-        <div className="relative px-8 py-8">
-          <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-5">
-              <div className="relative flex size-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10">
-                <Sparkles className="size-7 text-primary" />
+      {/* Header */}
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Buildify Studio</h1>
+          <p className="mt-1.5 text-muted-foreground">
+            Design, build, and publish beautiful pages
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {designs.length > 0 && (
+            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                </span>
+                <span className="font-medium text-foreground">{liveCount}</span> live
               </div>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">Buildify Studio</h1>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Design, build, and publish beautiful pages
-                </p>
+              <span className="text-border">|</span>
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-muted-foreground/30" />
+                <span className="font-medium text-foreground">{draftCount}</span> draft
               </div>
             </div>
-
-            <div className="flex items-center gap-4">
-              {designs.length > 0 && (
-                <div className="flex items-center gap-4 rounded-xl border border-border/50 bg-background/50 px-4 py-2.5 backdrop-blur-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="relative flex size-2">
-                      <span className="absolute inline-flex size-full animate-ping rounded-full bg-green-400 opacity-75" />
-                      <span className="relative inline-flex size-2 rounded-full bg-green-500" />
-                    </span>
-                    <span className="text-xs font-medium">{liveCount} live</span>
-                  </div>
-                  <div className="h-4 w-px bg-border" />
-                  <div className="flex items-center gap-2">
-                    <span className="size-2 rounded-full bg-muted-foreground/30" />
-                    <span className="text-xs text-muted-foreground">{designs.length - liveCount} draft</span>
-                  </div>
-                </div>
-              )}
-              <Button
-                onClick={() => router.push('/buildify-studio/new')}
-                size="lg"
-                className="gap-2 shadow-sm transition-all hover:shadow-md"
-              >
-                <Plus className="size-4" />
-                New Design
-              </Button>
-            </div>
-          </div>
+          )}
+          <Button
+            onClick={() => router.push('/buildify-studio/new')}
+            size="lg"
+            className="gap-2 px-6"
+          >
+            <Plus className="size-4" />
+            New Design
+          </Button>
         </div>
       </div>
 
@@ -163,17 +157,12 @@ export default function BuildifyStudioPage() {
           <button
             type="button"
             onClick={() => router.push('/buildify-studio/new')}
-            className="group flex h-full min-h-[260px] flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-border/60 text-muted-foreground transition-all duration-300 hover:border-primary/40 hover:bg-muted hover:text-primary hover:shadow-md"
+            className="group flex h-full min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border text-muted-foreground transition-all duration-200 hover:border-primary/50 hover:bg-primary/[0.02] hover:text-primary"
           >
-            <div className="relative">
-              <div className="relative flex size-14 items-center justify-center rounded-2xl border-2 border-dashed border-current opacity-40 transition-all group-hover:opacity-100 group-hover:border-solid group-hover:bg-background">
-                <Plus className="size-6" />
-              </div>
+            <div className="flex size-12 items-center justify-center rounded-xl border border-dashed border-current transition-colors group-hover:border-solid group-hover:bg-primary/10">
+              <Plus className="size-5" />
             </div>
-            <div className="text-center">
-              <span className="block text-sm font-semibold">New Design</span>
-              <span className="block text-xs opacity-60">Start from scratch or template</span>
-            </div>
+            <span className="text-sm font-medium">Create new design</span>
           </button>
         </div>
       )}
@@ -183,46 +172,48 @@ export default function BuildifyStudioPage() {
 
 function EmptyState({ onNew }: { onNew: () => void }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-dashed border-border/60 bg-card px-8 py-24 text-center">
-      <div className="relative flex flex-col items-center">
-        {/* Icon stack */}
-        <div className="relative mb-8">
-          <div className="relative flex size-24 items-center justify-center rounded-3xl border bg-muted">
-            <LayoutTemplate className="size-12 text-primary" />
-          </div>
-          <div className="absolute -bottom-1 -right-1 flex size-8 items-center justify-center rounded-full border-2 border-background bg-primary shadow-sm">
-            <Plus className="size-4 text-primary-foreground" />
-          </div>
+    <div className="flex flex-col items-center pt-8 pb-4">
+      {/* Illustration area */}
+      <div className="relative mb-10">
+        <div className="absolute -inset-8 rounded-full bg-primary/5" />
+        <div className="absolute -inset-16 rounded-full bg-primary/[0.02]" />
+        <div className="relative flex size-20 items-center justify-center rounded-2xl bg-primary/10">
+          <LayoutTemplate className="size-10 text-primary" />
         </div>
-
-        <h2 className="mb-2 text-xl font-bold tracking-tight">No designs yet</h2>
-        <p className="mb-10 max-w-md text-sm leading-relaxed text-muted-foreground">
-          Create stunning pages — portfolios, prototypes, landing pages, or stores — with our drag & drop editor and publish with one click.
-        </p>
-
-        {/* Feature highlights */}
-        <div className="mb-10 flex flex-wrap justify-center gap-3">
-          {[
-            { icon: Palette, text: 'Drag & drop editor', color: 'text-foreground bg-muted border-border' },
-            { icon: Layers, text: 'Templates included', color: 'text-foreground bg-muted border-border' },
-            { icon: Globe, text: 'One-click publish', color: 'text-foreground bg-muted border-border' },
-          ].map(({ icon: Icon, text, color }) => (
-            <div
-              key={text}
-              className={`flex items-center gap-2.5 rounded-full border px-4 py-2 text-xs font-medium ${color}`}
-            >
-              <Icon className="size-4" />
-              {text}
-            </div>
-          ))}
-        </div>
-
-        <Button onClick={onNew} size="lg" className="gap-2.5 px-8 shadow-md">
-          <Sparkles className="size-4" />
-          Create your first design
-          <ArrowRight className="size-4" />
-        </Button>
       </div>
+
+      <h2 className="mb-2 text-2xl font-bold tracking-tight">Start building</h2>
+      <p className="mb-8 max-w-sm text-center text-sm leading-relaxed text-muted-foreground">
+        Create portfolios, landing pages, prototypes, and more with our visual editor. Publish with a single click.
+      </p>
+
+      {/* Feature cards */}
+      <div className="mb-10 grid w-full max-w-lg grid-cols-3 gap-3">
+        {[
+          { icon: MousePointerClick, title: 'Drag & Drop', desc: 'Visual editor' },
+          { icon: PenTool, title: 'Templates', desc: 'Ready to use' },
+          { icon: Rocket, title: 'Publish', desc: 'One click' },
+        ].map(({ icon: Icon, title, desc }) => (
+          <div
+            key={title}
+            className="flex flex-col items-center gap-2 rounded-xl border bg-card p-4 text-center"
+          >
+            <div className="flex size-9 items-center justify-center rounded-lg bg-muted">
+              <Icon className="size-4.5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold">{title}</p>
+              <p className="text-[11px] text-muted-foreground">{desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <Button onClick={onNew} size="lg" className="gap-2 px-8">
+        <Sparkles className="size-4" />
+        Create your first design
+        <ArrowRight className="size-4" />
+      </Button>
     </div>
   )
 }
@@ -239,40 +230,39 @@ function DesignCardItem({
   onDelete: () => void
 }) {
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/50 bg-card transition-all duration-300 hover:-translate-y-1 hover:border-border hover:shadow-lg hover:shadow-black/[0.04]">
+    <div className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-all duration-200 hover:shadow-lg hover:shadow-black/[0.08] dark:hover:shadow-black/[0.3]">
       {/* Gradient thumbnail */}
-      <div
-        className="relative flex h-40 items-center justify-center overflow-hidden"
+      <Link
+        href={`/buildify-studio/${design.id}`}
+        className="relative flex h-44 items-center justify-center overflow-hidden"
         style={{ background: gradient }}
       >
-        {/* Grid overlay */}
+        {/* Dot pattern overlay */}
         <div
-          className="pointer-events-none absolute inset-0 opacity-10"
+          className="pointer-events-none absolute inset-0 opacity-[0.15]"
           style={{
-            backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-            backgroundSize: '24px 24px',
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.5) 1px, transparent 1px)',
+            backgroundSize: '16px 16px',
           }}
         />
 
         {/* Large initial letter */}
-        <span className="relative text-6xl font-black text-white/20 select-none transition-transform duration-300 group-hover:scale-110">
+        <span className="relative text-7xl font-black text-white/25 select-none transition-transform duration-300 group-hover:scale-110">
           {design.title.charAt(0).toUpperCase()}
         </span>
 
         {/* Status badge */}
-        <div className="absolute right-3 top-3">
+        <div className="absolute left-3 top-3">
           <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold backdrop-blur-md ${
+            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm ${
               design.isPublished
-                ? 'bg-green-500/20 text-green-700 dark:text-green-200 border border-green-500/30'
-                : 'bg-black/30 text-white/60 border border-white/10'
+                ? 'bg-emerald-500/20 text-white border border-emerald-400/30'
+                : 'bg-black/20 text-white/70 border border-white/10'
             }`}
           >
             {design.isPublished ? (
               <>
-                <span className="relative flex size-1.5">
-                  <span className="relative inline-flex size-1.5 rounded-full bg-green-500" />
-                </span>
+                <span className="size-1.5 rounded-full bg-emerald-400" />
                 Live
               </>
             ) : (
@@ -282,24 +272,21 @@ function DesignCardItem({
         </div>
 
         {/* Hover overlay */}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 backdrop-blur-[2px] transition-all duration-300 group-hover:opacity-100">
-          <Link
-            href={`/buildify-studio/${design.id}`}
-            className="flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-xl transition-transform duration-200 hover:scale-105 active:scale-95"
-          >
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 backdrop-blur-[2px] transition-all duration-200 group-hover:opacity-100">
+          <span className="flex items-center gap-2 rounded-lg bg-white px-5 py-2.5 text-sm font-semibold text-gray-900 shadow-xl">
             <Pencil className="size-3.5" />
             Open Editor
-          </Link>
+          </span>
         </div>
-      </div>
+      </Link>
 
       {/* Card body */}
-      <div className="flex flex-1 flex-col gap-3 p-4">
+      <div className="flex flex-1 flex-col gap-2.5 p-4">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold leading-tight">{design.title}</h2>
-          <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <h2 className="truncate font-semibold leading-tight">{design.title}</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
             <Clock className="size-3" />
-            {formatDate(design.updatedAt)}
+            Edited {formatDate(design.updatedAt)}
           </p>
         </div>
 
@@ -308,29 +295,30 @@ function DesignCardItem({
             href={`/p/${design.slug}`}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 truncate rounded-lg bg-muted px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
+            className="flex items-center gap-1.5 truncate rounded-md bg-muted/50 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
-            <ExternalLink className="size-3 shrink-0" />
-            /p/{design.slug}
+            <Globe className="size-3 shrink-0" />
+            <span className="truncate">/p/{design.slug}</span>
+            <ExternalLink className="ml-auto size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100" />
           </a>
         )}
 
         {/* Actions */}
-        <div className="mt-auto flex gap-2 pt-1">
-          <Button size="sm" variant="outline" className="flex-1 gap-1.5 rounded-xl text-xs" asChild>
+        <div className="mt-auto flex gap-2 pt-2 border-t border-border/50">
+          <Button size="sm" variant="ghost" className="flex-1 gap-1.5 text-xs h-8" asChild>
             <Link href={`/buildify-studio/${design.id}`}>
-              <Pencil className="size-3.5" />
+              <Pencil className="size-3" />
               Edit
             </Link>
           </Button>
 
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button size="sm" variant="outline" disabled={isDeleting} className="rounded-xl px-2.5">
+              <Button size="sm" variant="ghost" disabled={isDeleting} className="h-8 px-2 text-muted-foreground hover:text-destructive">
                 {isDeleting ? (
                   <Loader2 className="size-3.5 animate-spin" />
                 ) : (
-                  <Trash2 className="size-3.5 text-destructive/70 transition-colors group-hover:text-destructive" />
+                  <Trash2 className="size-3.5" />
                 )}
               </Button>
             </AlertDialogTrigger>

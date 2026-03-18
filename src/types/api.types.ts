@@ -225,6 +225,7 @@ export interface ChatRequestBody {
   chatId?: string
   streaming?: boolean
   attachments?: ChatAttachment[]
+  envVarNames?: string[]
 }
 
 /** Chat message from API */

@@ -1,4 +1,5 @@
 import React from 'react'
+import { VideoElement } from '@/components/buildify-studio/video-element'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { env } from '@/env'
@@ -25,7 +26,7 @@ interface DesignData {
 async function getDesign(slug: string): Promise<DesignData | null> {
   try {
     const baseUrl = env.NEXT_PUBLIC_APP_URL
-    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { next: { revalidate: 60 } })
+    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { cache: 'no-store' })
     if (!res.ok) return null
     return (await res.json()) as DesignData
   } catch {
@@ -252,15 +253,17 @@ function StaticElement({ el }: { el: CanvasElement }) {
           </div>
         )
       }
-      case 'video-embed': {
-        const ytMatch = el.content.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
-        const ytId = ytMatch?.[1]
-        return ytId ? (
-          <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-        ) : (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Video</div>
-        )
-      }
+     case 'video-embed': {
+  return (
+    <VideoElement
+      content={el.content}
+      borderRadius={styles.borderRadius}
+      videoAutoplay={styles.videoAutoplay}
+      videoLoop={styles.videoLoop}
+      videoMuted={styles.videoMuted}
+    />
+  )
+}
       case 'navbar': {
         const rawItems = el.content.split('|').filter(Boolean)
         const navLinks = rawItems.slice(1).map((item) => {
@@ -370,12 +373,12 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         .pb-anim-zoomin{animation:pb-zoomin 0.5s ease forwards}
         .pb-anim-bounce{animation:pb-bounce 1s ease infinite}
         *{box-sizing:border-box;margin:0;padding:0}
-        html{scroll-behavior:smooth}
-        body{font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden}
+        html{scroll-behavior:smooth;overflow-x:hidden}
+        body{font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
         main{position:relative;width:1440px;min-height:${pageHeight}px;margin:0 auto;${bgCss}}
         @media(max-width:1460px) and (min-width:769px){
           main{transform-origin:top left;transform:scale(calc(100vw / 1440));width:1440px;min-height:${pageHeight}px}
-          body{height:calc(${pageHeight}px * (100vw / 1440))}
+          body{height:calc(${pageHeight}px * (100vw / 1440));overflow:hidden}
         }
         @media(max-width:768px) and (min-width:481px){
           main{width:${DEVICE_WIDTHS.tablet}px!important;min-height:${tabletHeight}px!important;transform:none!important;margin:0 auto}

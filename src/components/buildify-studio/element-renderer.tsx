@@ -498,18 +498,44 @@ function VideoEmbedRenderer({ element, isPreview }: { element: CanvasElement; is
   const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(url)
   const ytId = ytMatch?.[1]
 
-  if (isPreview && ytId) {
+  // Check if it's a direct video file (MP4, WebM, OGG, or blob/data URL)
+  const isDirectVideo = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(url) ||
+    url.startsWith('data:video/') ||
+    url.startsWith('blob:')
+
+  if (ytId) {
+    if (isPreview) {
+      return (
+        <iframe
+          src={`https://www.youtube.com/embed/${ytId}`}
+          style={{
+            width: '100%',
+            height: '100%',
+            border: 'none',
+            borderRadius: element.styles.borderRadius ?? 8,
+          }}
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+        />
+      )
+    }
+  } else if (isDirectVideo && url) {
     return (
-      <iframe
-        src={`https://www.youtube.com/embed/${ytId}`}
+      // eslint-disable-next-line jsx-a11y/media-has-caption
+      <video
+        src={url}
+        controls={!element.styles.videoAutoplay}
+        autoPlay={element.styles.videoAutoplay ?? false}
+        loop={element.styles.videoLoop ?? false}
+        muted={element.styles.videoMuted ?? true}
+        playsInline
         style={{
           width: '100%',
           height: '100%',
-          border: 'none',
+          objectFit: 'cover',
           borderRadius: element.styles.borderRadius ?? 8,
+          backgroundColor: '#0f0f0f',
         }}
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
       />
     )
   }
@@ -531,7 +557,7 @@ function VideoEmbedRenderer({ element, isPreview }: { element: CanvasElement; is
     >
       <Play size={40} color="#ffffff" />
       <span style={{ fontSize: 12, color: '#9ca3af' }}>
-        {url ? (ytId ? 'YouTube Video' : 'Video Embed') : 'Paste YouTube URL in inspector'}
+        {url ? (ytId ? 'YouTube Video' : 'Video') : 'Add video URL or upload in inspector'}
       </span>
     </div>
   )
