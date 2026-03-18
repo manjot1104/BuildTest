@@ -1,15 +1,16 @@
 "use client"
 
 import { useState } from "react"
+import { cn } from "@/lib/utils"
 import {
     BadgeCheck,
     Bell,
     ChevronsUpDown,
-    Coins,
     CreditCard,
     LogOut,
     Sparkles,
     User,
+    Zap,
 } from "lucide-react"
 
 import {
@@ -138,24 +139,58 @@ export function NavUser({ onSettingsClick }: NavUserProps) {
                             </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem onClick={() => setSubscriptionModalOpen(true)}>
-                                {hasActiveSubscription ? (
-                                    <>
-                                        <Coins className="size-4" />
-                                        <span className="flex-1">Credits</span>
-                                        <span className="ml-auto text-xs text-muted-foreground">
-                                            {isLoading ? "..." : credits?.totalCredits ?? 0}
-                                        </span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <Sparkles className="size-4" />
-                                        Buy Pro
-                                    </>
-                                )}
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
+                        {/* Usage meter */}
+                        <div
+                            className="mx-1 my-1 cursor-pointer rounded-md px-2.5 py-2 transition-colors hover:bg-accent"
+                            onClick={() => setSubscriptionModalOpen(true)}
+                        >
+                            <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-1.5">
+                                    <Zap className={cn(
+                                        "size-3",
+                                        (credits?.totalCredits ?? 0) === 0 ? "text-red-500"
+                                            : (credits?.totalCredits ?? 0) <= 50 ? "text-amber-500"
+                                            : "text-primary",
+                                    )} />
+                                    <span className="text-xs font-medium">Credits</span>
+                                </div>
+                                <span className={cn(
+                                    "text-xs font-bold tabular-nums",
+                                    (credits?.totalCredits ?? 0) === 0 ? "text-red-500"
+                                        : (credits?.totalCredits ?? 0) <= 50 ? "text-amber-500"
+                                        : "text-foreground",
+                                )}>
+                                    {isLoading ? "..." : credits?.totalCredits ?? 0}
+                                </span>
+                            </div>
+                            <div className={cn(
+                                "h-1.5 w-full rounded-full overflow-hidden",
+                                (credits?.totalCredits ?? 0) === 0 ? "bg-red-500/10"
+                                    : (credits?.totalCredits ?? 0) <= 50 ? "bg-amber-500/10"
+                                    : "bg-primary/10",
+                            )}>
+                                <div
+                                    className={cn(
+                                        "h-full rounded-full transition-all duration-500",
+                                        (credits?.totalCredits ?? 0) === 0 ? "bg-red-500"
+                                            : (credits?.totalCredits ?? 0) <= 50 ? "bg-amber-500"
+                                            : "bg-primary",
+                                    )}
+                                    style={{ width: `${Math.min(((credits?.totalCredits ?? 0) / Math.max(credits?.totalCredits ?? 1, 500)) * 100, 100)}%` }}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between mt-1">
+                                <span className="text-[9px] text-muted-foreground">
+                                    {(credits?.subscriptionCredits ?? 0) > 0 && `${credits?.subscriptionCredits} sub`}
+                                    {(credits?.subscriptionCredits ?? 0) > 0 && (credits?.additionalCredits ?? 0) > 0 && " + "}
+                                    {(credits?.additionalCredits ?? 0) > 0 && `${credits?.additionalCredits} extra`}
+                                    {(credits?.totalCredits ?? 0) === 0 && "No credits"}
+                                </span>
+                                <span className="text-[9px] font-medium text-primary">
+                                    {hasActiveSubscription ? "Buy more" : "Upgrade"}
+                                </span>
+                            </div>
+                        </div>
                         <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                             <DropdownMenuItem onClick={() => onSettingsClick?.("general")}>
