@@ -271,11 +271,11 @@ function StaticElement({ el }: { el: CanvasElement }) {
           return sep > -1 ? { label: item.slice(0, sep), href: item.slice(sep + 2) } : { label: item, href: '#' }
         })
         return (
-          <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${styles.padding ?? 24}px`, borderRadius: styles.borderRadius }}>
-            <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{rawItems[0] ?? 'Brand'}</span>
-            <div style={{ display: 'flex', gap: 24 }}>
+          <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${el.width < 500 ? 12 : styles.padding ?? 24}px`, borderRadius: styles.borderRadius, overflow: 'hidden' }}>
+            <span style={{ fontWeight: '700', fontSize: el.width < 500 ? Math.min((styles.fontSize ?? 14) + 2, 13) : (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily, flexShrink: 0, whiteSpace: 'nowrap' }}>{rawItems[0] ?? 'Brand'}</span>
+            <div style={{ display: 'flex', gap: el.width < 500 ? 8 : el.width < 800 ? 14 : 24, flexWrap: 'wrap', overflow: 'hidden', maxHeight: '100%', alignItems: 'center' }}>
               {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
-                <a key={i} href={item.href} style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>{item.label}</a>
+                <a key={i} href={item.href} style={{ fontSize: el.width < 500 ? Math.min(styles.fontSize ?? 14, 11) : styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85, whiteSpace: 'nowrap' }}>{item.label}</a>
               ))}
             </div>
           </nav>

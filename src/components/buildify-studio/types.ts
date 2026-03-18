@@ -173,6 +173,13 @@ export function getResponsiveElement(
       ? Math.round(el.styles.padding * Math.max(ratio, 0.6))
       : undefined
 
+  // Auto-scale letter-spacing proportionally so wide-spaced labels don't break
+  // into vertical text when squeezed on smaller screens.
+  const autoLetterSpacing =
+    el.styles.letterSpacing !== undefined && el.styles.letterSpacing > 0
+      ? Math.max(Math.round(el.styles.letterSpacing * ratio * 10) / 10, device === 'mobile' ? 0.5 : 1)
+      : undefined
+
   return {
     ...el,
     x: overrides?.x ?? Math.round(el.x * ratio),
@@ -184,6 +191,7 @@ export function getResponsiveElement(
       ...el.styles,
       ...(autoFontSize !== undefined ? { fontSize: autoFontSize } : {}),
       ...(autoPadding !== undefined ? { padding: autoPadding } : {}),
+      ...(autoLetterSpacing !== undefined ? { letterSpacing: autoLetterSpacing } : {}),
       ...overrides?.styles,
     },
   }
@@ -212,13 +220,41 @@ export function computeResponsiveLayout(
   const margin = device === 'mobile' ? 10 : 16
   const maxW = targetWidth - margin * 2
 
-  // Step 1: Apply per-element responsive style/font scaling (NOT position scaling —
-  //         positions will be laid out by the reflow algorithm below).
+  // Step 1: Apply per-element responsive style/font scaling.
   const scaled: CanvasElement[] = elements.map((el) =>
     getResponsiveElement(el, device, desktopWidth),
   )
 
-  // Step 2: Build reading order from DESKTOP positions (Y then X) and group into rows
+  // Step 1b: Auto-fix elements that break smaller layouts.
+  for (let i = 0; i < scaled.length; i++) {
+    const orig = elements[i]!
+    const s = scaled[i]!
+    if (s.hidden) continue
+
+    // Auto-hide decorative sections/containers (empty bg shapes, section backgrounds)
+    // that are purely visual and would break the reflow.
+    const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim()
+    const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
+    if (isDecorative && isOversized) {
+      scaled[i] = { ...s, hidden: true }
+      continue
+    }
+
+    // Auto-cap image height so desktop images don't dominate mobile screens.
+    if (orig.type === 'image') {
+      const maxImgH = device === 'mobile'
+        ? Math.round(targetWidth * 0.6) // ~225px on 375px
+        : Math.round(targetWidth * 0.55) // ~422px on 768px
+      const hasExplicitH = orig.responsiveStyles?.[device]?.height !== undefined
+      if (!hasExplicitH && s.height > maxImgH) {
+        scaled[i] = { ...s, height: maxImgH }
+      }
+    }
+  }
+
+  // Step 2: Build reading order from DESKTOP positions (Y then X) and group into rows.
+  // Use a height cap for row grouping so one tall element doesn't absorb the whole page.
+  const HEIGHT_CAP = 200
   type Item = { orig: CanvasElement; scaled: CanvasElement; idx: number }
   const visible: Item[] = elements
     .map((el, i) => ({ orig: el, scaled: scaled[i]!, idx: i }))
@@ -237,9 +273,12 @@ export function computeResponsiveLayout(
       currentRow.push(item)
       continue
     }
+    // Cap heights so tall side-by-side elements (e.g. 420px image next to 100px text)
+    // don't create a mega-row that absorbs everything below.
     const rowTop = Math.min(...currentRow.map((r) => r.orig.y))
-    const rowBottom = Math.max(...currentRow.map((r) => r.orig.y + r.orig.height))
-    const overlap = Math.min(rowBottom - rowTop, item.orig.height) * 0.3
+    const rowBottom = Math.max(...currentRow.map((r) => r.orig.y + Math.min(r.orig.height, HEIGHT_CAP)))
+    const itemEffH = Math.min(item.orig.height, HEIGHT_CAP)
+    const overlap = Math.min(rowBottom - rowTop, itemEffH) * 0.3
     if (item.orig.y < rowBottom - overlap) {
       currentRow.push(item)
     } else {
@@ -248,6 +287,21 @@ export function computeResponsiveLayout(
     }
   }
   if (currentRow.length > 0) rows.push(currentRow)
+
+  // Step 2b: On mobile, reorder within each row so text comes before images/media.
+  // Produces natural mobile reading order: heading -> text -> image
+  if (device === 'mobile') {
+    const textTypes = new Set<string>(['heading', 'paragraph', 'button', 'navbar', 'social-links', 'form', 'divider', 'spacer'])
+    for (const row of rows) {
+      if (row.length <= 1) continue
+      const textEls = row.filter((item) => textTypes.has(item.orig.type))
+      const mediaEls = row.filter((item) => !textTypes.has(item.orig.type))
+      if (textEls.length > 0 && mediaEls.length > 0) {
+        row.length = 0
+        row.push(...textEls, ...mediaEls)
+      }
+    }
+  }
 
   // Step 3: Lay out each row
   const positions = new Array<{ x: number; y: number; w: number; h: number } | null>(
