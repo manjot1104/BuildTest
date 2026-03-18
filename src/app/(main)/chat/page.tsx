@@ -47,6 +47,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BuildifyLogo } from '@/components/buildify-logo'
+import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function SearchParamsHandler({
@@ -377,6 +378,22 @@ const handleChatIdChange = (chatId: string | null) => {
                                         </div>
                                     ) : (
                                         <>
+                                            {chatHistory.length > 0 && (
+                                                <div className="flex items-center justify-end px-3 py-1.5 border-b bg-background/80">
+                                                    <ChatExportMenu
+                                                        chatId={urlChatId ?? hookCurrentChat?.id ?? ""}
+                                                        chatType="BUILDER"
+                                                        title={chatHistory.find((m) => m.type === 'user')?.content?.toString().slice(0, 60)}
+                                                        messages={chatHistory
+                                                            .filter((m) => typeof m.content === 'string')
+                                                            .map((m) => ({
+                                                                role: m.type,
+                                                                content: m.content as string,
+                                                            }))}
+                                                        disabled={isLoading || isStreaming}
+                                                    />
+                                                </div>
+                                            )}
                                             <div className="flex-1 overflow-y-auto">
                                                 <ChatMessages
                                                     chatHistory={chatHistory}

@@ -184,10 +184,12 @@ export async function getChatDemoUrl({
 export async function getUserChatsByUserId({
   userId,
   limit = 50,
+  offset = 0,
   type = "all",
 }: {
   userId: string
   limit?: number
+  offset?: number
   type?: "builder" | "openrouter" | "all"
 }): Promise<UserChat[]> {
   try {
@@ -210,6 +212,7 @@ export async function getUserChatsByUserId({
       )
       .orderBy(desc(user_chats.updated_at))
       .limit(limit)
+      .offset(offset)
 
     return chats
   } catch (error: unknown) {

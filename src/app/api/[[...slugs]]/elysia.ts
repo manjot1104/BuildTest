@@ -532,7 +532,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
  .get(
   '/chats',
   async ({ query, set }) => {
-    const result = await getChatHistoryHandler({ query })
+    const result = await getChatHistoryHandler({ query: { ...query, page: query.page ? Number(query.page) : undefined, limit: query.limit ? Number(query.limit) : undefined } })
 
     if (isApiError(result)) {
       if (result.error === 'Failed to fetch chat history') {
@@ -551,6 +551,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           t.Literal("openrouter"),
         ])
       ),
+      page: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
     }),
   },
 )
