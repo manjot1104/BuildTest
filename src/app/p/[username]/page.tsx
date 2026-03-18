@@ -1,4 +1,5 @@
 import React from 'react'
+import { VideoElement } from '@/components/buildify-studio/video-element'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { env } from '@/env'
@@ -252,21 +253,17 @@ function StaticElement({ el }: { el: CanvasElement }) {
           </div>
         )
       }
-      case 'video-embed': {
-        const ytMatch = el.content.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
-        const ytId = ytMatch?.[1]
-        const isDirectVid = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(el.content)
-        if (ytId) {
-          return <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-        }
-        if (isDirectVid && el.content) {
-          // eslint-disable-next-line jsx-a11y/media-has-caption
-          return <video src={el.content} controls={!styles.videoAutoplay} autoPlay={!!styles.videoAutoplay} loop={!!styles.videoLoop} muted={styles.videoMuted !== false} playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: styles.borderRadius ?? 8, backgroundColor: '#0f0f0f' }} />
-        }
-        return (
-          <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Video</div>
-        )
-      }
+     case 'video-embed': {
+  return (
+    <VideoElement
+      content={el.content}
+      borderRadius={styles.borderRadius}
+      videoAutoplay={styles.videoAutoplay}
+      videoLoop={styles.videoLoop}
+      videoMuted={styles.videoMuted}
+    />
+  )
+}
       case 'navbar': {
         const rawItems = el.content.split('|').filter(Boolean)
         const navLinks = rawItems.slice(1).map((item) => {
