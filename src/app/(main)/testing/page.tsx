@@ -4,28 +4,25 @@ import { useState, useMemo, useEffect } from "react";
 import { useUserCredits } from "@/hooks/use-user-credits";
 import {
   Globe, Play, Loader2, CheckCircle2, XCircle,
-  ChevronDown, ChevronUp, RotateCcw, ExternalLink, Zap,
-  Bug, Sparkles, Clock, BarChart3, FlaskConical, Share2,
-  Download, Copy, Check, TrendingUp, Activity, History,
-  Code2, StopCircle, Plus, ListChecks, Settings2, FileText,
+  RotateCcw, ExternalLink, Zap, Bug, Sparkles,
+  Clock, BarChart3, FlaskConical, Share2, Download,
+  Check, TrendingUp, Activity, History,
+  Code2, Settings2, FileText, Plus,
+  ChevronDown, ChevronUp,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import {
   useStartTestRun, useTestRunStatus, useTestReport,
   useTestRunSSE, useCancelTestRun, useExportReportPdf,
-  type Bug as BugType, type PerformanceGauge,
-  type TrendDataPoint,
+  type Bug as BugType, type PerformanceGauge, type TrendDataPoint,
 } from "@/client-api/query-hooks/use-testing-hooks";
 
-// Sub-components
 import {
   BudgetStepper, TimeoutStepper, CrawlProgressPanel,
   ScoreGauge, CategoryDonut, PerfGaugeRow, TrendSparkline,
   LiveTestCaseCard, TestCaseCard, ReviewPhase,
   BugDetailModal, BugCard, HistoryPanel,
+  PipelineStepsRow, ExecutionCounters, StopButton,
   fmtMs, SEVERITY_CONFIG, TIMEOUT_MIN_MS, TIMEOUT_MAX_MS,
 } from "@/components/testing/testing-components";
 import {
@@ -35,19 +32,9 @@ import {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PIPELINE_STEPS = [
-  { key: "crawling",        label: "Crawling",   desc: "Mapping all pages and elements",      icon: Globe       },
-  { key: "generating",      label: "Generating", desc: "AI creating test cases",              icon: Sparkles    },
-  { key: "awaiting_review", label: "Review",     desc: "Confirm or edit test cases",          icon: ListChecks  },
-  { key: "executing",       label: "Executing",  desc: "Running parallel browser sessions",   icon: Zap         },
-  { key: "reporting",       label: "Reporting",  desc: "Compiling results and AI summary",    icon: BarChart3   },
-];
-
 const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, awaiting_review: 2, executing: 3, reporting: 4, complete: 5,
 };
-
-// ─── Plan limits ──────────────────────────────────────────────────────────────
 
 interface PlanLimits { maxPages: number; maxTests: number; label: string }
 const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, label: "Free" };
@@ -56,9 +43,9 @@ const PLAN_LIMITS: Record<string, PlanLimits> = {
   pro:        { maxPages: 10, maxTests: 20, label: "Pro"        },
   enterprise: { maxPages: 20, maxTests: 30, label: "Enterprise" },
 };
-function getPlanLimits(planId: string | null | undefined): PlanLimits {
-  if (!planId) return FREE_LIMITS;
-  return PLAN_LIMITS[planId.toLowerCase()] ?? FREE_LIMITS;
+function getPlanLimits(p: string | null | undefined): PlanLimits {
+  if (!p) return FREE_LIMITS;
+  return PLAN_LIMITS[p.toLowerCase()] ?? FREE_LIMITS;
 }
 
 const CONCURRENCY_MIN     = 1;
@@ -68,61 +55,74 @@ const DEFAULT_DISCOVERY_MS  = 300_000;
 const DEFAULT_EXTRACTION_MS = 300_000;
 const DEFAULT_EXECUTE_MS    = 300_000;
 
+// ─── Button primitives ────────────────────────────────────────────────────────
+
+function BfyPrimaryBtn({ onClick, disabled, children, className = "" }: {
+  onClick?: () => void; disabled?: boolean; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-[#00FF85] text-black text-sm font-mono font-bold hover:bg-[#00FF85]/90 active:scale-[0.98] disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0 ${className}`}>
+      {children}
+    </button>
+  );
+}
+
+function BfyGhostBtn({ onClick, children, className = "" }: {
+  onClick?: () => void; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <button onClick={onClick}
+      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation ${className}`}>
+      {children}
+    </button>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
   const { subscription, hasActiveSubscription } = useUserCredits();
   const planLimits = useMemo(() => getPlanLimits(subscription?.plan_id), [subscription?.plan_id]);
 
-  // ── Form state ──────────────────────────────────────────────────────────────
-  const [url, setUrl]         = useState("");
-  const [maxPages, setMaxPages] = useState(5);
-  const [maxTests, setMaxTests] = useState(10);
+  const [url, setUrl]               = useState("");
+  const [maxPages, setMaxPages]     = useState(5);
+  const [maxTests, setMaxTests]     = useState(10);
   const [concurrency, setConcurrency]   = useState(CONCURRENCY_DEFAULT);
   const [discoveryMs, setDiscoveryMs]   = useState(DEFAULT_DISCOVERY_MS);
   const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
   const [executeMs, setExecuteMs]       = useState(DEFAULT_EXECUTE_MS);
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // [GITHUB] source value — set by GithubSourcePanel when validation passes
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
 
-  // Clamp on plan change
   useEffect(() => {
     setMaxPages((p) => Math.min(p, planLimits.maxPages));
     setMaxTests((t) => Math.min(Math.max(t, 1), planLimits.maxTests));
   }, [planLimits]);
 
-  // ── Pipeline state ──────────────────────────────────────────────────────────
-  const [testRunId, setTestRunId] = useState<string | null>(null);
+  const [testRunId, setTestRunId]             = useState<string | null>(null);
+  const [filterSeverity, setFilterSeverity]   = useState("all");
+  const [filterCategory, setFilterCategory]   = useState("all");
+  const [tcFilter, setTcFilter]               = useState<"all"|"passed"|"failed"|"flaky">("all");
+  const [activeTab, setActiveTab]             = useState<"tests"|"bugs"|"performance"|"trend">("tests");
+  const [selectedBug, setSelectedBug]         = useState<BugType | null>(null);
+  const [showHistory, setShowHistory]         = useState(false);
+  const [copied, setCopied]                   = useState(false);
 
-  // ── Report / UI state ───────────────────────────────────────────────────────
-  const [filterSeverity, setFilterSeverity] = useState("all");
-  const [filterCategory, setFilterCategory] = useState("all");
-  const [tcFilter, setTcFilter]             = useState<"all" | "passed" | "failed" | "flaky">("all");
-  const [activeTab, setActiveTab]           = useState<"bugs" | "tests" | "performance" | "trend">("tests");
-  const [selectedBug, setSelectedBug]       = useState<BugType | null>(null);
-  const [showHistory, setShowHistory]       = useState(false);
-  const [copied, setCopied]                 = useState(false);
-
-  // ── Hooks ───────────────────────────────────────────────────────────────────
-  const { mutate: startTest,  isPending: isStarting  } = useStartTestRun();
-  const { mutate: cancelTest, isPending: isCancelling } = useCancelTestRun();
-  const { mutate: exportPdf,  isPending: isExportingPdf } = useExportReportPdf();
-
+  const { mutate: startTest,  isPending: isStarting    } = useStartTestRun();
+  const { mutate: cancelTest, isPending: isCancelling  } = useCancelTestRun();
+  const { mutate: exportPdf,  isPending: isExportingPdf} = useExportReportPdf();
   const { data: run } = useTestRunStatus(testRunId);
 
   const initialStatusForSSE =
-    run?.status && ["complete", "failed", "cancelled"].includes(run.status)
-      ? run.status
-      : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
+    run?.status && ["complete","failed","cancelled"].includes(run.status) ? run.status
+    : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
 
   const { sseState } = useTestRunSSE(testRunId, initialStatusForSSE);
 
-  // ── Derived state ────────────────────────────────────────────────────────────
-  const isComplete       = sseState.isComplete  || run?.status === "complete";
-  const isFailed         = sseState.pipelineStatus === "failed"   || run?.status === "failed";
-  const isCancelled      = sseState.isCancelled || run?.status === "cancelled";
+  const isComplete       = sseState.isComplete       || run?.status === "complete";
+  const isFailed         = sseState.pipelineStatus === "failed" || run?.status === "failed";
+  const isCancelled      = sseState.isCancelled      || run?.status === "cancelled";
   const isAwaitingReview = sseState.isAwaitingReview || run?.status === "awaiting_review";
   const isRunning        = !!testRunId && !isComplete && !isFailed && !isCancelled && !isAwaitingReview;
 
@@ -133,91 +133,50 @@ export default function TestingPage() {
     running: run?.running ?? 0, skipped: run?.skipped ?? 0, total: run?.totalTests ?? 0,
   };
 
-  const sseOrder     = PIPELINE_ORDER[sseState.pipelineStatus] ?? 0;
-  const dbOrder      = PIPELINE_ORDER[run?.status ?? "crawling"] ?? 0;
+  const sseOrder       = PIPELINE_ORDER[sseState.pipelineStatus] ?? 0;
+  const dbOrder        = PIPELINE_ORDER[run?.status ?? "crawling"] ?? 0;
   const pipelineStatus = sseOrder >= dbOrder ? sseState.pipelineStatus : (run?.status ?? "crawling");
   const percent        = sseState.percent > 0 ? sseState.percent : (run?.percent ?? 10);
-  const currentStepIndex = PIPELINE_STEPS.findIndex((s) => s.key === pipelineStatus);
-
   const isCrawlingPhase  = pipelineStatus === "crawling";
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
+  const liveTestCases    = sseState.generatedTestCases;
 
-  const filteredBugs = (report?.bugs ?? []).filter((bug) => {
-    if (filterSeverity !== "all" && bug.severity !== filterSeverity) return false;
-    if (filterCategory !== "all" && bug.category !== filterCategory) return false;
+  const filteredBugs = (report?.bugs ?? []).filter((b) => {
+    if (filterSeverity !== "all" && b.severity !== filterSeverity) return false;
+    if (filterCategory !== "all" && b.category !== filterCategory) return false;
     return true;
   });
-
   const filteredTestCases = (report?.testCases ?? []).filter((tc) => {
     if (tcFilter === "all") return true;
-    const liveStatus = sseState.testUpdates[tc.id]?.status;
-    return (liveStatus ?? tc.results?.[0]?.status ?? "skipped") === tcFilter;
+    const ls = sseState.testUpdates[tc.id]?.status;
+    return (ls ?? tc.results?.[0]?.status ?? "skipped") === tcFilter;
   });
 
-  const liveTestCases = sseState.generatedTestCases;
+  const hasAdvancedChanges = concurrency !== CONCURRENCY_DEFAULT || discoveryMs !== DEFAULT_DISCOVERY_MS || extractionMs !== DEFAULT_EXTRACTION_MS || executeMs !== DEFAULT_EXECUTE_MS;
 
-  const hasAdvancedChanges =
-    concurrency  !== CONCURRENCY_DEFAULT   ||
-    discoveryMs  !== DEFAULT_DISCOVERY_MS  ||
-    extractionMs !== DEFAULT_EXTRACTION_MS ||
-    executeMs    !== DEFAULT_EXECUTE_MS;
-
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-
-  const handleMaxPagesChange = (next: number) => {
-    const pages = Math.max(1, Math.min(next, planLimits.maxPages));
-    setMaxPages(pages);
-    if (pages > maxTests) setMaxTests(pages);
+  const handleMaxPagesChange = (n: number) => {
+    const p = Math.max(1, Math.min(n, planLimits.maxPages));
+    setMaxPages(p); if (p > maxTests) setMaxTests(p);
   };
-
-  const handleMaxTestsChange = (next: number) => {
-    setMaxTests(Math.max(maxPages, Math.min(next, planLimits.maxTests)));
-  };
-
-  const handleResetAdvanced = () => {
-    setConcurrency(CONCURRENCY_DEFAULT);
-    setDiscoveryMs(DEFAULT_DISCOVERY_MS);
-    setExtractionMs(DEFAULT_EXTRACTION_MS);
-    setExecuteMs(DEFAULT_EXECUTE_MS);
-  };
-
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL"); return; }
-
     const timeouts: Record<string, number> = {};
-    if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs  = discoveryMs;
-    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs = extractionMs;
+    if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs       = discoveryMs;
+    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs      = extractionMs;
     if (executeMs    !== DEFAULT_EXECUTE_MS)    timeouts.executeTestBaseMs = executeMs;
-
     startTest(
-      {
-        url: url.trim(),
-        maxPages,
-        maxTests,
+      { url: url.trim(), maxPages, maxTests,
         ...(concurrency !== CONCURRENCY_DEFAULT && { concurrency }),
         ...(Object.keys(timeouts).length > 0 && { timeouts }),
-        // [GITHUB] pass source fields when the panel has a validated value
-        ...(githubSource && {
-          githubOwner:  githubSource.owner,
-          githubRepo:   githubSource.repo,
-          githubBranch: githubSource.branch,
-        }),
-      },
-      {
-        onSuccess: (data) => { setTestRunId(data.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
-        onError:   (err)  => toast.error(err.message ?? "Failed to start test run"),
-      },
+        ...(githubSource && { githubOwner: githubSource.owner, githubRepo: githubSource.repo, githubBranch: githubSource.branch }) },
+      { onSuccess: (d) => { setTestRunId(d.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
+        onError: (e) => toast.error(e.message ?? "Failed") }
     );
   };
-
   const handleCancel = () => {
     if (!testRunId) return;
-    cancelTest(testRunId, {
-      onSuccess: (data) => { if (data.cancelled) toast.info("Test run cancelled."); },
-      onError: (err) => toast.error(err.message ?? "Failed to cancel"),
-    });
+    cancelTest(testRunId, { onSuccess: (d) => { if (d.cancelled) toast.info("Cancelled."); }, onError: (e) => toast.error(e.message ?? "Failed") });
   };
-
   const handleReset = () => {
     setUrl(""); setTestRunId(null); setGithubSource(null);
     setFilterSeverity("all"); setFilterCategory("all");
@@ -226,295 +185,240 @@ export default function TestingPage() {
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="w-full">
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
-      {showHistory  && <HistoryPanel  onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }} onClose={() => setShowHistory(false)} />}
+      {showHistory  && <HistoryPanel onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }} onClose={() => setShowHistory(false)} />}
 
-      {/* Header */}
-      <div className="border-b border-border bg-background/90 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-              <Bug className="h-4 w-4 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold tracking-tight">Testing Engine</h1>
-              <p className="text-xs text-muted-foreground font-mono">Crawl → Generate → Review → Execute → Report</p>
-            </div>
-          </div>
+      {/* ── MAIN ─────────────────────────────────────────────────────────────── */}
+      <main className="w-full max-w-2xl mx-auto px-4 py-5 space-y-4">
+
+        {/* Actions row — History + New Test only, no logo (app already shows "Testing") */}
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="sm" onClick={() => setShowHistory(true)} className="text-muted-foreground hover:text-foreground text-xs gap-1.5">
-              <History className="h-3.5 w-3.5" /> History
-            </Button>
+            <div className="h-6 w-6 rounded-md bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center">
+              <Bug className="h-3.5 w-3.5 text-[#00FF85]" />
+            </div>
+            <span className="text-sm font-mono font-semibold text-foreground">TestFish</span>
+            <span className="text-[10px] font-mono text-muted-foreground border border-border px-1.5 py-0.5 rounded-full">BETA</span>
+            {testRunId && (run?.targetUrl || url) && (
+              <span className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 truncate max-w-[160px]">
+                <span className="text-border shrink-0">·</span>
+                <span className="truncate">{(url || (run?.targetUrl ?? "")).replace(/^https?:\/\//, "")}</span>
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <BfyGhostBtn onClick={() => setShowHistory(true)}>
+              <History className="h-3.5 w-3.5" />
+              <span>History</span>
+            </BfyGhostBtn>
             {!!testRunId && (
-              <Button variant="ghost" size="sm" onClick={handleReset} className="text-muted-foreground hover:text-foreground text-xs gap-1.5">
-                <RotateCcw className="h-3 w-3" /> New Test
-              </Button>
+              <BfyGhostBtn onClick={handleReset}>
+                <RotateCcw className="h-3.5 w-3.5" />
+                <span>New Test</span>
+              </BfyGhostBtn>
             )}
           </div>
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-
-        {/* ── IDLE ─────────────────────────────────────────────────────────── */}
+        {/* ══ IDLE ═══════════════════════════════════════════════════════════ */}
         {!testRunId && (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] gap-8">
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-full">
-                <Zap className="h-3 w-3" />AI-powered · 50+ parallel sessions · 6 test categories
+          <div className="space-y-4">
+
+            {/* Hero */}
+            <div className="text-center space-y-2 pt-1">
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-[#00FF85] bg-[#00FF85]/10 border border-[#00FF85]/20 px-3 py-1 rounded-full">
+                <Zap className="h-3 w-3" /> ai-powered · 6 test categories
               </div>
-              <h2 className="text-4xl font-bold tracking-tight">Test any site. <span className="text-muted-foreground/50">Automatically.</span></h2>
-              <p className="text-muted-foreground text-lg max-w-md">Paste a URL. Get a comprehensive bug report in minutes.</p>
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+                Test any site. <span className="text-muted-foreground/40">Automatically.</span>
+              </h1>
+              <p className="text-xs text-muted-foreground font-mono">Paste a URL. Get a full bug report in minutes.</p>
             </div>
 
-            <div className="w-full max-w-xl space-y-3">
-              {/* URL + run button */}
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="https://yoursite.com" value={url} onChange={(e) => setUrl(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleStart()}
-                    className="pl-9 h-11 font-mono text-sm" />
-                </div>
-                <Button onClick={handleStart} disabled={isStarting || !url.trim()}
-                  className="h-11 px-5 bg-emerald-600 hover:bg-emerald-500 text-white gap-2 font-medium">
-                  {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /> Run Tests</>}
-                </Button>
+            {/* URL row */}
+            <div className="flex gap-2">
+              <div className="relative flex-1 min-w-0">
+                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
+                <input type="url" placeholder="https://your-app.com" value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleStart()}
+                  aria-label="Website URL to test"
+                  className="w-full h-10 pl-9 pr-3 rounded-lg border border-input bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[#00FF85]/50 focus:ring-1 focus:ring-[#00FF85]/20 transition-colors" />
               </div>
+              <BfyPrimaryBtn onClick={handleStart} disabled={isStarting || !url.trim()}>
+                {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /><span className="hidden xs:inline">Run Tests</span><span className="xs:hidden">Run</span></>}
+              </BfyPrimaryBtn>
+            </div>
 
-              {/* Test budget */}
-              <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Test Budget</p>
-                  {!hasActiveSubscription && (
-                    <span className="text-[10px] font-mono text-muted-foreground/50 border border-border/40 rounded-full px-2 py-0.5">
-                      Free plan · <a href="/pricing" className="underline underline-offset-2 hover:text-muted-foreground transition-colors">Upgrade</a> for more
-                    </span>
-                  )}
-                </div>
-                <div className="flex gap-4">
-                  <BudgetStepper label="Pages to crawl"    hint={`max ${planLimits.maxPages}`}
-                    value={maxPages} min={1} max={Math.min(planLimits.maxPages, maxTests)} onChange={handleMaxPagesChange} />
-                  <div className="w-px bg-border shrink-0" />
-                  <BudgetStepper label="Tests to generate" hint={`max ${planLimits.maxTests}`}
-                    value={maxTests} min={maxPages} max={planLimits.maxTests} onChange={handleMaxTestsChange} />
-                </div>
-                <p className="text-xs text-muted-foreground/50 font-mono">Tests ≥ pages · more tests = slower but more thorough</p>
-              </div>
-
-              {/* [GITHUB] Source code analysis panel */}
-              <GithubSourcePanel onChange={setGithubSource} disabled={isStarting} />
-
-              {/* Advanced settings */}
-              <div className="rounded-xl border border-border bg-card overflow-hidden">
-                <button type="button" onClick={() => setShowAdvanced((v) => !v)}
-                  className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
-                    <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Advanced Settings</span>
-                    {hasAdvancedChanges && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" title="Non-default settings active" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {hasAdvancedChanges && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); handleResetAdvanced(); }}
-                        className="text-[10px] font-mono text-muted-foreground/60 hover:text-muted-foreground transition-colors px-1.5 py-0.5 rounded border border-border/40 hover:border-border">
-                        reset
-                      </button>
-                    )}
-                    {showAdvanced ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
-                  </div>
-                </button>
-
-                {showAdvanced && (
-                  <div className="px-4 pb-4 border-t border-border space-y-4 pt-4">
-                    <div className="space-y-1.5">
-                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Parallelism</p>
-                      <BudgetStepper label="Concurrent extractions" hint={`${CONCURRENCY_MIN}–${CONCURRENCY_MAX}`}
-                        value={concurrency} min={CONCURRENCY_MIN} max={CONCURRENCY_MAX} onChange={setConcurrency} />
-                      <p className="text-xs text-muted-foreground/50 font-mono">
-                        Pages fetched in parallel during crawl Stage 2. Higher = faster but uses more TinyFish credits simultaneously.
-                      </p>
-                    </div>
-                    <div className="w-full h-px bg-border" />
-                    <div className="space-y-3">
-                      <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Timeouts</p>
-                      <div className="flex gap-4">
-                        <TimeoutStepper label="Discovery"  hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={discoveryMs}  onChange={setDiscoveryMs}  />
-                        <div className="w-px bg-border shrink-0" />
-                        <TimeoutStepper label="Extraction" hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={extractionMs} onChange={setExtractionMs} />
-                        <div className="w-px bg-border shrink-0" />
-                        <TimeoutStepper label="Execute"    hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={executeMs}    onChange={setExecuteMs}    />
-                      </div>
-                      <p className="text-xs text-muted-foreground/50 font-mono">
-                        Per-call TinyFish timeouts. Increase for slow or JS-heavy sites.
-                      </p>
-                    </div>
-                  </div>
+            {/* Test Budget */}
+            <div className="rounded-xl border border-border p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Test Budget</p>
+                {!hasActiveSubscription && (
+                  <span className="text-[10px] font-mono text-muted-foreground/30 border border-border rounded-full px-2 py-0.5 shrink-0">
+                    free · <a href="/pricing" className="text-[#00FF85]/60 hover:text-[#00FF85] underline underline-offset-2">upgrade</a>
+                  </span>
                 )}
               </div>
-
-              <p className="text-xs text-muted-foreground/60 text-center font-mono">Navigation · Forms · Visual · Performance · A11y · Security</p>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                <BudgetStepper label="pages to crawl" hint={`max ${planLimits.maxPages}`} value={maxPages}
+                  min={1} max={Math.min(planLimits.maxPages, maxTests)} onChange={handleMaxPagesChange} />
+                <div className="hidden sm:block w-px bg-border shrink-0" aria-hidden="true" />
+                <BudgetStepper label="tests to generate" hint={`max ${planLimits.maxTests}`} value={maxTests}
+                  min={maxPages} max={planLimits.maxTests} onChange={(n) => setMaxTests(Math.max(maxPages, Math.min(n, planLimits.maxTests)))} />
+              </div>
+              <p className="text-[9px] font-mono text-muted-foreground/30">tests ≥ pages · more tests = more thorough</p>
             </div>
+
+            {/* Advanced settings */}
+            <div className="rounded-xl border border-border overflow-hidden">
+              <button type="button" onClick={() => setShowAdvanced(v => !v)} aria-expanded={showAdvanced}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors touch-manipulation">
+                <div className="flex items-center gap-2">
+                  <Settings2 className="h-3.5 w-3.5 text-muted-foreground/40" />
+                  <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Advanced Settings</span>
+                  {hasAdvancedChanges && <span className="h-1.5 w-1.5 rounded-full bg-[#00FF85]" />}
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasAdvancedChanges && (
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setConcurrency(CONCURRENCY_DEFAULT); setDiscoveryMs(DEFAULT_DISCOVERY_MS); setExtractionMs(DEFAULT_EXTRACTION_MS); setExecuteMs(DEFAULT_EXECUTE_MS); }}
+                      className="text-[9px] font-mono text-muted-foreground/30 hover:text-muted-foreground px-1.5 py-0.5 rounded border border-border">reset</button>
+                  )}
+                  {showAdvanced ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                </div>
+              </button>
+              {showAdvanced && (
+                <div className="px-4 pb-4 border-t border-border space-y-4 pt-4">
+                  {/* Parallelism */}
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">Parallelism</p>
+                    <div className="max-w-xs">
+                      <BudgetStepper label="concurrent extractions" hint={`${CONCURRENCY_MIN}–${CONCURRENCY_MAX}`}
+                        value={concurrency} min={CONCURRENCY_MIN} max={CONCURRENCY_MAX} onChange={setConcurrency} />
+                    </div>
+                    <p className="text-[9px] font-mono text-muted-foreground/30">higher = faster but more simultaneous credits</p>
+                  </div>
+                  <div className="h-px bg-border" />
+                  {/* Timeouts — 3-col grid on tablet+ */}
+                  <div className="space-y-2">
+                    <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">Timeouts</p>
+                    <div className="grid grid-cols-3 gap-3">
+                      <TimeoutStepper label="discovery"  hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={discoveryMs}  onChange={setDiscoveryMs}  />
+                      <TimeoutStepper label="extraction" hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={extractionMs} onChange={setExtractionMs} />
+                      <TimeoutStepper label="execute"    hint={`${fmtMs(TIMEOUT_MIN_MS)}–${fmtMs(TIMEOUT_MAX_MS)}`} value={executeMs}    onChange={setExecuteMs}    />
+                    </div>
+                    <p className="text-[9px] font-mono text-muted-foreground/30">increase for slow or JS-heavy sites</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Source Code Analysis — after Advanced Settings */}
+            <GithubSourcePanel onChange={setGithubSource} disabled={isStarting} />
+
+            <p className="text-[10px] font-mono text-muted-foreground/30 text-center pb-2">
+              navigation · forms · visual · performance · a11y · security
+            </p>
           </div>
         )}
 
-        {/* ── REVIEW ───────────────────────────────────────────────────────── */}
+        {/* ══ REVIEW ═════════════════════════════════════════════════════════ */}
         {isAwaitingReview && testRunId && (
-          <div className="space-y-6">
-            <div className="w-full max-w-2xl mx-auto">
-              <div className="flex items-center justify-between text-xs font-mono text-muted-foreground mb-3">
-                <span className="flex items-center gap-1.5 text-amber-400 font-medium">
-                  <ListChecks className="h-3.5 w-3.5" /> Review &amp; edit test cases before running
-                </span>
-                <span className="text-muted-foreground/50">{url || run?.targetUrl}</span>
-              </div>
-              <Progress value={40} className="h-1" />
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border p-4">
+              <PipelineStepsRow pipelineStatus="awaiting_review" percent={40} />
             </div>
             <ReviewPhase testRunId={testRunId} targetUrl={url || (run?.targetUrl ?? "")} onCancel={handleReset} />
           </div>
         )}
 
-        {/* ── RUNNING ──────────────────────────────────────────────────────── */}
+        {/* ══ RUNNING ════════════════════════════════════════════════════════ */}
         {isRunning && (
-          <div className="space-y-6">
-            {/* URL + progress bar */}
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground bg-muted border border-border px-4 py-2 rounded-full">
-                <Globe className="h-3 w-3 text-muted-foreground/60" />{url || run?.targetUrl}
-              </div>
-              <div className="w-full max-w-xl space-y-2">
-                <Progress value={percent} className="h-1.5" />
-                <div className="flex justify-between text-xs text-muted-foreground font-mono">
-                  <span>{percent}% complete</span>
-                  {counter.total > 0 && <span>{counter.passed + counter.failed + counter.skipped}/{counter.total} tests done</span>}
+          <div className="space-y-4">
+
+            {/* Top card */}
+            <div className="rounded-xl border border-border p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <Globe className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                  <span className="text-xs font-mono text-muted-foreground truncate">
+                    {(url || (run?.targetUrl ?? "")).replace(/^https?:\/\//, "")}
+                  </span>
                 </div>
+                <StopButton onCancel={handleCancel} isCancelling={isCancelling} />
               </div>
+              <PipelineStepsRow pipelineStatus={pipelineStatus} percent={percent} />
             </div>
 
-            {/* Pipeline steps */}
-            <div className="w-full max-w-xl mx-auto relative">
-              <div className="absolute left-[18px] top-6 bottom-6 w-px bg-border" />
-              <div className="space-y-1">
-                {PIPELINE_STEPS.map((step, i) => {
-                  const isActive = step.key === pipelineStatus;
-                  const isDone   = i < currentStepIndex;
-                  const Icon     = step.icon;
-                  return (
-                    <div key={step.key} className={`flex items-start gap-4 p-3 rounded-xl transition-all ${isActive ? "bg-muted border border-border" : ""}`}>
-                      <div className={`h-9 w-9 rounded-full flex items-center justify-center shrink-0 border transition-all ${
-                        isDone ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
-                        : isActive ? "bg-muted border-border text-foreground"
-                        : "bg-background border-border text-muted-foreground"
-                      }`}>
-                        {isDone ? <CheckCircle2 className="h-4 w-4" /> : isActive ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-                      </div>
-                      <div className="pt-1.5">
-                        <p className={`text-sm font-medium ${i > currentStepIndex ? "text-muted-foreground" : "text-foreground"}`}>{step.label}</p>
-                        <p className="text-xs text-muted-foreground">{step.desc}</p>
-                      </div>
-                      {isActive && (
-                        <div className="ml-auto pt-2 flex gap-1">
-                          {[0, 1, 2].map((dot) => (
-                            <div key={dot} className="h-1.5 w-1.5 rounded-full bg-emerald-500"
-                              style={{ animation: `dotPulse 1.4s ease-in-out ${dot * 0.2}s infinite` }} />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+            {/* Counters */}
+            {isExecutingPhase && (
+              <ExecutionCounters passed={counter.passed} failed={counter.failed}
+                running={counter.running} skipped={counter.skipped} total={counter.total} />
+            )}
 
-            {/* Crawl progress panel */}
+            {/* Crawl panel */}
             {isCrawlingPhase && (
-              <CrawlProgressPanel
-                stage={sseState.crawlStage}
-                stageDescription={sseState.crawlStageDescription}
-                foundUrls={sseState.crawlFoundUrls}
-                extractedPages={sseState.crawlExtractedPages}
-                failedPages={sseState.crawlFailedPages}
-              />
+              <CrawlProgressPanel stage={sseState.crawlStage} stageDescription={sseState.crawlStageDescription}
+                foundUrls={sseState.crawlFoundUrls} extractedPages={sseState.crawlExtractedPages} failedPages={sseState.crawlFailedPages} />
             )}
 
-            {/* Cancel */}
-            <div className="flex justify-center w-full max-w-xl mx-auto">
-              <Button onClick={handleCancel} disabled={isCancelling} variant="outline"
-                className="border-red-900/60 text-red-400 hover:bg-red-950/40 hover:border-red-700 gap-2 text-sm">
-                {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <StopCircle className="h-4 w-4" />}
-                {isCancelling ? "Stopping…" : "Stop Test Run"}
-              </Button>
-            </div>
-
-            {/* Execution counters */}
-            {isExecutingPhase && (
-              <div className="grid grid-cols-4 gap-3 w-full max-w-xl mx-auto">
-                {[
-                  { value: counter.passed,  label: "passed",  color: "text-emerald-400" },
-                  { value: counter.failed,  label: "failed",  color: "text-red-400"     },
-                  { value: counter.running, label: "running", color: "text-blue-400"    },
-                  { value: counter.skipped, label: "skipped", color: "text-muted-foreground" },
-                ].map(({ value, label, color }) => (
-                  <div key={label} className="rounded-xl border border-border bg-card p-3 text-center">
-                    <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
-                    <p className="text-xs text-muted-foreground font-mono mt-0.5">{label}</p>
-                  </div>
-                ))}
+            {/* Generating */}
+            {pipelineStatus === "generating" && (
+              <div className="rounded-xl border border-border p-4 flex items-center gap-3">
+                <Sparkles className="h-4 w-4 text-[#00FF85] shrink-0" />
+                <p className="text-xs font-mono text-muted-foreground">ai is generating test cases from crawled pages…</p>
               </div>
             )}
 
-            {/* Live test cards */}
+            {/* Live test cards — tablet: 2-col grid */}
             {isExecutingPhase && (
-              <div className="w-full max-w-2xl mx-auto space-y-3">
+              <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <FlaskConical className="h-3.5 w-3.5" />
-                    {liveTestCases.length > 0 ? `Test Cases — ${liveTestCases.length} running` : "Test Cases — waiting for first result…"}
+                  <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest flex items-center gap-1.5">
+                    <FlaskConical className="h-3 w-3" />
+                    {liveTestCases.length > 0 ? `${liveTestCases.length} test cases` : "executing…"}
                   </p>
                   {liveTestCases.length > 0 && (
-                    <div className="flex gap-3 text-xs font-mono">
-                      <span className="text-emerald-400">{liveTestCases.filter(t => t.status === "passed").length} ✓</span>
-                      <span className="text-red-400">{liveTestCases.filter(t => t.status === "failed").length} ✗</span>
-                      <span className="text-blue-400">{liveTestCases.filter(t => t.status === "running").length} ⟳</span>
-                      <span className="text-muted-foreground">{liveTestCases.filter(t => t.status === "pending").length} pending</span>
+                    <div className="flex gap-3 text-[10px] font-mono">
+                      <span className="text-[#00FF85]">{liveTestCases.filter(t => t.status === "passed").length}✓</span>
+                      <span className="text-red-500">{liveTestCases.filter(t => t.status === "failed").length}✗</span>
+                      <span className="text-blue-500">{liveTestCases.filter(t => t.status === "running").length}⟳</span>
                     </div>
                   )}
                 </div>
-                {liveTestCases.length === 0 ? (
-                  <div className="rounded-xl border border-border bg-card/40 p-6 flex items-center justify-center gap-3">
-                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground font-mono">Executing tests in parallel…</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1">
-                    {liveTestCases.map((tc) => <LiveTestCaseCard key={tc.id} tc={tc} />)}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Generating placeholder */}
-            {pipelineStatus === "generating" && (
-              <div className="w-full max-w-xl mx-auto rounded-xl border border-border bg-card/40 p-4 flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-emerald-400 shrink-0" />
-                <p className="text-sm text-muted-foreground">AI is generating test cases from the crawled pages…</p>
+                {liveTestCases.length === 0
+                  ? (
+                    <div className="rounded-xl border border-border p-5 flex items-center justify-center gap-3">
+                      <Loader2 className="h-4 w-4 animate-spin text-[#00FF85]" />
+                      <p className="text-xs font-mono text-muted-foreground">executing tests in parallel…</p>
+                    </div>
+                  )
+                  : (
+                    /* tablet: 2-col, mobile: 1-col */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
+                      {liveTestCases.map((tc) => (
+                        <div key={tc.id} role="listitem"><LiveTestCaseCard tc={tc} /></div>
+                      ))}
+                    </div>
+                  )
+                }
               </div>
             )}
 
             {/* Live bugs */}
             {sseState.liveBugs.length > 0 && (
-              <div className="w-full max-w-2xl mx-auto">
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
-                  <Bug className="h-3 w-3 text-red-400" /> Failed ({sseState.liveBugs.length})
+              <div>
+                <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Bug className="h-3 w-3 text-red-500" />
+                  {sseState.liveBugs.length} issue{sseState.liveBugs.length !== 1 ? "s" : ""} found
                 </p>
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5" role="list">
                   {sseState.liveBugs.map((bug) => (
-                    <div key={bug.id} className="flex items-center gap-3 p-3 rounded-lg border border-red-500/20 bg-red-500/5">
+                    <div key={bug.id} role="listitem"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-red-500/15 bg-red-500/5">
                       <div className={`h-2 w-2 rounded-full shrink-0 ${SEVERITY_CONFIG[bug.severity as keyof typeof SEVERITY_CONFIG]?.dot ?? "bg-muted-foreground"}`} />
-                      <p className="text-xs text-foreground flex-1 truncate">{bug.title}</p>
+                      <p className="text-xs font-mono text-foreground flex-1 truncate">{bug.title}</p>
                     </div>
                   ))}
                 </div>
@@ -523,82 +427,99 @@ export default function TestingPage() {
           </div>
         )}
 
-        {/* ── CANCELLED ────────────────────────────────────────────────────── */}
+        {/* ══ CANCELLED ══════════════════════════════════════════════════════ */}
         {isCancelled && (
-          <div className="flex flex-col items-center gap-6 py-16">
-            <div className="h-16 w-16 rounded-2xl bg-muted border border-border flex items-center justify-center">
-              <StopCircle className="h-8 w-8 text-muted-foreground" />
+          <div className="flex flex-col items-center gap-5 py-16 text-center">
+            <div className="h-14 w-14 rounded-2xl bg-muted border border-border flex items-center justify-center">
+              <XCircle className="h-7 w-7 text-muted-foreground" />
             </div>
-            <div className="text-center">
-              <h3 className="text-lg font-semibold text-foreground">Test run cancelled</h3>
-              <p className="text-muted-foreground text-sm mt-1">You stopped this run. No further calls will be made.</p>
+            <div>
+              <h2 className="text-base font-mono font-semibold text-foreground">test run cancelled</h2>
+              <p className="text-muted-foreground text-xs font-mono mt-1">you stopped this run.</p>
               {(counter.passed > 0 || counter.failed > 0) && (
-                <p className="text-muted-foreground/60 text-xs font-mono mt-2">{counter.passed} passed · {counter.failed} failed before stopping</p>
+                <p className="text-muted-foreground/40 text-[10px] font-mono mt-1.5">{counter.passed} passed · {counter.failed} failed before stopping</p>
               )}
             </div>
-            <Button onClick={handleReset} variant="outline" className="gap-2"><RotateCcw className="h-4 w-4" /> Run New Test</Button>
+            <button onClick={handleReset}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
+              <RotateCcw className="h-4 w-4" /> run new test
+            </button>
           </div>
         )}
 
-        {/* ── FAILED ───────────────────────────────────────────────────────── */}
+        {/* ══ FAILED ═════════════════════════════════════════════════════════ */}
         {isFailed && (
-          <div className="flex flex-col items-center gap-6 py-16">
-            <div className="h-16 w-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-              <XCircle className="h-8 w-8 text-red-400" />
+          <div className="flex flex-col items-center gap-5 py-16 text-center" role="alert">
+            <div className="h-14 w-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+              <XCircle className="h-7 w-7 text-red-500" />
             </div>
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">Test run failed</h3>
-              <p className="text-muted-foreground text-sm mt-1">{sseState.errorMessage ?? "Something went wrong. Please try again."}</p>
+            <div>
+              <h2 className="text-base font-mono font-semibold text-foreground">test run failed</h2>
+              <p className="text-muted-foreground text-xs font-mono mt-1">{sseState.errorMessage ?? "something went wrong. please try again."}</p>
             </div>
-            <Button onClick={handleReset} variant="outline" className="gap-2"><RotateCcw className="h-4 w-4" /> Try Again</Button>
+            <button onClick={handleReset}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
+              <RotateCcw className="h-4 w-4" /> try again
+            </button>
           </div>
         )}
 
-        {/* ── COMPLETE ─────────────────────────────────────────────────────── */}
+        {/* ══ COMPLETE ═══════════════════════════════════════════════════════ */}
         {isComplete && report && (
-          <div className="space-y-8">
-            {/* Score hero */}
-            <div className="rounded-2xl border border-border bg-card p-6">
-              <div className="flex flex-col sm:flex-row items-center gap-8">
-                <ScoreGauge score={report.overallScore ?? 0} />
-                <div className="flex-1 space-y-4 w-full">
-                  <div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono mb-1">
-                      <Globe className="h-3 w-3" />{report.targetUrl}
-                      <a href={report.targetUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-3 w-3 hover:text-foreground" />
-                      </a>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground/60 font-mono">
-                      <Clock className="h-3 w-3" />
-                      {report.crawlSummary.totalPages} pages crawled · {Math.round(report.crawlSummary.crawlTimeMs / 1000)}s crawl time
-                    </div>
+          <div className="space-y-4">
+
+            {/* Score hero — tablet: side by side with stats */}
+            <div className="rounded-xl border border-border p-4">
+              <div className="flex items-center gap-4">
+                {/* Gauge — bigger on tablet */}
+                <ScoreGauge score={report.overallScore ?? 0} size={72} />
+
+                <div className="flex-1 min-w-0 space-y-2.5">
+                  {/* URL row */}
+                  <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground/50">
+                    <Globe className="h-3 w-3 shrink-0" />
+                    <span className="truncate flex-1">{report.targetUrl.replace(/^https?:\/\//, "")}</span>
+                    <a href={report.targetUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 hover:text-foreground transition-colors">
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
                   </div>
-                  <div className="space-y-1.5">
-                    <div className="flex gap-px h-2 rounded-full overflow-hidden">
-                      <div className="bg-emerald-500" style={{ width: `${((report.passed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
-                      <div className="bg-red-500"     style={{ width: `${((report.failed  ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
-                      <div className="bg-muted flex-1" />
-                    </div>
-                    <div className="flex gap-4 text-xs font-mono">
-                      <span className="text-emerald-400">{report.passed} passed</span>
-                      <span className="text-red-400">{report.failed} failed</span>
-                      <span className="text-muted-foreground">{report.skipped} skipped</span>
-                      <span className="text-muted-foreground/60 ml-auto">{report.totalTests} total</span>
-                    </div>
+                  {/* Stats grid — 2-col on tablet */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    {[
+                      { val: report.passed,     label: "passed",  cls: "text-[#00FF85]" },
+                      { val: report.failed,     label: "failed",  cls: "text-red-500"   },
+                      { val: report.skipped,    label: "skipped", cls: "text-muted-foreground/60" },
+                      { val: report.totalTests, label: "total",   cls: "text-foreground" },
+                    ].map(({ val, label, cls }) => (
+                      <div key={label} className="rounded-lg bg-muted/50 border border-border px-2 py-1.5">
+                        <p className={`text-sm font-mono font-bold tabular-nums ${cls}`}>{val ?? 0}</p>
+                        <p className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">{label}</p>
+                      </div>
+                    ))}
                   </div>
+                  {/* Progress bar */}
+                  <div className="flex gap-px h-1.5 rounded-full overflow-hidden bg-border">
+                    <div className="bg-[#00FF85] rounded-l-full" style={{ width: `${((report.passed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
+                    <div className="bg-red-500" style={{ width: `${((report.failed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
+                  </div>
+                  <p className="text-[9px] font-mono text-muted-foreground/30 flex items-center gap-1">
+                    <Clock className="h-2.5 w-2.5" />{report.crawlSummary.totalPages} pages crawled · {Math.round(report.crawlSummary.crawlTimeMs / 1000)}s
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Category donuts */}
+            {/* Category donuts — grid on tablet, scroll on mobile */}
             {Object.keys(report.resultsByCategory).length > 0 && (
               <div>
-                <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">Category Breakdown</p>
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">Categories</p>
+                {/* Mobile: horizontal scroll. Tablet+: wrap grid */}
+                <div className="flex gap-2 overflow-x-auto sm:overflow-x-visible sm:flex-wrap pb-1" role="group">
                   {Object.entries(report.resultsByCategory).map(([cat, data]) => (
-                    <CategoryDonut key={cat} category={cat} passed={data.passed} total={data.total}
-                      active={filterCategory === cat} onClick={() => setFilterCategory(filterCategory === cat ? "all" : cat)} />
+                    <div key={cat} className="shrink-0 sm:shrink">
+                      <CategoryDonut category={cat} passed={data.passed} total={data.total}
+                        active={filterCategory === cat} onClick={() => setFilterCategory(filterCategory === cat ? "all" : cat)} />
+                    </div>
                   ))}
                 </div>
               </div>
@@ -606,168 +527,179 @@ export default function TestingPage() {
 
             {/* AI summary */}
             {report.aiSummary && (
-              <div className="rounded-2xl border border-border bg-card p-5">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Summary</span>
+              <details className="rounded-xl border border-border overflow-hidden group">
+                <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors list-none touch-manipulation">
+                  <Sparkles className="h-4 w-4 text-[#00FF85] shrink-0" />
+                  <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest flex-1">AI Summary</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40 group-open:rotate-180 transition-transform" />
+                </summary>
+                <div className="px-4 pb-4 pt-2 border-t border-border">
+                  <p className="text-sm font-mono text-muted-foreground leading-relaxed">{report.aiSummary}</p>
                 </div>
-                <p className="text-sm text-foreground leading-relaxed">{report.aiSummary}</p>
-              </div>
+              </details>
             )}
 
             {/* Tabs */}
-            <div className="flex gap-1 border-b border-border overflow-x-auto">
+            <div className="flex border-b border-border" role="tablist">
               {([
-                { key: "tests",       label: "Test Cases",  count: report.testCases?.length ?? 0,        icon: FlaskConical },
-                { key: "bugs",        label: "Bugs",        count: report.bugs?.length ?? 0,              icon: Bug         },
-                { key: "performance", label: "Performance", count: report.performanceGauges?.length ?? 0, icon: Activity    },
-                { key: "trend",       label: "Trend",       count: report.trendData?.length ?? 0,         icon: TrendingUp  },
+                { key: "tests",       label: "tests", count: report.testCases?.length ?? 0,        icon: FlaskConical },
+                { key: "bugs",        label: "bugs",  count: report.bugs?.length ?? 0,              icon: Bug         },
+                { key: "performance", label: "perf",  count: report.performanceGauges?.length ?? 0, icon: Activity    },
+                { key: "trend",       label: "trend", count: report.trendData?.length ?? 0,         icon: TrendingUp  },
               ] as const).map(({ key, label, count, icon: Icon }) => (
-                <button key={key} onClick={() => setActiveTab(key as typeof activeTab)}
-                  className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px shrink-0 ${
-                    activeTab === key ? "border-emerald-500 text-emerald-400" : "border-transparent text-muted-foreground hover:text-foreground"
+                <button key={key} role="tab" aria-selected={activeTab === key}
+                  onClick={() => setActiveTab(key as typeof activeTab)}
+                  className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] sm:text-xs font-mono uppercase tracking-widest border-b-2 transition-colors -mb-px shrink-0 touch-manipulation ${
+                    activeTab === key ? "border-[#00FF85] text-[#00FF85]" : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}>
-                  <Icon className="h-3.5 w-3.5" />{label}
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
                   {count > 0 && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-mono ${activeTab === key ? "bg-emerald-500/20 text-emerald-400" : "bg-muted text-muted-foreground"}`}>
-                      {count}
-                    </span>
+                    <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] ${activeTab === key ? "bg-[#00FF85]/15 text-[#00FF85]" : "bg-muted text-muted-foreground/50"}`}>{count}</span>
                   )}
                 </button>
               ))}
             </div>
 
-            {/* Tests tab */}
+            {/* ── Tests tab ──────────────────────────────────────────────── */}
             {activeTab === "tests" && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-muted-foreground font-mono">Filter:</span>
-                  {(["all", "passed", "failed", "flaky"] as const).map((f) => (
-                    <button key={f} onClick={() => setTcFilter(f)}
-                      className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${tcFilter === f ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                      {f}{f !== "all" && (
-                        <span className="ml-1 text-muted-foreground/60">
+              <div className="space-y-3">
+                {/* Filter chips */}
+                <div className="flex items-center gap-1.5 flex-wrap" role="group">
+                  {(["all","passed","failed","flaky"] as const).map((f) => (
+                    <button key={f} onClick={() => setTcFilter(f)} aria-pressed={tcFilter === f}
+                      className={`text-[10px] font-mono px-2.5 py-1 rounded-md capitalize transition-all touch-manipulation border ${
+                        tcFilter === f ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
+                      }`}>
+                      {f}
+                      {f !== "all" && (
+                        <span className="ml-1 text-muted-foreground/40">
                           ({(report.testCases ?? []).filter((tc) => {
-                            const live = sseState.testUpdates[tc.id]?.status;
-                            return (live ?? tc.results?.[0]?.status ?? "skipped") === f;
+                            const ls = sseState.testUpdates[tc.id]?.status;
+                            return (ls ?? tc.results?.[0]?.status ?? "skipped") === f;
                           }).length})
                         </span>
                       )}
                     </button>
                   ))}
                 </div>
-                <div className="space-y-2">
+                {/* tablet: 2-col grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
                   {filteredTestCases.length === 0
-                    ? <div className="rounded-xl border border-border bg-card p-8 text-center">
-                        <FlaskConical className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                        <p className="text-sm text-muted-foreground">No test cases match this filter</p>
+                    ? (
+                      <div className="sm:col-span-2 rounded-xl border border-border p-6 text-center">
+                        <FlaskConical className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+                        <p className="text-xs font-mono text-muted-foreground">no test cases match this filter</p>
                       </div>
-                    : filteredTestCases.map((tc) => <TestCaseCard key={tc.id} tc={tc} liveStatus={sseState.testUpdates[tc.id]} />)
+                    )
+                    : filteredTestCases.map((tc) => (
+                      <div key={tc.id} role="listitem">
+                        <TestCaseCard tc={tc} liveStatus={sseState.testUpdates[tc.id]} />
+                      </div>
+                    ))
                   }
                 </div>
               </div>
             )}
 
-            {/* Bugs tab */}
+            {/* ── Bugs tab ───────────────────────────────────────────────── */}
             {activeTab === "bugs" && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-2">
-                    <Bug className="h-4 w-4 text-red-400" />
-                    <h3 className="text-sm font-semibold">{filteredBugs.length} Bug{filteredBugs.length !== 1 ? "s" : ""}</h3>
-                  </div>
-                  <div className="flex gap-1 flex-wrap">
-                    {["all", "critical", "high", "medium", "low"].map((sev) => (
-                      <button key={sev} onClick={() => setFilterSeverity(sev)}
-                        className={`text-xs px-2.5 py-1 rounded-full font-mono capitalize transition-all ${filterSeverity === sev ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                        {sev}
-                      </button>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <p className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest flex items-center gap-1.5">
+                    <Bug className="h-3.5 w-3.5 text-red-500" />{filteredBugs.length} bug{filteredBugs.length !== 1 ? "s" : ""}
+                  </p>
+                  <div className="flex gap-1 flex-wrap" role="group">
+                    {["all","critical","high","medium","low"].map((sev) => (
+                      <button key={sev} onClick={() => setFilterSeverity(sev)} aria-pressed={filterSeverity === sev}
+                        className={`text-[10px] font-mono px-2 py-1 rounded-md capitalize transition-all touch-manipulation border ${
+                          filterSeverity === sev ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
+                        }`}>{sev}</button>
                     ))}
                   </div>
                 </div>
                 {filteredBugs.length === 0
-                  ? <div className="rounded-xl border border-border bg-card p-8 text-center">
-                      <CheckCircle2 className="h-8 w-8 text-emerald-400 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No bugs found for this filter</p>
+                  ? (
+                    <div className="rounded-xl border border-border p-6 text-center">
+                      <CheckCircle2 className="h-7 w-7 text-[#00FF85] mx-auto mb-2" />
+                      <p className="text-xs font-mono text-muted-foreground">no bugs found for this filter</p>
                     </div>
-                  : <div className="space-y-2">{filteredBugs.map((bug) => <BugCard key={bug.id} bug={bug} onClick={() => setSelectedBug(bug)} />)}</div>
+                  )
+                  : (
+                    /* tablet: 2-col for bug cards */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
+                      {filteredBugs.map((bug) => (
+                        <div key={bug.id} role="listitem">
+                          <BugCard bug={bug} onClick={() => setSelectedBug(bug)} />
+                        </div>
+                      ))}
+                    </div>
+                  )
                 }
               </div>
             )}
 
-            {/* Performance tab */}
+            {/* ── Performance tab ────────────────────────────────────────── */}
             {activeTab === "performance" && (
               <div className="space-y-4">
                 {(!report.performanceGauges || report.performanceGauges.length === 0)
-                  ? <div className="rounded-xl border border-border bg-card p-8 text-center">
-                      <Activity className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No performance data available</p>
+                  ? (
+                    <div className="rounded-xl border border-border p-6 text-center">
+                      <Activity className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
+                      <p className="text-xs font-mono text-muted-foreground">no performance data available</p>
                     </div>
-                  : report.performanceGauges.map((pg: PerformanceGauge) => (
-                    <div key={pg.pageUrl} className="rounded-xl border border-border bg-card p-5">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <p className="text-xs font-mono text-muted-foreground truncate">{pg.pageUrl}</p>
-                      </div>
-                      <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Core Web Vitals</p>
-                      <div className="space-y-3 mb-5">
-                        <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
-                        <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
-                        <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
-                      </div>
-                      <p className="text-xs font-mono text-muted-foreground/60 uppercase tracking-wider mb-2">Load Timing</p>
-                      <div className="space-y-3">
-                        <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
-                        <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"} />
-                      </div>
-                      <div className="flex gap-4 mt-4 pt-3 border-t border-border flex-wrap">
-                        {[{ label: "Good", color: "bg-emerald-500" }, { label: "Needs improvement", color: "bg-yellow-500" }, { label: "Poor", color: "bg-red-500" }, { label: "Unknown", color: "bg-muted-foreground/30" }]
-                          .map(({ label, color }) => (
-                            <div key={label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <div className={`h-2 w-2 rounded-full ${color}`} />{label}
-                            </div>
-                          ))}
-                      </div>
-                      <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-x-6 gap-y-1">
-                        {[
-                          { label: "LCP",  desc: "Largest Contentful Paint — render time of largest element" },
-                          { label: "CLS",  desc: "Cumulative Layout Shift — visual stability score"           },
-                          { label: "TTFB", desc: "Time to First Byte — server response speed"                 },
-                          { label: "DCL",  desc: "DOMContentLoaded — HTML parsed, scripts ready"              },
-                          { label: "Load", desc: "Page Load — all resources including images finished"        },
-                        ].map(({ label, desc }) => (
-                          <div key={label} className="flex gap-2 text-xs py-0.5">
-                            <span className="font-mono text-muted-foreground shrink-0 w-10">{label}</span>
-                            <span className="text-muted-foreground/60">{desc}</span>
+                  )
+                  : (
+                    /* tablet: 2-col grid for perf cards */
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {report.performanceGauges.map((pg: PerformanceGauge) => (
+                        <div key={pg.pageUrl} className="rounded-xl border border-border p-4">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Globe className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                            <p className="text-[10px] font-mono text-muted-foreground truncate">{pg.pageUrl}</p>
                           </div>
-                        ))}
-                      </div>
+                          <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">Core Web Vitals</p>
+                          <div className="space-y-2 mb-3">
+                            <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
+                            <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
+                            <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
+                          </div>
+                          <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">Load Timing</p>
+                          <div className="space-y-2">
+                            <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
+                            <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"} />
+                          </div>
+                          <div className="flex gap-3 mt-3 pt-3 border-t border-border flex-wrap">
+                            {[{l:"good",c:"bg-[#00FF85]"},{l:"needs improvement",c:"bg-yellow-500"},{l:"poor",c:"bg-red-500"},{l:"unknown",c:"bg-muted"}].map(({l,c}) => (
+                              <div key={l} className="flex items-center gap-1.5 text-[9px] font-mono text-muted-foreground/40"><div className={`h-1.5 w-1.5 rounded-full ${c}`} />{l}</div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))
+                  )
                 }
               </div>
             )}
 
-            {/* Trend tab */}
+            {/* ── Trend tab ──────────────────────────────────────────────── */}
             {activeTab === "trend" && (
-              <div className="rounded-xl border border-border bg-card p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="text-sm font-semibold">Score Over Time</h3>
-                  <span className="text-xs text-muted-foreground/60 font-mono">{report.targetUrl}</span>
+              <div className="rounded-xl border border-border p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="h-4 w-4 text-muted-foreground/40" />
+                  <h3 className="text-xs font-mono font-medium text-foreground">score over time</h3>
                 </div>
                 <TrendSparkline data={report.trendData ?? []} />
                 {report.trendData && report.trendData.length > 1 && (
-                  <div className="mt-4 pt-4 border-t border-border space-y-2">
+                  <div className="mt-3 pt-3 border-t border-border space-y-1.5">
                     {report.trendData.map((pt: TrendDataPoint) => (
-                      <div key={pt.runId} className={`flex items-center gap-3 text-xs font-mono ${pt.isCurrent ? "text-foreground" : "text-muted-foreground"}`}>
-                        <span className="w-24 shrink-0">{new Date(pt.date).toLocaleDateString()}</span>
-                        <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                          <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-emerald-500" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`}
-                            style={{ width: `${pt.score ?? 0}%` }} />
+                      <div key={pt.runId} className={`flex items-center gap-3 text-[10px] font-mono ${pt.isCurrent ? "text-foreground" : "text-muted-foreground/40"}`}>
+                        <span className="w-20 shrink-0">{new Date(pt.date).toLocaleDateString()}</span>
+                        <div className="flex-1 h-1 rounded-full bg-border overflow-hidden">
+                          <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-[#00FF85]" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${pt.score ?? 0}%` }} />
                         </div>
-                        <span className={`w-8 text-right ${(pt.score ?? 0) >= 90 ? "text-emerald-400" : (pt.score ?? 0) >= 70 ? "text-yellow-400" : "text-red-400"}`}>{pt.score}</span>
-                        {pt.isCurrent && <span className="text-muted-foreground/60">(current)</span>}
+                        <span className={`w-8 text-right font-bold ${(pt.score ?? 0) >= 90 ? "text-[#00FF85]" : (pt.score ?? 0) >= 70 ? "text-yellow-500" : "text-red-500"}`}>{pt.score}</span>
+                        {pt.isCurrent && <span className="text-muted-foreground/30">(now)</span>}
                       </div>
                     ))}
                   </div>
@@ -776,51 +708,38 @@ export default function TestingPage() {
             )}
 
             {/* Footer actions */}
-            <div className="flex gap-3 flex-wrap pb-10">
-              <Button variant="outline" className="gap-2 text-sm" disabled={isExportingPdf}
-                onClick={() => { if (!testRunId) return; exportPdf(testRunId, { onSuccess: () => toast.success("PDF report downloaded"), onError: (err) => toast.error(err.message ?? "PDF export failed") }); }}>
-                {isExportingPdf ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {isExportingPdf ? "Generating PDF…" : "Export PDF"}
-              </Button>
-              <Button variant="outline" className="gap-2 text-sm"
-                onClick={() => {
-                  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-                  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-                  a.download = `buildify-test-report-${Date.now()}.json`; a.click();
-                  toast.success("JSON report downloaded");
-                }}>
-                <FileText className="h-4 w-4" /> Export JSON
-              </Button>
+            <div className="flex gap-2 flex-wrap pb-6 pt-1" role="group">
+              <button disabled={isExportingPdf}
+                onClick={() => { if (!testRunId) return; exportPdf(testRunId, { onSuccess: () => toast.success("PDF downloaded"), onError: (e) => toast.error(e.message ?? "Failed") }); }}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted disabled:opacity-40 transition-all touch-manipulation">
+                {isExportingPdf ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                {isExportingPdf ? "generating…" : "PDF"}
+              </button>
+              <button onClick={() => { const b = new Blob([JSON.stringify(report,null,2)],{type:"application/json"}); const a = document.createElement("a"); a.href=URL.createObjectURL(b); a.download=`testfish-${Date.now()}.json`; a.click(); toast.success("JSON downloaded"); }}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
+                <FileText className="h-3.5 w-3.5" /> JSON
+              </button>
               {report.shareableSlug && (
-                <Button variant="outline" className="gap-2 text-sm"
-                  onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`); setCopied(true); toast.success("Shareable link copied!"); setTimeout(() => setCopied(false), 2000); }}>
-                  {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
-                  {copied ? "Copied!" : "Share Link"}
-                </Button>
+                <button onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`); setCopied(true); toast.success("Link copied!"); setTimeout(()=>setCopied(false),2000); }}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
+                  {copied ? <Check className="h-3.5 w-3.5 text-[#00FF85]" /> : <Share2 className="h-3.5 w-3.5" />}
+                  {copied ? "copied!" : "share"}
+                </button>
               )}
               {report.embedBadgeToken && (
-                <Button variant="ghost" className="text-muted-foreground hover:text-foreground gap-2 text-sm"
-                  onClick={() => {
-                    const badge = `[![Tested by Buildify](${window.location.origin}/api/badge/${report.embedBadgeToken}/svg)](${window.location.origin}/report/${report.shareableSlug})`;
-                    void navigator.clipboard.writeText(badge); toast.success("Badge markdown copied!");
-                  }}>
-                  <Code2 className="h-4 w-4" /> Copy Badge
-                </Button>
+                <button onClick={() => { void navigator.clipboard.writeText(`[![TestFish](${window.location.origin}/api/badge/${report.embedBadgeToken}/svg)](${window.location.origin}/report/${report.shareableSlug})`); toast.success("Badge copied!"); }}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
+                  <Code2 className="h-3.5 w-3.5" /> badge
+                </button>
               )}
-              <Button variant="ghost" className="text-muted-foreground hover:text-foreground gap-2 text-sm ml-auto" onClick={handleReset}>
-                <RotateCcw className="h-4 w-4" /> New Test
-              </Button>
+              <button onClick={handleReset}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground transition-all ml-auto touch-manipulation">
+                <RotateCcw className="h-3.5 w-3.5" /> new test
+              </button>
             </div>
           </div>
         )}
-      </div>
-
-      <style jsx>{`
-        @keyframes dotPulse {
-          0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
-          40%            { opacity: 1;   transform: scale(1);   }
-        }
-      `}</style>
+      </main>
     </div>
   );
 }
