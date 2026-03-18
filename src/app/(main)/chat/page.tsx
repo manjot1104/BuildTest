@@ -418,7 +418,7 @@ const handleChatIdChange = (chatId: string | null) => {
             currentChat={hookCurrentChat}
             isFullscreen={isFullscreen}
             setIsFullscreen={setIsFullscreen}
-            isBuilding={false}
+            isBuilding={isLoading || isStreaming}
         />
     ) : null
 }

@@ -1,5 +1,6 @@
 'use client'
 import { toast } from 'sonner'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +37,9 @@ export function StarredChatsDialog({
     open: boolean
     onOpenChange: (v: boolean) => void
 }) {
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [chatToDelete, setChatToDelete] = useState<StarredChat | null>(null)
     const router = useRouter()
     const queryClient = useQueryClient()
     const { data: chats, isLoading, error } = useQuery({
@@ -61,22 +65,22 @@ export function StarredChatsDialog({
 
         try {
             if (chat.type === 'openrouter') {
-                // OpenRouter ke liye /api/openrouter/star use karo
+                
                 await fetch('/api/openrouter/star', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         conversationId: chat.conversationId || chat.v0ChatId,
-                        starred: false,  // ✅ UNSTAR KARO
+                        starred: false,  
                     }),
                 })
             } else {
-                // Builder ke liye /api/chat/star use karo
+                
                 await fetch('/api/chat/star', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        chatId: chat.v0ChatId,
+                       chatId: chat.v0ChatId, 
                         isStarred: false,
                     }),
                 })
@@ -94,28 +98,44 @@ export function StarredChatsDialog({
         }
     }
 
-    const handleDeleteChat = async (e: React.MouseEvent, chat: StarredChat) => {
-        e.stopPropagation()
-        try {
-            const idToDelete = chat.conversationId || chat.v0ChatId
-            await fetch('/api/chat/delete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ chatId: idToDelete }),
-            })
+ const handleDeleteClick = (e: React.MouseEvent, chat: StarredChat) => {
+    e.stopPropagation()
+    setChatToDelete(chat)
+    setConfirmOpen(true)
+}
 
-            await queryClient.invalidateQueries({
-                queryKey: ['starred-chats'],
-                refetchType: 'all'
-            })
-            toast.success('Chat deleted successfully')
-        } catch (error) {
-            console.error('Failed to delete chat:', error)
-            toast.error('Failed to delete chat')
-        }
+const confirmDelete = async () => {
+    if (!chatToDelete) return
+
+    try {
+        const idToDelete = chatToDelete.conversationId || chatToDelete.v0ChatId
+        setDeletingId(idToDelete)
+
+        await fetch('/api/chat/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId: idToDelete }),
+        })
+
+        await queryClient.invalidateQueries({
+            queryKey: ['starred-chats'],
+            refetchType: 'all'
+        })
+
+        toast.success('Chat deleted successfully')
+    } catch (error) {
+        console.error('Failed to delete chat:', error)
+        toast.error('Failed to delete chat')
+    } finally {
+        setDeletingId(null)
+        setConfirmOpen(false)
+        setChatToDelete(null)
     }
+}
 
     return (
+<>
+
         <AlertDialog open={open} onOpenChange={onOpenChange}>
             <AlertDialogContent
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
@@ -215,11 +235,15 @@ export function StarredChatsDialog({
 
                                         <button
                                             type="button"
-                                            onClick={(e) => handleDeleteChat(e, chat)}
+                                            onClick={(e) => handleDeleteClick(e, chat)}
                                             className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
                                             title="Delete chat"
                                         >
-                                            <Trash2 className="size-3.5" />
+                                           {deletingId === (chat.conversationId || chat.v0ChatId) ? (
+    <Loader2 className="size-3.5 animate-spin" />
+) : (
+    <Trash2 className="size-3.5" />
+)}
                                         </button>
                                     </div>
                                 ))}
@@ -229,5 +253,42 @@ export function StarredChatsDialog({
                 </div>
             </AlertDialogContent>
         </AlertDialog>
+        
+<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+    <AlertDialogContent className="max-w-xs">
+        <div className="space-y-3">
+            <h3 className="text-sm font-semibold">Delete chat?</h3>
+            <p className="text-xs text-muted-foreground">
+                This action cannot be undone.
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmOpen(false)}
+                >
+                    Cancel
+                </Button>
+                <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={confirmDelete}
+                    disabled={!!deletingId}
+                >
+                    {deletingId ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                    ) : (
+                        "Delete"
+                    )}
+                </Button>
+            </div>
+        </div>
+    </AlertDialogContent>
+</AlertDialog>
+
+
+        </>
+        
     )
 }

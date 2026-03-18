@@ -436,7 +436,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         chatId: string
         isStarred: boolean
       }
-
+ console.log('Star API - userId:', session.user.id)  
+    console.log('Star API - chatId:', chatId)           
+    console.log('Star API - isStarred:', isStarred)     
       await toggleStarChat({
         userId: session.user.id,
         chatId,

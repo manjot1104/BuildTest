@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 'use client'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -23,11 +24,16 @@ import { X, MessageSquare, ExternalLink, Star, Loader2, Trash2 } from 'lucide-re
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
+import { useState } from 'react'
 
 export function ChatHistoryDialog({
     className,
     ...props
 }: React.ComponentProps<'div'>) {
+    const queryClient = useQueryClient()
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+const [confirmOpen, setConfirmOpen] = useState(false)
+const [chatToDelete, setChatToDelete] = useState<string | null>(null)
     const { historyModal, toggleHistoryModal } = useStateMachine()
     const [filter, setFilter] = React.useState<"all" | "builder" | "openrouter">("all")
     const router = useRouter()
@@ -79,22 +85,43 @@ export function ChatHistoryDialog({
             )
         )
     }
-const handleDeleteChat = async (chatId: string) => {
+const handleDeleteClick = (e: React.MouseEvent, chat: any) => {
+  e.stopPropagation()
+  setChatToDelete(chat.v0ChatId || chat.id)
+  setConfirmOpen(true)
+}
+
+const confirmDelete = async () => {
+  if (!chatToDelete) return
+
   try {
+    setDeletingId(chatToDelete)
+
     await fetch('/api/chat/delete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatId }),
+      body: JSON.stringify({ chatId: chatToDelete }),
     })
 
-    setLocalChats((prev) => prev.filter((chat) => chat.v0ChatId !== chatId))
+    setLocalChats((prev) =>
+      prev.filter((chat) => chat.v0ChatId !== chatToDelete)
+    )
+ await queryClient.refetchQueries({
+  queryKey: ['chat-history']
+})
+
     toast.success('Chat deleted successfully')
   } catch (error) {
     console.error('Failed to delete chat:', error)
     toast.error('Failed to delete chat')
+  } finally {
+    setDeletingId(null)
+    setConfirmOpen(false)
+    setChatToDelete(null)
   }
 }
     return (
+        <>
         <AlertDialog open={historyModal} onOpenChange={toggleHistoryModal}>
             <AlertDialogContent
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
@@ -188,6 +215,8 @@ const handleDeleteChat = async (chatId: string) => {
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
+                                                    console.log('Chat object:', chat) 
+    console.log('ID being sent:', chat.v0ChatId || chat.id)  
                                                     if (chat.type === 'builder') {
                                                         router.push(`/chat?chatId=${chat.v0ChatId}`)
                                                     } else {
@@ -221,17 +250,19 @@ const handleDeleteChat = async (chatId: string) => {
 
                                                 
                                             </button>
-                                            <button
-    type="button"
-    onClick={(e) => {
-      e.stopPropagation()
-      handleDeleteChat(chat.v0ChatId)
-    }}
-    className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
-    title="Delete chat"
-  >
+                                       <button
+  type="button"
+  
+  onClick={(e) => handleDeleteClick(e, chat)}  
+  className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-destructive hover:bg-background border border-transparent hover:border-border/50"
+  title="Delete chat"
+>
+  {deletingId === (chat.v0ChatId || chat.id) ? (
+    <Loader2 className="size-3.5 animate-spin" />
+  ) : (
     <Trash2 className="size-3.5" />
-  </button>
+  )}
+</button>
                                             
                                         </div>
 
@@ -246,5 +277,41 @@ const handleDeleteChat = async (chatId: string) => {
                 </div>
             </AlertDialogContent>
         </AlertDialog>
+
+<AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+  <AlertDialogContent className="max-w-xs">
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold">Delete chat?</h3>
+      <p className="text-xs text-muted-foreground">
+        This action cannot be undone.
+      </p>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirmOpen(false)}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={confirmDelete}
+          disabled={!!deletingId}
+        >
+          {deletingId ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            "Delete"
+          )}
+        </Button>
+      </div>
+    </div>
+  </AlertDialogContent>
+</AlertDialog>
+
+
+        </>
     )
 }
