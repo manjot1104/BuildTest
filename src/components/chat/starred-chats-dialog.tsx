@@ -48,14 +48,14 @@ const [chatToDelete, setChatToDelete] = useState<StarredChat | null>(null)
         enabled: open,
     })
 
-    const handleChatClick = (chat: StarredChat) => {
-        if (chat.type === "openrouter") {
-            router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
-        } else {
-            router.push(`/chat?chatId=${chat.v0ChatId}`)
-        }
-        onOpenChange(false)
+ const handleChatClick = (chat: StarredChat) => {
+    if (chat.type === "openrouter") {
+        router.push(`/ai-chat?chatId=${chat.conversationId}`) 
+    } else {
+        router.push(`/chat?chatId=${chat.v0ChatId}`) 
     }
+    onOpenChange(false)
+}
 
     const handleStarToggle = async (
         e: React.MouseEvent,
