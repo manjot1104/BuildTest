@@ -502,7 +502,7 @@ function makeAbortSignal(ms: number): {
 // The TinyFish API is inconsistent about field names across event types
 // and API versions. To be resilient we treat every known alias as valid:
 //
-//   jobId      — "jobId" | "job_id" | "id"
+//   jobId      — "jobId" | "job_id" | "id" | "run_id" | "taskId" | "task_id" | "runId" | "executionId"
 //   resultJson — "resultJson" | "result" | "data" | "output" | "response"
 //   type       — "type" | "event"        (COMPLETE marker)
 //   status     — "status" | "state"
@@ -514,8 +514,20 @@ function makeAbortSignal(ms: number): {
 type RawSSEEvent = Record<string, unknown>;
 
 // Pull jobId from any field name TinyFish might use.
+// "run_id" is the field used for live TinyFish SSE events
+// (observed: { type, run_id, status, timestamp, result }).
 function extractJobId(ev: RawSSEEvent): string | null {
-  for (const key of ["jobId", "job_id", "id"]) {
+  for (const key of [
+    "run_id",      
+    "jobId",
+    "job_id",
+    "id",
+    "taskId",
+    "task_id",
+    "jobid",
+    "runId",
+    "executionId",
+  ]) {
     const v = ev[key];
     if (typeof v === "string" && v.length > 0) return v;
   }
@@ -632,8 +644,8 @@ async function runTinyFish(
         }
 
         // Harvest jobId from EVERY event, not just the first.
-        // TinyFish sometimes only sends jobId on the COMPLETE event, so
-        // checking early events alone was causing jobId to always be null.
+        // TinyFish sends run_id on all events, so we pick it up as early
+        // as possible (typically the very first event).
         const evJobId = extractJobId(ev);
         if (evJobId && !jobId) jobId = evJobId;
 
@@ -1508,7 +1520,7 @@ export async function crawlSite(
   );
 
   // ── Stage 3: Test budget allocation ───────────────────────────────────────
-  // [ADDED] Notify the client that budget allocation is happening.
+  // Notify the client that budget allocation is happening.
   emitProgress({
     type: "crawl_stage_change",
     stage: "Allocating test budget",
