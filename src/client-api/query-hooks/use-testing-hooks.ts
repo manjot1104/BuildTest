@@ -384,6 +384,8 @@ export const testingKeys = {
     [...testingKeys.all, "public-report", slug] as const,
   badge: (token: string) => [...testingKeys.all, "badge", token] as const,
   cases: (runId: string) => [...testingKeys.all, "cases", runId] as const,
+  // Daily run quota — fetched by useTestUsage for the usage indicator.
+  usage: () => [...testingKeys.all, "usage"] as const,
 };
 
 const TERMINAL_STATUSES = new Set(["complete", "failed", "cancelled"]);
@@ -496,6 +498,28 @@ export function useReviewTestCases(testRunId: string | null, enabled = true) {
     },
     enabled: !!testRunId && enabled,
     staleTime: 0,
+    retry: 1,
+  });
+}
+
+/**
+ * useTestUsage
+ *
+ * Fetches today's run count and daily limit for the authenticated user.
+ * Used to render the usage pill near the Run button and disable it when
+ * the daily cap is reached. Refetched automatically after a run starts.
+ * Polls every 60s while the page is open so the count stays fresh.
+ */
+export function useTestUsage() {
+  return useQuery({
+    queryKey: testingKeys.usage(),
+    queryFn: async (): Promise<{ runsToday: number; dailyLimit: number; planId: string }> => {
+      const res = await fetch("/api/test/usage");
+      if (!res.ok) throw new Error("Failed to fetch test usage");
+      return (await res.json()) as { runsToday: number; dailyLimit: number; planId: string };
+    },
+    staleTime: 1000 * 30, // treat as fresh for 30s to avoid redundant fetches
+    refetchInterval: 1000 * 60, // background poll every 60s
     retry: 1,
   });
 }
@@ -870,6 +894,9 @@ export function useStartTestRun() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: testingKeys.history() });
+      // Invalidate usage so the pill re-fetches after a run is started
+      // and reflects the updated count immediately.
+      void queryClient.invalidateQueries({ queryKey: testingKeys.usage() });
     },
   });
 }

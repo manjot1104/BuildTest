@@ -88,6 +88,8 @@ import {
   // renders as an actual image in GitHub READMEs and websites
   getEmbedBadgeSvgHandler,
   exportTestReportPdfHandler,
+  // daily run quota handler — used by GET /api/test/usage
+  getTestUsageHandler,
   // Review phase: test case CRUD + confirm
   getTestCasesHandler,
   createTestCaseHandler,
@@ -1456,6 +1458,17 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
+
+  // GET /api/test/usage — today's run count and daily limit for the authenticated user.
+  // IMPORTANT: must be declared BEFORE /test/run/:id to avoid route collision.
+  // Used by useTestUsage() to render the usage pill and disable the Run button
+  // when the per-plan daily cap is reached.
+  .get("/test/usage", async ({ set }) => {
+    const result = await getTestUsageHandler();
+    if (isApiError(result))
+      set.status = (result as ApiErrorResponse).status ?? 500;
+    return result;
+  })
 
   // GET /api/test/history — past test runs for the authenticated user
   // IMPORTANT: must be declared BEFORE /test/run/:id to avoid route collision

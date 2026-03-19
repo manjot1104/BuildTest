@@ -35,6 +35,7 @@ import {
 import type { ApiErrorResponse } from "@/types/api.types";
 import {
   countTestCasesByRunId,
+  countTestRunsTodayByUserId,
   createTestCase,
   deleteTestCase,
   getTestCasesByRunId,
@@ -95,20 +96,36 @@ function buildTestGoal(tc: TestCase): string {
 interface PlanLimits {
   maxPages: number;
   maxTests: number;
+  // [ADDED] Maximum test runs allowed per UTC calendar day.
+  // Change DAILY_RUN_LIMITS below to adjust per-plan values.
+  dailyRuns: number;
 }
 
-const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5 };
+// ---------------------------------------------------------------------------
+// Daily run limits — edit these to change per-plan quotas.
+// Keys must match subscriptions.plan_id values (lower-cased).
+// "free" is the fallback for users with no active subscription.
+// ---------------------------------------------------------------------------
+const DAILY_RUN_LIMITS: Record<string, number> = {
+  free:       2,
+  starter:    5,
+  pro:        15,
+  enterprise: 50,
+} as const;
+
+const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, dailyRuns: DAILY_RUN_LIMITS.free! };
 
 const SERVER_PLAN_LIMITS: Record<string, PlanLimits> = {
-  starter:    { maxPages:  5, maxTests: 10 },
-  pro:        { maxPages: 10, maxTests: 20 },
-  enterprise: { maxPages: 20, maxTests: 30 },
+  starter:    { maxPages:  5, maxTests: 10, dailyRuns: DAILY_RUN_LIMITS.starter!    },
+  pro:        { maxPages: 10, maxTests: 20, dailyRuns: DAILY_RUN_LIMITS.pro!        },
+  enterprise: { maxPages: 20, maxTests: 30, dailyRuns: DAILY_RUN_LIMITS.enterprise! },
 };
 
 /**
  * Resolves the hard server-side test-generation cap for a given subscription.
  * Called in runPipelineStages to clamp AI-generated case count and in
  * createTestCaseHandler to enforce the add-case ceiling during review.
+ * Also used by startTestRunHandler and getTestUsageHandler for the daily limit.
  *
  * @param planId - value of subscriptions.plan_id, or null/undefined for free tier.
  */
@@ -1032,6 +1049,23 @@ export async function startTestRunHandler({
       );
     }
 
+    // ── Daily run limit enforcement ────────────────────────────────────────
+    // Count how many runs the user has already started today (UTC calendar day).
+    // This is a hard server-side gate — the UI also disables the Run button
+    // when the limit is reached (via useTestUsage), but we enforce it here
+    // so a crafted request can never bypass the cap.
+    const runsToday = await countTestRunsTodayByUserId(session.user.id);
+    if (runsToday >= planLimits.dailyRuns) {
+      console.warn(
+        `[Testing] User ${session.user.id} hit daily run limit: ${runsToday}/${planLimits.dailyRuns} (plan="${planId ?? "free"}").`,
+      );
+      return {
+        error: `Daily limit reached. Your ${planId ?? "free"} plan allows ${planLimits.dailyRuns} test run${planLimits.dailyRuns === 1 ? "" : "s"} per day. Resets at midnight UTC.`,
+        status: 429,
+      };
+    }
+    // ── End daily run limit enforcement ───────────────────────────────────
+
     // [ADDED] Concurrency is plan-agnostic: clamp to the hard caps defined in
     // tinyfish.service (MIN=1, MAX=20).  We log if the user sent an out-of-range
     // value so it is visible in server logs without throwing an error.
@@ -1433,6 +1467,27 @@ export async function getTestRunHandler({
     shareableSlug: run.reportExports?.[0]?.shareable_slug ?? null,
     embedBadgeToken: run.reportExports?.[0]?.embed_badge_token ?? null,
     bugs: run.bugReports ?? [],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/test/usage  — daily run quota for the authenticated user
+// Used by useTestUsage() to render the usage pill in the UI and disable the
+// Run button when the limit is reached.
+// ---------------------------------------------------------------------------
+
+export async function getTestUsageHandler(): Promise<object | ApiErrorResponse> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  const planId = await getUserPlanId(session.user.id);
+  const planLimits = getServerPlanLimits(planId);
+  const runsToday = await countTestRunsTodayByUserId(session.user.id);
+
+  return {
+    runsToday,
+    dailyLimit: planLimits.dailyRuns,
+    planId: planId ?? "free",
   };
 }
 

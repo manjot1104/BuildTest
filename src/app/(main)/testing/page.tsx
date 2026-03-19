@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import {
   useStartTestRun, useTestRunStatus, useTestReport,
   useTestRunSSE, useCancelTestRun, useExportReportPdf,
+  useTestUsage,
   type Bug as BugType, type PerformanceGauge, type TrendDataPoint,
 } from "@/client-api/query-hooks/use-testing-hooks";
 
@@ -79,11 +80,89 @@ function BfyGhostBtn({ onClick, children, className = "" }: {
   );
 }
 
+// ─── Usage Pill ───────────────────────────────────────────────────────────────
+// Shows today's run count vs daily limit. Goes amber at 80% and red when full.
+// Only renders when usage data is available (no flash of content on first load).
+
+function UsagePill({ runsToday, dailyLimit, planId }: {
+  runsToday: number;
+  dailyLimit: number;
+  planId: string;
+}) {
+  const remaining = dailyLimit - runsToday;
+  const pct = runsToday / dailyLimit;
+  const isAtLimit   = runsToday >= dailyLimit;
+  const isNearLimit = pct >= 0.8 && !isAtLimit;
+
+  const barColor = isAtLimit
+    ? "bg-red-500"
+    : isNearLimit
+    ? "bg-yellow-500"
+    : "bg-[#00FF85]";
+
+  const textColor = isAtLimit
+    ? "text-red-500"
+    : isNearLimit
+    ? "text-yellow-500"
+    : "text-muted-foreground/50";
+
+  const borderColor = isAtLimit
+    ? "border-red-500/25"
+    : isNearLimit
+    ? "border-yellow-500/20"
+    : "border-border";
+
+  return (
+    <div
+      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${borderColor} bg-background`}
+      title={`${runsToday} of ${dailyLimit} daily runs used (${planId} plan). Resets at midnight UTC.`}
+      role="meter"
+      aria-valuenow={runsToday}
+      aria-valuemin={0}
+      aria-valuemax={dailyLimit}
+      aria-label={`${runsToday} of ${dailyLimit} runs today`}
+    >
+      {/* Mini progress track */}
+      <div className="w-16 h-1 rounded-full bg-border overflow-hidden shrink-0">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${Math.min(100, pct * 100)}%` }}
+        />
+      </div>
+
+      <span className={`text-[10px] font-mono tabular-nums ${textColor}`}>
+        {isAtLimit ? (
+          <span className="text-red-500">limit reached</span>
+        ) : (
+          <>{remaining} run{remaining !== 1 ? "s" : ""} left today</>
+        )}
+      </span>
+
+      {/* Upgrade nudge only on free tier when at or near limit */}
+      {(isAtLimit || isNearLimit) && planId === "free" && (
+        <a
+          href="/pricing"
+          className="text-[10px] font-mono text-[#00FF85]/70 hover:text-[#00FF85] underline underline-offset-2 shrink-0 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          upgrade
+        </a>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
   const { subscription, hasActiveSubscription } = useUserCredits();
   const planLimits = useMemo(() => getPlanLimits(subscription?.plan_id), [subscription?.plan_id]);
+
+  // [ADDED] Daily run quota — drives the usage pill and Run button disable state
+  const { data: usageData } = useTestUsage();
+  const isAtDailyLimit = usageData
+    ? usageData.runsToday >= usageData.dailyLimit
+    : false;
 
   const [url, setUrl]               = useState("");
   const [maxPages, setMaxPages]     = useState(5);
@@ -160,6 +239,14 @@ export default function TestingPage() {
   };
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL"); return; }
+    // [ADDED] Client-side guard — the server enforces this too, but blocking
+    // early gives a better UX than waiting for a 429 after crawl starts.
+    if (isAtDailyLimit) {
+      toast.error(
+        `Daily limit reached. Your ${usageData?.planId ?? "free"} plan allows ${usageData?.dailyLimit ?? 0} runs/day. Resets at midnight UTC.`
+      );
+      return;
+    }
     const timeouts: Record<string, number> = {};
     if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs       = discoveryMs;
     if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs      = extractionMs;
@@ -236,7 +323,7 @@ export default function TestingPage() {
               <p className="text-xs text-muted-foreground font-mono">Paste a URL. Get a full bug report in minutes.</p>
             </div>
 
-            {/* URL row */}
+            {/* URL row + usage pill */}
             <div className="flex gap-2">
               <div className="relative flex-1 min-w-0">
                 <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40 pointer-events-none" />
@@ -246,10 +333,25 @@ export default function TestingPage() {
                   aria-label="Website URL to test"
                   className="w-full h-10 pl-9 pr-3 rounded-lg border border-input bg-background text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[#00FF85]/50 focus:ring-1 focus:ring-[#00FF85]/20 transition-colors" />
               </div>
-              <BfyPrimaryBtn onClick={handleStart} disabled={isStarting || !url.trim()}>
+              {/* [ADDED] Disable the Run button when the daily cap is reached.
+                  isAtDailyLimit is false until usageData loads, so it never
+                  flashes disabled on first render. */}
+              <BfyPrimaryBtn onClick={handleStart} disabled={isStarting || !url.trim() || isAtDailyLimit}>
                 {isStarting ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Play className="h-4 w-4" /><span className="hidden xs:inline">Run Tests</span><span className="xs:hidden">Run</span></>}
               </BfyPrimaryBtn>
             </div>
+
+            {/* [ADDED] Usage pill — shown only once data has loaded to avoid
+                a flash of "0 runs left" before the fetch completes. */}
+            {usageData && (
+              <div className="flex items-center justify-end -mt-1">
+                <UsagePill
+                  runsToday={usageData.runsToday}
+                  dailyLimit={usageData.dailyLimit}
+                  planId={usageData.planId}
+                />
+              </div>
+            )}
 
             {/* Test Budget */}
             <div className="rounded-xl border border-border p-4 space-y-3">
