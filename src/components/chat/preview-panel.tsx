@@ -18,11 +18,13 @@ import {
   Monitor,
   Code,
   Github,
+  FlaskConical,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
+import { TestingLaunchDialog } from '@/components/chat/testing-launch-dialog'
 
 // Lazy-load the GitHub dialog — it's heavy (pulls in React Query hooks, auth client, etc.)
 // Only mounted when user actually opens it, never on initial render.
@@ -98,6 +100,7 @@ export function PreviewPanel({
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
+  const [testingDialogOpen, setTestingDialogOpen] = useState(false)
 
   // Track if dialog has ever been opened — once opened, keep mounted for fast re-open
   const [githubDialogMounted, setGithubDialogMounted] = useState(false)
@@ -181,6 +184,14 @@ if (!effectiveSrc) {
                 onClick={openGithubDialog}
               >
                 <Github className="h-4 w-4" />
+              </WebPreviewNavigationButton>
+
+              {/* Testing button — opens dialog, never navigates directly */}
+              <WebPreviewNavigationButton
+                tooltip="Run tests"
+                onClick={() => setTestingDialogOpen(true)}
+              >
+                <FlaskConical className="h-4 w-4" />
               </WebPreviewNavigationButton>
 
               <WebPreviewNavigationButton
@@ -303,6 +314,16 @@ if (!effectiveSrc) {
             chatId={currentChat.id}
           />
         </Suspense>
+      )}
+
+      {/* Testing Launch Dialog — always available, handles its own auth/repo state */}
+      {currentChat?.id && (
+        <TestingLaunchDialog
+          open={testingDialogOpen}
+          onOpenChange={setTestingDialogOpen}
+          chatId={currentChat.id}
+          demoUrl={currentChat.demo}
+        />
       )}
     </>
   )

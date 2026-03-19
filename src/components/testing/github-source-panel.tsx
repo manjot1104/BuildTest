@@ -19,18 +19,25 @@ export interface GithubSourceValue {
 interface GithubSourcePanelProps {
   onChange: (value: GithubSourceValue | null) => void;
   disabled?: boolean;
+  /**
+   * Optional initial value to seed the form fields (e.g. prefilled from the
+   * Preview Panel when navigating from a project with a linked GitHub repo).
+   * The panel auto-expands and the user can click "Validate Repo" to confirm.
+   */
+  initialValue?: GithubSourceValue | null;
 }
 
 type ValState = "idle" | "validating" | "valid" | "invalid";
 
-export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePanelProps) {
+export function GithubSourcePanel({ onChange, disabled = false, initialValue }: GithubSourcePanelProps) {
   const router = useRouter();
   const { data: githubStatus, isLoading } = useGithubStatus();
 
-  const [expanded, setExpanded] = useState(false);
-  const [owner, setOwner] = useState("");
-  const [repo, setRepo] = useState("");
-  const [branch, setBranch] = useState("");
+  // Auto-expand if we have prefilled values so the user sees them immediately
+  const [expanded, setExpanded] = useState(!!initialValue);
+  const [owner, setOwner]       = useState(initialValue?.owner ?? "");
+  const [repo, setRepo]         = useState(initialValue?.repo ?? "");
+  const [branch, setBranch]     = useState(initialValue?.branch ?? "");
 
   const [valState, setValState] = useState<ValState>("idle");
   const [valError, setValError] = useState("");
@@ -40,17 +47,31 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
 
   const githubConnected = githubStatus?.connected === true;
 
-  // Pre-fill owner from the connected GitHub login so the user doesn't have to type it
+  // Pre-fill owner from the connected GitHub login so the user doesn't have to type it.
+  // Don't override if an initialValue owner was already provided.
   useEffect(() => {
     if (githubStatus?.login && owner === "") {
       setOwner(githubStatus.login);
     }
   }, [githubStatus?.login, owner]);
 
-  const ownerTrimmed = owner.trim();
-  const repoTrimmed = repo.trim();
+  // If initialValue arrives after mount (async), sync it in
+  useEffect(() => {
+    if (!initialValue) return;
+    setOwner(initialValue.owner);
+    setRepo(initialValue.repo);
+    setBranch(initialValue.branch);
+    setExpanded(true);
+  }, [
+    initialValue?.owner,
+    initialValue?.repo,
+    initialValue?.branch,
+  ]);
+
+  const ownerTrimmed  = owner.trim();
+  const repoTrimmed   = repo.trim();
   const branchTrimmed = branch.trim() || "main";
-  const inputsFilled = ownerTrimmed !== "" && repoTrimmed !== "";
+  const inputsFilled  = ownerTrimmed !== "" && repoTrimmed !== "";
 
   // Reset when user edits after validating
   useEffect(() => {
@@ -72,7 +93,7 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
     onChange(null);
 
     try {
-      const qs = new URLSearchParams({ owner: ownerTrimmed, repo: repoTrimmed, branch: branchTrimmed });
+      const qs  = new URLSearchParams({ owner: ownerTrimmed, repo: repoTrimmed, branch: branchTrimmed });
       const res = await fetch(`/api/github/validate?${qs}`);
       const json = await res.json() as {
         valid: boolean;
@@ -110,8 +131,8 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
   const isValidating = valState === "validating";
 
   function btnLabel() {
-    if (isValidating) return "Checking…";
-    if (valState === "valid") return "Validated ✓";
+    if (isValidating)           return "Checking…";
+    if (valState === "valid")   return "Validated ✓";
     if (valState === "invalid") return "Retry";
     return "Validate Repo";
   }
@@ -146,6 +167,10 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
           </span>
           {valState === "valid" && (
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0" />
+          )}
+          {/* Dot indicator when fields are prefilled but not yet validated */}
+          {valState === "idle" && inputsFilled && (
+            <span className="h-1.5 w-1.5 rounded-full bg-[#00FF85]/60 shrink-0" title="Prefilled — validate to confirm" />
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -274,10 +299,10 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
                       onClick={() => { void handleValidate(); }}
                       className={btnClass()}
                     >
-                      {isValidating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {!isValidating && valState === "valid" && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {!isValidating && valState === "invalid" && <XCircle className="h-3.5 w-3.5" />}
-                      {!isValidating && valState === "idle" && <ShieldCheck className="h-3.5 w-3.5" />}
+                      {isValidating                            && <Loader2      className="h-3.5 w-3.5 animate-spin" />}
+                      {!isValidating && valState === "valid"   && <CheckCircle2 className="h-3.5 w-3.5" />}
+                      {!isValidating && valState === "invalid" && <XCircle      className="h-3.5 w-3.5" />}
+                      {!isValidating && valState === "idle"    && <ShieldCheck  className="h-3.5 w-3.5" />}
                       {btnLabel()}
                     </button>
 

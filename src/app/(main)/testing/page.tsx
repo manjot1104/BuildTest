@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useUserCredits } from "@/hooks/use-user-credits";
 import {
   Globe, Play, Loader2, CheckCircle2, XCircle,
@@ -152,9 +153,32 @@ function UsagePill({ runsToday, dailyLimit, planId }: {
   );
 }
 
+// ─── Prefill Banner ───────────────────────────────────────────────────────────
+// Shown briefly when the page was opened from the Preview Panel with prefilled
+// query params (url, owner, repo, branch). Auto-dismisses after 6 seconds.
+
+function PrefillBanner({ repoFullName, onDismiss }: { repoFullName: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+
+  return (
+    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-[#00FF85]/20 bg-[#00FF85]/5 text-xs font-mono text-muted-foreground animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <FlaskConical className="h-3.5 w-3.5 text-[#00FF85] shrink-0" />
+      <span>
+        Prefilled from your project ·{" "}
+        <span className="text-foreground font-medium">{repoFullName}</span>
+      </span>
+      <button onClick={onDismiss} className="ml-auto text-muted-foreground/40 hover:text-muted-foreground transition-colors">✕</button>
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
+  const searchParams = useSearchParams();
   const { subscription, hasActiveSubscription } = useUserCredits();
   const planLimits = useMemo(() => getPlanLimits(subscription?.plan_id), [subscription?.plan_id]);
 
@@ -164,7 +188,15 @@ export default function TestingPage() {
     ? usageData.runsToday >= usageData.dailyLimit
     : false;
 
-  const [url, setUrl]               = useState("");
+  // ── Read prefill params from query string (set by PreviewPanel's TestingButton) ──
+  // These are optional — the page works normally when no params are present.
+  const prefillUrl    = searchParams.get("url") ?? "";
+  const prefillOwner  = searchParams.get("owner") ?? "";
+  const prefillRepo   = searchParams.get("repo") ?? "";
+  const prefillBranch = searchParams.get("branch") ?? "";
+  const hasPrefill    = !!(prefillUrl || prefillOwner || prefillRepo);
+
+  const [url, setUrl]               = useState(prefillUrl);
   const [maxPages, setMaxPages]     = useState(5);
   const [maxTests, setMaxTests]     = useState(10);
   const [concurrency, setConcurrency]   = useState(CONCURRENCY_DEFAULT);
@@ -173,6 +205,19 @@ export default function TestingPage() {
   const [executeMs, setExecuteMs]       = useState(DEFAULT_EXECUTE_MS);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
+
+  // Show the prefill banner once if we arrived with params
+  const [showPrefillBanner, setShowPrefillBanner] = useState(hasPrefill);
+
+  // Derived repo name shown in the banner
+  const prefillRepoFullName = prefillOwner && prefillRepo
+    ? `${prefillOwner}/${prefillRepo}`
+    : prefillRepo || prefillOwner;
+
+  // Initial value passed down to GithubSourcePanel to seed its fields
+  const githubInitial: GithubSourceValue | null = (prefillOwner && prefillRepo)
+    ? { owner: prefillOwner, repo: prefillRepo, branch: prefillBranch || "main" }
+    : null;
 
   useEffect(() => {
     setMaxPages((p) => Math.min(p, planLimits.maxPages));
@@ -312,6 +357,14 @@ export default function TestingPage() {
         {!testRunId && (
           <div className="space-y-4">
 
+            {/* Prefill banner — only shown when navigated here from the Preview Panel */}
+            {showPrefillBanner && prefillRepoFullName && (
+              <PrefillBanner
+                repoFullName={prefillRepoFullName}
+                onDismiss={() => setShowPrefillBanner(false)}
+              />
+            )}
+
             {/* Hero */}
             <div className="text-center space-y-2 pt-1">
               <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-[#00FF85] bg-[#00FF85]/10 border border-[#00FF85]/20 px-3 py-1 rounded-full">
@@ -416,8 +469,13 @@ export default function TestingPage() {
               )}
             </div>
 
-            {/* Source Code Analysis — after Advanced Settings */}
-            <GithubSourcePanel onChange={setGithubSource} disabled={isStarting} />
+            {/* Source Code Analysis — after Advanced Settings.
+                Pass initialValue so it seeds the form when navigated from a project. */}
+            <GithubSourcePanel
+              onChange={setGithubSource}
+              disabled={isStarting}
+              initialValue={githubInitial}
+            />
 
             <p className="text-[10px] font-mono text-muted-foreground/30 text-center pb-2">
               navigation · forms · visual · performance · a11y · security
@@ -800,7 +858,7 @@ export default function TestingPage() {
                         <div className="flex-1 h-1 rounded-full bg-border overflow-hidden">
                           <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-[#00FF85]" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${pt.score ?? 0}%` }} />
                         </div>
-                        <span className={`w-8 text-right font-bold ${(pt.score ?? 0) >= 90 ? "text-[#00FF85]" : (pt.score ?? 0) >= 70 ? "text-yellow-500" : "text-red-500"}`}>{pt.score}</span>
+                        <span className={`w-8 text-right font-bold ${(pt.score ?? 0) >= 90 ? "bg-[#00FF85]" : (pt.score ?? 0) >= 70 ? "text-yellow-500" : "text-red-500"}`}>{pt.score}</span>
                         {pt.isCurrent && <span className="text-muted-foreground/30">(now)</span>}
                       </div>
                     ))}
