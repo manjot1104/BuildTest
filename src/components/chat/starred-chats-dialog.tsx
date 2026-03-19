@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import {
     AlertDialog,
     AlertDialogContent,
+    AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { X, Star, ExternalLink, Loader2, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -141,6 +142,7 @@ const confirmDelete = async () => {
                 className="p-0 gap-0 overflow-hidden rounded-xl border shadow-lg"
                 style={{ width: '95vw', maxWidth: '40rem' }}
             >
+                <AlertDialogTitle className="sr-only">Starred Chats</AlertDialogTitle>
                 <div className="flex flex-col">
                     {/* Header */}
                     <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b bg-muted/30">

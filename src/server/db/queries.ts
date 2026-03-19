@@ -1,7 +1,8 @@
-import { and, count, desc, eq, gte, isNotNull, inArray } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull, inArray, or } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
-import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts } from './schema'
+import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts, chat_folders } from './schema'
+import { isNull } from 'drizzle-orm'
 import { db } from './index'
 
 // ============================================================================
@@ -129,6 +130,36 @@ export async function updateUserChat({
   } catch (error: unknown) {
     throw error
   }
+}
+
+/**
+ * Renames a chat title with ownership verification.
+ * Matches by id, v0_chat_id, or conversation_id.
+ */
+export async function renameUserChat({
+  chatId,
+  userId,
+  title,
+}: {
+  chatId: string
+  userId: string
+  title: string
+}): Promise<boolean> {
+  const result = await db
+    .update(user_chats)
+    .set({ title: title.trim(), updated_at: new Date() })
+    .where(
+      and(
+        eq(user_chats.user_id, userId),
+        or(
+          eq(user_chats.id, chatId),
+          eq(user_chats.v0_chat_id, chatId),
+          eq(user_chats.conversation_id, chatId),
+        ),
+      ),
+    )
+    .returning({ id: user_chats.id })
+  return result.length > 0
 }
 
 /**
@@ -692,4 +723,175 @@ export async function deleteStudioLayout(id: string, userId: string): Promise<vo
   await db
     .delete(studio_layouts)
     .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+}
+
+// ─── Chat Folders ────────────────────────────────────────────────────────────
+
+export type ChatFolder = typeof chat_folders.$inferSelect
+
+export async function createChatFolder({
+  userId,
+  name,
+  color,
+}: {
+  userId: string
+  name: string
+  color?: string
+}): Promise<ChatFolder> {
+  const id = randomUUID()
+  // Get the next position
+  const existing = await db
+    .select({ position: chat_folders.position })
+    .from(chat_folders)
+    .where(eq(chat_folders.user_id, userId))
+    .orderBy(desc(chat_folders.position))
+    .limit(1)
+  const nextPos = (existing[0]?.position ?? -1) + 1
+
+  const [folder] = await db
+    .insert(chat_folders)
+    .values({
+      id,
+      user_id: userId,
+      name: name.trim(),
+      color: color ?? null,
+      position: nextPos,
+      created_at: new Date(),
+      updated_at: new Date(),
+    })
+    .returning()
+
+  return folder!
+}
+
+export async function getChatFoldersByUserId(userId: string): Promise<(ChatFolder & { chatCount: number })[]> {
+  const folders = await db
+    .select()
+    .from(chat_folders)
+    .where(eq(chat_folders.user_id, userId))
+    .orderBy(chat_folders.position, chat_folders.created_at)
+
+  // Get chat counts per folder
+  const counts = await db
+    .select({
+      folder_id: user_chats.folder_id,
+      count: count(user_chats.id),
+    })
+    .from(user_chats)
+    .where(and(eq(user_chats.user_id, userId), isNotNull(user_chats.folder_id)))
+    .groupBy(user_chats.folder_id)
+
+  const countMap = new Map(counts.map((c) => [c.folder_id, c.count]))
+  return folders.map((f) => ({ ...f, chatCount: countMap.get(f.id) ?? 0 }))
+}
+
+export async function updateChatFolder(
+  id: string,
+  userId: string,
+  data: { name?: string; color?: string | null; position?: number },
+): Promise<void> {
+  await db
+    .update(chat_folders)
+    .set({
+      ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+      ...(data.color !== undefined ? { color: data.color } : {}),
+      ...(data.position !== undefined ? { position: data.position } : {}),
+      updated_at: new Date(),
+    })
+    .where(and(eq(chat_folders.id, id), eq(chat_folders.user_id, userId)))
+}
+
+export async function deleteChatFolder(id: string, userId: string): Promise<void> {
+  // Chats in this folder will have folder_id set to null due to ON DELETE SET NULL
+  await db
+    .delete(chat_folders)
+    .where(and(eq(chat_folders.id, id), eq(chat_folders.user_id, userId)))
+}
+
+export async function assignChatToFolder({
+  chatId,
+  folderId,
+  userId,
+}: {
+  chatId: string
+  folderId: string | null
+  userId: string
+}): Promise<void> {
+  // Try matching by id first, then by v0_chat_id, then by conversation_id
+  const [chat] = await db
+    .select({ id: user_chats.id })
+    .from(user_chats)
+    .where(
+      and(
+        eq(user_chats.user_id, userId),
+        eq(user_chats.id, chatId),
+      ),
+    )
+    .limit(1)
+
+  const targetId = chat?.id
+
+  if (!targetId) {
+    // Try v0_chat_id
+    const [byV0] = await db
+      .select({ id: user_chats.id })
+      .from(user_chats)
+      .where(and(eq(user_chats.user_id, userId), eq(user_chats.v0_chat_id, chatId)))
+      .limit(1)
+    if (!byV0) {
+      // Try conversation_id
+      const [byConv] = await db
+        .select({ id: user_chats.id })
+        .from(user_chats)
+        .where(and(eq(user_chats.user_id, userId), eq(user_chats.conversation_id, chatId)))
+        .limit(1)
+      if (!byConv) return
+      await db
+        .update(user_chats)
+        .set({ folder_id: folderId, updated_at: new Date() })
+        .where(eq(user_chats.id, byConv.id))
+      return
+    }
+    await db
+      .update(user_chats)
+      .set({ folder_id: folderId, updated_at: new Date() })
+      .where(eq(user_chats.id, byV0.id))
+    return
+  }
+
+  await db
+    .update(user_chats)
+    .set({ folder_id: folderId, updated_at: new Date() })
+    .where(eq(user_chats.id, targetId))
+}
+
+export async function getChatsByFolderId({
+  folderId,
+  userId,
+  limit: lim = 50,
+}: {
+  folderId: string
+  userId: string
+  limit?: number
+}): Promise<UserChat[]> {
+  return db
+    .select()
+    .from(user_chats)
+    .where(
+      and(
+        eq(user_chats.user_id, userId),
+        eq(user_chats.folder_id, folderId),
+      ),
+    )
+    .orderBy(desc(user_chats.updated_at))
+    .limit(lim)
+}
+
+export async function getUnfiledChatCount(userId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: count(user_chats.id) })
+    .from(user_chats)
+    .where(and(eq(user_chats.user_id, userId), isNull(user_chats.folder_id)))
+
+  return result?.count ?? 0
 }

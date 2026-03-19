@@ -21,8 +21,9 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { Trash2 } from 'lucide-react'
-import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight, FolderOpen, Pencil, Check } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { MoveToFolderPopover } from '@/components/chat/move-to-folder-popover'
 import { useRouter } from 'next/navigation'
 import { formatDistanceToNow } from 'date-fns'
 import React from 'react'
@@ -48,6 +49,8 @@ const [chatToDelete, setChatToDelete] = useState<string | null>(null)
     const totalPages = result?.totalPages ?? 1
     const totalItems = result?.totalItems ?? 0
     const [localChats, setLocalChats] = React.useState<any[]>([])
+    const [renamingId, setRenamingId] = React.useState<string | null>(null)
+    const [renameValue, setRenameValue] = React.useState('')
 
     React.useEffect(() => {
         if (chats) {
@@ -124,16 +127,34 @@ const confirmDelete = async () => {
   queryKey: ['chat-history']
 })
 
-    toast.success('Chat deleted successfully')
-  } catch (error) {
-    console.error('Failed to delete chat:', error)
-    toast.error('Failed to delete chat')
-  } finally {
-    setDeletingId(null)
-    setConfirmOpen(false)
-    setChatToDelete(null)
-  }
-}
+    const handleRenameStart = (e: React.MouseEvent, chat: any) => {
+        e.stopPropagation()
+        setRenamingId(chat.v0ChatId)
+        setRenameValue(chat.title ?? chat.prompt ?? '')
+    }
+
+    const handleRenameSubmit = async (chatId: string) => {
+        if (!renameValue.trim()) {
+            setRenamingId(null)
+            return
+        }
+        await fetch('/api/chat/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chatId, title: renameValue.trim() }),
+        })
+        setLocalChats((prev) =>
+            prev.map((chat) =>
+                chat.v0ChatId === chatId ? { ...chat, title: renameValue.trim() } : chat
+            )
+        )
+        setRenamingId(null)
+    }
+
+    const handleRenameCancel = () => {
+        setRenamingId(null)
+    }
+
     const filteredChats = localChats.filter((chat) => {
         if (!searchQuery.trim()) return true
         const query = searchQuery.toLowerCase()
@@ -238,18 +259,58 @@ const confirmDelete = async () => {
                                             <MessageSquare className="size-3.5 text-muted-foreground/60 group-hover:text-primary transition-colors" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
-                                                {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
-                                            </p>
-                                            {chat.createdAt && (
-                                                <p className="text-[10px] text-muted-foreground/50 mt-1 font-medium">
-                                                    {formatDistanceToNow(new Date(chat.createdAt), {
-                                                        addSuffix: true,
-                                                    })}
-                                                </p>
+                                            {renamingId === chat.v0ChatId ? (
+                                                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                                    <Input
+                                                        autoFocus
+                                                        value={renameValue}
+                                                        onChange={(e) => setRenameValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') void handleRenameSubmit(chat.v0ChatId)
+                                                            if (e.key === 'Escape') handleRenameCancel()
+                                                        }}
+                                                        className="h-7 text-sm flex-1"
+                                                    />
+                                                    <Button
+                                                        size="icon"
+                                                        className="size-6 shrink-0"
+                                                        onClick={(e) => { e.stopPropagation(); void handleRenameSubmit(chat.v0ChatId) }}
+                                                    >
+                                                        <Check className="size-3" />
+                                                    </Button>
+                                                    <Button
+                                                        size="icon"
+                                                        variant="ghost"
+                                                        className="size-6 shrink-0"
+                                                        onClick={(e) => { e.stopPropagation(); handleRenameCancel() }}
+                                                    >
+                                                        <X className="size-3" />
+                                                    </Button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
+                                                        {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
+                                                    </p>
+                                                    {chat.createdAt && (
+                                                        <p className="text-[10px] text-muted-foreground/50 mt-1 font-medium">
+                                                            {formatDistanceToNow(new Date(chat.createdAt), {
+                                                                addSuffix: true,
+                                                            })}
+                                                        </p>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                type="button"
+                                                onClick={(e) => handleRenameStart(e, chat)}
+                                                className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+                                                title="Rename chat"
+                                            >
+                                                <Pencil className="size-3.5" />
+                                            </button>
                                             <button
                                                 type="button"
                                                 onClick={(e) => {
@@ -268,6 +329,16 @@ const confirmDelete = async () => {
                                             >
                                                 <ExternalLink className="size-3.5" />
                                             </button>
+                                            <MoveToFolderPopover chatId={chat.v0ChatId} currentFolderId={chat.folderId}>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
+                                                title="Move to folder"
+                                              >
+                                                <FolderOpen className="size-3.5" />
+                                              </button>
+                                            </MoveToFolderPopover>
                                             <button
                                                 type="button"
                                                 onClick={(e) =>

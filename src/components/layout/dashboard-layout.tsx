@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Shield } from "lucide-react";
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
+import { ChatFoldersDialog } from '@/components/chat/chat-folders-dialog'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import {
@@ -51,6 +52,7 @@ export default function DashboardLayout({
     };
 
     const [starredOpen, setStarredOpen] = useState(false)
+    const [foldersOpen, setFoldersOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
 
@@ -64,6 +66,7 @@ export default function DashboardLayout({
             <SidebarProvider>
                 <AppSidebar
                     onStarredClick={() => setStarredOpen(true)}
+                    onFoldersClick={() => setFoldersOpen(true)}
                     onSettingsClick={handleSettingsClick}
                     className="border-r"
                 />
@@ -128,6 +131,10 @@ export default function DashboardLayout({
             <StarredChatsDialog
                 open={starredOpen}
                 onOpenChange={setStarredOpen}
+            />
+            <ChatFoldersDialog
+                open={foldersOpen}
+                onOpenChange={setFoldersOpen}
             />
             <SettingsDialog
                 open={settingsOpen}

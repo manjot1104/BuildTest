@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Terminal, Pause, Play } from 'lucide-react'
+import { Pause, Play, Terminal } from 'lucide-react'
 import type { SSEEvent } from '@/types/accessibility.types'
 
 interface LiveLogViewerProps {
@@ -40,7 +39,7 @@ function getLogColor(event: SSEEvent): string {
     case 'report:complete':
       return 'text-green-300 font-bold'
     case 'error':
-      return 'text-red-400 bg-red-950/30 px-1 rounded'
+      return 'text-red-400'
     case 'progress':
       return 'text-gray-600'
     default:
@@ -97,64 +96,68 @@ export function LiveLogViewer({ logs, progress, title }: LiveLogViewerProps) {
     .filter(Boolean) as Array<{ event: SSEEvent; text: string }>
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Terminal className="size-5" />
-            {title ?? 'Live Logs'}
-          </CardTitle>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Switch
-                id="verbose-toggle"
-                checked={verbose}
-                onCheckedChange={setVerbose}
-                className="scale-75"
-              />
-              <Label htmlFor="verbose-toggle" className="cursor-pointer text-xs text-muted-foreground">
-                Verbose
-              </Label>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAutoScroll(!autoScroll)}
-              className="gap-1 text-xs"
-            >
-              {autoScroll ? <Pause className="size-3" /> : <Play className="size-3" />}
-              {autoScroll ? 'Pause' : 'Resume'}
-            </Button>
-          </div>
+    <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between border-b px-5 py-3">
+        <div className="flex items-center gap-2.5">
+          <Terminal className="size-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">{title ?? 'Live Logs'}</span>
+          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-muted-foreground">
+            {displayLogs.length}
+          </span>
         </div>
-        {progress && (
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span className="capitalize">{progress.phase}</span>
-              <span>
-                {progress.current}/{progress.total} ({progress.percentage}%)
-              </span>
-            </div>
-            <Progress value={progress.percentage} className="h-2" />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="verbose-toggle"
+              checked={verbose}
+              onCheckedChange={setVerbose}
+              className="scale-[0.8]"
+            />
+            <Label htmlFor="verbose-toggle" className="cursor-pointer text-xs text-muted-foreground">
+              Verbose
+            </Label>
           </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setAutoScroll(!autoScroll)}
+            className="h-7 gap-1.5 px-2.5 text-xs transition-colors duration-150"
+          >
+            {autoScroll ? <Pause className="size-3" /> : <Play className="size-3" />}
+            {autoScroll ? 'Pause' : 'Resume'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Progress */}
+      {progress && (
+        <div className="border-b bg-muted/20 px-5 py-2.5">
+          <div className="flex justify-between text-xs text-muted-foreground mb-2">
+            <span className="capitalize font-medium">{progress.phase}</span>
+            <span className="tabular-nums font-mono">{progress.current}/{progress.total} ({progress.percentage}%)</span>
+          </div>
+          <Progress value={progress.percentage} className="h-1.5" />
+        </div>
+      )}
+
+      {/* Terminal */}
+      <div
+        ref={scrollRef}
+        className="h-[440px] overflow-auto bg-[#0a0a0a] p-5 font-mono text-[13px] leading-relaxed"
+      >
+        {displayLogs.length === 0 ? (
+          <div className="flex h-full items-center justify-center">
+            <span className="text-gray-600">Waiting for events...</span>
+          </div>
+        ) : (
+          displayLogs.map(({ event, text }, idx) => (
+            <div key={idx} className={`${getLogColor(event)} whitespace-pre-wrap py-px transition-colors duration-100`}>
+              {text}
+            </div>
+          ))
         )}
-      </CardHeader>
-      <CardContent>
-        <div
-          ref={scrollRef}
-          className="h-[500px] overflow-auto rounded-lg border border-neutral-800 bg-[#0a0a0a] p-4 font-mono text-[13px] leading-relaxed"
-        >
-          {displayLogs.length === 0 ? (
-            <span className="text-gray-500">No log events.</span>
-          ) : (
-            displayLogs.map(({ event, text }, idx) => (
-              <div key={idx} className={`${getLogColor(event)} whitespace-pre-wrap py-0.5`}>
-                {text}
-              </div>
-            ))
-          )}
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

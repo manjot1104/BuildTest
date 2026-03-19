@@ -173,8 +173,8 @@ export function getResponsiveElement(
       ? Math.round(el.styles.padding * Math.max(ratio, 0.6))
       : undefined
 
-  // Auto-scale letter-spacing proportionally so wide-spaced labels don't break
-  // into vertical text when squeezed on smaller screens.
+  // Auto-scale letter-spacing proportionally so wide-spaced labels don't break into
+  // vertical text when squeezed on mobile. Cap at 1px on mobile.
   const autoLetterSpacing =
     el.styles.letterSpacing !== undefined && el.styles.letterSpacing > 0
       ? Math.max(Math.round(el.styles.letterSpacing * ratio * 10) / 10, device === 'mobile' ? 0.5 : 1)
@@ -225,36 +225,43 @@ export function computeResponsiveLayout(
     getResponsiveElement(el, device, desktopWidth),
   )
 
-  // Step 1b: Auto-fix elements that break smaller layouts.
-  for (let i = 0; i < scaled.length; i++) {
-    const orig = elements[i]!
-    const s = scaled[i]!
-    if (s.hidden) continue
+  // Step 1b: Auto-fix elements that break mobile/tablet layouts.
+  if (device === 'mobile' || device === 'tablet') {
+    for (let i = 0; i < scaled.length; i++) {
+      const orig = elements[i]!
+      const s = scaled[i]!
+      if (s.hidden) continue
 
-    // Auto-hide decorative sections/containers (empty bg shapes, section backgrounds)
-    // that are purely visual and would break the reflow.
-    const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim()
-    const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
-    if (isDecorative && isOversized) {
-      scaled[i] = { ...s, hidden: true }
-      continue
-    }
+      // Auto-hide decorative sections/containers (background shapes, section backgrounds)
+      // that are purely visual and oversized.
+      const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim()
+      const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
+      if (isDecorative && isOversized) {
+        scaled[i] = { ...s, hidden: true }
+        continue
+      }
 
-    // Auto-cap image height so desktop images don't dominate mobile screens.
-    if (orig.type === 'image') {
-      const maxImgH = device === 'mobile'
-        ? Math.round(targetWidth * 0.6) // ~225px on 375px
-        : Math.round(targetWidth * 0.55) // ~422px on 768px
-      const hasExplicitH = orig.responsiveStyles?.[device]?.height !== undefined
-      if (!hasExplicitH && s.height > maxImgH) {
-        scaled[i] = { ...s, height: maxImgH }
+      // Auto-cap image height on mobile if the user hasn't set an explicit mobile height.
+      // Without this, a 420px tall desktop image renders at 420px on a 375px wide screen.
+      if (device === 'mobile' && orig.type === 'image' && !orig.responsiveStyles?.mobile?.height) {
+        const maxImgH = Math.round(targetWidth * 0.6) // 60% of width = max ~225px on 375px
+        if (s.height > maxImgH) {
+          scaled[i] = { ...s, height: maxImgH }
+        }
+      }
+      if (device === 'tablet' && orig.type === 'image' && !orig.responsiveStyles?.tablet?.height) {
+        const maxImgH = Math.round(targetWidth * 0.55) // ~422px on 768px
+        if (s.height > maxImgH) {
+          scaled[i] = { ...s, height: maxImgH }
+        }
       }
     }
   }
 
   // Step 2: Build reading order from DESKTOP positions (Y then X) and group into rows.
-  // Use a height cap for row grouping so one tall element doesn't absorb the whole page.
-  const HEIGHT_CAP = 200
+  // Use a capped "effective height" for row grouping to prevent tall side-by-side elements
+  // (like a 420px image next to 100px text) from creating a mega-row that absorbs everything.
+  const HEIGHT_CAP = 200 // Max height contribution for row boundary calculation
   type Item = { orig: CanvasElement; scaled: CanvasElement; idx: number }
   const visible: Item[] = elements
     .map((el, i) => ({ orig: el, scaled: scaled[i]!, idx: i }))
@@ -273,8 +280,7 @@ export function computeResponsiveLayout(
       currentRow.push(item)
       continue
     }
-    // Cap heights so tall side-by-side elements (e.g. 420px image next to 100px text)
-    // don't create a mega-row that absorbs everything below.
+    // Use capped heights to prevent one tall element from absorbing the entire page
     const rowTop = Math.min(...currentRow.map((r) => r.orig.y))
     const rowBottom = Math.max(...currentRow.map((r) => r.orig.y + Math.min(r.orig.height, HEIGHT_CAP)))
     const itemEffH = Math.min(item.orig.height, HEIGHT_CAP)
@@ -288,15 +294,18 @@ export function computeResponsiveLayout(
   }
   if (currentRow.length > 0) rows.push(currentRow)
 
-  // Step 2b: On mobile, reorder within each row so text comes before images/media.
-  // Produces natural mobile reading order: heading -> text -> image
+  // Step 2b: On mobile, reorder within each row so images/code-blocks come after text.
+  // This produces a natural mobile reading order: heading → text → image
+  // instead of the desktop X-sorted order which may put images before text.
   if (device === 'mobile') {
-    const textTypes = new Set<string>(['heading', 'paragraph', 'button', 'navbar', 'social-links', 'form', 'divider', 'spacer'])
+    const textTypes = new Set(['heading', 'paragraph', 'button', 'navbar', 'social-links', 'form', 'divider', 'spacer'])
     for (const row of rows) {
       if (row.length <= 1) continue
       const textEls = row.filter((item) => textTypes.has(item.orig.type))
       const mediaEls = row.filter((item) => !textTypes.has(item.orig.type))
+      // Only reorder if there's a mix of text and media
       if (textEls.length > 0 && mediaEls.length > 0) {
+        // Within text elements, keep their original sort order (by desktop Y then X)
         row.length = 0
         row.push(...textEls, ...mediaEls)
       }
