@@ -43,43 +43,43 @@ MANDATORY STRUCTURE (LaTeX):
 \\setlength{\\itemsep}{0pt}
 
 \\begin{minipage}[t]{0.35\\textwidth}
-{\\Huge\\textbf{\\textcolor{blue!90!black}{NAME}}}
-\\textcolor{blue!70!black}{email | phone}
-\\vspace{0.4cm}
-\\section*{\\textcolor{blue!75!black}{\\large Skills}}
+{\\Large\\textbf{\\textcolor{blue!90!black}{NAME}}}
+{\\small\\textcolor{blue!70!black}{email | phone}}
+\\vspace{0.35cm}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Skills}}
 \\textcolor{blue!75!black}{\\rule{0.9\\textwidth}{0.5pt}}
-\\vspace{0.15cm}
-\\begin{itemize}[leftmargin=*,itemsep=0.03cm,topsep=0.05cm]
+\\vspace{0.12cm}
+\\begin{itemize}[leftmargin=*,itemsep=0.02cm,topsep=0.04cm]
 \\item React
 \\item TypeScript
 \\item Node.js
 \\item PostgreSQL
 \\item AWS
 \\end{itemize}
-\\vspace{0.25cm}
-\\section*{\\textcolor{blue!75!black}{\\large Education}}
+\\vspace{0.2cm}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Education}}
 \\textcolor{blue!75!black}{\\rule{0.9\\textwidth}{0.5pt}}
-\\vspace{0.15cm}
+\\vspace{0.12cm}
 \\textbf{\\textcolor{blue!60!black}{Bachelor of Science in Computer Science}}
 \\textit{\\textcolor{blue!50!black}{University of Technology | 2015 - 2019}}
 \\end{minipage}
 \\hfill
 \\begin{minipage}[t]{0.62\\textwidth}
-\\section*{\\textcolor{blue!75!black}{\\large Experience}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Experience}}
 \\textcolor{blue!75!black}{\\rule{0.95\\textwidth}{0.5pt}}
-\\vspace{0.15cm}
+\\vspace{0.12cm}
 \\textbf{\\textcolor{blue!60!black}{Senior Software Engineer}}
 \\textit{\\textcolor{blue!50!black}{Tech Corp | 2021 - Present}}
-\\begin{itemize}[leftmargin=*,itemsep=0.08cm,topsep=0.08cm]
+\\begin{itemize}[leftmargin=*,itemsep=0.06cm,topsep=0.06cm]
 \\item Led development of microservices architecture serving 2M+ users
 \\item Improved application performance by 40% through optimization
 \\end{itemize}
-\\vspace{0.25cm}
-\\section*{\\textcolor{blue!75!black}{\\large Projects}}
+\\vspace{0.2cm}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Projects}}
 \\textcolor{blue!75!black}{\\rule{0.95\\textwidth}{0.5pt}}
-\\vspace{0.15cm}
+\\vspace{0.12cm}
 \\textbf{\\textcolor{blue!60!black}{E-Commerce Platform | 2023}}
-\\begin{itemize}[leftmargin=*,itemsep=0.08cm,topsep=0.08cm]
+\\begin{itemize}[leftmargin=*,itemsep=0.06cm,topsep=0.06cm]
 \\item Full-stack application with React frontend and Node.js backend
 \\end{itemize}
 \\end{minipage}
@@ -107,14 +107,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; 
 .resume { display: flex; gap: 35px; max-width: 950px; margin: 20px auto; padding: 30px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
 .left-column { width: 35%; border-right: 3px solid #1e40af; padding-right: 25px; }
 .right-column { width: 65%; }
-h1 { color: #002244; font-size: 32px; margin-bottom: 10px; margin-top: 0; font-weight: 700; letter-spacing: -0.5px; }
-.contact { color: #3b82f6; font-size: 13px; margin-bottom: 25px; line-height: 1.6; }
-h2 { color: #003366; font-size: 16px; margin-top: 20px; margin-bottom: 12px; border-bottom: 2px solid #3b82f6; padding-bottom: 6px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-ul { margin-top: 10px; margin-bottom: 18px; padding-left: 22px; line-height: 1.7; }
-li { margin-bottom: 6px; color: #1a1a1a; font-size: 13px; }
-.section-content { margin-top: 10px; margin-bottom: 18px; line-height: 1.7; }
-.job-title { color: #0066AA; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-.company { color: #3388CC; font-style: italic; font-size: 13px; margin-bottom: 8px; }
+h1 { color: #002244; font-size: 26px; margin-bottom: 8px; margin-top: 0; font-weight: 700; letter-spacing: -0.3px; }
+.contact { color: #3b82f6; font-size: 10.5px; margin-bottom: 20px; line-height: 1.5; }
+h2 { color: #003366; font-size: 12.5px; margin-top: 18px; margin-bottom: 10px; border-bottom: 2px solid #3b82f6; padding-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { margin-bottom: 5px; color: #1a1a1a; font-size: 10.5px; }
+.section-content { margin-top: 8px; margin-bottom: 15px; line-height: 1.6; }
+.job-title { color: #0066AA; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
+.company { color: #3388CC; font-style: italic; font-size: 10.5px; margin-bottom: 6px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; padding: 15px; }
@@ -180,11 +180,12 @@ CRITICAL: Use EXACTLY this two-column structure with left sidebar (35%) and righ
     styleGuide: `MODERN MINIMAL TEMPLATE STYLE - YOU MUST USE THIS EXACT LAYOUT:
 
 MANDATORY STRUCTURE (LaTeX):
+\\documentclass[10pt]{article}
 \\usepackage[margin=1in]{geometry}
 \\begin{center}
-{\\Huge\\textbf{NAME}}
-\\vspace{0.2cm}
-email | phone
+{\\Large\\textbf{NAME}}
+\\vspace{0.15cm}
+{\\small email | phone}
 \\end{center}
 \\vspace{0.4cm}
 \\hrule
@@ -216,15 +217,15 @@ MANDATORY STRUCTURE (HTML):
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { max-width: 750px; margin: 30px auto; padding: 50px 40px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-h1 { text-align: center; font-size: 38px; font-weight: 300; color: #1a1a1a; margin-bottom: 8px; letter-spacing: 2px; }
-.contact { text-align: center; color: #666; margin-bottom: 45px; font-size: 14px; letter-spacing: 0.5px; }
-hr { border: none; border-top: 1px solid #e5e5e5; margin: 35px 0; }
-h2 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; color: #333; margin: 35px 0 15px 0; }
-.job-entry { margin-bottom: 25px; }
-.job-title { font-weight: 600; color: #1a1a1a; font-size: 15px; margin-bottom: 3px; }
-.job-meta { color: #666; font-size: 13px; margin-bottom: 8px; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 20px; line-height: 1.8; }
-li { color: #444; font-size: 13px; margin-bottom: 5px; }
+h1 { text-align: center; font-size: 26px; font-weight: 300; color: #1a1a1a; margin-bottom: 6px; letter-spacing: 1.5px; }
+.contact { text-align: center; color: #666; margin-bottom: 35px; font-size: 10.5px; letter-spacing: 0.3px; }
+hr { border: none; border-top: 1px solid #e5e5e5; margin: 28px 0; }
+h2 { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #333; margin: 28px 0 12px 0; }
+.job-entry { margin-bottom: 20px; }
+.job-title { font-weight: 600; color: #1a1a1a; font-size: 11.5px; margin-bottom: 3px; }
+.job-meta { color: #666; font-size: 10.5px; margin-bottom: 6px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #444; font-size: 10.5px; margin-bottom: 4px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; padding: 30px; }
@@ -237,7 +238,7 @@ li { color: #444; font-size: 13px; margin-bottom: 5px; }
   <div class="contact">email | phone</div>
   <hr>
   <h2>Skills</h2>
-  <div style="color: #444; font-size: 13px; line-height: 1.8;">Skills list</div>
+  <div style="color: #444; font-size: 10.5px; line-height: 1.6;">Skills list</div>
   <hr>
   <h2>Experience</h2>
   <div class="job-entry">
@@ -320,14 +321,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; 
 .resume { max-width: 900px; margin: 20px auto; background: white; box-shadow: 0 4px 25px rgba(0,0,0,0.12); overflow: hidden; }
 .header { background: linear-gradient(135deg, #8b4513 0%, #d2691e 100%); padding: 50px 45px; color: white; }
 .content { padding: 45px; }
-h1 { font-size: 44px; margin-bottom: 12px; font-weight: 700; letter-spacing: -0.5px; }
-.header-contact { font-size: 16px; opacity: 0.95; letter-spacing: 0.3px; }
-h2 { color: #8b4513; font-size: 22px; margin-top: 35px; margin-bottom: 18px; border-left: 5px solid #8b4513; padding-left: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.job-title { font-weight: 600; color: #8b4513; margin-top: 22px; font-size: 17px; margin-bottom: 5px; }
-.company { color: #a0522d; font-style: italic; font-size: 14px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 7px; }
-.project-title { font-weight: 600; color: #8b4513; font-size: 17px; margin-bottom: 8px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 700; letter-spacing: -0.3px; }
+.header-contact { font-size: 10.5px; opacity: 0.95; letter-spacing: 0.2px; }
+h2 { color: #8b4513; font-size: 12.5px; margin-top: 28px; margin-bottom: 12px; border-left: 5px solid #8b4513; padding-left: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.job-title { font-weight: 600; color: #8b4513; margin-top: 18px; font-size: 11.5px; margin-bottom: 4px; }
+.company { color: #a0522d; font-style: italic; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
+.project-title { font-weight: 600; color: #8b4513; font-size: 11.5px; margin-bottom: 6px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; }
@@ -346,7 +347,7 @@ li { color: #333; font-size: 13px; margin-bottom: 7px; }
     <div class="company">Company | Dates</div>
     <ul><li>Description</li></ul>
     <h2>Skills</h2>
-    <p style="color: #333; font-size: 13px; line-height: 1.8;">Skills list</p>
+    <p style="color: #333; font-size: 10.5px; line-height: 1.6;">Skills list</p>
     <h2>Projects</h2>
     <div class="project-title">Project Name | Year</div>
     <ul><li>Description</li></ul>
@@ -413,16 +414,16 @@ MANDATORY STRUCTURE (HTML):
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f8f9fa; }
 .resume { max-width: 850px; margin: 25px auto; padding: 45px 35px; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
-h1 { color: #002244; font-size: 36px; margin-bottom: 12px; border-bottom: 4px solid #1e40af; padding-bottom: 12px; font-weight: 700; letter-spacing: -0.5px; }
-.contact { color: #3b82f6; margin-bottom: 30px; font-size: 14px; }
-.summary { background: linear-gradient(to right, #f0f4ff 0%, #ffffff 100%); padding: 22px 25px; border-left: 5px solid #1e40af; margin: 28px 0; font-style: italic; color: #333; font-size: 14px; line-height: 1.7; border-radius: 4px; }
-.achievements { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin: 25px 0; }
-.achievement { background: #f8fafc; padding: 18px; border: 1px solid #e2e8f0; border-radius: 6px; color: #333; font-size: 13px; line-height: 1.6; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-h2 { color: #003366; font-size: 20px; margin-top: 30px; margin-bottom: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.job-title { font-weight: 600; color: #0066AA; margin-top: 18px; font-size: 15px; margin-bottom: 5px; }
-.company { color: #3388CC; font-style: italic; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { color: #002244; font-size: 26px; margin-bottom: 8px; border-bottom: 4px solid #1e40af; padding-bottom: 10px; font-weight: 700; letter-spacing: -0.3px; }
+.contact { color: #3b82f6; margin-bottom: 20px; font-size: 10.5px; }
+.summary { background: linear-gradient(to right, #f0f4ff 0%, #ffffff 100%); padding: 18px 20px; border-left: 5px solid #1e40af; margin: 22px 0; font-style: italic; color: #333; font-size: 10.5px; line-height: 1.6; border-radius: 4px; }
+.achievements { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin: 20px 0; }
+.achievement { background: #f8fafc; padding: 15px; border: 1px solid #e2e8f0; border-radius: 6px; color: #333; font-size: 10.5px; line-height: 1.5; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+h2 { color: #003366; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.job-title { font-weight: 600; color: #0066AA; margin-top: 15px; font-size: 11.5px; margin-bottom: 4px; }
+.company { color: #3388CC; font-style: italic; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; padding: 30px; }
@@ -526,17 +527,17 @@ MANDATORY STRUCTURE (HTML):
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { max-width: 800px; margin: 25px auto; padding: 35px 30px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
-h1 { text-align: center; font-size: 32px; margin-bottom: 12px; margin-top: 0; color: #1a1a1a; font-weight: 400; letter-spacing: 1px; }
-.contact { text-align: center; color: #555; margin-bottom: 35px; font-size: 13px; letter-spacing: 0.3px; }
-hr { border: none; border-top: 2px solid #d1d5db; margin: 25px 0; }
-h2 { font-size: 17px; margin-top: 28px; margin-bottom: 14px; border-bottom: 2px solid #d1d5db; padding-bottom: 6px; color: #1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-.degree-title { font-weight: 600; margin-top: 16px; color: #1a1a1a; font-size: 14px; margin-bottom: 4px; }
-.degree-meta { color: #666; font-size: 13px; margin-bottom: 6px; }
-.degree-details { margin-top: 6px; font-style: italic; color: #555; font-size: 12px; line-height: 1.6; }
-.publication { margin: 10px 0; padding-left: 22px; color: #333; font-size: 13px; line-height: 1.7; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
-.skills-text { color: #333; font-size: 13px; line-height: 1.7; }
+h1 { text-align: center; font-size: 26px; margin-bottom: 8px; margin-top: 0; color: #1a1a1a; font-weight: 400; letter-spacing: 0.5px; }
+.contact { text-align: center; color: #555; margin-bottom: 28px; font-size: 10.5px; letter-spacing: 0.2px; }
+hr { border: none; border-top: 2px solid #d1d5db; margin: 20px 0; }
+h2 { font-size: 12.5px; margin-top: 22px; margin-bottom: 10px; border-bottom: 2px solid #d1d5db; padding-bottom: 5px; color: #1a1a1a; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.degree-title { font-weight: 600; margin-top: 12px; color: #1a1a1a; font-size: 11.5px; margin-bottom: 3px; }
+.degree-meta { color: #666; font-size: 10.5px; margin-bottom: 5px; }
+.degree-details { margin-top: 5px; font-style: italic; color: #555; font-size: 10px; line-height: 1.5; }
+.publication { margin: 8px 0; padding-left: 20px; color: #333; font-size: 10.5px; line-height: 1.6; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
+.skills-text { color: #333; font-size: 10.5px; line-height: 1.6; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; padding: 20px; }
@@ -674,18 +675,18 @@ MANDATORY STRUCTURE (HTML):
 body { margin: 0; padding: 0; background: #000000; font-family: 'Courier New', 'Consolas', monospace; }
 .resume { background: #0d1117; color: #00ff00; padding: 35px; border: 3px solid #00ff00; max-width: 900px; margin: 20px auto; box-shadow: 0 0 20px rgba(0, 255, 0, 0.2); }
 .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
-h1 { color: #00ff00; font-size: 30px; margin: 0; text-transform: uppercase; font-weight: bold; letter-spacing: 2px; text-shadow: 0 0 10px rgba(0, 255, 0, 0.5); }
-.contact { color: #00ff88; margin-top: 5px; font-size: 13px; text-align: right; }
-.github { color: #00ff88; margin-bottom: 28px; font-size: 13px; }
-hr { border: none; border-top: 2px solid #00ff00; margin: 25px 0; box-shadow: 0 0 5px rgba(0, 255, 0, 0.3); }
-h2 { color: #00ff00; font-size: 18px; margin-top: 28px; margin-bottom: 15px; border-bottom: 2px solid #00ff00; padding-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
-.skills-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 18px 0; }
-.skill { background: #161b22; padding: 10px; border: 2px solid #00ff00; text-align: center; color: #00ff00; font-size: 12px; box-shadow: 0 0 5px rgba(0, 255, 0, 0.2); }
-.job-title { font-weight: bold; color: #00ff88; margin-top: 18px; font-size: 15px; margin-bottom: 5px; }
-.company { color: #00ff00; font-style: italic; margin-bottom: 12px; font-size: 13px; }
+h1 { color: #00ff00; font-size: 26px; margin: 0; text-transform: uppercase; font-weight: bold; letter-spacing: 1.5px; text-shadow: 0 0 10px rgba(0, 255, 0, 0.5); }
+.contact { color: #00ff88; margin-top: 4px; font-size: 10.5px; text-align: right; }
+.github { color: #00ff88; margin-bottom: 22px; font-size: 10.5px; }
+hr { border: none; border-top: 2px solid #00ff00; margin: 20px 0; box-shadow: 0 0 5px rgba(0, 255, 0, 0.3); }
+h2 { color: #00ff00; font-size: 12.5px; margin-top: 22px; margin-bottom: 12px; border-bottom: 2px solid #00ff00; padding-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px; }
+.skills-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 15px 0; }
+.skill { background: #161b22; padding: 8px; border: 2px solid #00ff00; text-align: center; color: #00ff00; font-size: 10.5px; box-shadow: 0 0 5px rgba(0, 255, 0, 0.2); }
+.job-title { font-weight: bold; color: #00ff88; margin-top: 15px; font-size: 11.5px; margin-bottom: 4px; }
+.company { color: #00ff00; font-style: italic; margin-bottom: 10px; font-size: 10.5px; }
 .tech { color: #00ff88; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.7; }
-li { color: #00ff00; margin-bottom: 6px; font-size: 13px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #00ff00; margin-bottom: 5px; font-size: 10.5px; }
 @media print {
   body { background: #0d1117; }
   .resume { border: 3px solid #00ff00; box-shadow: none; }
@@ -811,21 +812,21 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { background: white; padding: 45px; max-width: 850px; margin: 20px auto; box-shadow: 0 4px 25px rgba(147, 51, 234, 0.15); }
 .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
-h1 { color: #9333ea; font-size: 40px; margin: 0; font-weight: 700; letter-spacing: -0.5px; }
-.contact-info { text-align: right; color: #1a1a1a; font-size: 13px; margin-top: 5px; }
-.contact-line { margin-bottom: 5px; }
-hr { border: none; border-top: 2px solid #1a1a1a; margin: 25px 0; }
-h2 { color: #9333ea; font-size: 24px; margin-top: 32px; margin-bottom: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+h1 { color: #9333ea; font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -0.3px; }
+.contact-info { text-align: right; color: #1a1a1a; font-size: 10.5px; margin-top: 4px; }
+.contact-line { margin-bottom: 4px; }
+hr { border: none; border-top: 2px solid #1a1a1a; margin: 20px 0; }
+h2 { color: #9333ea; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 .portfolio-section { margin-left: 0; }
-.portfolio-item { margin-bottom: 25px; padding-bottom: 20px; border-bottom: 1px solid #e5e5e5; }
+.portfolio-item { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 1px solid #e5e5e5; }
 .portfolio-item:last-child { border-bottom: none; }
-.project-title { font-weight: 600; color: #9333ea; margin-bottom: 8px; font-size: 16px; }
-.project-description { color: #555; margin-bottom: 12px; font-size: 13px; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; margin-bottom: 8px; font-size: 13px; }
-.job-title { font-weight: 600; color: #9333ea; margin-top: 22px; font-size: 16px; margin-bottom: 5px; }
-.company-row { display: flex; justify-content: space-between; color: #555; margin-bottom: 12px; font-size: 13px; }
-.skills-text { color: #333; font-size: 13px; line-height: 1.7; }
+.project-title { font-weight: 600; color: #9333ea; margin-bottom: 6px; font-size: 11.5px; }
+.project-description { color: #555; margin-bottom: 10px; font-size: 10.5px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; margin-bottom: 5px; font-size: 10.5px; }
+.job-title { font-weight: 600; color: #9333ea; margin-top: 18px; font-size: 11.5px; margin-bottom: 4px; }
+.company-row { display: flex; justify-content: space-between; color: #555; margin-bottom: 10px; font-size: 10.5px; }
+.skills-text { color: #333; font-size: 10.5px; line-height: 1.6; }
 @media print {
   body { background: white; }
   .resume { padding: 25px; box-shadow: none; }
@@ -949,21 +950,21 @@ MANDATORY STRUCTURE (HTML):
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #ffffff; }
 .resume { max-width: 950px; margin: 25px auto; padding: 45px; background: white; }
-.contact { text-align: center; color: #1a1a1a; margin-bottom: 35px; font-size: 14px; }
-.contact-name { font-size: 22px; font-weight: 600; margin-bottom: 6px; letter-spacing: 0.3px; }
-.two-column { display: grid; grid-template-columns: 1fr 1.5fr; gap: 45px; margin-bottom: 30px; align-items: start; }
+.contact { text-align: center; color: #1a1a1a; margin-bottom: 28px; font-size: 10.5px; }
+.contact-name { font-size: 26px; font-weight: 600; margin-bottom: 5px; letter-spacing: 0.2px; }
+.two-column { display: grid; grid-template-columns: 1fr 1.5fr; gap: 35px; margin-bottom: 25px; align-items: start; }
 .left-column { }
 .right-column { }
-h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; margin-bottom: 12px; color: #1a1a1a; letter-spacing: 1.5px; }
-.skills-content { color: #333; font-size: 13px; line-height: 1.8; }
-.education-content { color: #333; font-size: 13px; line-height: 1.8; }
-.education-degree { font-weight: 600; color: #1a1a1a; margin-bottom: 5px; font-size: 13px; }
-.education-details { color: #666; font-size: 12px; }
-.experience-section { margin-top: 22px; }
-.job-title { font-weight: 600; color: #1a1a1a; margin-bottom: 5px; font-size: 14px; }
-.company { color: #666; margin-bottom: 12px; font-size: 12px; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; margin-bottom: 8px; font-size: 13px; line-height: 1.7; }
+h2 { font-size: 12.5px; font-weight: 600; text-transform: uppercase; margin-bottom: 10px; color: #1a1a1a; letter-spacing: 1px; }
+.skills-content { color: #333; font-size: 10.5px; line-height: 1.6; }
+.education-content { color: #333; font-size: 10.5px; line-height: 1.6; }
+.education-degree { font-weight: 600; color: #1a1a1a; margin-bottom: 4px; font-size: 11.5px; }
+.education-details { color: #666; font-size: 10.5px; }
+.experience-section { margin-top: 18px; }
+.job-title { font-weight: 600; color: #1a1a1a; margin-bottom: 4px; font-size: 11.5px; }
+.company { color: #666; margin-bottom: 10px; font-size: 10.5px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; margin-bottom: 5px; font-size: 10.5px; line-height: 1.6; }
 @media print {
   body { background: white; }
   .resume { padding: 25px; }
@@ -1049,7 +1050,7 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
@@ -1063,20 +1064,20 @@ MANDATORY STRUCTURE (LaTeX):
     urlcolor=blue,
 }
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries}{}{0em}{}[\\titlerule]
 
-\\setlength{\\parskip}{0.5em}
-\\setlength{\\itemsep}{0.2em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+\\setlength{\\parskip}{0.4em}
+\\setlength{\\itemsep}{0.15em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\large Job Title}\\\\[0.2cm]
-email | phone | location\\\\
-linkedin | portfolio
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize Job Title}\\\\[0.15cm]
+{\\small email | phone | location}\\\\
+{\\small linkedin | portfolio}
 \\end{center}
 
 \\vspace{0.3cm}
@@ -1185,7 +1186,7 @@ MANDATORY STRUCTURE (LaTeX):
 \\noindent
 {\\Large\\textbf{NAME}}\\\\
 {\\normalsize Job Title}\\\\
-email | phone | location
+{\\small email | phone | location}
 
 \\vspace{0.2cm}
 
@@ -1250,30 +1251,30 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{10pt}{5pt}
-\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\titleformat{\\section}{\\normalsize\\bfseries}{}{0em}{}[\\titlerule]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+\\setlength{\\parskip}{0.3em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
 \\begin{minipage}[t]{0.32\\textwidth}
-{\\Huge\\textbf{NAME}}\\\\[0.2cm]
-{\\normalsize Job Title}\\\\[0.3cm]
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\normalsize Job Title}\\\\[0.2cm]
 
 \\section*{Contact}
-email\\\\
-phone\\\\
-location\\\\
-linkedin\\\\
-portfolio
+{\\small email}\\\\
+{\\small phone}\\\\
+{\\small location}\\\\
+{\\small linkedin}\\\\
+{\\small portfolio}
 
 \\vspace{0.3cm}
 
@@ -1362,19 +1363,19 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 
-\\setlength{\\parskip}{0.5em}
-\\setlength{\\itemsep}{0.2em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlength{\\itemsep}{0.15em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Large\\textbf{NAME}}\\\\[0.2cm]
-email | phone | location
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\small email | phone | location}
 \\end{center}
 
 \\vspace{0.3cm}
@@ -1459,7 +1460,7 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
@@ -1467,20 +1468,20 @@ MANDATORY STRUCTURE (LaTeX):
 
 \\definecolor{sectioncolor}{RGB}{0,51,102}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\color{sectioncolor}}{}{0em}{}
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\color{sectioncolor}}{}{0em}{}
 
-\\setlength{\\parskip}{0.5em}
-\\setlength{\\itemsep}{0.25em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlength{\\itemsep}{0.15em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\large\\textit{Job Title}}\\\\[0.2cm]
-email $\\cdot$ phone $\\cdot$ location\\\\
-linkedin $\\cdot$ portfolio
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize\\textit{Job Title}}\\\\[0.15cm]
+{\\small email $\\cdot$ phone $\\cdot$ location}\\\\
+{\\small linkedin $\\cdot$ portfolio}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -1571,26 +1572,26 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{10pt}{5pt}
-\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\vspace{-0.3em}\\titlerule\\vspace{0.5em}]
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\vspace{-0.3em}\\titlerule\\vspace{0.4em}]
 
-\\setlength{\\parskip}{0.4em}
-\\setlength{\\itemsep}{0.2em}
-\\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.12em}
+\\setlength{\\parskip}{0.35em}
+\\setlength{\\itemsep}{0.15em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\LARGE\\textbf{NAME}}\\\\[0.25cm]
-{\\normalsize Job Title}\\\\[0.15cm]
-email | phone | location\\\\
-\\small linkedin | portfolio
+{\\Large\\textbf{NAME}}\\\\[0.2cm]
+{\\normalsize Job Title}\\\\[0.12cm]
+{\\small email | phone | location}\\\\
+{\\small linkedin | portfolio}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -1679,18 +1680,18 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Large\\textbf{NAME}}\\\\[0.2cm]
-email | phone | location
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\small email | phone | location}
 \\end{center}
 
 \\vspace{0.3cm}
@@ -1748,19 +1749,19 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\large Job Title}\\\\[0.2cm]
-email | phone | location
+{\\Large\\textbf{NAME}}\\\\[0.2cm]
+{\\normalsize Job Title}\\\\[0.15cm]
+{\\small email | phone | location}
 
 \\vspace{0.3cm}
 \\hrule
@@ -1815,7 +1816,7 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
@@ -1823,17 +1824,17 @@ MANDATORY STRUCTURE (LaTeX):
 
 \\definecolor{accent}{RGB}{0,51,102}
 
-\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titlespacing*{\\section}{0pt}{8pt}{4pt}
 \\titleformat{\\section}{\\normalsize\\bfseries\\color{accent}}{}{0em}{}
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+\\setlength{\\parskip}{0.3em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
 \\begin{minipage}[t]{0.3\\textwidth}
-{\\Large\\textbf{NAME}}\\\\[0.2cm]
-{\\small Job Title}\\\\[0.3cm]
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\small Job Title}\\\\[0.2cm]
 
 \\section*{Contact}
 {\\small email\\\\phone\\\\location}
@@ -1908,18 +1909,18 @@ MANDATORY STRUCTURE (LaTeX):
 \\begin{document}
 
 \\begin{minipage}[t]{0.28\\textwidth}
-{\\large\\textbf{NAME}}\\\\[0.1cm]
-{\\footnotesize email | phone}
+{\\Large\\textbf{NAME}}\\\\[0.1cm]
+{\\small email | phone}
 
 \\vspace{0.2cm}
 
 \\textbf{SKILLS}\\\\
-{\\footnotesize Skill1, Skill2, Skill3}
+{\\small Skill1, Skill2, Skill3}
 
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 
 \\textbf{EDUCATION}\\\\
-{\\footnotesize \\textbf{Degree}\\\\Institution\\\\Dates}
+{\\small \\textbf{Degree}\\\\Institution\\\\Dates}
 \\end{minipage}
 \\hfill
 \\begin{minipage}[t]{0.7\\textwidth}
@@ -1964,7 +1965,7 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.8in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
@@ -1972,18 +1973,18 @@ MANDATORY STRUCTURE (LaTeX):
 
 \\definecolor{elegant}{RGB}{64,64,64}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\color{elegant}}{}{0em}{}[\\vspace{-0.5em}\\titlerule[0.5pt]\\vspace{0.5em}]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\color{elegant}}{}{0em}{}[\\vspace{-0.4em}\\titlerule[0.5pt]\\vspace{0.4em}]
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\LARGE\\textbf{NAME}}\\\\[0.3cm]
-{\\normalsize\\textit{Job Title}}\\\\[0.2cm]
-email $\\cdot$ phone $\\cdot$ location
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize\\textit{Job Title}}\\\\[0.15cm]
+{\\small email $\\cdot$ phone $\\cdot$ location}
 \\end{center}
 
 \\vspace{0.5cm}
@@ -2028,20 +2029,20 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 
 \\definecolor{tech}{RGB}{0,102,204}
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
-{\\Huge\\textbf{\\textcolor{tech}{NAME}}}\\\\[0.2cm]
-email | phone | location | github
+{\\Large\\textbf{\\textcolor{tech}{NAME}}}\\\\[0.15cm]
+{\\small email | phone | location | github}
 
 \\vspace{0.3cm}
 \\textcolor{tech}{\\rule{\\textwidth}{1pt}}
@@ -2095,18 +2096,18 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Large\\textbf{NAME}}\\\\[0.2cm]
-email | phone
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\small email | phone}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -2163,22 +2164,22 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-email | phone | location
+{\\Large\\textbf{NAME}}\\\\[0.2cm]
+{\\small email | phone | location}
 
-\\vspace{0.3cm}
+\\vspace{0.25cm}
 \\hrule
-\\vspace{0.3cm}
+\\vspace{0.25cm}
 
 \\section*{PROFESSIONAL SUMMARY}
 Summary text in 3-4 lines highlighting key qualifications, experience, and career focus.
@@ -2227,18 +2228,18 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.8in]{geometry}
 \\usepackage{enumitem}
 
-\\setlength{\\parskip}{0.6em}
-\\setlist[itemize]{leftmargin=*,topsep=0.4em,itemsep=0.2em}
+\\setlength{\\parskip}{0.5em}
+\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
 
 \\begin{document}
 
 \\begin{center}
-{\\LARGE\\textbf{NAME}}\\\\[0.3cm]
-{\\normalsize email | phone}
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\small email | phone}
 \\end{center}
 
 \\vspace{0.5cm}
@@ -2289,25 +2290,25 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries}{}{0em}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries}{}{0em}{}[\\titlerule]
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.15em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\large Job Title}\\\\[0.2cm]
-email | phone | location\\\\
-linkedin | portfolio
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize Job Title}\\\\[0.15cm]
+{\\small email | phone | location}\\\\
+{\\small linkedin | portfolio}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -2388,15 +2389,15 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 0; background: #f5f5f5; }
 .resume { max-width: 850px; margin: 25px auto; padding: 50px 40px; background: white; box-shadow: 0 3px 15px rgba(0,0,0,0.1); }
 .header { text-align: center; border-bottom: 3px solid #2c3e50; padding-bottom: 20px; margin-bottom: 30px; }
-h1 { color: #2c3e50; font-size: 36px; margin-bottom: 8px; font-weight: 400; letter-spacing: 2px; }
-.subtitle { color: #7f8c8d; font-size: 16px; margin-bottom: 10px; font-style: italic; }
-.contact { color: #34495e; font-size: 13px; letter-spacing: 0.5px; }
-h2 { color: #2c3e50; font-size: 18px; margin-top: 28px; margin-bottom: 15px; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; font-weight: 400; text-transform: uppercase; letter-spacing: 1.5px; }
-.job-entry { margin-bottom: 22px; }
-.job-title { color: #34495e; font-weight: 600; font-size: 15px; margin-bottom: 4px; }
-.job-meta { color: #7f8c8d; font-size: 13px; margin-bottom: 10px; font-style: italic; }
-ul { margin-top: 10px; margin-bottom: 18px; padding-left: 22px; line-height: 1.8; }
-li { color: #2c3e50; font-size: 13px; margin-bottom: 6px; }
+h1 { color: #2c3e50; font-size: 26px; margin-bottom: 6px; font-weight: 400; letter-spacing: 1px; }
+.subtitle { color: #7f8c8d; font-size: 11.5px; margin-bottom: 8px; font-style: italic; }
+.contact { color: #34495e; font-size: 10.5px; letter-spacing: 0.3px; }
+h2 { color: #2c3e50; font-size: 12.5px; margin-top: 22px; margin-bottom: 12px; border-bottom: 2px solid #ecf0f1; padding-bottom: 6px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; }
+.job-entry { margin-bottom: 18px; }
+.job-title { color: #34495e; font-weight: 600; font-size: 11.5px; margin-bottom: 3px; }
+.job-meta { color: #7f8c8d; font-size: 10.5px; margin-bottom: 8px; font-style: italic; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #2c3e50; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; margin: 0; padding: 30px; }
@@ -2411,7 +2412,7 @@ li { color: #2c3e50; font-size: 13px; margin-bottom: 6px; }
     <div class="contact">email | phone | location</div>
   </div>
   <h2>Professional Summary</h2>
-  <p style="color: #34495e; font-size: 13px; line-height: 1.8; margin-bottom: 20px;">Summary text in 2-3 lines describing professional background and key qualifications.</p>
+  <p style="color: #34495e; font-size: 10.5px; line-height: 1.6; margin-bottom: 15px;">Summary text in 2-3 lines describing professional background and key qualifications.</p>
   <h2>Experience</h2>
   <div class="job-entry">
     <div class="job-title">Job Title</div>
@@ -2457,14 +2458,14 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f0f2f5; }
 .resume { max-width: 900px; margin: 20px auto; background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
 .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 45px; color: white; }
-h1 { font-size: 38px; margin-bottom: 10px; font-weight: 700; }
-.contact { font-size: 14px; opacity: 0.95; }
-h2 { color: #667eea; font-size: 20px; margin-top: 30px; margin-bottom: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.content { padding: 40px; }
-.job-title { color: #667eea; font-weight: 600; font-size: 16px; margin-top: 20px; margin-bottom: 5px; }
-.company { color: #764ba2; font-style: italic; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 700; }
+.contact { font-size: 10.5px; opacity: 0.95; }
+h2 { color: #667eea; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.content { padding: 35px; }
+.job-title { color: #667eea; font-weight: 600; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #764ba2; font-style: italic; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #667eea; }
@@ -2479,7 +2480,7 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
   </div>
   <div class="content">
     <h2>Skills</h2>
-    <p style="color: #333; font-size: 13px; line-height: 1.8;">Skills list</p>
+    <p style="color: #333; font-size: 10.5px; line-height: 1.6;">Skills list</p>
     <h2>Experience</h2>
     <div class="job-title">Job Title</div>
     <div class="company">Company | Dates</div>
@@ -2528,14 +2529,14 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Arial', sans-serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { max-width: 880px; margin: 20px auto; background: white; box-shadow: 0 5px 25px rgba(0,0,0,0.15); }
 .header { background: #ff6b6b; padding: 50px; color: white; }
-h1 { font-size: 42px; margin-bottom: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 2px; }
-.contact { font-size: 15px; opacity: 0.95; }
-h2 { color: #ff6b6b; font-size: 22px; margin-top: 32px; margin-bottom: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; border-left: 6px solid #ff6b6b; padding-left: 15px; }
-.content { padding: 45px; }
-.job-title { color: #ff6b6b; font-weight: 700; font-size: 17px; margin-top: 22px; margin-bottom: 6px; }
-.company { color: #333; font-size: 14px; margin-bottom: 12px; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 7px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 900; text-transform: uppercase; letter-spacing: 1.5px; }
+.contact { font-size: 10.5px; opacity: 0.95; }
+h2 { color: #ff6b6b; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-left: 6px solid #ff6b6b; padding-left: 12px; }
+.content { padding: 35px; }
+.job-title { color: #ff6b6b; font-weight: 700; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #333; font-size: 10.5px; margin-bottom: 10px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #ff6b6b; }
@@ -2554,7 +2555,7 @@ li { color: #333; font-size: 13px; margin-bottom: 7px; }
     <div class="company">Company | Dates</div>
     <ul><li>Achievement with detailed information spanning multiple lines</li></ul>
     <h2>Skills</h2>
-    <p style="color: #333; font-size: 13px; line-height: 1.8;">Skills list</p>
+    <p style="color: #333; font-size: 10.5px; line-height: 1.6;">Skills list</p>
     <h2>Education</h2>
     <div class="job-title">Degree</div>
     <div class="company">Institution | Dates</div>
@@ -2598,16 +2599,16 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
 .resume { max-width: 900px; margin: 25px auto; background: white; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
 .header { background: #1a1a1a; color: white; padding: 45px; }
-h1 { font-size: 40px; margin-bottom: 10px; font-weight: 300; letter-spacing: 3px; }
-.subtitle { font-size: 18px; margin-bottom: 12px; opacity: 0.9; }
-.contact { font-size: 13px; opacity: 0.85; }
-.content { padding: 45px; }
-.summary-box { background: #f8f9fa; padding: 25px; border-left: 5px solid #1a1a1a; margin: 25px 0; }
-h2 { color: #1a1a1a; font-size: 18px; margin-top: 30px; margin-bottom: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.job-title { color: #1a1a1a; font-weight: 600; font-size: 16px; margin-top: 22px; margin-bottom: 5px; }
-.company { color: #666; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 300; letter-spacing: 1.5px; }
+.subtitle { font-size: 11.5px; margin-bottom: 8px; opacity: 0.9; }
+.contact { font-size: 10.5px; opacity: 0.85; }
+.content { padding: 35px; }
+.summary-box { background: #f8f9fa; padding: 18px; border-left: 5px solid #1a1a1a; margin: 20px 0; }
+h2 { color: #1a1a1a; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.job-title { color: #1a1a1a; font-weight: 600; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #666; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #1a1a1a; }
@@ -2623,7 +2624,7 @@ li { color: #333; font-size: 13px; margin-bottom: 6px; }
   </div>
   <div class="content">
     <div class="summary-box">
-      <p style="color: #333; font-size: 14px; line-height: 1.8; font-style: italic;">Executive summary in 3-4 lines highlighting leadership experience and strategic vision.</p>
+      <p style="color: #333; font-size: 10.5px; line-height: 1.6; font-style: italic;">Executive summary in 3-4 lines highlighting leadership experience and strategic vision.</p>
     </div>
     <h2>Key Achievements</h2>
     <ul>
@@ -2672,16 +2673,16 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f8f9fa; }
 .resume { max-width: 920px; margin: 20px auto; background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
 .header { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); padding: 50px; color: white; }
-h1 { font-size: 40px; margin-bottom: 10px; font-weight: 700; }
-.contact { font-size: 14px; opacity: 0.95; }
-.content { padding: 45px; }
-h2 { color: #4facfe; font-size: 20px; margin-top: 30px; margin-bottom: 18px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.skills-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }
-.skill-badge { background: #e3f2fd; color: #4facfe; padding: 8px 12px; border-radius: 20px; text-align: center; font-size: 12px; font-weight: 600; }
-.job-title { color: #4facfe; font-weight: 600; font-size: 16px; margin-top: 22px; margin-bottom: 5px; }
-.company { color: #666; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 700; }
+.contact { font-size: 10.5px; opacity: 0.95; }
+.content { padding: 35px; }
+h2 { color: #4facfe; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.skills-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }
+.skill-badge { background: #e3f2fd; color: #4facfe; padding: 6px 10px; border-radius: 20px; text-align: center; font-size: 10.5px; font-weight: 600; }
+.job-title { color: #4facfe; font-weight: 600; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #666; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #4facfe; }
@@ -2749,15 +2750,15 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Helvetica', 'Arial', sans-serif; margin: 0; padding: 0; background: #ffffff; }
 .resume { max-width: 800px; margin: 40px auto; padding: 60px 50px; background: white; }
 .header { text-align: center; margin-bottom: 50px; }
-h1 { font-size: 32px; margin-bottom: 12px; font-weight: 300; color: #1a1a1a; letter-spacing: 3px; }
-.contact { color: #999; font-size: 12px; letter-spacing: 1px; margin-bottom: 40px; }
-.divider { border: none; border-top: 1px solid #e5e5e5; margin: 40px 0; }
-h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 3px; color: #1a1a1a; margin: 40px 0 20px 0; }
-.job-entry { margin-bottom: 30px; }
-.job-title { font-weight: 400; color: #1a1a1a; font-size: 14px; margin-bottom: 4px; }
-.job-meta { color: #999; font-size: 11px; margin-bottom: 12px; }
-ul { margin-top: 12px; margin-bottom: 25px; padding-left: 20px; line-height: 2; }
-li { color: #666; font-size: 12px; margin-bottom: 8px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 300; color: #1a1a1a; letter-spacing: 1.5px; }
+.contact { color: #999; font-size: 10.5px; letter-spacing: 0.5px; margin-bottom: 30px; }
+.divider { border: none; border-top: 1px solid #e5e5e5; margin: 30px 0; }
+h2 { font-size: 12.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; color: #1a1a1a; margin: 30px 0 15px 0; }
+.job-entry { margin-bottom: 22px; }
+.job-title { font-weight: 400; color: #1a1a1a; font-size: 11.5px; margin-bottom: 3px; }
+.job-meta { color: #999; font-size: 10.5px; margin-bottom: 10px; }
+ul { margin-top: 8px; margin-bottom: 18px; padding-left: 20px; line-height: 1.6; }
+li { color: #666; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .resume { padding: 40px; }
@@ -2817,14 +2818,14 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f0f4f8; }
 .resume { max-width: 900px; margin: 25px auto; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
 .header { background: #1e3a8a; color: white; padding: 40px; }
-h1 { font-size: 36px; margin-bottom: 10px; font-weight: 600; }
-.contact { font-size: 14px; opacity: 0.95; }
-.content { padding: 40px; }
-h2 { color: #1e3a8a; font-size: 19px; margin-top: 28px; margin-bottom: 16px; font-weight: 600; border-bottom: 3px solid #3b82f6; padding-bottom: 8px; }
-.job-title { color: #1e40af; font-weight: 600; font-size: 15px; margin-top: 20px; margin-bottom: 5px; }
-.company { color: #60a5fa; font-style: italic; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 600; }
+.contact { font-size: 10.5px; opacity: 0.95; }
+.content { padding: 35px; }
+h2 { color: #1e3a8a; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; border-bottom: 3px solid #3b82f6; padding-bottom: 6px; }
+.job-title { color: #1e40af; font-weight: 600; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #60a5fa; font-style: italic; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #1e3a8a; }
@@ -2880,14 +2881,14 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f5f7fa; }
 .resume { max-width: 950px; margin: 25px auto; padding: 30px; }
 .header-card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 25px; text-align: center; }
-h1 { font-size: 38px; margin-bottom: 10px; color: #1a1a1a; font-weight: 700; }
-.contact { color: #666; font-size: 14px; }
-.card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 25px; }
-h2 { color: #2563eb; font-size: 20px; margin-bottom: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
-.job-title { color: #1a1a1a; font-weight: 600; font-size: 15px; margin-top: 18px; margin-bottom: 5px; }
-.company { color: #666; font-size: 13px; margin-bottom: 10px; }
-ul { margin-top: 12px; margin-bottom: 18px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; color: #1a1a1a; font-weight: 700; }
+.contact { color: #666; font-size: 10.5px; }
+.card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+h2 { color: #2563eb; font-size: 12.5px; margin-bottom: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+.job-title { color: #1a1a1a; font-weight: 600; font-size: 11.5px; margin-top: 15px; margin-bottom: 4px; }
+.company { color: #666; font-size: 10.5px; margin-bottom: 8px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .card, .header-card { box-shadow: none; border: 1px solid #e5e5e5; }
@@ -2957,15 +2958,15 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { max-width: 850px; margin: 25px auto; padding: 40px; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
 .header { text-align: center; border-bottom: 2px solid #2c3e50; padding-bottom: 25px; margin-bottom: 30px; }
-h1 { font-size: 34px; margin-bottom: 10px; color: #2c3e50; font-weight: 400; }
-.contact { color: #555; font-size: 13px; }
-h2 { font-size: 17px; margin-top: 30px; margin-bottom: 15px; color: #2c3e50; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #bdc3c7; padding-bottom: 6px; }
-.publication { margin: 12px 0; padding-left: 22px; color: #333; font-size: 13px; line-height: 1.7; }
-.job-entry { margin-bottom: 22px; }
-.degree-title { font-weight: 600; color: #2c3e50; font-size: 14px; margin-bottom: 4px; }
-.degree-meta { color: #7f8c8d; font-size: 13px; margin-bottom: 6px; }
-ul { margin-top: 12px; margin-bottom: 20px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; color: #2c3e50; font-weight: 400; }
+.contact { color: #555; font-size: 10.5px; }
+h2 { font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; color: #2c3e50; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
+.publication { margin: 10px 0; padding-left: 20px; color: #333; font-size: 10.5px; line-height: 1.6; }
+.job-entry { margin-bottom: 18px; }
+.degree-title { font-weight: 600; color: #2c3e50; font-size: 11.5px; margin-bottom: 3px; }
+.degree-meta { color: #7f8c8d; font-size: 10.5px; margin-bottom: 5px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; padding: 30px; }
@@ -3026,15 +3027,15 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #f8f9fa; }
 .resume { max-width: 920px; margin: 25px auto; background: white; box-shadow: 0 4px 18px rgba(0,0,0,0.1); }
 .header { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 50px; color: white; }
-h1 { font-size: 40px; margin-bottom: 12px; font-weight: 700; }
-.contact { font-size: 14px; opacity: 0.95; }
-.content { padding: 45px; }
-h2 { color: #6366f1; font-size: 21px; margin-top: 32px; margin-bottom: 20px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; position: relative; padding-left: 15px; }
-h2::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 20px; background: #6366f1; }
-.job-title { color: #1a1a1a; font-weight: 600; font-size: 16px; margin-top: 22px; margin-bottom: 6px; }
-.company { color: #6366f1; font-size: 13px; margin-bottom: 12px; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 22px; line-height: 1.8; }
-li { color: #333; font-size: 13px; margin-bottom: 7px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 700; }
+.contact { font-size: 10.5px; opacity: 0.95; }
+.content { padding: 35px; }
+h2 { color: #6366f1; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; position: relative; padding-left: 12px; }
+h2::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 4px; height: 16px; background: #6366f1; }
+.job-title { color: #1a1a1a; font-weight: 600; font-size: 11.5px; margin-top: 18px; margin-bottom: 4px; }
+.company { color: #6366f1; font-size: 10.5px; margin-bottom: 10px; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #6366f1; }
@@ -3093,18 +3094,18 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Arial', 'Helvetica', sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
 .resume { max-width: 900px; margin: 0 auto; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
 .header { background: #1e3a8a; color: white; padding: 40px 50px; }
-h1 { font-size: 36px; margin-bottom: 10px; font-weight: 700; }
-.subtitle { font-size: 16px; margin-bottom: 15px; opacity: 0.9; }
-.contact { font-size: 13px; line-height: 1.8; }
-.content { padding: 40px 50px; }
-h2 { color: #1e3a8a; font-size: 18px; margin-top: 30px; margin-bottom: 15px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; }
-.job-title { color: #1e3a8a; font-weight: 600; font-size: 15px; margin-top: 20px; }
-.company { color: #4b5563; font-size: 13px; font-style: italic; margin-bottom: 8px; }
-.dates { color: #6b7280; font-size: 12px; float: right; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 25px; line-height: 1.7; }
-li { color: #374151; font-size: 13px; margin-bottom: 6px; }
-.skills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.skill { background: #eff6ff; color: #1e3a8a; padding: 5px 12px; border-radius: 4px; font-size: 12px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 700; }
+.subtitle { font-size: 11.5px; margin-bottom: 10px; opacity: 0.9; }
+.contact { font-size: 10.5px; line-height: 1.6; }
+.content { padding: 35px 40px; }
+h2 { color: #1e3a8a; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 700; text-transform: uppercase; border-bottom: 2px solid #1e3a8a; padding-bottom: 5px; }
+.job-title { color: #1e3a8a; font-weight: 600; font-size: 11.5px; margin-top: 18px; }
+.company { color: #4b5563; font-size: 10.5px; font-style: italic; margin-bottom: 6px; }
+.dates { color: #6b7280; font-size: 10px; float: right; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #374151; font-size: 10.5px; margin-bottom: 5px; }
+.skills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.skill { background: #eff6ff; color: #1e3a8a; padding: 4px 10px; border-radius: 4px; font-size: 10.5px; }
 @media print {
   body { background: white; padding: 0; }
   .header { background: #1e3a8a; }
@@ -3169,17 +3170,17 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Georgia', 'Times New Roman', serif; margin: 0; padding: 0; background: #fafafa; }
 .resume { max-width: 950px; margin: 30px auto; background: white; box-shadow: 0 5px 20px rgba(0,0,0,0.08); }
 .header { padding: 50px 60px 40px; border-bottom: 4px solid #2c3e50; }
-h1 { font-size: 42px; color: #2c3e50; margin-bottom: 12px; font-weight: 300; letter-spacing: 2px; }
-.subtitle { font-size: 18px; color: #7f8c8d; margin-bottom: 20px; font-weight: 300; }
-.contact { font-size: 13px; color: #34495e; line-height: 2; }
-.content { padding: 45px 60px; }
-h2 { color: #2c3e50; font-size: 20px; margin-top: 35px; margin-bottom: 18px; font-weight: 400; text-transform: uppercase; letter-spacing: 1px; }
-.job-title { color: #2c3e50; font-weight: 500; font-size: 16px; margin-top: 22px; }
-.company { color: #7f8c8d; font-size: 14px; font-style: italic; margin-bottom: 10px; }
-.dates { color: #95a5a6; font-size: 12px; float: right; font-weight: 300; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 28px; line-height: 1.8; }
-li { color: #34495e; font-size: 13px; margin-bottom: 8px; }
-.summary { color: #34495e; font-size: 14px; line-height: 1.8; margin-bottom: 30px; padding: 20px; background: #f8f9fa; border-left: 3px solid #2c3e50; }
+h1 { font-size: 26px; color: #2c3e50; margin-bottom: 8px; font-weight: 300; letter-spacing: 1px; }
+.subtitle { font-size: 11.5px; color: #7f8c8d; margin-bottom: 15px; font-weight: 300; }
+.contact { font-size: 10.5px; color: #34495e; line-height: 1.6; }
+.content { padding: 35px 45px; }
+h2 { color: #2c3e50; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 400; text-transform: uppercase; letter-spacing: 0.5px; }
+.job-title { color: #2c3e50; font-weight: 500; font-size: 11.5px; margin-top: 18px; }
+.company { color: #7f8c8d; font-size: 10.5px; font-style: italic; margin-bottom: 8px; }
+.dates { color: #95a5a6; font-size: 10px; float: right; font-weight: 300; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #34495e; font-size: 10.5px; margin-bottom: 5px; }
+.summary { color: #34495e; font-size: 10.5px; line-height: 1.6; margin-bottom: 22px; padding: 15px; background: #f8f9fa; border-left: 3px solid #2c3e50; }
 @media print {
   body { background: white; }
   .resume { box-shadow: none; }
@@ -3237,17 +3238,17 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; margin: 0; padding: 0; background: #0a0e27; }
 .resume { max-width: 920px; margin: 20px auto; background: white; }
 .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 45px 50px; color: white; }
-h1 { font-size: 38px; margin-bottom: 8px; font-weight: 700; }
-.subtitle { font-size: 17px; opacity: 0.95; margin-bottom: 15px; }
-.contact { font-size: 13px; opacity: 0.9; line-height: 1.8; }
-.content { padding: 40px 50px; }
-h2 { color: #667eea; font-size: 19px; margin-top: 28px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; position: relative; padding-left: 12px; }
+h1 { font-size: 26px; margin-bottom: 6px; font-weight: 700; }
+.subtitle { font-size: 11.5px; opacity: 0.95; margin-bottom: 10px; }
+.contact { font-size: 10.5px; opacity: 0.9; line-height: 1.6; }
+.content { padding: 35px 40px; }
+h2 { color: #667eea; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; position: relative; padding-left: 10px; }
 h2::before { content: '▸'; position: absolute; left: 0; color: #667eea; }
-.job-title { color: #2d3748; font-weight: 600; font-size: 15px; margin-top: 20px; }
-.company { color: #667eea; font-size: 13px; margin-bottom: 9px; }
-.dates { color: #718096; font-size: 12px; float: right; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 22px; line-height: 1.7; }
-li { color: #4a5568; font-size: 13px; margin-bottom: 6px; }
+.job-title { color: #2d3748; font-weight: 600; font-size: 11.5px; margin-top: 18px; }
+.company { color: #667eea; font-size: 10.5px; margin-bottom: 8px; }
+.dates { color: #718096; font-size: 10px; float: right; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #4a5568; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #667eea; }
@@ -3304,16 +3305,16 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Helvetica Neue', 'Arial', sans-serif; margin: 0; padding: 30px; background: #ffffff; }
 .resume { max-width: 850px; margin: 0 auto; background: white; }
 .header { padding: 50px 0 30px; border-bottom: 1px solid #e5e5e5; }
-h1 { font-size: 32px; color: #1a1a1a; margin-bottom: 8px; font-weight: 300; letter-spacing: -0.5px; }
-.subtitle { font-size: 15px; color: #666; margin-bottom: 15px; font-weight: 300; }
-.contact { font-size: 12px; color: #888; line-height: 2; }
-.content { padding: 35px 0; }
-h2 { color: #1a1a1a; font-size: 14px; margin-top: 32px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 2px; }
-.job-title { color: #1a1a1a; font-weight: 500; font-size: 14px; margin-top: 20px; }
-.company { color: #666; font-size: 12px; margin-bottom: 8px; }
-.dates { color: #999; font-size: 11px; float: right; font-weight: 300; }
-ul { margin-top: 10px; margin-bottom: 18px; padding-left: 20px; line-height: 1.7; }
-li { color: #333; font-size: 12px; margin-bottom: 5px; }
+h1 { font-size: 26px; color: #1a1a1a; margin-bottom: 6px; font-weight: 300; letter-spacing: -0.3px; }
+.subtitle { font-size: 11.5px; color: #666; margin-bottom: 10px; font-weight: 300; }
+.contact { font-size: 10.5px; color: #888; line-height: 1.6; }
+.content { padding: 30px 0; }
+h2 { color: #1a1a1a; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; }
+.job-title { color: #1a1a1a; font-weight: 500; font-size: 11.5px; margin-top: 18px; }
+.company { color: #666; font-size: 10.5px; margin-bottom: 6px; }
+.dates { color: #999; font-size: 10px; float: right; font-weight: 300; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333; font-size: 10.5px; margin-bottom: 4px; }
 @media print {
   body { padding: 0; }
   .header { border-bottom: 1px solid #ccc; }
@@ -3370,16 +3371,16 @@ body { font-family: 'Arial Black', 'Arial', sans-serif; margin: 0; padding: 0; b
 .resume { max-width: 940px; margin: 25px auto; background: white; box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
 .header { background: #000000; color: white; padding: 50px 55px; position: relative; }
 .header::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 8px; background: #ff6b6b; }
-h1 { font-size: 44px; margin-bottom: 10px; font-weight: 900; letter-spacing: 1px; }
-.subtitle { font-size: 18px; color: #ff6b6b; margin-bottom: 18px; font-weight: 600; }
-.contact { font-size: 13px; opacity: 0.9; line-height: 1.9; }
-.content { padding: 45px 55px; }
-h2 { color: #000000; font-size: 22px; margin-top: 32px; margin-bottom: 18px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; border-left: 6px solid #ff6b6b; padding-left: 12px; }
-.job-title { color: #000000; font-weight: 700; font-size: 16px; margin-top: 22px; }
-.company { color: #666666; font-size: 13px; margin-bottom: 10px; }
-.dates { color: #999999; font-size: 12px; float: right; font-weight: 600; }
-ul { margin-top: 12px; margin-bottom: 22px; padding-left: 25px; line-height: 1.8; }
-li { color: #333333; font-size: 13px; margin-bottom: 7px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 900; letter-spacing: 0.5px; }
+.subtitle { font-size: 11.5px; color: #ff6b6b; margin-bottom: 12px; font-weight: 600; }
+.contact { font-size: 10.5px; opacity: 0.9; line-height: 1.6; }
+.content { padding: 35px 40px; }
+h2 { color: #000000; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; border-left: 6px solid #ff6b6b; padding-left: 10px; }
+.job-title { color: #000000; font-weight: 700; font-size: 11.5px; margin-top: 18px; }
+.company { color: #666666; font-size: 10.5px; margin-bottom: 8px; }
+.dates { color: #999999; font-size: 10px; float: right; font-weight: 600; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #333333; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #000000; }
@@ -3437,17 +3438,17 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Times New Roman', 'Georgia', serif; margin: 0; padding: 0; background: #f9f9f9; }
 .resume { max-width: 900px; margin: 30px auto; background: white; box-shadow: 0 3px 15px rgba(0,0,0,0.1); }
 .header { padding: 45px 50px; border-bottom: 3px double #2c3e50; background: #fafafa; }
-h1 { font-size: 36px; color: #2c3e50; margin-bottom: 10px; font-weight: 400; font-variant: small-caps; }
-.subtitle { font-size: 16px; color: #5d6d7e; margin-bottom: 18px; font-style: italic; }
-.contact { font-size: 13px; color: #34495e; line-height: 2; }
-.content { padding: 40px 50px; }
-h2 { color: #2c3e50; font-size: 17px; margin-top: 30px; margin-bottom: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
-.job-title { color: #2c3e50; font-weight: 600; font-size: 15px; margin-top: 20px; }
-.company { color: #5d6d7e; font-size: 13px; font-style: italic; margin-bottom: 8px; }
-.dates { color: #7f8c8d; font-size: 12px; float: right; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 28px; line-height: 1.8; }
-li { color: #34495e; font-size: 13px; margin-bottom: 6px; }
-.publication { margin-top: 15px; padding: 12px; background: #f8f9fa; border-left: 3px solid #2c3e50; font-size: 12px; line-height: 1.7; }
+h1 { font-size: 26px; color: #2c3e50; margin-bottom: 8px; font-weight: 400; font-variant: small-caps; }
+.subtitle { font-size: 11.5px; color: #5d6d7e; margin-bottom: 12px; font-style: italic; }
+.contact { font-size: 10.5px; color: #34495e; line-height: 1.6; }
+.content { padding: 35px 40px; }
+h2 { color: #2c3e50; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #bdc3c7; padding-bottom: 5px; }
+.job-title { color: #2c3e50; font-weight: 600; font-size: 11.5px; margin-top: 18px; }
+.company { color: #5d6d7e; font-size: 10.5px; font-style: italic; margin-bottom: 6px; }
+.dates { color: #7f8c8d; font-size: 10px; float: right; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #34495e; font-size: 10.5px; margin-bottom: 5px; }
+.publication { margin-top: 12px; padding: 10px; background: #f8f9fa; border-left: 3px solid #2c3e50; font-size: 10.5px; line-height: 1.6; }
 @media print {
   body { background: white; }
   .header { background: white; }
@@ -3505,17 +3506,17 @@ MANDATORY STRUCTURE (HTML):
 body { font-family: 'Segoe UI', 'Helvetica Neue', sans-serif; margin: 0; padding: 0; background: #f4f6f8; }
 .resume { max-width: 910px; margin: 25px auto; background: white; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
 .header { background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%); padding: 45px 50px; color: white; }
-h1 { font-size: 38px; margin-bottom: 10px; font-weight: 600; }
-.subtitle { font-size: 17px; opacity: 0.95; margin-bottom: 16px; }
-.contact { font-size: 13px; opacity: 0.9; line-height: 1.8; }
-.content { padding: 42px 50px; }
-h2 { color: #2563eb; font-size: 19px; margin-top: 30px; margin-bottom: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; position: relative; padding-bottom: 8px; }
-h2::after { content: ''; position: absolute; bottom: 0; left: 0; width: 50px; height: 3px; background: linear-gradient(90deg, #2563eb, #1e40af); }
-.job-title { color: #1e293b; font-weight: 600; font-size: 15px; margin-top: 20px; }
-.company { color: #475569; font-size: 13px; margin-bottom: 9px; }
-.dates { color: #64748b; font-size: 12px; float: right; }
-ul { margin-top: 10px; margin-bottom: 20px; padding-left: 24px; line-height: 1.7; }
-li { color: #334155; font-size: 13px; margin-bottom: 6px; }
+h1 { font-size: 26px; margin-bottom: 8px; font-weight: 600; }
+.subtitle { font-size: 11.5px; opacity: 0.95; margin-bottom: 10px; }
+.contact { font-size: 10.5px; opacity: 0.9; line-height: 1.6; }
+.content { padding: 35px 40px; }
+h2 { color: #2563eb; font-size: 12.5px; margin-top: 24px; margin-bottom: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; position: relative; padding-bottom: 6px; }
+h2::after { content: ''; position: absolute; bottom: 0; left: 0; width: 40px; height: 2px; background: linear-gradient(90deg, #2563eb, #1e40af); }
+.job-title { color: #1e293b; font-weight: 600; font-size: 11.5px; margin-top: 18px; }
+.company { color: #475569; font-size: 10.5px; margin-bottom: 8px; }
+.dates { color: #64748b; font-size: 10px; float: right; }
+ul { margin-top: 8px; margin-bottom: 15px; padding-left: 20px; line-height: 1.6; }
+li { color: #334155; font-size: 10.5px; margin-bottom: 5px; }
 @media print {
   body { background: white; }
   .header { background: #2563eb; }
@@ -3565,25 +3566,25 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{14pt}{7pt}
-\\titleformat{\\section}{\\Large\\bfseries\\uppercase}{}{0em}{}[\\color{blue!70!black}\\titlerule[1.5pt]]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\color{blue!70!black}\\titlerule[1.5pt]]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.2em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{\\textcolor{blue!80!black}{NAME}}}\\\\[0.4cm]
-{\\Large\\textcolor{blue!60!black}{Executive Job Title}}\\\\[0.3cm]
-{\\normalsize email | phone | location}\\\\
-{\\normalsize linkedin | portfolio}
+{\\Large\\textbf{\\textcolor{blue!80!black}{NAME}}}\\\\[0.3cm]
+{\\normalsize\\textcolor{blue!60!black}{Executive Job Title}}\\\\[0.2cm]
+{\\small email | phone | location}\\\\
+{\\small linkedin | portfolio}
 \\end{center}
 
 \\vspace{0.5cm}
@@ -3656,23 +3657,23 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
 \\noindent
-{\\Huge\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.2cm]
-{\\large\\textcolor{blue!65!black}{Tech Job Title}}\\\\[0.15cm]
+{\\Large\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.15cm]
+{\\normalsize\\textcolor{blue!65!black}{Tech Job Title}}\\\\[0.12cm]
 {\\small email | phone | location | github}
 
 \\vspace{0.4cm}
@@ -3761,7 +3762,7 @@ MANDATORY STRUCTURE (LaTeX):
 
 \\noindent
 {\\Large\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\
-{\\normalsize email | phone | location}
+{\\small email | phone | location}
 
 \\vspace{0.3cm}
 
@@ -3827,25 +3828,25 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\large Research Position Title}\\\\[0.2cm]
-{\\normalsize email | phone | location}\\\\
-{\\normalsize website | orcid}
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\normalsize Research Position Title}\\\\[0.15cm]
+{\\small email | phone | location}\\\\
+{\\small website | orcid}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -3917,27 +3918,27 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{multicol}
 
-\\setlength{\\parskip}{0.3em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.12em}
+\\setlength{\\parskip}{0.25em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{\\textcolor{blue!90!black}{NAME}}}\\\\[0.2cm]
-{\\large email | phone | location}
+{\\Large\\textbf{\\textcolor{blue!90!black}{NAME}}}\\\\[0.15cm]
+{\\small email | phone | location}
 \\end{center}
 
-\\vspace{0.3cm}
+\\vspace{0.25cm}
 
 \\begin{multicols}{2}
 
-\\section*{\\textcolor{blue!75!black}{\\large Skills}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Skills}}
 \\begin{itemize}
 \\item Skill1, Skill2, Skill3
 \\item Skill4, Skill5, Skill6
@@ -3946,19 +3947,19 @@ MANDATORY STRUCTURE (LaTeX):
 
 \\vspace{0.2cm}
 
-\\section*{\\textcolor{blue!75!black}{\\large Education}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Education}}
 \\textbf{\\textcolor{blue!60!black}{Degree}}\\\\
 \\textit{\\textcolor{blue!50!black}{Institution | Date}}
 
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 
-\\section*{\\textcolor{blue!75!black}{\\large Certifications}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Certifications}}
 \\textbf{Certification}\\\\
 \\textit{Organization | Date}
 
 \\columnbreak
 
-\\section*{\\textcolor{blue!75!black}{\\large Experience}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Experience}}
 \\textbf{\\textcolor{blue!60!black}{Job Title}}\\\\
 \\textit{\\textcolor{blue!50!black}{Company | Dates}}
 \\begin{itemize}
@@ -3966,9 +3967,9 @@ MANDATORY STRUCTURE (LaTeX):
 \\item Another achievement with specific metrics
 \\end{itemize}
 
-\\vspace{0.2cm}
+\\vspace{0.15cm}
 
-\\section*{\\textcolor{blue!75!black}{\\large Projects}}
+\\section*{\\textcolor{blue!75!black}{\\normalsize\\bfseries Projects}}
 \\textbf{\\textcolor{blue!60!black}{Project Name}}\\\\
 \\textit{\\textcolor{blue!50!black}{Technologies | Year}}
 \\begin{itemize}
@@ -4003,22 +4004,22 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=1in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{16pt}{8pt}
+\\titlespacing*{\\section}{0pt}{12pt}{6pt}
 \\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\textcolor{gray!30}\\titlerule[0.5pt]]
 
-\\setlength{\\parskip}{0.5em}
-\\setlist[itemize]{leftmargin=*,topsep=0.3em,itemsep=0.2em}
+\\setlength{\\parskip}{0.4em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\LARGE\\textbf{NAME}}\\\\[0.4cm]
+{\\Large\\textbf{NAME}}\\\\[0.3cm]
 {\\small email | phone | location}
 \\end{center}
 
@@ -4075,24 +4076,24 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule[1pt]]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\textcolor{blue!75!black}}{}{0em}{}[\\textcolor{blue!75!black}\\titlerule[1pt]]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.3cm]
-{\\large\\textcolor{blue!65!black}{Job Title}}\\\\[0.2cm]
-{\\normalsize email | phone | location}
+{\\Large\\textbf{\\textcolor{blue!85!black}{NAME}}}\\\\[0.25cm]
+{\\normalsize\\textcolor{blue!65!black}{Job Title}}\\\\[0.15cm]
+{\\small email | phone | location}
 \\end{center}
 
 \\vspace{0.4cm}
@@ -4164,24 +4165,24 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{14pt}{7pt}
-\\titleformat{\\section}{\\Large\\bfseries\\textcolor{black}}{}{0em}{}[\\textcolor{red!70!black}\\titlerule[2pt]]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\textcolor{black}}{}{0em}{}[\\textcolor{red!70!black}\\titlerule[2pt]]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.25em,itemsep=0.18em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.1em}
 
 \\begin{document}
 
 \\noindent
-{\\Huge\\textbf{NAME}}\\\\[0.2cm]
-{\\Large\\textcolor{red!70!black}{Designer Job Title}}\\\\[0.15cm]
-{\\normalsize email | phone | location | portfolio}
+{\\Large\\textbf{NAME}}\\\\[0.15cm]
+{\\normalsize\\textcolor{red!70!black}{Designer Job Title}}\\\\[0.12cm]
+{\\small email | phone | location | portfolio}
 
 \\vspace{0.5cm}
 
@@ -4252,24 +4253,24 @@ CRITICAL FORMATTING RULES:
 🚨 COPY THIS EXACT STRUCTURE - DO NOT MODIFY 🚨
 
 MANDATORY STRUCTURE (LaTeX):
-\\documentclass[11pt]{article}
+\\documentclass[10pt]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{enumitem}
 \\usepackage{xcolor}
 \\usepackage{titlesec}
 
-\\titlespacing*{\\section}{0pt}{12pt}{6pt}
-\\titleformat{\\section}{\\large\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
+\\titlespacing*{\\section}{0pt}{10pt}{5pt}
+\\titleformat{\\section}{\\normalsize\\bfseries\\uppercase}{}{0em}{}[\\titlerule]
 
-\\setlength{\\parskip}{0.4em}
-\\setlist[itemize]{leftmargin=*,topsep=0.2em,itemsep=0.15em}
+\\setlength{\\parskip}{0.35em}
+\\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.1em}
 
 \\begin{document}
 
 \\begin{center}
-{\\Huge\\textbf{NAME}}\\\\[0.3cm]
-{\\normalsize email | phone | location}\\\\
-{\\normalsize linkedin | portfolio}
+{\\Large\\textbf{NAME}}\\\\[0.25cm]
+{\\small email | phone | location}\\\\
+{\\small linkedin | portfolio}
 \\end{center}
 
 \\vspace{0.4cm}

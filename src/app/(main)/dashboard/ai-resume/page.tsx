@@ -171,19 +171,43 @@ export default function AIResumeBuilderPage() {
 
     try {
       const endpoint = isLaTeX ? '/api/resume/generate-latex' : '/api/resume/generate-html'
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ...data, 
-          model: selectedModel,
-          templateId: selectedTemplate?.id,
-          templateStyleGuide: selectedTemplate?.styleGuide,
-        }),
-      })
+      
+      // Create AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes timeout
+
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            ...data, 
+            model: selectedModel,
+            templateId: selectedTemplate?.id,
+            templateStyleGuide: selectedTemplate?.styleGuide,
+          }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again with a smaller template or simpler data.')
+        }
+        
+        if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
+          throw new Error('Unable to connect to server. Please check your internet connection and try again.')
+        }
+        
+        throw fetchError
+      }
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'}` }))
+        const error = await response.json().catch(() => ({ 
+          error: `Server returned error: ${response.status} ${response.statusText}` 
+        }))
         throw new Error(error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`)
       }
 
@@ -214,10 +238,17 @@ export default function AIResumeBuilderPage() {
       }
     } catch (error) {
       console.error(`Error generating ${isLaTeX ? 'LaTeX' : 'HTML'}:`, error)
-      toast.error(
-        error instanceof Error ? error.message : `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code. Please try again.`,
-        { id: 'resume-generate' }
-      )
+      
+      let errorMessage = `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code. Please try again.`
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage, { 
+        id: 'resume-generate',
+        duration: 5000,
+      })
     } finally {
       setIsGenerating(false)
     }
@@ -389,38 +420,145 @@ export default function AIResumeBuilderPage() {
     if (!resume && !jd) return
 
     setIsParsingFiles(true)
-    toast.loading('Parsing uploaded files...', { id: 'parse-files' })
-
+    
+    // Show progress updates
+    toast.loading('Extracting text from files...', { id: 'parse-files' })
+    
     try {
       const formData = new FormData()
       if (resume) formData.append('resume', resume)
       if (jd) formData.append('jd', jd)
 
-      const response = await fetch('/api/resume/parse-files', {
-        method: 'POST',
-        body: formData,
-      })
+      // Update progress
+      setTimeout(() => {
+        toast.loading('Analyzing content with AI...', { id: 'parse-files' })
+      }, 2000)
 
-      if (!response.ok) {
-        throw new Error('Failed to parse files')
+      let response: Response
+      try {
+        response = await fetch('/api/resume/parse-files', {
+          method: 'POST',
+          body: formData,
+          // Add timeout to prevent hanging
+          signal: AbortSignal.timeout(60000), // 60 seconds
+        })
+      } catch (fetchError) {
+        console.error('[parse-files] Fetch error:', fetchError)
+        
+        if (fetchError instanceof Error) {
+          if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
+            throw new Error('Request timed out. The files might be too large. Please try smaller files or fill the form manually.')
+          }
+          if (fetchError.message === 'Failed to fetch') {
+            throw new Error('Unable to connect to server. Please check if the server is running and try again.')
+          }
+          throw fetchError
+        }
+        throw new Error('Network error occurred. Please check your connection and try again.')
       }
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }))
+        const errorMessage = errorData.error || errorData.details || 'Failed to parse files'
+        throw new Error(errorMessage)
+      }
+
+      toast.loading('Processing extracted data...', { id: 'parse-files' })
+
       const result = await response.json()
+      console.log('[parse-files] API response:', result)
+      console.log('[parse-files] Extracted resume data:', result.extractedResumeData)
+      console.log('[parse-files] JD requirements:', result.jdRequirements)
+      
+      // Check if extraction failed - but still continue if success is true
+      if (result.success === false) {
+        toast.warning(
+          result.error || 'Could not extract data from files. Please fill the form manually.',
+          { 
+            id: 'parse-files',
+            description: result.details || 'The files might be image-based PDFs or in an unsupported format.',
+            duration: 6000,
+          }
+        )
+        setIsParsingFiles(false)
+        return
+      }
+      
+      // If no data extracted, show friendly info message (not error)
+      if (!result.extractedResumeData && !result.jdRequirements) {
+        // Show as info message - this is normal for image-based PDFs
+        toast.info(
+          'Files uploaded successfully',
+          { 
+            id: 'parse-files',
+            description: 'PDF text extraction wasn\'t possible (likely image-based PDFs). Please fill the form manually.',
+            duration: 4000,
+          }
+        )
+        setIsParsingFiles(false)
+        return // Exit early since there's no data to process
+      }
+      
       setParsedData({
         resumeData: result.extractedResumeData,
         jdRequirements: result.jdRequirements,
       })
 
       // Auto-fill form if resume data is extracted
+      let fieldsFilled = 0
       if (result.extractedResumeData) {
         const data = result.extractedResumeData
-        if (data.fullName) form.setValue('fullName', data.fullName)
-        if (data.email) form.setValue('email', data.email)
-        if (data.phone) form.setValue('phone', data.phone)
-        if (data.skills) form.setValue('skills', data.skills)
-        if (data.experience) form.setValue('experience', data.experience)
-        if (data.education) form.setValue('education', data.education)
-        if (data.projects) form.setValue('projects', data.projects)
+        console.log('[parse-files] Auto-filling form with data:', data)
+        
+        if (data.fullName) {
+          form.setValue('fullName', data.fullName)
+          fieldsFilled++
+        }
+        if (data.email) {
+          form.setValue('email', data.email)
+          fieldsFilled++
+        }
+        if (data.phone) {
+          form.setValue('phone', data.phone)
+          fieldsFilled++
+        }
+        if (data.skills) {
+          form.setValue('skills', data.skills)
+          fieldsFilled++
+        }
+        if (data.experience) {
+          form.setValue('experience', data.experience)
+          fieldsFilled++
+        }
+        // Education - always set, even if empty (will use fallback from API)
+        if (data.education) {
+          form.setValue('education', data.education)
+          fieldsFilled++
+          console.log('[parse-files] ✅ Education field filled:', data.education.substring(0, 50))
+        } else {
+          console.warn('[parse-files] ⚠️ Education field missing in extracted data')
+          // Set a default value if missing
+          form.setValue('education', 'Not specified')
+        }
+        
+        // Projects - always set, even if empty (will use fallback from API)
+        if (data.projects) {
+          form.setValue('projects', data.projects)
+          fieldsFilled++
+          console.log('[parse-files] ✅ Projects field filled:', data.projects.substring(0, 50))
+        } else {
+          console.warn('[parse-files] ⚠️ Projects field missing in extracted data')
+          // Set a default value if missing
+          form.setValue('projects', 'Not specified')
+        }
+        
+        console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
+        console.log('[parse-files] Form values after auto-fill:', {
+          education: form.getValues('education'),
+          projects: form.getValues('projects'),
+        })
+      } else {
+        console.warn('[parse-files] No extractedResumeData found in response')
       }
 
       // Add JD requirements to additional instructions if JD is provided
@@ -428,12 +566,22 @@ export default function AIResumeBuilderPage() {
         const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${result.jdRequirements.requiredSkills?.join(', ') || 'N/A'}\n- Qualifications: ${result.jdRequirements.qualifications || 'N/A'}\n- Key Requirements: ${result.jdRequirements.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
         const currentInstructions = form.getValues('additionalInstructions') || ''
         form.setValue('additionalInstructions', currentInstructions + jdInstructions)
+        console.log('[parse-files] Added JD requirements to instructions')
       }
 
-      toast.success('Files parsed successfully! Form auto-filled.', { id: 'parse-files' })
+      if (fieldsFilled > 0) {
+        toast.success(`Files parsed successfully! ${fieldsFilled} form fields auto-filled.`, { id: 'parse-files' })
+      } else if (result.extractedResumeData) {
+        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', { id: 'parse-files' })
+      } else {
+        toast.success('Files parsed successfully!', { id: 'parse-files' })
+      }
     } catch (error) {
       console.error('Error parsing files:', error)
-      toast.error('Failed to parse files. Please try again.', { id: 'parse-files' })
+      const errorMessage = error instanceof Error && error.message.includes('timeout')
+        ? 'Parsing took too long. Please try with smaller files or check your connection.'
+        : 'Failed to parse files. Please try again.'
+      toast.error(errorMessage, { id: 'parse-files' })
     } finally {
       setIsParsingFiles(false)
     }

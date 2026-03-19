@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { generateLaTeXResume } from '@/lib/openrouter'
 import { env } from '@/env'
 
+// Configure runtime for longer operations
+export const maxDuration = 120 // 2 minutes for AI generation
+
 const resumeRequestSchema = z.object({
   fullName: z.string().min(1).max(100),
   email: z.string().email(),

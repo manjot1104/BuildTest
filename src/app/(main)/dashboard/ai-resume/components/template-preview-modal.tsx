@@ -51,18 +51,22 @@ function extractMandatoryBlock(styleGuide: string | undefined, kind: 'HTML' | 'L
   const startIdx = styleGuide.indexOf(startToken)
   if (startIdx === -1) return null
 
-  const afterStart = styleGuide.slice(startIdx + startToken.length)
+  const afterStart = styleGuide.slice(startIdx + startToken.length).trim()
 
   // Stop at CRITICAL rules or next mandatory block marker
   const endCandidates = [
     afterStart.indexOf('CRITICAL FORMATTING RULES:'),
     afterStart.indexOf('MANDATORY STRUCTURE (HTML):'),
     afterStart.indexOf('MANDATORY STRUCTURE (LaTeX):'),
-  ].filter((n) => n !== -1)
+  ].filter((n) => n !== -1 && n > 0)
 
   const endIdx = endCandidates.length ? Math.min(...endCandidates) : afterStart.length
   const block = afterStart.slice(0, endIdx).trim()
-  return block.length ? block : null
+  
+  // Remove leading/trailing backticks or code markers if present
+  const cleaned = block.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim()
+  
+  return cleaned.length ? cleaned : null
 }
 
 // Parse experience data into structured format
@@ -1905,7 +1909,14 @@ export function ResumeTemplatePreviewModal({
           setIsCompilingPdf(false)
         })
     } else if (format === 'html') {
-      setPreviewContent(generateSampleHtml(template))
+      const htmlContent = generateSampleHtml(template)
+      // Ensure HTML is valid and complete
+      if (htmlContent && htmlContent.trim()) {
+        setPreviewContent(htmlContent)
+      } else {
+        console.error('Failed to generate HTML preview for template:', template.id)
+        setPreviewContent('')
+      }
       setPdfUrl(null)
     } else {
       // For 'both' or undefined, use currentFormat
@@ -1936,7 +1947,14 @@ export function ResumeTemplatePreviewModal({
             setIsCompilingPdf(false)
           })
       } else {
-        setPreviewContent(generateSampleHtml(template))
+        const htmlContent = generateSampleHtml(template)
+        // Ensure HTML is valid and complete
+        if (htmlContent && htmlContent.trim()) {
+          setPreviewContent(htmlContent)
+        } else {
+          console.error('Failed to generate HTML preview for template:', template.id)
+          setPreviewContent('')
+        }
         setPdfUrl(null)
       }
     }
@@ -2050,12 +2068,21 @@ export function ResumeTemplatePreviewModal({
           {displayFormat === 'html' ? (
             // HTML Preview - Render in iframe
             <div className="rounded-lg border border-white/10 bg-white shadow-2xl">
+              {previewContent && previewContent.trim() ? (
               <iframe
                 srcDoc={previewContent}
                 className="h-[800px] w-full rounded-lg"
                 style={{ border: 'none' }}
                 title="HTML Resume Preview"
+                  sandbox="allow-same-origin"
               />
+              ) : (
+                <div className="flex h-[800px] items-center justify-center p-6">
+                  <div className="text-center">
+                    <p className="text-sm text-white/60 mb-2">Loading preview...</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             // LaTeX Preview - Show rendered PDF
