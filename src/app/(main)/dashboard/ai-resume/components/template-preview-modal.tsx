@@ -1880,6 +1880,7 @@ export function ResumeTemplatePreviewModal({
   useEffect(() => {
     if (!open || !template) return
 
+    let cancelled = false
     const format = template.format || 'both'
     const effectiveFormat = format === 'both' ? currentFormat : format
 
@@ -1887,7 +1888,6 @@ export function ResumeTemplatePreviewModal({
       const latexCode = generateSampleLatex(template)
       setPreviewContent(latexCode)
 
-      let cancelled = false
       setIsCompilingPdf(true)
       fetch('/api/resume/compile-pdf', {
         method: 'POST',
@@ -1933,6 +1933,7 @@ export function ResumeTemplatePreviewModal({
           body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
         })
           .then(async (res) => {
+            if (cancelled) return
             if (res.ok) {
               const blob = await res.blob()
               const url = URL.createObjectURL(blob)
@@ -1942,10 +1943,10 @@ export function ResumeTemplatePreviewModal({
             }
           })
           .catch(() => {
-            setPdfUrl(null)
+            if (!cancelled) setPdfUrl(null)
           })
           .finally(() => {
-            setIsCompilingPdf(false)
+            if (!cancelled) setIsCompilingPdf(false)
           })
       } else {
         const htmlContent = generateSampleHtml(template)
