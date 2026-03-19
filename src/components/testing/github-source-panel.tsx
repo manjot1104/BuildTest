@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useGithubStatus } from "@/client-api/query-hooks/use-github-hooks";
+import { useRouter } from "next/navigation";
 
 export interface GithubSourceValue {
   owner: string;
@@ -23,12 +24,13 @@ interface GithubSourcePanelProps {
 type ValState = "idle" | "validating" | "valid" | "invalid";
 
 export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePanelProps) {
+  const router = useRouter();
   const { data: githubStatus, isLoading } = useGithubStatus();
 
   const [expanded, setExpanded] = useState(false);
-  const [owner, setOwner]       = useState("");
-  const [repo, setRepo]         = useState("");
-  const [branch, setBranch]     = useState("");
+  const [owner, setOwner] = useState("");
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("");
 
   const [valState, setValState] = useState<ValState>("idle");
   const [valError, setValError] = useState("");
@@ -45,10 +47,10 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
     }
   }, [githubStatus?.login, owner]);
 
-  const ownerTrimmed  = owner.trim();
-  const repoTrimmed   = repo.trim();
+  const ownerTrimmed = owner.trim();
+  const repoTrimmed = repo.trim();
   const branchTrimmed = branch.trim() || "main";
-  const inputsFilled  = ownerTrimmed !== "" && repoTrimmed !== "";
+  const inputsFilled = ownerTrimmed !== "" && repoTrimmed !== "";
 
   // Reset when user edits after validating
   useEffect(() => {
@@ -70,7 +72,7 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
     onChange(null);
 
     try {
-      const qs  = new URLSearchParams({ owner: ownerTrimmed, repo: repoTrimmed, branch: branchTrimmed });
+      const qs = new URLSearchParams({ owner: ownerTrimmed, repo: repoTrimmed, branch: branchTrimmed });
       const res = await fetch(`/api/github/validate?${qs}`);
       const json = await res.json() as {
         valid: boolean;
@@ -108,8 +110,8 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
   const isValidating = valState === "validating";
 
   function btnLabel() {
-    if (isValidating)           return "Checking…";
-    if (valState === "valid")   return "Validated ✓";
+    if (isValidating) return "Checking…";
+    if (valState === "valid") return "Validated ✓";
     if (valState === "invalid") return "Retry";
     return "Validate Repo";
   }
@@ -184,13 +186,14 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
                   </p>
                 </div>
               </div>
-              <a
-                href="http://localhost:3000/login"
+              <button
+                type="button"
+                onClick={() => router.push("/login")}
                 className="flex items-center justify-center gap-2 w-full h-9 rounded-lg bg-[#24292f] text-white text-xs font-semibold hover:bg-[#2f363d] transition-colors"
               >
                 <Github className="h-4 w-4" />
                 Sign in with GitHub
-              </a>
+              </button>
             </div>
           )}
 
@@ -271,10 +274,10 @@ export function GithubSourcePanel({ onChange, disabled = false }: GithubSourcePa
                       onClick={() => { void handleValidate(); }}
                       className={btnClass()}
                     >
-                      {isValidating                        && <Loader2      className="h-3.5 w-3.5 animate-spin" />}
-                      {!isValidating && valState === "valid"   && <CheckCircle2 className="h-3.5 w-3.5" />}
-                      {!isValidating && valState === "invalid" && <XCircle      className="h-3.5 w-3.5" />}
-                      {!isValidating && valState === "idle"    && <ShieldCheck  className="h-3.5 w-3.5" />}
+                      {isValidating && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {!isValidating && valState === "valid" && <CheckCircle2 className="h-3.5 w-3.5" />}
+                      {!isValidating && valState === "invalid" && <XCircle className="h-3.5 w-3.5" />}
+                      {!isValidating && valState === "idle" && <ShieldCheck className="h-3.5 w-3.5" />}
                       {btnLabel()}
                     </button>
 
