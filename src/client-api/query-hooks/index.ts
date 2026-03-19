@@ -93,6 +93,7 @@ export {
   useGithubRepoForChat,
   usePushToGithub,
   GithubPushError,
+  useGithubSourceValidation,
 } from './use-github-hooks'
 
 export type {
@@ -100,4 +101,37 @@ export type {
   GithubRepoInfo,
   PushToGithubRequest,
   PushToGithubResponse,
+  GithubSourceValidationState,
 } from './use-github-hooks'
+
+// Testing hooks
+export {
+  useTestRunStatus,
+  useTestReport,
+  useTestHistory,
+  usePublicTestReport,
+  useEmbedBadge,
+  useReviewTestCases,
+  useTestRunSSE,
+  useStartTestRun,
+  useCancelTestRun,
+  useCreateTestCase,
+  useUpdateTestCase,
+  useDeleteTestCase,
+  useConfirmAndExecute,
+  useExportReportPdf,
+} from './use-testing-hooks'
+
+export type {
+  TestRun,
+  Bug,
+  TestCase,
+  ReviewTestCase,
+  TestReport,
+  TestHistoryItem,
+  LiveTestCase,
+  PerformanceGauge,
+  TrendDataPoint,
+  SSEState,
+  TimeoutOverrides,
+} from './use-testing-hooks'

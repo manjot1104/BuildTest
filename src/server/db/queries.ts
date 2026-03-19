@@ -713,6 +713,32 @@ export type TestCaseInsert = typeof test_cases.$inferInsert
 // ─── Test Run ─────────────────────────────────────────────────────────────────
 
 /**
+ * Counts test runs started by a user today (UTC calendar day).
+ * Used to enforce per-plan daily run limits in startTestRunHandler and
+ * getTestUsageHandler. Counts all statuses so a failed or in-progress run
+ * still consumes quota — only the DB insert happening counts, regardless of
+ * outcome. This prevents users from repeatedly hammering the endpoint on
+ * transient failures to work around the daily cap.
+ */
+export async function countTestRunsTodayByUserId(userId: string): Promise<number> {
+  // Start of today in UTC (midnight)
+  const todayUtc = new Date()
+  todayUtc.setUTCHours(0, 0, 0, 0)
+
+  const [result] = await db
+    .select({ count: count(test_runs.id) })
+    .from(test_runs)
+    .where(
+      and(
+        eq(test_runs.user_id, userId),
+        gte(test_runs.started_at, todayUtc),
+      ),
+    )
+
+  return result?.count ?? 0
+}
+
+/**
  * Fetches a single test run by id with optional relations.
  * Used by getTestRunHandler, streamTestRunHandler, cancelTestRunHandler.
  */

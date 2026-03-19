@@ -384,6 +384,8 @@ export const testingKeys = {
     [...testingKeys.all, "public-report", slug] as const,
   badge: (token: string) => [...testingKeys.all, "badge", token] as const,
   cases: (runId: string) => [...testingKeys.all, "cases", runId] as const,
+  // Daily run quota — fetched by useTestUsage for the usage indicator.
+  usage: () => [...testingKeys.all, "usage"] as const,
 };
 
 const TERMINAL_STATUSES = new Set(["complete", "failed", "cancelled"]);
@@ -496,6 +498,28 @@ export function useReviewTestCases(testRunId: string | null, enabled = true) {
     },
     enabled: !!testRunId && enabled,
     staleTime: 0,
+    retry: 1,
+  });
+}
+
+/**
+ * useTestUsage
+ *
+ * Fetches today's run count and daily limit for the authenticated user.
+ * Used to render the usage pill near the Run button and disable it when
+ * the daily cap is reached. Refetched automatically after a run starts.
+ * Polls every 60s while the page is open so the count stays fresh.
+ */
+export function useTestUsage() {
+  return useQuery({
+    queryKey: testingKeys.usage(),
+    queryFn: async (): Promise<{ runsToday: number; dailyLimit: number; planId: string }> => {
+      const res = await fetch("/api/test/usage");
+      if (!res.ok) throw new Error("Failed to fetch test usage");
+      return (await res.json()) as { runsToday: number; dailyLimit: number; planId: string };
+    },
+    staleTime: 1000 * 30, // treat as fresh for 30s to avoid redundant fetches
+    refetchInterval: 1000 * 60, // background poll every 60s
     retry: 1,
   });
 }
@@ -820,8 +844,8 @@ export interface TimeoutOverrides {
   executeTestBaseMs?: number;
 }
 
-// [CHANGED] mutation input now also accepts optional concurrency and timeouts.
-// These map 1-to-1 to the new fields in POST /api/test/run.
+// [CHANGED] mutation input now also accepts optional concurrency, timeouts,
+// and [GITHUB] optional github source fields.
 // All fields remain optional — omitting them keeps server defaults.
 export function useStartTestRun() {
   const queryClient = useQueryClient();
@@ -837,12 +861,26 @@ export function useStartTestRun() {
        * Number of parallel TinyFish extraction calls during Stage 2 crawl.
        * Clamped server-side to [1, 20]. Omit to use server default (5).
        */
-      concurrency?: number;        // [ADDED]
+      concurrency?: number;
       /**
        * Per-run timeout overrides in milliseconds. Clamped server-side to
        * [30 000, 600 000] per field. Omit individual fields to keep defaults.
        */
-      timeouts?: TimeoutOverrides; // [ADDED]
+      timeouts?: TimeoutOverrides;
+      /**
+       * [GITHUB] GitHub repo owner for source code analysis (e.g. "vercel").
+       * All three github fields must be present for enrichment to apply.
+       * Stripped server-side when the user has no GitHub token.
+       */
+      githubOwner?: string;
+      /**
+       * [GITHUB] GitHub repo name for source code analysis (e.g. "next.js").
+       */
+      githubRepo?: string;
+      /**
+       * [GITHUB] Branch to analyse (e.g. "main").
+       */
+      githubBranch?: string;
     }): Promise<{ testRunId: string }> => {
       const res = await fetch("/api/test/run", {
         method: "POST",
@@ -856,6 +894,9 @@ export function useStartTestRun() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: testingKeys.history() });
+      // Invalidate usage so the pill re-fetches after a run is started
+      // and reflects the updated count immediately.
+      void queryClient.invalidateQueries({ queryKey: testingKeys.usage() });
     },
   });
 }
