@@ -220,8 +220,7 @@ export function computeResponsiveLayout(
   const margin = device === 'mobile' ? 10 : 16
   const maxW = targetWidth - margin * 2
 
-  // Step 1: Apply per-element responsive style/font scaling (NOT position scaling —
-  //         positions will be laid out by the reflow algorithm below).
+  // Step 1: Apply per-element responsive style/font scaling.
   const scaled: CanvasElement[] = elements.map((el) =>
     getResponsiveElement(el, device, desktopWidth),
   )

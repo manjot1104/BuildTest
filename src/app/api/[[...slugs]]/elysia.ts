@@ -474,7 +474,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     const chats = await getStarredChats(session.user.id)
     return chats.map((chat) => ({
       id: chat.id,
-      v0ChatId: chat.v0_chat_id || chat.conversation_id || chat.id,
+    v0ChatId: chat.v0_chat_id || chat.id,  
+  conversationId: chat.conversation_id,
       title: chat.title,
       prompt: chat.prompt,
       demoUrl: chat.demo_url,

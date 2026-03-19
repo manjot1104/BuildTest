@@ -186,16 +186,13 @@ function StaticEl({ el }: { el: CanvasElement }) {
               {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
                 <a key={i} href={item.href || '#'}
                   onClick={(e) => {
-                    // External URLs — let browser handle
                     if (item.href.startsWith('http://') || item.href.startsWith('https://')) return
                     e.preventDefault()
                     e.stopPropagation()
-                    // #anchor links — find element by ID first
                     if (item.href.startsWith('#') && item.href.length > 1) {
                       const target = document.getElementById(item.href.slice(1))
                       if (target) { smoothScrollToElement(target); return }
                     }
-                    // Fallback: fuzzy match by label name
                     const heading = findSectionHeading(item.label)
                     if (heading) smoothScrollToElement(heading)
                   }}
