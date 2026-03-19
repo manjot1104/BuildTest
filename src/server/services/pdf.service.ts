@@ -72,32 +72,17 @@ export async function generatePDFFromLatex({
  */
 export async function generatePDFFromLatexPuppeteer({
   latexContent,
-  filename = 'resume',
+  filename: _filename = 'resume',
 }: PDFGenerationOptions): Promise<Buffer> {
   try {
-    const puppeteer = await import('puppeteer');
     const { LaTeXJS } = await import('latex.js');
+    const { launchBrowser } = await import('@/lib/browser');
 
     // Convert LaTeX to HTML
     const latex = new LaTeXJS();
     const html = latex.parseAndGenerateHTML(latexContent);
 
-    // Launch Puppeteer with enhanced configuration
-    const browser = await puppeteer.default.launch({
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-      ],
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      ignoreHTTPSErrors: true,
-      timeout: 30000,
-    });
+    const browser = await launchBrowser();
 
     const page = await browser.newPage();
     

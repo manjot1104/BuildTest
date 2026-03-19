@@ -3,6 +3,7 @@
 import React, { useRef, useEffect, useState } from 'react'
 import { X, Monitor, Tablet, Smartphone, ExternalLink } from 'lucide-react'
 import { NavbarScrollHandler } from './navbar-scroll-handler'
+import { RenderIcon } from './element-renderer'
 import { type CanvasElement, type CanvasBackground, type EnterAnimation, type ResponsiveDevice, computeResponsiveLayout } from './types'
 
 import { findSectionHeading, smoothScrollToElement } from '@/lib/navigation-utils'
@@ -14,15 +15,6 @@ const DEVICES = [
   { id: 'tablet'  as const, label: 'Tablet',  Icon: Tablet,     width: 768,  height: 1024 },
   { id: 'mobile'  as const, label: 'Mobile',  Icon: Smartphone, width: 375,  height: 844  },
 ]
-
-// ─── Icon characters ──────────────────────────────────────────────────────────
-
-const ICON_CHARS: Record<string, string> = {
-  star: '★', heart: '♥', zap: '⚡', check: '✓', home: '⌂', user: '👤',
-  mail: '✉', phone: '☎', globe: '🌐', camera: '📷', code: '</>',
-  music: '♪', coffee: '☕', shield: '🛡', rocket: '🚀', smile: '☺',
-  diamond: '◆', flame: '🔥', leaf: '🌿', crown: '♛',
-}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -93,7 +85,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
       case 'paragraph':
         return (
           <p style={{
-            width: '100%', height: '100%', margin: 0,
+            width: '100%', minHeight: '100%', margin: 0,
             color: styles.color ?? '#374151',
             fontSize: styles.fontSize ?? 16,
             fontWeight: styles.fontWeight ?? '400',
@@ -103,13 +95,15 @@ function StaticEl({ el }: { el: CanvasElement }) {
             lineHeight: styles.lineHeight ?? '1.6',
             padding: styles.padding ?? 4,
             background: getBg(),
-            wordBreak: 'break-word', whiteSpace: 'pre-wrap', overflow: 'auto',
+            wordBreak: 'break-word', whiteSpace: 'pre-wrap', overflow: 'visible',
           }}>{el.content}</p>
         )
       case 'image':
-        // eslint-disable-next-line @next/next/no-img-element
-        return <img src={el.content || 'https://placehold.co/320x220/e2e8f0/94a3b8?text=Image'} alt=""
-          style={{ width: '100%', height: '100%', objectFit: (styles.objectFit as React.CSSProperties['objectFit']) ?? 'cover', borderRadius: styles.borderRadius ?? 0, border: styles.border, boxShadow: styles.boxShadow, display: 'block' }} />
+        return <div style={{ width: '100%', height: '100%', overflow: 'hidden', borderRadius: styles.borderRadius ?? 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={el.content || 'https://placehold.co/320x220/e2e8f0/94a3b8?text=Image'} alt=""
+            style={{ width: '100%', height: '100%', objectFit: (styles.objectFit as React.CSSProperties['objectFit']) ?? 'cover', border: styles.border, boxShadow: styles.boxShadow, display: 'block' }} />
+        </div>
       case 'button': {
         const btn = (
           <button type="button" style={{
@@ -140,26 +134,45 @@ function StaticEl({ el }: { el: CanvasElement }) {
         return <div style={{ width: '100%', height: '100%' }} />
       case 'social-links': {
         const links = el.socialLinks ?? []
+        const socialIcons: Record<string, string> = {
+          github: 'GH', twitter: '𝕏', linkedin: 'in', instagram: 'IG',
+          youtube: '▶', tiktok: '♪', facebook: 'fb', discord: 'DC',
+          website: '🌐', email: '✉',
+        }
         return (
           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', gap: styles.gap ?? 16, padding: styles.padding ?? 0, flexWrap: 'wrap' }}>
             {links.filter((l) => l.url).map((link, i) => (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer"
-                style={{ color: styles.iconColor ?? '#374151', fontSize: (styles.iconSize ?? 28) * 0.6, fontWeight: '700', textDecoration: 'none' }}
+                style={{
+                  color: styles.iconColor ?? '#374151',
+                  fontSize: (styles.iconSize ?? 28) * 0.65,
+                  fontWeight: '700',
+                  textDecoration: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: styles.iconSize ?? 28,
+                  height: styles.iconSize ?? 28,
+                }}
                 title={link.platform}
               >
-                {link.platform.slice(0, 2).toUpperCase()}
+                {socialIcons[link.platform] ?? link.platform.slice(0, 2).toUpperCase()}
               </a>
             ))}
           </div>
         )
       }
-      case 'video-embed': {
-        const ytMatch = el.content.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)
-        const ytId = ytMatch?.[1]
-        return ytId
-          ? <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-          : <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Paste a YouTube URL</div>
-      }
+     case 'video-embed': {
+  const ytMatch = /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/.exec(el.content)
+  const ytId = ytMatch?.[1]
+  const isCustomVideo = el.content && !ytMatch && (el.content.includes('blob:') || el.content.startsWith('/') || el.content.includes('.mp4') || el.content.includes('.webm') || el.content.includes('.ogg'))
+  
+  return ytId
+    ? <iframe src={`https://www.youtube.com/embed/${ytId}`} style={{ width: '100%', height: '100%', border: 'none', borderRadius: styles.borderRadius ?? 8 }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+    : isCustomVideo
+    ? <video src={el.content} style={{ width: '100%', height: '100%', borderRadius: styles.borderRadius ?? 8, objectFit: 'cover' }} controls autoPlay muted />
+    : <div style={{ width: '100%', height: '100%', backgroundColor: '#0f0f0f', borderRadius: styles.borderRadius ?? 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 14 }}>Paste a YouTube URL or upload a video</div>
+}
       case 'navbar': {
         const rawItems = el.content.split('|').filter(Boolean)
         const navLinks = rawItems.slice(1).map((item) => {
@@ -167,12 +180,23 @@ function StaticEl({ el }: { el: CanvasElement }) {
           return sep > -1 ? { label: item.slice(0, sep), href: item.slice(sep + 2) } : { label: item, href: '#' }
         })
         return (
-          <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${styles.padding ?? 24}px`, borderRadius: styles.borderRadius }}>
-            <span style={{ fontWeight: '700', fontSize: (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily }}>{rawItems[0] ?? 'Brand'}</span>
-            <div style={{ display: 'flex', gap: 24 }}>
+          <nav style={{ width: '100%', height: '100%', background: getBg() ?? '#1a1a2e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: `0 ${el.width < 500 ? 12 : styles.padding ?? 24}px`, borderRadius: styles.borderRadius, overflow: 'hidden' }}>
+            <span style={{ fontWeight: '700', fontSize: el.width < 500 ? Math.min((styles.fontSize ?? 14) + 2, 13) : (styles.fontSize ?? 14) + 2, color: styles.color ?? '#ffffff', fontFamily: styles.fontFamily, flexShrink: 0, whiteSpace: 'nowrap' }}>{rawItems[0] ?? 'Brand'}</span>
+            <div style={{ display: 'flex', gap: el.width < 500 ? 8 : el.width < 800 ? 14 : 24, flexWrap: 'wrap', overflow: 'hidden', maxHeight: '100%', alignItems: 'center' }}>
               {(navLinks.length > 0 ? navLinks : [{ label: 'Home', href: '#' }, { label: 'About', href: '#' }]).map((item, i) => (
-                <a key={i} href={item.href}
-                  style={{ fontSize: styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85 }}>
+                <a key={i} href={item.href || '#'}
+                  onClick={(e) => {
+                    if (item.href.startsWith('http://') || item.href.startsWith('https://')) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (item.href.startsWith('#') && item.href.length > 1) {
+                      const target = document.getElementById(item.href.slice(1))
+                      if (target) { smoothScrollToElement(target); return }
+                    }
+                    const heading = findSectionHeading(item.label)
+                    if (heading) smoothScrollToElement(heading)
+                  }}
+                  style={{ fontSize: el.width < 500 ? Math.min(styles.fontSize ?? 14, 11) : styles.fontSize ?? 14, fontWeight: styles.fontWeight ?? '500', color: styles.color ?? '#ffffff', textDecoration: 'none', opacity: 0.85, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   {item.label}
                 </a>
               ))}
@@ -183,7 +207,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
       case 'form': {
         const formFields = el.formFields ?? []
         return (
-          <div style={{ width: '100%', height: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ width: '100%', minHeight: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, overflow: 'visible', display: 'flex', flexDirection: 'column', gap: 12 }}>
             {el.content && <h3 style={{ margin: 0, fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>{el.content}</h3>}
             {formFields.map((f) => (
               <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -211,8 +235,8 @@ function StaticEl({ el }: { el: CanvasElement }) {
         )
       case 'icon':
         return (
-          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.iconColor ?? '#3b82f6', fontSize: styles.iconSize ?? 48 }}>
-            {ICON_CHARS[el.content] ?? ICON_CHARS[el.iconName ?? ''] ?? '★'}
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: styles.iconColor ?? '#3b82f6' }}>
+            <RenderIcon name={el.content || el.iconName || 'star'} size={styles.iconSize ?? 48} />
           </div>
         )
       default:
@@ -225,7 +249,11 @@ function StaticEl({ el }: { el: CanvasElement }) {
     : inner
 
   return (
-    <div className={animClass(el.enterAnimation)} style={wrapStyle}>
+    <div
+      id={el.type === 'section' && el.sectionKey ? el.sectionKey : undefined}
+      className={animClass(el.enterAnimation)}
+      style={wrapStyle}
+    >
       {content}
     </div>
   )
@@ -233,7 +261,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
 
 // ─── Scaled preview canvas ────────────────────────────────────────────────────
 
-function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH, deviceId }: {
+function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH: _containerH, deviceId }: {
   elements: CanvasElement[]
   background: CanvasBackground
   deviceWidth: number

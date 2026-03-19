@@ -1879,14 +1879,15 @@ export function ResumeTemplatePreviewModal({
 
   useEffect(() => {
     if (!open || !template) return
-    
-    // Generate preview content based on template format
+
     const format = template.format || 'both'
-    if (format === 'latex') {
+    const effectiveFormat = format === 'both' ? currentFormat : format
+
+    if (effectiveFormat === 'latex') {
       const latexCode = generateSampleLatex(template)
       setPreviewContent(latexCode)
-      
-      // Compile LaTeX to PDF for preview
+
+      let cancelled = false
       setIsCompilingPdf(true)
       fetch('/api/resume/compile-pdf', {
         method: 'POST',
@@ -1894,19 +1895,19 @@ export function ResumeTemplatePreviewModal({
         body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
       })
         .then(async (res) => {
+          if (cancelled) return
           if (res.ok) {
             const blob = await res.blob()
-            const url = URL.createObjectURL(blob)
-            setPdfUrl(url)
+            setPdfUrl(URL.createObjectURL(blob))
           } else {
             setPdfUrl(null)
           }
         })
         .catch(() => {
-          setPdfUrl(null)
+          if (!cancelled) setPdfUrl(null)
         })
         .finally(() => {
-          setIsCompilingPdf(false)
+          if (!cancelled) setIsCompilingPdf(false)
         })
     } else if (format === 'html') {
       const htmlContent = generateSampleHtml(template)
@@ -1958,7 +1959,10 @@ export function ResumeTemplatePreviewModal({
         setPdfUrl(null)
       }
     }
-    
+
+    return () => {
+      cancelled = true
+    }
   }, [open, template, currentFormat])
 
   // Cleanup PDF URL when modal closes or component unmounts

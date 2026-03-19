@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -22,6 +22,7 @@ import { savePromptToStorage, createImageAttachment, type ImageAttachment } from
 import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 
 // --- Animation Variants ---
 
@@ -374,7 +375,7 @@ const FEATURE_DEMOS = [
     },
 ] as const
 
-function FeatureVideo({ src, index }: { src: string; index: number }) {
+function FeatureVideo({ src, index, onClick }: { src: string; index: number; onClick?: () => void }) {
     const ref = useRef<HTMLVideoElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(containerRef, { once: false, margin: '-100px' })
@@ -408,7 +409,8 @@ function FeatureVideo({ src, index }: { src: string; index: number }) {
                 whileInView="visible"
                 viewport={{ once: true, margin: '-80px' }}
                 custom={0.15}
-                className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15]"
+                className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15] cursor-pointer group/video"
+                onClick={onClick}
             >
                 <video
                     ref={ref}
@@ -419,6 +421,12 @@ function FeatureVideo({ src, index }: { src: string; index: number }) {
                     preload="metadata"
                     className="w-full block"
                 />
+                {/* Play overlay on hover */}
+                <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover/video:bg-black/30 transition-all duration-300">
+                    <div className="size-14 rounded-full bg-white/90 dark:bg-white/80 flex items-center justify-center opacity-0 group-hover/video:opacity-100 scale-75 group-hover/video:scale-100 transition-all duration-300 shadow-xl">
+                        <Play className="size-6 text-black fill-black ml-0.5" />
+                    </div>
+                </div>
             </motion.div>
         </div>
     )
@@ -434,6 +442,8 @@ export default function LandingPage() {
     const [prompt, setPrompt] = useState('')
     const [inputFocused, setInputFocused] = useState(false)
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const [openVideoIndex, setOpenVideoIndex] = useState<number | null>(null)
+    const dialogVideoRef = useRef<HTMLVideoElement>(null)
     const { state: micState, error: micError, clearError: clearMicError, toggle: toggleMic } = useSpeechRecord(
         (text) => setPrompt((prev) => (prev ? `${prev} ${text}` : text)),
     )
@@ -553,7 +563,7 @@ export default function LandingPage() {
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-                className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
+               className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />
@@ -1211,7 +1221,7 @@ export default function LandingPage() {
                                             }}
                                             transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut', delay: index * 2 }}
                                         />
-                                        <FeatureVideo src={feature.video} index={index} />
+                                        <FeatureVideo src={feature.video} index={index} onClick={() => setOpenVideoIndex(index)} />
                                     </div>
                                 </div>
                             )
@@ -1469,6 +1479,72 @@ export default function LandingPage() {
 
             {/* ── Footer ── */}
             <Footer />
+
+            {/* ── Video Demo Dialog ── */}
+            <Dialog
+                open={openVideoIndex !== null}
+                onOpenChange={(open) => {
+                    if (!open) setOpenVideoIndex(null)
+                }}
+            >
+                <DialogContent
+                    showCloseButton
+                    className="sm:max-w-4xl max-h-[90vh] p-0 gap-0 bg-black border-white/10 overflow-hidden"
+                >
+                    <DialogTitle className="sr-only">
+                        {openVideoIndex !== null ? FEATURE_DEMOS[openVideoIndex]?.title : 'Video'} Demo
+                    </DialogTitle>
+                    {openVideoIndex !== null && (
+                        <>
+                            {/* Video */}
+                            <div className="relative w-full">
+                                <video
+                                    ref={dialogVideoRef}
+                                    key={FEATURE_DEMOS[openVideoIndex]?.video}
+                                    src={FEATURE_DEMOS[openVideoIndex]?.video}
+                                    controls
+                                    autoPlay
+                                    playsInline
+                                    className="w-full block max-h-[70vh] object-contain bg-black"
+                                />
+                            </div>
+
+                            {/* Bottom bar: title + navigation */}
+                            <div className="flex items-center justify-between px-4 py-3 bg-black/80 border-t border-white/10">
+                                {/* Prev button */}
+                                <button
+                                    onClick={() => setOpenVideoIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : prev))}
+                                    disabled={openVideoIndex === 0}
+                                    className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <ChevronLeft className="size-4" />
+                                    <span className="hidden sm:inline">Previous</span>
+                                </button>
+
+                                {/* Title */}
+                                <div className="text-center">
+                                    <p className="text-sm font-medium text-white">
+                                        {FEATURE_DEMOS[openVideoIndex]?.title}
+                                    </p>
+                                    <p className="text-xs text-white/50">
+                                        {openVideoIndex + 1} / {FEATURE_DEMOS.length}
+                                    </p>
+                                </div>
+
+                                {/* Next button */}
+                                <button
+                                    onClick={() => setOpenVideoIndex((prev) => (prev !== null && prev < FEATURE_DEMOS.length - 1 ? prev + 1 : prev))}
+                                    disabled={openVideoIndex === FEATURE_DEMOS.length - 1}
+                                    className="flex items-center gap-1.5 text-sm text-white/70 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                >
+                                    <span className="hidden sm:inline">Next</span>
+                                    <ChevronRight className="size-4" />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

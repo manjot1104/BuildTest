@@ -20,7 +20,7 @@ import {
   addAdditionalCredits,
 } from '@/server/services/credits.service'
 import { getV0Client } from '@/lib/v0-client'
-import { enhanceFirstPrompt } from '@/lib/prompt-enhancer'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatRequestBody,
   type ChatMessage,
@@ -82,7 +82,7 @@ type GetChatDetailsResponse = (ChatDetail & { isOwner?: boolean }) | ErrorRespon
 type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
 
 /** Response type for getChatHistoryHandler */
-type GetChatHistoryResponse = { data: ChatHistoryItem[] } | ErrorResponse
+type GetChatHistoryResponse = { data: ChatHistoryItem[]; page: number; totalPages: number; totalItems: number } | ErrorResponse
 
 /** Response type for getCommunityBuildsHandler */
 type GetCommunityBuildsResponse = CommunityBuildsPage | ErrorResponse
@@ -197,10 +197,21 @@ export async function createChatHandler({
   try {
     const session = await getSession()
     sessionUserId = session?.user?.id
-    const { message, chatId, attachments } = body
+  const { message, chatId, attachments, envVarNames = [] } = body
 
     if (!message) {
       return { error: 'Message is required' }
+    }
+
+    // Ownership check: only the chat owner can send follow-up messages
+    if (chatId && session?.user?.id) {
+      const existingChat = await getUserChat({ v0ChatId: chatId })
+      if (existingChat && existingChat.user_id !== session.user.id) {
+        return {
+          error: 'forbidden',
+          details: 'You cannot send messages to a chat you do not own. Fork the chat first.',
+        }
+      }
     }
 
     // Check rate limiting
@@ -252,11 +263,11 @@ export async function createChatHandler({
     if (chatId) {
       try {
         // Continue existing chat (non-streaming)
-        chatResult = await v0.chats.sendMessage({
-          chatId,
-          message,
-          ...(attachments && attachments.length > 0 && { attachments }),
-        })
+       chatResult = await v0.chats.sendMessage({
+  chatId,
+message: enhanceFollowUpPrompt(message, envVarNames),
+  ...(attachments && attachments.length > 0 && { attachments }),
+})
       } catch (error) {
         // If chat doesn't exist (404), create a new chat instead
         const errorMessage =
@@ -268,7 +279,7 @@ export async function createChatHandler({
         ) {
           // Create new chat (non-streaming)
           chatResult = await v0.chats.create({
-            message: enhanceFirstPrompt(message),
+           message: enhanceFirstPrompt(message, envVarNames),
             responseMode: 'sync',
             ...(attachments && attachments.length > 0 && { attachments }),
           })
@@ -281,7 +292,7 @@ export async function createChatHandler({
     } else {
       // Create new chat with enhanced first prompt (non-streaming)
       chatResult = await v0.chats.create({
-        message: enhanceFirstPrompt(message),
+     message: enhanceFirstPrompt(message, envVarNames),
         responseMode: 'sync',
         ...(attachments && attachments.length > 0 && { attachments }),
       })
@@ -429,7 +440,9 @@ export async function getChatDetailsHandler({
       throw error
     }
 
-    return { ...chatDetails, isOwner }
+    const localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+const resolvedDemo = chatDetails.demo ?? localChat?.demo_url ?? undefined
+return { ...chatDetails, demo: resolvedDemo, isOwner }
   } catch {
     return {
       error: 'Failed to fetch chat details',
@@ -554,23 +567,27 @@ export async function forkChatHandler({
 export async function getChatHistoryHandler({
   query,
 }: {
-  query: { type?: "all" | "builder" | "openrouter" }
+  query: { type?: "all" | "builder" | "openrouter"; page?: number; limit?: number }
 }): Promise<GetChatHistoryResponse> {
   try {
     const session = await getSession()
 
     if (!session?.user?.id) {
-      return { data: [] }
+      return { data: [], page: 1, totalPages: 0, totalItems: 0 }
     }
 
     const type = query?.type ?? "all"
+    const page = Math.max(query?.page ?? 1, 1)
+    const limit = Math.min(Math.max(query?.limit ?? 10, 1), 50)
+    const offset = (page - 1) * limit
 
     let userChats: any[] = []
+    let totalItems = 0
 
 if (type === "builder" || type === "all") {
   const builderChats = await getUserChatsByUserId({
     userId: session.user.id,
-    limit: 50,
+    limit: 999,
     type: "builder",
   })
 
@@ -587,7 +604,6 @@ if (type === "openrouter" || type === "all") {
     .from(conversations)
     .where(eq(conversations.user_id, session.user.id))
     .orderBy(desc(conversations.created_at))
-    .limit(50)
 
   userChats.push(
     ...aiChats.map((chat) => ({
@@ -603,7 +619,7 @@ if (type === "openrouter" || type === "all") {
   )
 }
 
-    const chatHistory: ChatHistoryItem[] = userChats
+    const allChats: ChatHistoryItem[] = userChats
       .filter((chat) => chat.v0_chat_id)
       .map((chat) => ({
         id: chat.id,
@@ -614,10 +630,15 @@ if (type === "openrouter" || type === "all") {
         previewUrl: chat.preview_url,
         createdAt: chat.created_at.toISOString(),
         updatedAt: chat.updated_at.toISOString(),
-        type: chat.chat_type?.toLowerCase() === 'openrouter' || !chat.demo_url && chat.v0_chat_id && chat.v0_chat_id === chat.id ? 'openrouter' : 'builder',
+        type: (chat.chat_type?.toLowerCase() === 'openrouter' || !chat.demo_url && chat.v0_chat_id && chat.v0_chat_id === chat.id ? 'openrouter' : 'builder') as 'builder' | 'openrouter',
       }))
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
-    return { data: chatHistory }
+    totalItems = allChats.length
+    const totalPages = Math.ceil(totalItems / limit)
+    const paginatedChats = allChats.slice(offset, offset + limit)
+
+    return { data: paginatedChats, page, totalPages, totalItems }
   } catch (error: any) {
     return {
       error: "Failed to fetch chat history",

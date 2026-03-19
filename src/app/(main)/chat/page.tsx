@@ -1,6 +1,9 @@
 'use client'
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { ModeSelection } from "./components/mode-selection"
-import React, { useState, useEffect, useRef, Suspense } from 'react'
+import { KeyRound } from 'lucide-react'
+import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
+import { useEnvVariables } from '@/hooks/use-env-variables'
 import { useSearchParams } from 'next/navigation'
 import { useRouter } from "next/navigation"
 import {
@@ -44,6 +47,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BuildifyLogo } from '@/components/buildify-logo'
+import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function SearchParamsHandler({
@@ -66,13 +70,16 @@ function SearchParamsHandler({
             newUrl.searchParams.delete('reset')
             window.history.replaceState({}, '', newUrl.pathname)
         }
-    }, [searchParams, onReset])
+    }, [searchParams])
 
     // Handle chatId from URL
-    useEffect(() => {
-        const chatId = searchParams.get('chatId')
+   // Handle chatId from URL
+useEffect(() => {
+    const chatId = searchParams.get('chatId')
+    if (chatId !== null) {              
         onChatIdChange(chatId)
-    }, [searchParams, onChatIdChange])
+    }
+}, [searchParams, onChatIdChange])
 
     return null
 }
@@ -84,30 +91,32 @@ export default function ChatPage() {
     const [isLoading, setIsLoading] = useState(false)
     const [showChatInterface, setShowChatInterface] = useState(false)
 
+const [envPanelOpen, setEnvPanelOpen] = useState(false)
+const { variables } = useEnvVariables()
+    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
+    const [isDragOver, setIsDragOver] = useState(false)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
+    const [micError, setMicError] = useState<string | null>(null)
+    const [urlChatId, setUrlChatId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+        return new URLSearchParams(window.location.search).get('chatId')
+    }
+    return null
+})
    useEffect(() => {
   if (chatMode === "AI_CHAT") {
     setShowChatInterface(true)
     setUrlChatId(null)
   }
 }, [chatMode])
-    const [attachments, setAttachments] = useState<ImageAttachment[]>([])
-    const [isDragOver, setIsDragOver] = useState(false)
-    const [isFullscreen, setIsFullscreen] = useState(false)
-    const [activePanel, setActivePanel] = useState<'chat' | 'preview'>('chat')
-    const [micError, setMicError] = useState<string | null>(null)
-   const [urlChatId, setUrlChatId] = useState<string | null>(() => {
-   if (typeof window !== 'undefined') {
-   return new URLSearchParams(window.location.search).get('chatId')
-   }
-   return null
-   })
 
     useEffect(() => {
-        if (urlChatId && !chatMode) {
+        if (urlChatId) {
             setChatMode("BUILDER");
             setShowChatInterface(true);
         }
-    }, [urlChatId, chatMode]);
+    }, [urlChatId]);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -156,34 +165,28 @@ export default function ChatPage() {
         setIsLoading(hookIsLoading)
     }, [hookIsLoading])
 
-    const handleReset = () => {
-        // Reset all chat-related state
-        setShowChatInterface(false)
-        setMessage('')
-        setAttachments([])
-        setIsLoading(false)
-        setIsFullscreen(false)
-        setUrlChatId(null)
+  const handleReset = useCallback(() => {
+    setShowChatInterface(false)
+    setChatMode(null)
+    setMessage('')
+    setAttachments([])
+    setIsLoading(false)
+    setIsFullscreen(false)
+    setUrlChatId(null)
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.delete('chatId')
+    window.history.replaceState({}, '', newUrl.pathname)
+    clearPromptFromStorage()
+    setTimeout(() => {
+        if (textareaRef.current) {
+            textareaRef.current.focus()
+        }
+    }, 0)
+}, [])
 
-        // Clear chatId from URL
-        const newUrl = new URL(window.location.href)
-        newUrl.searchParams.delete('chatId')
-        window.history.replaceState({}, '', newUrl.pathname)
-
-        // Clear any stored data
-        clearPromptFromStorage()
-
-        // Focus textarea after reset
-        setTimeout(() => {
-            if (textareaRef.current) {
-                textareaRef.current.focus()
-            }
-        }, 0)
-    }
-
-    const handleChatIdChange = (chatId: string | null) => {
-        setUrlChatId(chatId)
-    }
+const handleChatIdChange = (chatId: string | null) => {
+    setUrlChatId(chatId)
+}
 
     // Auto-focus the textarea on page load and restore from sessionStorage
     useEffect(() => {
@@ -305,6 +308,7 @@ export default function ChatPage() {
     if (chatMode === "AI_CHAT") {
         return (
             <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+                
                 <SubscriptionModal
                     open={showSubscriptionModal}
                     onOpenChange={setShowSubscriptionModal}
@@ -374,6 +378,22 @@ export default function ChatPage() {
                                         </div>
                                     ) : (
                                         <>
+                                            {chatHistory.length > 0 && (
+                                                <div className="flex items-center justify-end px-3 py-1.5 border-b bg-background/80">
+                                                    <ChatExportMenu
+                                                        chatId={urlChatId ?? hookCurrentChat?.id ?? ""}
+                                                        chatType="BUILDER"
+                                                        title={chatHistory.find((m) => m.type === 'user')?.content?.toString().slice(0, 60)}
+                                                        messages={chatHistory
+                                                            .filter((m) => typeof m.content === 'string')
+                                                            .map((m) => ({
+                                                                role: m.type,
+                                                                content: m.content as string,
+                                                            }))}
+                                                        disabled={isLoading || isStreaming}
+                                                    />
+                                                </div>
+                                            )}
                                             <div className="flex-1 overflow-y-auto">
                                                 <ChatMessages
                                                     chatHistory={chatHistory}
@@ -415,7 +435,7 @@ export default function ChatPage() {
             currentChat={hookCurrentChat}
             isFullscreen={isFullscreen}
             setIsFullscreen={setIsFullscreen}
-            isBuilding={false}
+            isBuilding={isLoading || isStreaming}
         />
     ) : null
 }
@@ -437,45 +457,133 @@ export default function ChatPage() {
 if (!chatMode) {
   return (
     <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-   <ModeSelection
-  onSelect={(mode) => {
-    if (mode === "AI_CHAT") {
-      router.push("/ai-chat")
-    }
-
-   if (mode === "BUILDER") {
-  setChatMode("BUILDER")
-}
-  }}
-/>
-
+      <Suspense fallback={null}>
+        <SearchParamsHandler
+          onReset={handleReset}
+          onChatIdChange={handleChatIdChange}
+        />
+      </Suspense>
+      <ModeSelection
+        onSelect={(mode) => {
+          if (mode === "AI_CHAT") {
+            router.push("/ai-chat")
+          }
+          if (mode === "BUILDER") {
+            setChatMode("BUILDER")
+          }
+        }}
+      />
     </div>
   )
 }
     const suggestions = [
         {
             label: 'Landing Page',
-            text: 'Design a modern SaaS landing page with strong visual hierarchy: a bold hero section with headline, supporting subtext, and primary call-to-action; feature sections arranged in clean content grids; tiered pricing cards with visual emphasis on the recommended plan; testimonial carousels for social proof; and a conversion-focused footer. Use a 12-column grid, generous whitespace, soft gradients, rounded surfaces, subtle shadows, and smooth hover and scroll animations. Ensure mobile-first responsiveness, accessible contrast ratios, and clear CTA affordances.',
+         text: `
+Create a modern SaaS landing page.
+
+Sections:
+- Hero section with headline, subtext and primary CTA
+- Product screenshot or illustration
+- Features grid (3–6 cards with icons)
+- Pricing section with highlighted recommended plan
+- Testimonials section
+- Conversion-focused footer with links and CTA
+
+Design Requirements:
+- Clean modern UI
+- Generous whitespace
+- Smooth hover and scroll animations
+- Mobile-first responsive layout
+`, 
             icon: Layout,
         },
         {
             label: 'Task Management',
-            text: 'Build a productivity-focused task management application using a Kanban-style layout with draggable task cards, status columns, and a collapsible sidebar for projects and filters. Include inline editing, due-date indicators, priority color cues, and completion feedback animations. Define clear hover, active, drag, empty, and loading states, support keyboard navigation, and reduce cognitive load through consistent spacing and grouping.',
+           text: `
+Build a task management web application with a Kanban-style interface.
+
+Features:
+- Sidebar with projects and filters
+- Columns: Todo, In Progress, Done
+- Draggable task cards between columns
+- Task details with title, description and due date
+- Ability to add, edit and delete tasks
+
+UI Requirements:
+- Clean dashboard layout
+- Card based design
+- Responsive interface
+`,
             icon: CheckSquare,
         },
         {
             label: 'Dashboard',
-            text: 'Create a structured analytics dashboard featuring KPI summary cards, interactive charts, and persistent filter controls. Apply strong visual hierarchy to guide attention, consistent color semantics for data interpretation, and contextual tooltips for clarity. Use a dark UI theme with high contrast, subtle dividers, loading skeletons, and smooth transitions for real-time updates without overwhelming the user.',
+        text: `
+Create an analytics dashboard.
+
+Layout:
+- Left sidebar navigation
+- Top header with search and profile
+
+Main Content:
+- KPI stats cards (Users, Revenue, Growth)
+- Line chart for trends
+- Bar chart for category performance
+- Table for recent activity
+
+Design:
+- Dark modern UI
+- Clear visual hierarchy
+- Responsive layout
+`,
             icon: BarChart3,
         },
         {
             label: 'Blog',
-            text: 'Develop a content-first blog platform with a typography-driven layout optimized for reading comfort. Include markdown-based authoring, category and tag filtering, sticky table of contents for long-form articles, and reading-progress indicators. Focus on accessibility, readable font scales, rhythmic spacing, and distraction-free article pages.',
+        text: `
+Create a modern blog platform.
+
+Pages:
+- Homepage with article cards
+- Article detail page
+- Author profile page
+
+Features:
+- Category and tag filtering
+- Search functionality
+- Reading progress indicator
+- Pagination for posts
+
+Design:
+- Typography-focused layout
+- Clean reading experience
+- Responsive design
+`,
             icon: FileText,
         },
         {
             label: 'Shop',
-            text: 'Design a high-conversion e-commerce experience with scannable product cards, clear pricing, ratings, and prominent call-to-action placement. Build detailed product pages with image galleries, variant selectors, reviews, and trust signals. Streamline cart and checkout flows using step indicators, inline validation, minimal form friction, responsive layouts, and subtle feedback animations.',
+          text: `
+Create an e-commerce store.
+
+Pages:
+- Product listing page
+- Product detail page
+- Shopping cart
+- Checkout page
+
+Features:
+- Product cards with image, price and rating
+- Add to cart functionality
+- Product variants and quantity selector
+- Order summary and checkout flow
+
+Design:
+- Clean product grid
+- Mobile responsive layout
+- High-conversion UI patterns
+`,
             icon: ShoppingCart,
         },
     ]
@@ -485,7 +593,10 @@ if (!chatMode) {
     }
 
     return (
-       <div className="bg-background h-[calc(100vh-48px)] flex flex-col overflow-hidden">
+       <ChatActionsProvider onSendMessage={(msg) => hookHandleSendMessage(msg)}>
+         <EnvVariablesPanel open={envPanelOpen} onOpenChange={setEnvPanelOpen} />
+      <div className={cn("bg-background flex flex-col", showChatInterface ? "h-[calc(100vh-48px)] overflow-hidden" : "min-h-[calc(100vh-48px)]")}>
+           
             <SubscriptionModal
                 open={showSubscriptionModal}
                 onOpenChange={setShowSubscriptionModal}
@@ -521,17 +632,26 @@ if (!chatMode) {
             />
           </div>
 
-          <ChatInput
-            message={message}
-            setMessage={setMessage}
-            onSubmit={handleSendMessage}
-            isLoading={isLoading}
-            isStreaming={isStreaming}
-            showSuggestions={false}
-            attachments={attachments}
-            onAttachmentsChange={setAttachments}
-            textareaRef={textareaRef}
-          />
+          {isViewingOthersChat ? (
+            <ForkBanner
+              isAuthenticated={!!session?.user}
+              isForking={forkChat.isPending}
+              onFork={handleFork}
+              onSignIn={() => window.location.href = "/login"}
+            />
+          ) : (
+            <ChatInput
+              message={message}
+              setMessage={setMessage}
+              onSubmit={handleSendMessage}
+              isLoading={isLoading}
+              isStreaming={isStreaming}
+              showSuggestions={false}
+              attachments={attachments}
+              onAttachmentsChange={setAttachments}
+              textareaRef={textareaRef}
+            />
+          )}
 
         </div>
       }
@@ -549,7 +669,7 @@ if (!chatMode) {
 
   </div>
 ) : (
-                <div className="max-w-2xl w-full mx-auto">
+                <div className="max-w-2xl w-full mx-auto flex-1 flex flex-col items-center justify-center px-4">
                     {/* Logo + Title */}
                     <div className="flex items-center justify-center gap-3 mb-3">
                         <div className="size-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/10 flex items-center justify-center">
@@ -592,6 +712,19 @@ if (!chatMode) {
                                         onImageSelect={handleImageFiles}
                                         disabled={isLoading}
                                     />
+                                    <button
+        type="button"
+        onClick={() => setEnvPanelOpen(true)}
+        title="Environment variables"
+        className="relative flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+    >
+        <KeyRound className="size-4" />
+        {variables.length > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+                {variables.length}
+            </span>
+        )}
+    </button>
                                 </PromptInputTools>
                                 <PromptInputTools>
                                     <PromptInputMicButton
@@ -652,13 +785,14 @@ if (!chatMode) {
                            </div>
 )}
           {!showChatInterface && (
-  <div className="px-4 sm:px-6 lg:px-8 pb-12">
+<div className="px-4 sm:px-6 lg:px-8 pb-12">
       <div className="max-w-5xl w-full mx-auto">
           <CommunityBuildsGrid />
       </div>
   </div>
 )}
         </div>
+        </ChatActionsProvider>
     )
 
 }

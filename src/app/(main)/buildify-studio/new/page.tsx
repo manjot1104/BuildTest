@@ -1,7 +1,7 @@
 import { BuildifyStudioEditor } from '@/components/buildify-studio/editor'
 
 export const metadata = {
-  title: 'New Design – Buildify',
+  title: 'New Design',
 }
 
 export default function NewDesignPage() {

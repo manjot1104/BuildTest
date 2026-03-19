@@ -3,6 +3,14 @@ const config = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  serverExternalPackages: [
+    "puppeteer",
+    "puppeteer-core",
+    "@sparticuz/chromium",
+    "@axe-core/puppeteer",
+    "axe-core",
+    "pdf-parse",
+  ],
   // Increase memory limits for large files
   webpack: (config, { isServer }) => {
     if (!isServer) {
@@ -24,13 +32,17 @@ const config = {
         },
       };
     }
-    
-    // Don't bundle pdf-parse on server side - use Node.js require
     if (isServer) {
       config.externals = config.externals || [];
-      config.externals.push('pdf-parse');
+      config.externals.push(
+        "puppeteer",
+        "puppeteer-core",
+        "@sparticuz/chromium",
+        "@axe-core/puppeteer",
+        "axe-core",
+        "pdf-parse",
+      );
     }
-    
     return config;
   },
 };

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { Shield } from "lucide-react";
 import { StarredChatsDialog } from '@/components/chat/starred-chats-dialog'
+import { ChatFoldersDialog } from '@/components/chat/chat-folders-dialog'
 import { SettingsDialog, type SettingsTab } from '@/components/settings-dialog'
 import { AppSidebar } from "@/components/layout/app-sidebar"
 import {
@@ -28,6 +29,7 @@ const SEGMENT_LABELS: Record<string, string> = {
     "chat": "New Chat",
     "buildify-studio": "Buildify Studio",
     "ai-resume": "AI Resume Builder",
+    "accessibility-tester": "Accessibility Tester",
     "docs": "Documentation",
 };
 
@@ -50,6 +52,7 @@ export default function DashboardLayout({
     };
 
     const [starredOpen, setStarredOpen] = useState(false)
+    const [foldersOpen, setFoldersOpen] = useState(false)
     const [settingsOpen, setSettingsOpen] = useState(false)
     const [settingsTab, setSettingsTab] = useState<SettingsTab>("general")
 
@@ -63,10 +66,11 @@ export default function DashboardLayout({
             <SidebarProvider>
                 <AppSidebar
                     onStarredClick={() => setStarredOpen(true)}
+                    onFoldersClick={() => setFoldersOpen(true)}
                     onSettingsClick={handleSettingsClick}
                     className="border-r"
                 />
-                <SidebarInset>
+          <SidebarInset className="min-h-screen">
                     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center border-b bg-background/80 backdrop-blur-sm transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
                         <div className="flex w-full items-center justify-between gap-2 px-4">
                             <div className="flex items-center gap-2">
@@ -119,7 +123,7 @@ export default function DashboardLayout({
                             </div>
                         </div>
                     </header>
-                    <div className="flex flex-1 flex-col gap-4 p-4 pt-4">
+                  <div className="flex flex-col gap-4 p-4 pt-4">
                         {children}
                     </div>
                 </SidebarInset>
@@ -127,6 +131,10 @@ export default function DashboardLayout({
             <StarredChatsDialog
                 open={starredOpen}
                 onOpenChange={setStarredOpen}
+            />
+            <ChatFoldersDialog
+                open={foldersOpen}
+                onOpenChange={setFoldersOpen}
             />
             <SettingsDialog
                 open={settingsOpen}

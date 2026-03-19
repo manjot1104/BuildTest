@@ -41,7 +41,7 @@ export function SettingsDialog({
 }: SettingsDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[560px] p-0 gap-0 overflow-hidden rounded-xl border shadow-lg" showCloseButton={false}>
+            <DialogContent className="sm:max-w-[560px] p-0 gap-0 overflow-hidden rounded-xl border shadow-lg" showCloseButton={true}>
                 <div className="px-6 pt-6 pb-4 border-b bg-muted/30">
                     <DialogHeader>
                         <DialogTitle className="text-lg font-semibold tracking-tight">Settings</DialogTitle>

@@ -932,12 +932,6 @@ AVOID:
 export async function generateHtmlResume(data: ResumeData): Promise<OpenRouterResult> {
   const model = data.model || DEFAULT_MODEL
 
-  // Debug: Log template info
-  if (data.templateStyleGuide) {
-    console.log('[HTML] Template selected:', data.templateId)
-    console.log('[HTML] Template guide length:', data.templateStyleGuide.length)
-  }
-
   // Get comprehensive design instructions (only if no template)
   const designInstructions = data.templateStyleGuide ? '' : getHtmlDesignInstructions()
   

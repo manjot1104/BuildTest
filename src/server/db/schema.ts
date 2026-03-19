@@ -134,6 +134,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   paymentTransactions: many(payment_transactions),
   creditUsageLogs: many(credit_usage_logs),
   githubRepos: many(github_repos),
+  accessibilityTestRuns: many(accessibility_test_runs),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -206,6 +207,38 @@ export const conversation_messages = createTable(
   ],
 );
 
+// ─── Chat Folders ────────────────────────────────────────────────────────────
+
+export const chat_folders = createTable(
+  "chat_folders",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: d.varchar("name", { length: 100 }).notNull(),
+    color: d.varchar("color", { length: 7 }), // hex color e.g. "#3B82F6"
+    position: d.integer("position").notNull().default(0),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("chat_folders_user_id_idx").on(t.user_id),
+    unique("chat_folders_user_name_uniq").on(t.user_id, t.name),
+  ],
+);
+
+export const chatFoldersRelations = relations(chat_folders, ({ one }) => ({
+  user: one(user, { fields: [chat_folders.user_id], references: [user.id] }),
+}));
+
 // User chats - stores chat data locally for efficient history retrieval
 // Maps V0 chat IDs to user IDs and stores chat metadata
 export const user_chats = createTable(
@@ -242,6 +275,10 @@ prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
 conversation_id: d
   .text("conversation_id")
   .references(() => conversations.id, { onDelete: "set null" }),
+
+folder_id: d
+  .text("folder_id")
+  .references(() => chat_folders.id, { onDelete: "set null" }),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
@@ -250,6 +287,7 @@ conversation_id: d
     index("user_chats_created_at_idx").on(t.created_at),
     index("user_chats_chat_type_idx").on(t.chat_type),
 index("user_chats_conversation_id_idx").on(t.conversation_id),
+index("user_chats_folder_id_idx").on(t.folder_id),
   ],
 );
 
@@ -411,6 +449,88 @@ export const credit_usage_logs = createTable(
     index("credit_usage_logs_created_at_idx").on(t.created_at),
   ],
 );
+
+// Accessibility Tester
+export const a11yTestStatusEnum = pgEnum("a11y_test_status", [
+  "pending", "crawling", "testing", "generating_report", "completed", "failed",
+])
+
+export const accessibility_test_runs = createTable(
+  "accessibility_test_runs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    target_url: d.text("target_url").notNull(),
+    standards: d.text("standards").notNull(), // JSON string array
+    status: a11yTestStatusEnum("status").notNull().default("pending"),
+    max_pages: d.integer("max_pages").notNull().default(20),
+    max_depth: d.integer("max_depth").notNull().default(3),
+    total_pages_tested: d.integer("total_pages_tested").default(0),
+    total_violations: d.integer("total_violations").default(0),
+    total_passes: d.integer("total_passes").default(0),
+    total_incomplete: d.integer("total_incomplete").default(0),
+    logs: d.text("logs"), // JSON array of SSEEvent objects
+    pdf_report_base64: d.text("pdf_report_base64"),
+    error_message: d.text("error_message"),
+    started_at: d.timestamp("started_at", { withTimezone: true }),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("a11y_test_runs_user_id_idx").on(t.user_id),
+    index("a11y_test_runs_created_at_idx").on(t.created_at),
+    index("a11y_test_runs_status_idx").on(t.status),
+  ],
+)
+
+export const accessibility_page_results = createTable(
+  "accessibility_page_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => accessibility_test_runs.id, { onDelete: "cascade" }),
+    page_url: d.text("page_url").notNull(),
+    page_title: d.text("page_title"),
+    violation_count: d.integer("violation_count").notNull().default(0),
+    pass_count: d.integer("pass_count").notNull().default(0),
+    incomplete_count: d.integer("incomplete_count").notNull().default(0),
+    inapplicable_count: d.integer("inapplicable_count").notNull().default(0),
+    violations: d.text("violations").notNull().default("[]"), // JSON
+    passes: d.text("passes").notNull().default("[]"), // JSON
+    incomplete: d.text("incomplete").notNull().default("[]"), // JSON
+    tested_at: d
+      .timestamp("tested_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("a11y_page_results_test_run_id_idx").on(t.test_run_id),
+  ],
+)
+
+export const accessibilityTestRunsRelations = relations(accessibility_test_runs, ({ one, many }) => ({
+  user: one(user, { fields: [accessibility_test_runs.user_id], references: [user.id] }),
+  pageResults: many(accessibility_page_results),
+}))
+
+export const accessibilityPageResultsRelations = relations(accessibility_page_results, ({ one }) => ({
+  testRun: one(accessibility_test_runs, {
+    fields: [accessibility_page_results.test_run_id],
+    references: [accessibility_test_runs.id],
+  }),
+}))
 
 export const demoTypeEnum = pgEnum("demo_type", [
   "featured",
@@ -616,6 +736,35 @@ export const studio_layouts = createTable(
 export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
   user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
 }));
+
+// ─── Shared Chat Links ──────────────────────────────────────────────────────
+
+export const shared_chat_links = createTable(
+  "shared_chat_links",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    token: d.varchar("token", { length: 64 }).notNull().unique(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chat_type: chatTypeEnum("chat_type").notNull(),
+    // For BUILDER chats: v0_chat_id; For OPENROUTER chats: conversation_id
+    chat_id: d.text("chat_id").notNull(),
+    title: d.text("title"),
+    // Snapshot of messages at share time (JSON array)
+    messages: d.text("messages").notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    expires_at: d.timestamp("expires_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("shared_chat_links_token_idx").on(t.token),
+    index("shared_chat_links_user_id_idx").on(t.user_id),
+  ],
+);
 
 // ─── Sandbox Executions ──────────────────────────────────────────────────────
 

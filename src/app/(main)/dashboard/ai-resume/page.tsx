@@ -104,7 +104,7 @@ function getModelName(modelId: string): string {
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
-  templateType: z.enum(['latex', 'html']).default('latex'),
+  templateType: z.enum(['latex', 'html']),
   fullName: z.string().min(1, 'Full name is required').max(100),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
@@ -213,7 +213,7 @@ export default function AIResumeBuilderPage() {
 
       const result = await response.json()
       const generatedCode = isLaTeX ? result.latex : result.html
-      const rawResponse = result.rawResponse || ''
+      const rawResponse = ''
 
       if (!generatedCode) {
         throw new Error(`No ${isLaTeX ? 'LaTeX' : 'HTML'} code returned from API`)
@@ -349,7 +349,7 @@ export default function AIResumeBuilderPage() {
 
       const result = await response.json()
       const updatedCode = templateType === 'latex' ? result.latex : result.html
-      const rawResponse = result.rawResponse || ''
+      const rawResponse = ''
 
       if (!updatedCode) {
         throw new Error(`No ${templateType === 'latex' ? 'LaTeX' : 'HTML'} code returned from AI`)

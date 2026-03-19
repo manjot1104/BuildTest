@@ -16,7 +16,9 @@ import {
 } from '@/components/ai-elements/prompt-input'
 import { Suggestions, Suggestion } from '@/components/ai-elements/suggestion'
 import { useState, useCallback, useEffect } from 'react'
-
+import { KeyRound } from 'lucide-react'
+import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
+import { useEnvVariables } from '@/hooks/use-env-variables'
 interface ChatInputProps {
   message: string
   setMessage: (message: string) => void
@@ -45,7 +47,8 @@ export function ChatInput({
 }: ChatInputProps) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [micError, setMicError] = useState<string | null>(null)
-
+const [envPanelOpen, setEnvPanelOpen] = useState(false)
+const { variables } = useEnvVariables()
   const handleImageFiles = useCallback(
     async (files: File[]) => {
       if (!onAttachmentsChange) return
@@ -121,6 +124,7 @@ export function ChatInput({
 
   return (
     <div className="px-4 md:pb-4">
+      <EnvVariablesPanel open={envPanelOpen} onOpenChange={setEnvPanelOpen} />
       <div className="flex gap-2">
         <PromptInput
           onSubmit={handleSubmit}
@@ -145,6 +149,19 @@ export function ChatInput({
           <PromptInputToolbar>
             <PromptInputTools>
               <PromptInputImageButton onImageSelect={handleImageFiles} />
+              <button
+    type="button"
+    onClick={() => setEnvPanelOpen(true)}
+    title="Environment variables"
+    className="relative flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+  >
+    <KeyRound className="size-4" />
+    {variables.length > 0 && (
+      <span className="absolute -right-0.5 -top-0.5 flex size-3.5 items-center justify-center rounded-full bg-primary text-[8px] font-bold text-primary-foreground">
+        {variables.length}
+      </span>
+    )}
+  </button>
             </PromptInputTools>
             <PromptInputTools>
               <PromptInputMicButton

@@ -47,6 +47,9 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const [currentId, setCurrentId] = useState<string | undefined>(designId)
   const currentIdRef = useRef<string | undefined>(designId)
 
+  // Clipboard for copy/paste
+  const clipboardRef = useRef<CanvasElement[]>([])
+
   // ── Tabs ────────────────────────────────────────────────────────────────────
   const [leftTab, setLeftTab] = useState<LeftTab>(() => {
     // Open templates tab for brand-new designs with no draft
@@ -147,12 +150,12 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
     }
   }, [state.elements, state.canvasBackground, editor])
 
-  // Auto-save every 30s when dirty
+  // Auto-save: debounce 2s after any change
   useEffect(() => {
     if (!state.isDirty) return
-    const timer = setTimeout(() => { void handleSaveDraft() }, 30_000)
+    const timer = setTimeout(() => { void handleSaveDraft() }, 2_000)
     return () => clearTimeout(timer)
-  }, [state.isDirty, handleSaveDraft])
+  }, [state.isDirty, state.elements, state.canvasBackground, handleSaveDraft])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -164,6 +167,29 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
         e.preventDefault(); editor.undo()
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
         e.preventDefault(); editor.redo()
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+        // Copy selected elements to clipboard ref
+        if (state.selectedIds.length > 0) {
+          e.preventDefault()
+          clipboardRef.current = state.elements.filter((el) => state.selectedIds.includes(el.id))
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+        // Paste from clipboard ref
+        if (clipboardRef.current.length > 0) {
+          e.preventDefault()
+          const maxZ = Math.max(...state.elements.map((el) => el.zIndex), 0)
+          const copies: CanvasElement[] = clipboardRef.current.map((el, i) => ({
+            ...el,
+            id: crypto.randomUUID(),
+            x: el.x + 30,
+            y: el.y + 30,
+            zIndex: maxZ + i + 1,
+          }))
+          for (const copy of copies) {
+            editor.dispatch({ type: 'ADD_ELEMENT', element: copy })
+          }
+          editor.selectElements(copies.map((c) => c.id))
+        }
       } else if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
         e.preventDefault()
         if (state.selectedIds.length > 0) editor.duplicateElements(state.selectedIds)
@@ -329,6 +355,7 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
         open={publishOpen}
         onOpenChange={setPublishOpen}
         designId={currentId}
+        onBeforePublish={handleSaveDraft}
       />
 
       {/* Real-website preview modal */}

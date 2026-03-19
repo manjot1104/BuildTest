@@ -18,11 +18,13 @@ interface PublishDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   designId?: string
+  /** Called before publishing to ensure latest state is saved to DB */
+  onBeforePublish?: () => Promise<void>
 }
 
 type PublishState = 'idle' | 'publishing' | 'done' | 'error'
 
-export function PublishDialog({ open, onOpenChange, designId }: PublishDialogProps) {
+export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }: PublishDialogProps) {
   const [slug, setSlug] = useState('')
   const [title, setTitle] = useState('Untitled')
   const [state, setState] = useState<PublishState>('idle')
@@ -43,6 +45,11 @@ export function PublishDialog({ open, onOpenChange, designId }: PublishDialogPro
     setErrorMsg('')
 
     try {
+      // Save current state before publishing to ensure DB has latest data
+      if (onBeforePublish) {
+        await onBeforePublish()
+      }
+
       const res = await fetch(`/api/design/${designId}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

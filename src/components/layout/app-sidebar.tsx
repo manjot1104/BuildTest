@@ -1,5 +1,5 @@
 "use client"
-
+import { useRouter, usePathname } from "next/navigation"
 import * as React from "react"
 import {
     BookOpen,
@@ -10,6 +10,8 @@ import {
     LayoutTemplate,
     History,
     Star,
+    ShieldCheck,
+    FolderOpen,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -27,6 +29,7 @@ import {
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
     onStarredClick: () => void
+    onFoldersClick: () => void
     onSettingsClick: (tab: SettingsTab) => void
 }
 
@@ -49,14 +52,16 @@ export type NavItem = {
 
 const buildNavSections = (
     onStarredClick: () => void,
+    onFoldersClick: () => void,
     onSettingsClick: (tab: SettingsTab) => void,
+    onNewChat: () => void,
 ): NavSection[] => [
     {
         label: "Create",
         items: [
             {
                 title: "New Chat",
-                url: "/chat",
+                onClick: onNewChat,
                 icon: MessageSquare,
             },
             {
@@ -74,6 +79,11 @@ const buildNavSections = (
                 url: "/dashboard/ai-resume",
                 icon: FileText,
             },
+            {
+                title: "Accessibility Tester",
+                url: "/dashboard/accessibility-tester",
+                icon: ShieldCheck,
+            },
         ],
     },
     {
@@ -83,6 +93,11 @@ const buildNavSections = (
                 title: "History",
                 icon: History,
                 onClick: undefined, // handled specially in nav-main
+            },
+            {
+                title: "Folders",
+                icon: FolderOpen,
+                onClick: onFoldersClick,
             },
             {
                 title: "Starred",
@@ -134,14 +149,21 @@ const platforms = [
     },
 ]
 
-export function AppSidebar({
-    onStarredClick,
-    onSettingsClick,
-    ...props
-}: AppSidebarProps) {
+export function AppSidebar({ onStarredClick, onFoldersClick, onSettingsClick, ...props }: AppSidebarProps) {
+    const router = useRouter()
+    const pathname = usePathname()
+
+    const handleNewChat = React.useCallback(() => {
+        if (pathname === '/chat') {
+            router.push('/chat?reset=true&t=' + Date.now())
+        } else {
+            router.push('/chat')
+        }
+    }, [router, pathname])
+
     const navSections = React.useMemo(
-        () => buildNavSections(onStarredClick, onSettingsClick),
-        [onStarredClick, onSettingsClick],
+        () => buildNavSections(onStarredClick, onFoldersClick, onSettingsClick, handleNewChat),
+        [onStarredClick, onFoldersClick, onSettingsClick, handleNewChat],
     )
 
     return (
@@ -149,15 +171,12 @@ export function AppSidebar({
             <SidebarHeader>
                 <PlatformSwitcher platforms={platforms} />
             </SidebarHeader>
-
             <SidebarContent>
                 <NavMain sections={navSections} />
             </SidebarContent>
-
             <SidebarFooter>
                 <NavUser onSettingsClick={onSettingsClick} />
             </SidebarFooter>
-
             <SidebarRail />
         </Sidebar>
     )
