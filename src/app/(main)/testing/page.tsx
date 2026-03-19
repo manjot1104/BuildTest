@@ -32,6 +32,7 @@ import {
   GithubSourcePanel,
   type GithubSourceValue,
 } from "@/components/testing/github-source-panel";
+import { SubscriptionModal } from "@/components/payments/subscription-modal";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -39,12 +40,17 @@ const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, awaiting_review: 2, executing: 3, reporting: 4, complete: 5,
 };
 
-interface PlanLimits { maxPages: number; maxTests: number; label: string }
-const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, label: "Free" };
+// These are the true hard ceilings across all plans — used to cap the + button
+// so users can explore but never go above what even enterprise allows.
+const ABSOLUTE_MAX_PAGES = 20;  // matches enterprise maxPages
+const ABSOLUTE_MAX_TESTS = 30;  // matches enterprise maxTests
+
+interface PlanLimits { maxPages: number; maxTests: number; maxConcurrency: number; label: string }
+const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, maxConcurrency: 3, label: "Free" };
 const PLAN_LIMITS: Record<string, PlanLimits> = {
-  starter:    { maxPages:  5, maxTests: 10, label: "Starter"   },
-  pro:        { maxPages: 10, maxTests: 20, label: "Pro"        },
-  enterprise: { maxPages: 20, maxTests: 30, label: "Enterprise" },
+  starter:    { maxPages:  5, maxTests: 10, maxConcurrency:  5, label: "Starter"   },
+  pro:        { maxPages: 10, maxTests: 20, maxConcurrency: 10, label: "Pro"        },
+  enterprise: { maxPages: 20, maxTests: 30, maxConcurrency: 20, label: "Enterprise" },
 };
 function getPlanLimits(p: string | null | undefined): PlanLimits {
   if (!p) return FREE_LIMITS;
@@ -72,6 +78,26 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
         </span>
       )}
     </span>
+  );
+}
+
+// ─── Upgrade Nudge ─────────────────────────────────────────────────────────────
+
+function UpgradeNudge({ feature, planNeeded, onUpgrade }: { feature: string; planNeeded: string; onUpgrade: () => void }) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#00FF85]/20 bg-[#00FF85]/5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <Lock className="h-3 w-3 text-[#00FF85] shrink-0" />
+      <p className="text-[10px] font-mono text-muted-foreground flex-1">
+        {feature} limit reached on your plan
+      </p>
+      <button
+        type="button"
+        className="text-[10px] font-mono text-[#00FF85] hover:text-[#00FF85]/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
+        onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+      >
+        {planNeeded} ↗
+      </button>
+    </div>
   );
 }
 
@@ -112,8 +138,8 @@ function BfyGhostBtn({ onClick, children, className = "" }: {
 
 // ─── Usage Pill ────────────────────────────────────────────────────────────────
 
-function UsagePill({ runsToday, dailyLimit, planId }: {
-  runsToday: number; dailyLimit: number; planId: string;
+function UsagePill({ runsToday, dailyLimit, planId, onUpgrade }: {
+  runsToday: number; dailyLimit: number; planId: string; onUpgrade: () => void;
 }) {
   const remaining   = dailyLimit - runsToday;
   const pct         = runsToday / dailyLimit;
@@ -143,13 +169,13 @@ function UsagePill({ runsToday, dailyLimit, planId }: {
         }
       </span>
       {(isAtLimit || isNearLimit) && planId === "free" && (
-        <a
-          href="/pricing"
+        <button
+          type="button"
           className="text-[10px] font-mono text-[#00FF85] hover:text-[#00FF85]/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
         >
           upgrade ↗
-        </a>
+        </button>
       )}
     </div>
   );
@@ -170,7 +196,7 @@ function PrefillBanner({ repoFullName, onDismiss }: { repoFullName: string; onDi
   );
 }
 
-// ─── Advanced Settings Section (redesigned) ────────────────────────────────────
+// ─── Advanced Settings Section ─────────────────────────────────────────────────
 
 function AdvancedSettingsPanel({
   concurrency, setConcurrency,
@@ -178,12 +204,14 @@ function AdvancedSettingsPanel({
   extractionMs, setExtractionMs,
   executeMs, setExecuteMs,
   hasChanges, onReset,
+  maxConcurrency, planLabel, onUpgrade,
 }: {
   concurrency: number; setConcurrency: (n: number) => void;
   discoveryMs: number; setDiscoveryMs: (n: number) => void;
   extractionMs: number; setExtractionMs: (n: number) => void;
   executeMs: number; setExecuteMs: (n: number) => void;
   hasChanges: boolean; onReset: () => void;
+  maxConcurrency: number; planLabel: string; onUpgrade: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -201,6 +229,10 @@ function AdvancedSettingsPanel({
       tooltip: "How long each individual test gets to run. Increase for slow interactions.",
     },
   ];
+
+  // Thresholds relative to plan max for color coding
+  const low = Math.ceil(maxConcurrency * 0.4);
+  const mid = Math.ceil(maxConcurrency * 0.75);
 
   return (
     <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
@@ -266,9 +298,11 @@ function AdvancedSettingsPanel({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-muted-foreground">concurrent extractions</span>
-                <span className="text-[10px] font-mono text-muted-foreground/40 bg-muted border border-border rounded px-1.5 py-0.5">
-                  {CONCURRENCY_MIN}–{CONCURRENCY_MAX}
-                </span>
+                <Tooltip text={`Your ${planLabel} plan allows up to ${maxConcurrency} concurrent extractions.`}>
+                  <span className="text-[10px] font-mono text-muted-foreground/50 bg-muted border border-border rounded px-1.5 py-0.5 cursor-help">
+                    max {maxConcurrency}
+                  </span>
+                </Tooltip>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -283,22 +317,28 @@ function AdvancedSettingsPanel({
                   <div className="h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                     <span className="text-sm font-mono font-bold text-foreground tabular-nums">{concurrency}</span>
                   </div>
-                  {/* Speed indicator bar */}
+                  {/* Speed indicator bar — full 20 segments, locked ones shown dimmed */}
                   <div className="flex gap-0.5 h-1">
-                    {Array.from({ length: CONCURRENCY_MAX }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`flex-1 rounded-full transition-colors duration-150 ${
-                          i < concurrency
-                            ? concurrency <= 7  ? "bg-[#00FF85]/70"
-                            : concurrency <= 14 ? "bg-yellow-500/70"
-                            : "bg-orange-500/70"
+                    {Array.from({ length: CONCURRENCY_MAX }).map((_, i) => {
+                      const isActive = i < concurrency;
+                      const isLocked = i >= maxConcurrency;
+                      const activeColor = concurrency <= low  ? "bg-[#00FF85]/70"
+                                        : concurrency <= mid  ? "bg-yellow-500/70"
+                                        : "bg-orange-500/70";
+                      return (
+                        <div
+                          key={i}
+                          className={`flex-1 rounded-full transition-colors duration-150 ${
+                            isLocked  ? "bg-border/30"   // greyed-out locked segment
+                            : isActive ? activeColor
                             : "bg-border"
-                        }`}
-                      />
-                    ))}
+                          }`}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
+                {/* + button: enabled up to CONCURRENCY_MAX, but shows upgrade nudge past plan limit */}
                 <button
                   type="button" aria-label="Increase concurrency"
                   onClick={() => setConcurrency(Math.min(CONCURRENCY_MAX, concurrency + 1))}
@@ -308,24 +348,28 @@ function AdvancedSettingsPanel({
                   <span className="text-base font-light">+</span>
                 </button>
               </div>
-              {/* Contextual hint based on value */}
-              <p className={`text-[10px] font-mono flex items-center gap-1.5 ${
-                concurrency <= 7 ? "text-[#00FF85]/60"
-                : concurrency <= 14 ? "text-yellow-500/60"
-                : "text-orange-500/60"
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${
-                  concurrency <= 7 ? "bg-[#00FF85]/60"
-                  : concurrency <= 14 ? "bg-yellow-500/60"
-                  : "bg-orange-500/60"
-                }`} />
-                {concurrency <= 7
-                  ? "efficient — good for most sites"
-                  : concurrency <= 14
-                  ? "fast — uses more credits at once"
-                  : "maximum speed — high credit usage"
-                }
-              </p>
+              {/* Contextual hint — or upgrade nudge if over plan limit */}
+              {concurrency > maxConcurrency ? (
+                <UpgradeNudge feature="Concurrency" planNeeded="Upgrade plan" onUpgrade={onUpgrade} />
+              ) : (
+                <p className={`text-[10px] font-mono flex items-center gap-1.5 ${
+                  concurrency <= low ? "text-[#00FF85]/60"
+                  : concurrency <= mid ? "text-yellow-500/60"
+                  : "text-orange-500/60"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    concurrency <= low ? "bg-[#00FF85]/60"
+                    : concurrency <= mid ? "bg-yellow-500/60"
+                    : "bg-orange-500/60"
+                  }`} />
+                  {concurrency <= low
+                    ? "lower parallelism · steady credit usage"
+                    : concurrency <= mid
+                    ? "moderate parallelism · balanced speed"
+                    : "high parallelism · uses credits quickly"
+                  }
+                </p>
+              )}
             </div>
           </div>
 
@@ -406,7 +450,7 @@ function AdvancedSettingsPanel({
 
 export default function TestingPage() {
   const searchParams = useSearchParams();
-  const { subscription, hasActiveSubscription } = useUserCredits();
+  const { subscription, hasActiveSubscription, credits, isLoading: isCreditsLoading } = useUserCredits();
   const planLimits = useMemo(() => getPlanLimits(subscription?.plan_id), [subscription?.plan_id]);
 
   const { data: usageData } = useTestUsage();
@@ -428,6 +472,10 @@ export default function TestingPage() {
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
   const [showPrefillBanner, setShowPrefillBanner] = useState(hasPrefill);
 
+  // Upgrade nudge visibility for pages and tests steppers
+  const [showPagesUpgradeNudge, setShowPagesUpgradeNudge] = useState(false);
+  const [showTestsUpgradeNudge, setShowTestsUpgradeNudge] = useState(false);
+
   const prefillRepoFullName = prefillOwner && prefillRepo ? `${prefillOwner}/${prefillRepo}` : prefillRepo || prefillOwner;
   const githubInitial: GithubSourceValue | null = (prefillOwner && prefillRepo)
     ? { owner: prefillOwner, repo: prefillRepo, branch: prefillBranch || "main" }
@@ -436,6 +484,10 @@ export default function TestingPage() {
   useEffect(() => {
     setMaxPages((p) => Math.min(p, planLimits.maxPages));
     setMaxTests((t) => Math.min(Math.max(t, 1), planLimits.maxTests));
+    setConcurrency((c) => Math.min(c, planLimits.maxConcurrency));
+    // Dismiss nudges when plan changes (e.g. after upgrading)
+    setShowPagesUpgradeNudge(false);
+    setShowTestsUpgradeNudge(false);
   }, [planLimits]);
 
   const [testRunId, setTestRunId]           = useState<string | null>(null);
@@ -446,6 +498,7 @@ export default function TestingPage() {
   const [selectedBug, setSelectedBug]       = useState<BugType | null>(null);
   const [showHistory, setShowHistory]       = useState(false);
   const [copied, setCopied]                 = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const { mutate: startTest,  isPending: isStarting     } = useStartTestRun();
   const { mutate: cancelTest, isPending: isCancelling   } = useCancelTestRun();
@@ -498,7 +551,13 @@ export default function TestingPage() {
     executeMs !== DEFAULT_EXECUTE_MS;
 
   const handleMaxPagesChange = (n: number) => {
-    const p = Math.max(1, Math.min(n, planLimits.maxPages));
+    if (n > planLimits.maxPages) {
+      // Show upgrade nudge instead of silently clamping
+      setShowPagesUpgradeNudge(true);
+      return;
+    }
+    setShowPagesUpgradeNudge(false);
+    const p = Math.max(1, n);
     setMaxPages(p);
     if (p > maxTests) setMaxTests(p);
   };
@@ -518,6 +577,8 @@ export default function TestingPage() {
       toast.error(`Daily limit reached. Your ${usageData?.planId ?? "free"} plan allows ${usageData?.dailyLimit ?? 0} runs/day.`);
       return;
     }
+    // Clamp concurrency to plan limit before sending (server also enforces this)
+    const effectiveConcurrency = Math.min(concurrency, planLimits.maxConcurrency);
     const timeouts: Record<string, number> = {};
     if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs       = discoveryMs;
     if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs      = extractionMs;
@@ -525,7 +586,7 @@ export default function TestingPage() {
     startTest(
       {
         url: url.trim(), maxPages, maxTests,
-        ...(concurrency !== CONCURRENCY_DEFAULT && { concurrency }),
+        ...(effectiveConcurrency !== CONCURRENCY_DEFAULT && { concurrency: effectiveConcurrency }),
         ...(Object.keys(timeouts).length > 0 && { timeouts }),
         ...(githubSource && { githubOwner: githubSource.owner, githubRepo: githubSource.repo, githubBranch: githubSource.branch }),
       },
@@ -548,6 +609,7 @@ export default function TestingPage() {
     setUrl(""); setTestRunId(null); setGithubSource(null);
     setFilterSeverity("all"); setFilterCategory("all");
     setTcFilter("all"); setActiveTab("tests"); setSelectedBug(null);
+    setShowPagesUpgradeNudge(false); setShowTestsUpgradeNudge(false);
   };
 
   // ─── Render ──────────────────────────────────────────────────────────────────
@@ -560,6 +622,13 @@ export default function TestingPage() {
           onClose={() => setShowHistory(false)}
         />
       )}
+      <SubscriptionModal
+        open={showUpgradeModal}
+        onOpenChange={setShowUpgradeModal}
+        hasActiveSubscription={hasActiveSubscription}
+        currentCredits={credits?.totalCredits ?? 0}
+        currentPlanId={subscription?.plan_id ?? null}
+      />
 
       <main className="w-full max-w-2xl mx-auto px-4 py-6 space-y-4">
 
@@ -644,7 +713,7 @@ export default function TestingPage() {
             {/* Usage pill — right aligned */}
             {usageData && (
               <div className="flex items-center justify-end">
-                <UsagePill runsToday={usageData.runsToday} dailyLimit={usageData.dailyLimit} planId={usageData.planId} />
+                <UsagePill runsToday={usageData.runsToday} dailyLimit={usageData.dailyLimit} planId={usageData.planId} onUpgrade={() => setShowUpgradeModal(true)} />
               </div>
             )}
 
@@ -662,9 +731,13 @@ export default function TestingPage() {
                   </Tooltip>
                 </div>
                 {!hasActiveSubscription && (
-                  <a href="/pricing" className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 hover:text-[#00FF85] border border-border hover:border-[#00FF85]/30 rounded-full px-2 py-0.5 transition-all">
+                  <button
+                    type="button"
+                    onClick={() => setShowUpgradeModal(true)}
+                    className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 hover:text-[#00FF85] border border-border hover:border-[#00FF85]/30 rounded-full px-2 py-0.5 transition-all"
+                  >
                     <Lock className="h-2.5 w-2.5" /> free plan
-                  </a>
+                  </button>
                 )}
               </div>
               <div className="p-4 space-y-4">
@@ -683,18 +756,26 @@ export default function TestingPage() {
                       </Tooltip>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => handleMaxPagesChange(maxPages - 1)} disabled={maxPages <= 1}
+                      <button type="button"
+                        onClick={() => { setShowPagesUpgradeNudge(false); handleMaxPagesChange(maxPages - 1); }}
+                        disabled={maxPages <= 1}
                         className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">−</span>
                       </button>
                       <div className="flex-1 h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                         <span className="text-sm font-mono font-bold text-foreground tabular-nums">{maxPages}</span>
                       </div>
-                      <button type="button" onClick={() => handleMaxPagesChange(maxPages + 1)} disabled={maxPages >= Math.min(planLimits.maxPages, maxTests)}
+                      {/* + button: enabled up to ABSOLUTE_MAX_PAGES, shows upgrade nudge past plan limit */}
+                      <button type="button"
+                        onClick={() => handleMaxPagesChange(maxPages + 1)}
+                        disabled={maxPages >= ABSOLUTE_MAX_PAGES}
                         className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">+</span>
                       </button>
                     </div>
+                    {showPagesUpgradeNudge && (
+                      <UpgradeNudge feature="Pages" planNeeded="Upgrade plan" onUpgrade={() => setShowUpgradeModal(true)} />
+                    )}
                   </div>
 
                   {/* Divider */}
@@ -717,18 +798,33 @@ export default function TestingPage() {
                       </Tooltip>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => setMaxTests(Math.max(maxPages, maxTests - 1))} disabled={maxTests <= maxPages}
+                      <button type="button"
+                        onClick={() => { setShowTestsUpgradeNudge(false); setMaxTests(Math.max(maxPages, maxTests - 1)); }}
+                        disabled={maxTests <= maxPages}
                         className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">−</span>
                       </button>
                       <div className="flex-1 h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                         <span className="text-sm font-mono font-bold text-foreground tabular-nums">{maxTests}</span>
                       </div>
-                      <button type="button" onClick={() => setMaxTests(Math.min(planLimits.maxTests, maxTests + 1))} disabled={maxTests >= planLimits.maxTests}
+                      {/* + button: enabled up to ABSOLUTE_MAX_TESTS, shows upgrade nudge past plan limit */}
+                      <button type="button"
+                        onClick={() => {
+                          if (maxTests + 1 > planLimits.maxTests) {
+                            setShowTestsUpgradeNudge(true);
+                            return;
+                          }
+                          setShowTestsUpgradeNudge(false);
+                          setMaxTests(maxTests + 1);
+                        }}
+                        disabled={maxTests >= ABSOLUTE_MAX_TESTS}
                         className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">+</span>
                       </button>
                     </div>
+                    {showTestsUpgradeNudge && (
+                      <UpgradeNudge feature="Tests" planNeeded="Upgrade plan" onUpgrade={() => setShowUpgradeModal(true)} />
+                    )}
                   </div>
                 </div>
 
@@ -752,15 +848,18 @@ export default function TestingPage() {
               </div>
             </div>
 
-            {/* ── Advanced Settings (redesigned) ── */}
+            {/* ── Advanced Settings ── */}
             <AdvancedSettingsPanel
               concurrency={concurrency} setConcurrency={setConcurrency}
               discoveryMs={discoveryMs} setDiscoveryMs={setDiscoveryMs}
               extractionMs={extractionMs} setExtractionMs={setExtractionMs}
               executeMs={executeMs} setExecuteMs={setExecuteMs}
               hasChanges={hasAdvancedChanges}
+              maxConcurrency={planLimits.maxConcurrency}
+              planLabel={planLimits.label}
+              onUpgrade={() => setShowUpgradeModal(true)}
               onReset={() => {
-                setConcurrency(CONCURRENCY_DEFAULT);
+                setConcurrency(Math.min(CONCURRENCY_DEFAULT, planLimits.maxConcurrency));
                 setDiscoveryMs(DEFAULT_DISCOVERY_MS);
                 setExtractionMs(DEFAULT_EXTRACTION_MS);
                 setExecuteMs(DEFAULT_EXECUTE_MS);

@@ -99,6 +99,9 @@ interface PlanLimits {
   // [ADDED] Maximum test runs allowed per UTC calendar day.
   // Change DAILY_RUN_LIMITS below to adjust per-plan values.
   dailyRuns: number;
+  // [ADDED] Maximum concurrent extractions allowed per run.
+  // Must stay in sync with PLAN_LIMITS.maxConcurrency in testing.page.tsx.
+  maxConcurrency: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,12 +116,12 @@ const DAILY_RUN_LIMITS: Record<string, number> = {
   enterprise: 50,
 } as const;
 
-const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, dailyRuns: DAILY_RUN_LIMITS.free! };
+const FREE_PLAN_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, dailyRuns: DAILY_RUN_LIMITS.free!, maxConcurrency: 3 };
 
 const SERVER_PLAN_LIMITS: Record<string, PlanLimits> = {
-  starter:    { maxPages:  5, maxTests: 10, dailyRuns: DAILY_RUN_LIMITS.starter!    },
-  pro:        { maxPages: 10, maxTests: 20, dailyRuns: DAILY_RUN_LIMITS.pro!        },
-  enterprise: { maxPages: 20, maxTests: 30, dailyRuns: DAILY_RUN_LIMITS.enterprise! },
+  starter:    { maxPages:  5, maxTests: 10, dailyRuns: DAILY_RUN_LIMITS.starter!,    maxConcurrency:  5 },
+  pro:        { maxPages: 10, maxTests: 20, dailyRuns: DAILY_RUN_LIMITS.pro!,        maxConcurrency: 10 },
+  enterprise: { maxPages: 20, maxTests: 30, dailyRuns: DAILY_RUN_LIMITS.enterprise!, maxConcurrency: 20 },
 };
 
 /**
@@ -1066,25 +1069,28 @@ export async function startTestRunHandler({
     }
     // ── End daily run limit enforcement ───────────────────────────────────
 
-    // [ADDED] Concurrency is plan-agnostic: clamp to the hard caps defined in
-    // tinyfish.service (MIN=1, MAX=20).  We log if the user sent an out-of-range
-    // value so it is visible in server logs without throwing an error.
+    // ── Concurrency plan limit enforcement ────────────────────────────────
+    // Concurrency is now plan-gated (not just hard-capped at 20).
+    // We clamp to the plan's maxConcurrency, which is itself always ≤ the
+    // absolute hard cap of CONCURRENCY_MAX=20 defined in tinyfish.service.
+    // The UI already prevents values above planLimits.maxConcurrency from
+    // being submitted, but we enforce it here for tampered requests.
     const CONCURRENCY_MIN = 1;
-    const CONCURRENCY_MAX = 20;
     const effectiveConcurrency =
       concurrency !== undefined
-        ? Math.max(CONCURRENCY_MIN, Math.min(concurrency, CONCURRENCY_MAX))
+        ? Math.max(CONCURRENCY_MIN, Math.min(concurrency, planLimits.maxConcurrency))
         : undefined;
 
-    if (
-      concurrency !== undefined &&
-      (concurrency < CONCURRENCY_MIN || concurrency > CONCURRENCY_MAX)
-    ) {
+    if (concurrency !== undefined && concurrency > planLimits.maxConcurrency) {
       console.warn(
-        `[Testing] User ${session.user.id} requested concurrency=${concurrency} — clamped to ${effectiveConcurrency}.`,
+        `[Testing] User ${session.user.id} requested concurrency=${concurrency} but plan "${planId ?? "free"}" allows ${planLimits.maxConcurrency} — clamped to ${effectiveConcurrency}.`,
+      );
+    } else if (concurrency !== undefined && concurrency < CONCURRENCY_MIN) {
+      console.warn(
+        `[Testing] User ${session.user.id} requested concurrency=${concurrency} below minimum — clamped to ${CONCURRENCY_MIN}.`,
       );
     }
-    // ── End server-side validation ─────────────────────────────────────────
+    // ── End concurrency plan limit enforcement ─────────────────────────────
 
     // [GITHUB] Strip GitHub fields if the user has no GitHub token.
     // This is the server-side safety net — the UI already hides/disables the
@@ -1124,7 +1130,7 @@ export async function startTestRunHandler({
       session.user.id,
       effectiveMaxPages,
       effectiveMaxTests,
-      effectiveConcurrency,      // [ADDED]
+      effectiveConcurrency,      // [ADDED] now plan-clamped, not just hard-capped
       timeouts,                  // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
       effectiveGithubOwner,      // [GITHUB]
       effectiveGithubRepo,       // [GITHUB]
