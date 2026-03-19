@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { useStateMachine } from '@/context/state-machine'
 import { useChatHistory } from '@/client-api/query-hooks'
-import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight, FolderOpen, Pencil, Check } from 'lucide-react'
+import { X, MessageSquare, ExternalLink, Star, Loader2, Search, ChevronLeft, ChevronRight, FolderOpen, Pencil, Check, Trash2 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { MoveToFolderPopover } from '@/components/chat/move-to-folder-popover'
 import { useRouter } from 'next/navigation'
@@ -123,9 +123,18 @@ const confirmDelete = async () => {
     setLocalChats((prev) =>
       prev.filter((chat) => chat.v0ChatId !== chatToDelete)
     )
- await queryClient.refetchQueries({
-  queryKey: ['chat-history']
-})
+    await queryClient.refetchQueries({
+      queryKey: ['chat-history']
+    })
+    toast.success('Chat deleted')
+  } catch {
+    toast.error('Failed to delete chat')
+  } finally {
+    setDeletingId(null)
+    setChatToDelete(null)
+    setConfirmOpen(false)
+  }
+}
 
     const handleRenameStart = (e: React.MouseEvent, chat: any) => {
         e.stopPropagation()
