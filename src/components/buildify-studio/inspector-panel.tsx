@@ -560,18 +560,73 @@ function ContentTab({ element, upd, allElements }: {
         </div>
       )
 
-    case 'video-embed':
+    case 'video-embed': {
+      const isDirectVideo = /\.(mp4|webm|ogg|mov)(\?.*)?$/i.test(element.content) ||
+        element.content.startsWith('data:video/') ||
+        element.content.startsWith('blob:')
       return (
-        <div className="flex flex-col gap-2">
-          <Label className="text-[10px] text-muted-foreground">YouTube URL</Label>
-          <Input
-            value={element.content}
-            onChange={(e) => upd({ content: e.target.value })}
-            className="h-7 text-xs"
-            placeholder="https://www.youtube.com/watch?v=..."
-          />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
+            <Label className="text-[10px] text-muted-foreground">Video URL</Label>
+            <Input
+              value={element.content}
+              onChange={(e) => upd({ content: e.target.value })}
+              className="h-7 text-xs"
+              placeholder="YouTube URL or direct video URL (.mp4)"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-[10px] text-muted-foreground">Or upload video file</Label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5">
+              <Upload className="size-3.5" />
+              <span>Choose MP4, WebM, or OGG</span>
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/ogg"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  const url = URL.createObjectURL(file)
+                  upd({ content: url })
+                }}
+              />
+            </label>
+          </div>
+          {isDirectVideo && (
+            <div className="flex flex-col gap-1.5">
+              <Label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={element.styles.videoAutoplay ?? false}
+                  onChange={(e) => upd({ styles: { ...element.styles, videoAutoplay: e.target.checked } })}
+                  className="accent-primary"
+                />
+                Autoplay
+              </Label>
+              <Label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={element.styles.videoLoop ?? false}
+                  onChange={(e) => upd({ styles: { ...element.styles, videoLoop: e.target.checked } })}
+                  className="accent-primary"
+                />
+                Loop
+              </Label>
+              <Label className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={element.styles.videoMuted ?? true}
+                  onChange={(e) => upd({ styles: { ...element.styles, videoMuted: e.target.checked } })}
+                  className="accent-primary"
+                />
+                Muted
+              </Label>
+            </div>
+          )}
         </div>
       )
+    }
 
     case 'icon':
       return <IconEditor element={element} upd={upd} />

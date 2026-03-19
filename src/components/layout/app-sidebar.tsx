@@ -12,6 +12,7 @@ import {
     History,
     Star,
     ShieldCheck,
+    FolderOpen,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -29,6 +30,7 @@ import {
 
 type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
     onStarredClick: () => void
+    onFoldersClick: () => void
     onSettingsClick: (tab: SettingsTab) => void
 }
 
@@ -51,8 +53,9 @@ export type NavItem = {
 
 const buildNavSections = (
     onStarredClick: () => void,
+    onFoldersClick: () => void,
     onSettingsClick: (tab: SettingsTab) => void,
-    onNewChat: () => void,  
+    onNewChat: () => void,
 ): NavSection[] => [
     {
         label: "Create",
@@ -96,6 +99,11 @@ const buildNavSections = (
                 title: "History",
                 icon: History,
                 onClick: undefined, // handled specially in nav-main
+            },
+            {
+                title: "Folders",
+                icon: FolderOpen,
+                onClick: onFoldersClick,
             },
             {
                 title: "Starred",
@@ -147,7 +155,7 @@ const platforms = [
     },
 ]
 
-export function AppSidebar({ onStarredClick, onSettingsClick, ...props }: AppSidebarProps) {
+export function AppSidebar({ onStarredClick, onFoldersClick, onSettingsClick, ...props }: AppSidebarProps) {
     const router = useRouter()
     const pathname = usePathname()
 
@@ -160,8 +168,8 @@ export function AppSidebar({ onStarredClick, onSettingsClick, ...props }: AppSid
     }, [router, pathname])
 
     const navSections = React.useMemo(
-        () => buildNavSections(onStarredClick, onSettingsClick, handleNewChat),
-        [onStarredClick, onSettingsClick, handleNewChat],
+        () => buildNavSections(onStarredClick, onFoldersClick, onSettingsClick, handleNewChat),
+        [onStarredClick, onFoldersClick, onSettingsClick, handleNewChat],
     )
 
     return (

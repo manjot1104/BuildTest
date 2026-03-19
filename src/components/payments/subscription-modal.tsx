@@ -230,7 +230,7 @@ export function SubscriptionModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
-      <DialogContent className="sm:max-w-[680px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto rounded-xl border shadow-lg" showCloseButton={false}>
+      <DialogContent className="sm:max-w-[680px] p-0 gap-0 overflow-hidden max-h-[90vh] overflow-y-auto rounded-xl border shadow-lg" showCloseButton={true}>
         {/* Header */}
         <div className="relative overflow-hidden bg-muted/50 px-5 pt-5 pb-4 sm:px-6 sm:pt-6 border-b">
           <DialogHeader>

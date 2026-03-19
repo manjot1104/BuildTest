@@ -102,7 +102,12 @@ function stripSystemPromptFromBinary(
   if (!Array.isArray(content)) return content
 
   // Try to find the marker "User's Request:" (with or without trailing newline)
-  const markers = ["User's Request:\n", "User's Request:"]
+ const markers = [
+  'USER REQUEST:\n',
+  'USER FOLLOWUP:\n',
+  "User's Request:\n",  // legacy support
+  "User's Request:",    // legacy support
+]
   let markerFound = false
 
   // Recursively strip system prompt strings from any nested structure

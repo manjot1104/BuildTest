@@ -170,21 +170,31 @@ function renderTaskPart(part: string | TaskPart, index: number): React.ReactNode
     )
   }
 
-  if (isDesignInspirationCompletePart(part)) {
+  if (isDesignInspirationCompletePart(part) || (part.type === 'design-inspiration-complete' && 'inspirations' in part)) {
+    const inspirations = (part as { inspirations?: DesignInspiration[] }).inspirations ?? []
     return (
       <TaskItem key={index}>
         <div className="space-y-2">
-          <div className="text-gray-700 dark:text-gray-300 text-sm">
-            Generated {part.inspirations.length} design inspirations
+          <div className="text-gray-700 dark:text-gray-300 text-sm font-medium">
+            Generated {inspirations.length} design inspiration{inspirations.length !== 1 ? 's' : ''}
           </div>
-          {part.inspirations.slice(0, 3).map((inspiration: DesignInspiration, i: number) => (
+          {inspirations.map((inspiration: DesignInspiration, i: number) => (
             <div
               key={i}
-              className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-2 rounded"
+              className="text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 p-3 rounded-md border border-gray-200 dark:border-gray-700"
             >
-              {inspiration.title ?? inspiration.description ?? `Inspiration ${i + 1}`}
+              {inspiration.title && (
+                <div className="font-medium text-gray-800 dark:text-gray-200 mb-1">{inspiration.title}</div>
+              )}
+              {inspiration.description && (
+                <div className="text-gray-500 dark:text-gray-400">{inspiration.description}</div>
+              )}
+              {!inspiration.title && !inspiration.description && `Inspiration ${i + 1}`}
             </div>
           ))}
+          {inspirations.length === 0 && (
+            <div className="text-xs text-gray-500 dark:text-gray-400 italic">No inspirations available</div>
+          )}
         </div>
       </TaskItem>
     )
@@ -270,8 +280,11 @@ function renderTaskPart(part: string | TaskPart, index: number): React.ReactNode
   if (isFinishedDesignInspirationPart(part)) {
     return (
       <TaskItem key={index}>
-        <div className="text-green-600 dark:text-green-400 text-sm">
-          Design inspiration generated
+        <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-sm">
+          <svg className="size-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+          </svg>
+          Design inspiration generated successfully
         </div>
       </TaskItem>
     )
@@ -549,7 +562,8 @@ const CustomTaskSectionWrapper = (props: CustomTaskSectionWrapperProps) => {
         {...restProps}
         type={type}
         parts={parts}
-        title={title ?? 'Generating Design Inspiration'}
+        title={title ?? 'Design Inspiration'}
+        collapsed={false}
       />
     )
   }

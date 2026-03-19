@@ -7,6 +7,7 @@ export type TemplateCategory =
   | 'minimal'
   | 'creative'
   | 'photography'
+  | 'futuristic'
 
 export interface StudioTemplate {
   id: string
@@ -389,6 +390,374 @@ export const TEMPLATES: StudioTemplate[] = [
       el('ph-contact', 'paragraph', 920, 640, 480, 128,
         'Available for Work\nhello@elenavasquez.com\n+34 612 345 678\nBarcelona, Spain',
         { backgroundColor: '#141414', border: '1px solid #262626', borderRadius: 12, padding: 24, color: '#9ca3af', fontSize: 14, lineHeight: 1.8 }, { zIndex: 3 }),
+    ],
+  },
+
+  // ── 7. Futuristic Developer Portfolio ────────────────────────────────────────
+  // NO decorative section elements (glow orbs, section BGs) — they break mobile reflow.
+  // Glow effects achieved via boxShadow on content elements instead.
+  // Hero image at y=540 (below hero text y=80–500) so reflow puts it in separate row.
+  // Code block at y=880 (separate row from about text).
+  {
+    id: 'futuristic-dev',
+    name: 'Futuristic Dev Portfolio',
+    category: 'futuristic',
+    description: 'Premium futuristic portfolio for developers',
+    background: mkBg('gradient', '#06080f', { gradientFrom: '#06080f', gradientTo: '#0c1225', gradientAngle: 180 }),
+    elements: [
+
+      // ── Navbar ──────────────────────────────────────────────────────────────
+      el('fd-nav', 'navbar', 0, 0, 1440, 56, 'Portfolio|About|Skills|Experience|Projects|Education|Contact',
+        { backgroundColor: 'rgba(6,8,15,0.9)', color: '#e2e8f0', fontSize: 13, fontWeight: '500', border: '1px solid rgba(59,130,246,0.08)' },
+        { zIndex: 20, responsiveStyles: {
+          tablet: { height: 50, styles: { fontSize: 12 } },
+          mobile: { height: 46, styles: { fontSize: 10 } },
+        } }),
+
+      // ── Hero Section — text only (y=76–496), image at y=540 ─────────────
+      el('fd-hero-tag', 'paragraph', 100, 80, 160, 28,
+        'Available for hire',
+        { backgroundColor: 'rgba(59,130,246,0.1)', borderRadius: 20, padding: 5, color: '#60a5fa', fontSize: 11, fontWeight: '600', textAlign: 'center', border: '1px solid rgba(59,130,246,0.2)' },
+        { zIndex: 2, enterAnimation: 'fadeIn', responsiveStyles: {
+          tablet: { height: 26 },
+          mobile: { height: 24, styles: { fontSize: 10 } },
+        } }),
+
+      el('fd-hero-h1', 'heading', 100, 122, 680, 100, "Hi, I'm Alex Carter",
+        { color: '#f1f5f9', fontSize: 52, fontWeight: '800', lineHeight: 1.1, letterSpacing: -1 },
+        { headingLevel: 1, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 80, styles: { fontSize: 40 } },
+          mobile: { height: 64, styles: { fontSize: 28, letterSpacing: 0 } },
+        } }),
+
+      el('fd-hero-role', 'heading', 100, 234, 560, 36, 'Full Stack Developer',
+        { color: 'transparent', fontSize: 26, fontWeight: '700', gradientType: 'linear', gradientFrom: '#60a5fa', gradientTo: '#a78bfa', gradientAngle: 90 },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 32, styles: { fontSize: 20 } },
+          mobile: { height: 28, styles: { fontSize: 17 } },
+        } }),
+
+      el('fd-hero-desc', 'paragraph', 100, 284, 520, 64,
+        'I build performant web applications and scalable systems.\nPassionate about clean code, open source, and developer experience.',
+        { color: '#94a3b8', fontSize: 15, lineHeight: 1.75 },
+        { zIndex: 2, enterAnimation: 'fadeIn', responsiveStyles: {
+          tablet: { height: 60, styles: { fontSize: 14 } },
+          mobile: { height: 68, styles: { fontSize: 13, lineHeight: 1.6 } },
+        } }),
+
+      el('fd-hero-btn1', 'button', 100, 364, 160, 44, 'Download CV',
+        { backgroundColor: '#3b82f6', color: '#ffffff', fontSize: 14, fontWeight: '600', borderRadius: 10, boxShadow: '0 4px 20px rgba(59,130,246,0.3)' },
+        { zIndex: 3, hoverAnimation: 'lift', enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 42 },
+          mobile: { height: 42, styles: { fontSize: 13 } },
+        } }),
+
+      el('fd-hero-btn2', 'button', 276, 364, 144, 44, 'Contact Me',
+        { backgroundColor: 'rgba(59,130,246,0.08)', color: '#93c5fd', fontSize: 14, fontWeight: '500', borderRadius: 10, border: '1px solid rgba(59,130,246,0.3)' },
+        { zIndex: 3, hoverAnimation: 'lift', enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 42 },
+          mobile: { height: 42, styles: { fontSize: 13 } },
+        } }),
+
+      el('fd-hero-social', 'social-links', 100, 426, 240, 32, '',
+        { iconColor: '#64748b', iconSize: 18, gap: 16 },
+        { zIndex: 2, socialLinks: [{ platform: 'github', url: '' }, { platform: 'linkedin', url: '' }, { platform: 'twitter', url: '' }, { platform: 'discord', url: '' }] }),
+
+      // Hero image at y=540 — clearly below text (y=80–458) → separate reflow row
+      el('fd-hero-img', 'image', 860, 540, 460, 420,
+        'https://placehold.co/460x420/0f172a/3b82f6?text=Your+Photo',
+        { borderRadius: 20, objectFit: 'cover', border: '2px solid rgba(59,130,246,0.12)', boxShadow: '0 16px 48px rgba(0,0,0,0.5), 0 0 60px rgba(59,130,246,0.06)' },
+        { zIndex: 2, enterAnimation: 'fadeIn', responsiveStyles: {
+          tablet: { height: 260, styles: { borderRadius: 16 } },
+          mobile: { height: 200, styles: { borderRadius: 14 } },
+        } }),
+
+      // ── About Section (no background section element) ─────────────────────
+      el('fd-about-label', 'paragraph', 100, 580, 100, 22,
+        'ABOUT ME',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-about-h', 'heading', 100, 610, 560, 42, 'Crafting Digital Experiences',
+        { color: '#f1f5f9', fontSize: 30, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 38, styles: { fontSize: 24 } },
+          mobile: { height: 34, styles: { fontSize: 20 } },
+        } }),
+
+      el('fd-about-p', 'paragraph', 100, 662, 540, 72,
+        "I'm a full stack developer with 5+ years of experience building web applications. I specialize in React, Node.js, and cloud infrastructure. I love turning complex problems into elegant solutions.",
+        { color: '#94a3b8', fontSize: 14, lineHeight: 1.75 },
+        { zIndex: 2, responsiveStyles: {
+          tablet: { height: 68 },
+          mobile: { height: 88, styles: { fontSize: 13, lineHeight: 1.65 } },
+        } }),
+
+      // About highlight cards (y=750 — separate row from text at y=662)
+      el('fd-about-c1', 'paragraph', 100, 750, 210, 72,
+        '5+\nYears Experience',
+        { backgroundColor: 'rgba(59,130,246,0.06)', borderRadius: 14, border: '1px solid rgba(59,130,246,0.1)', padding: 14, color: '#e2e8f0', fontSize: 13, fontWeight: '600', lineHeight: 1.4, textAlign: 'center' },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 64 },
+        } }),
+
+      el('fd-about-c2', 'paragraph', 326, 750, 210, 72,
+        '30+\nProjects Delivered',
+        { backgroundColor: 'rgba(139,92,246,0.06)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.1)', padding: 14, color: '#e2e8f0', fontSize: 13, fontWeight: '600', lineHeight: 1.4, textAlign: 'center' },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 64 },
+        } }),
+
+      el('fd-about-c3', 'paragraph', 552, 750, 210, 72,
+        '10+\nOpen Source Repos',
+        { backgroundColor: 'rgba(6,182,212,0.06)', borderRadius: 14, border: '1px solid rgba(6,182,212,0.1)', padding: 14, color: '#e2e8f0', fontSize: 13, fontWeight: '600', lineHeight: 1.4, textAlign: 'center' },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 64 },
+        } }),
+
+      // Code block (y=840 — own row, hidden on mobile via responsive)
+      el('fd-about-code', 'code-block', 860, 580, 480, 240,
+        '// about.ts\nconst developer = {\n  name: "Alex Carter",\n  role: "Full Stack Dev",\n  languages: ["TS", "Python", "Go"],\n  interests: [\n    "Open Source",\n    "System Design",\n  ],\n  available: true,\n};',
+        { backgroundColor: '#0d1117', color: '#c9d1d9', fontSize: 12, fontFamily: '"Fira Code", monospace', lineHeight: 1.6, borderRadius: 14, border: '1px solid rgba(59,130,246,0.08)' },
+        { zIndex: 2, responsiveStyles: {
+          tablet: { hidden: true },
+          mobile: { hidden: true },
+        } }),
+
+      // ── Skills Section ──────────────────────────────────────────────────────
+      el('fd-skills-label', 'paragraph', 100, 860, 80, 22,
+        'SKILLS',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-skills-h', 'heading', 100, 888, 460, 38, 'Tech Stack & Expertise',
+        { color: '#f1f5f9', fontSize: 30, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 36, styles: { fontSize: 24 } },
+          mobile: { height: 32, styles: { fontSize: 20 } },
+        } }),
+
+      // Skill cards (all at y=940 — same row, reflow stacks them vertically on mobile)
+      el('fd-sk1', 'paragraph', 100, 940, 300, 100,
+        'Frontend\n\nReact · Next.js · TypeScript\nTailwind CSS · Framer Motion',
+        { backgroundColor: 'rgba(59,130,246,0.04)', borderRadius: 14, border: '1px solid rgba(59,130,246,0.1)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 90, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-sk2', 'paragraph', 416, 940, 300, 100,
+        'Backend\n\nNode.js · Express · Python\nGraphQL · REST APIs',
+        { backgroundColor: 'rgba(139,92,246,0.04)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.1)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 90, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-sk3', 'paragraph', 732, 940, 300, 100,
+        'Database & Cloud\n\nPostgreSQL · MongoDB · Redis\nAWS · Docker · Kubernetes',
+        { backgroundColor: 'rgba(6,182,212,0.04)', borderRadius: 14, border: '1px solid rgba(6,182,212,0.1)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 90, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-sk4', 'paragraph', 1048, 940, 300, 100,
+        'Tools & Design\n\nGit · GitHub Actions · CI/CD\nFigma · VS Code · Postman',
+        { backgroundColor: 'rgba(244,114,182,0.04)', borderRadius: 14, border: '1px solid rgba(244,114,182,0.1)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 90, styles: { fontSize: 12 } },
+        } }),
+
+      // ── Experience Section ──────────────────────────────────────────────────
+      el('fd-exp-label', 'paragraph', 100, 1070, 120, 22,
+        'EXPERIENCE',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-exp-h', 'heading', 100, 1098, 460, 38, 'Work Experience',
+        { color: '#f1f5f9', fontSize: 30, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 36, styles: { fontSize: 24 } },
+          mobile: { height: 32, styles: { fontSize: 20 } },
+        } }),
+
+      el('fd-exp1', 'paragraph', 100, 1150, 600, 110,
+        'Senior Full Stack Developer\nTechCorp Inc. · 2022 – Present\n\nLead a team of 5 engineers building a SaaS platform serving 100K+ users.',
+        { backgroundColor: 'rgba(59,130,246,0.04)', borderRadius: 14, border: '1px solid rgba(59,130,246,0.08)', padding: 18, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          tablet: { height: 120 },
+          mobile: { height: 130, styles: { padding: 14 } },
+        } }),
+
+      el('fd-exp2', 'paragraph', 740, 1150, 600, 110,
+        'Software Developer\nStartupLab · 2020 – 2022\n\nBuilt core product features from scratch. Increased test coverage to 85%.',
+        { backgroundColor: 'rgba(139,92,246,0.04)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.08)', padding: 18, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          tablet: { height: 120 },
+          mobile: { height: 130, styles: { padding: 14 } },
+        } }),
+
+      el('fd-exp3', 'paragraph', 100, 1278, 600, 110,
+        'Junior Developer\nCodeWorks Agency · 2018 – 2020\n\nDeveloped responsive web applications for 15+ clients across industries.',
+        { backgroundColor: 'rgba(6,182,212,0.04)', borderRadius: 14, border: '1px solid rgba(6,182,212,0.08)', padding: 18, color: '#cbd5e1', fontSize: 12, lineHeight: 1.7 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          tablet: { height: 120 },
+          mobile: { height: 130, styles: { padding: 14 } },
+        } }),
+
+      // ── Projects Section ────────────────────────────────────────────────────
+      el('fd-proj-label', 'paragraph', 100, 1420, 100, 22,
+        'PROJECTS',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-proj-h', 'heading', 100, 1448, 460, 38, 'Featured Projects',
+        { color: '#f1f5f9', fontSize: 30, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 36, styles: { fontSize: 24 } },
+          mobile: { height: 32, styles: { fontSize: 20 } },
+        } }),
+
+      // Project 1
+      el('fd-p1-img', 'image', 100, 1502, 400, 160,
+        'https://placehold.co/400x200/0f172a/3b82f6?text=Project+01',
+        { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(59,130,246,0.1)' },
+        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+      el('fd-p1-title', 'heading', 100, 1674, 400, 24, 'Cloud Dashboard',
+        { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
+        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+      el('fd-p1-desc', 'paragraph', 100, 1704, 400, 34,
+        'Real-time monitoring dashboard for cloud infrastructure.',
+        { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
+        { zIndex: 2 }),
+      el('fd-p1-tech', 'paragraph', 100, 1744, 400, 18,
+        'React · D3.js · WebSockets · AWS',
+        { color: '#60a5fa', fontSize: 10, fontWeight: '500' },
+        { zIndex: 2 }),
+
+      // Project 2
+      el('fd-p2-img', 'image', 520, 1502, 400, 160,
+        'https://placehold.co/400x200/0f172a/8b5cf6?text=Project+02',
+        { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(139,92,246,0.1)' },
+        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+      el('fd-p2-title', 'heading', 520, 1674, 400, 24, 'DevSync CLI',
+        { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
+        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+      el('fd-p2-desc', 'paragraph', 520, 1704, 400, 34,
+        'Open-source CLI for scaffolding projects with CI/CD templates.',
+        { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
+        { zIndex: 2 }),
+      el('fd-p2-tech', 'paragraph', 520, 1744, 400, 18,
+        'TypeScript · Node.js · npm · GitHub Actions',
+        { color: '#a78bfa', fontSize: 10, fontWeight: '500' },
+        { zIndex: 2 }),
+
+      // Project 3
+      el('fd-p3-img', 'image', 940, 1502, 400, 160,
+        'https://placehold.co/400x200/0f172a/06b6d4?text=Project+03',
+        { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(6,182,212,0.1)' },
+        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+      el('fd-p3-title', 'heading', 940, 1674, 400, 24, 'API Gateway',
+        { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
+        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+      el('fd-p3-desc', 'paragraph', 940, 1704, 400, 34,
+        'High-performance API gateway with rate limiting and caching.',
+        { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
+        { zIndex: 2 }),
+      el('fd-p3-tech', 'paragraph', 940, 1744, 400, 18,
+        'Go · Redis · PostgreSQL · Docker',
+        { color: '#22d3ee', fontSize: 10, fontWeight: '500' },
+        { zIndex: 2 }),
+
+      // ── Education Section ───────────────────────────────────────────────────
+      el('fd-edu-label', 'paragraph', 100, 1796, 110, 22,
+        'EDUCATION',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-edu-h', 'heading', 100, 1824, 460, 36, 'Education',
+        { color: '#f1f5f9', fontSize: 30, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 34, styles: { fontSize: 24 } },
+          mobile: { height: 30, styles: { fontSize: 20 } },
+        } }),
+
+      el('fd-edu1', 'paragraph', 100, 1874, 400, 88,
+        "B.S. Computer Science\nStanford University · 2014 – 2018\n\nGraduated with honors.",
+        { backgroundColor: 'rgba(59,130,246,0.04)', borderRadius: 14, border: '1px solid rgba(59,130,246,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 92, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-edu2', 'paragraph', 520, 1874, 400, 88,
+        "AWS Solutions Architect\nAmazon Web Services · 2021\n\nProfessional cloud certification.",
+        { backgroundColor: 'rgba(139,92,246,0.04)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 88, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-edu3', 'paragraph', 940, 1874, 400, 88,
+        "Full Stack Bootcamp\nHack Reactor · 2018\n\nIntensive 12-week JS & React program.",
+        { backgroundColor: 'rgba(6,182,212,0.04)', borderRadius: 14, border: '1px solid rgba(6,182,212,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
+        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+          mobile: { height: 88, styles: { fontSize: 12 } },
+        } }),
+
+      // ── Contact Section ─────────────────────────────────────────────────────
+      el('fd-contact-label', 'paragraph', 100, 1996, 100, 22,
+        'CONTACT',
+        { color: '#60a5fa', fontSize: 11, fontWeight: '700', letterSpacing: 2 },
+        { zIndex: 2 }),
+
+      el('fd-contact-h', 'heading', 100, 2024, 500, 38, "Let's Work Together",
+        { color: '#f1f5f9', fontSize: 32, fontWeight: '700' },
+        { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
+          tablet: { height: 36, styles: { fontSize: 26 } },
+          mobile: { height: 30, styles: { fontSize: 20 } },
+        } }),
+
+      el('fd-contact-p', 'paragraph', 100, 2072, 440, 36,
+        "Have a project in mind? Send me a message and I'll get back to you.",
+        { color: '#94a3b8', fontSize: 13, lineHeight: 1.6 },
+        { zIndex: 2, responsiveStyles: {
+          mobile: { height: 44, styles: { fontSize: 12 } },
+        } }),
+
+      el('fd-contact-email', 'paragraph', 100, 2120, 280, 22,
+        'alex@carter.dev',
+        { color: '#60a5fa', fontSize: 14, fontWeight: '600' },
+        { zIndex: 2 }),
+
+      el('fd-contact-social', 'social-links', 100, 2154, 240, 32, '',
+        { iconColor: '#60a5fa', iconSize: 20, gap: 18 },
+        { zIndex: 2, socialLinks: [
+          { platform: 'github', url: '' },
+          { platform: 'linkedin', url: '' },
+          { platform: 'twitter', url: '' },
+          { platform: 'email', url: '' },
+        ] }),
+
+      // Contact form (y=2024 — same row start as contact text, reflow stacks on mobile)
+      el('fd-contact-form', 'form', 700, 2024, 640, 320, 'Send Message',
+        { backgroundColor: 'rgba(15,23,42,0.5)', borderRadius: 18, border: '1px solid rgba(59,130,246,0.08)', padding: 24, color: '#e2e8f0' },
+        { zIndex: 2, formFields: [
+          { id: 'fc1', type: 'text', label: 'Your Name', placeholder: 'John Doe', required: true },
+          { id: 'fc2', type: 'email', label: 'Email Address', placeholder: 'john@example.com', required: true },
+          { id: 'fc3', type: 'textarea', label: 'Message', placeholder: "Tell me about your project...", required: true },
+        ], responsiveStyles: {
+          tablet: { height: 300, styles: { padding: 20 } },
+          mobile: { height: 280, styles: { padding: 16, borderRadius: 14 } },
+        } }),
+
+      // Footer
+      el('fd-footer-div', 'divider', 100, 2370, 1240, 1, '',
+        { backgroundColor: 'rgba(59,130,246,0.08)' },
+        { zIndex: 2 }),
+
+      el('fd-footer', 'paragraph', 100, 2386, 1240, 20,
+        'Designed & built by Alex Carter. All rights reserved.',
+        { color: '#475569', fontSize: 11, textAlign: 'center' },
+        { zIndex: 2, responsiveStyles: {
+          mobile: { styles: { fontSize: 10 } },
+        } }),
     ],
   },
 ]

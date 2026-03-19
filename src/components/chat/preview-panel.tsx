@@ -96,7 +96,7 @@ export function PreviewPanel({
 }: PreviewPanelProps) {
   const [device, setDevice] = useState<PreviewDevice>('desktop')
   const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
-  console.log('🖼️ PreviewPanel rendered | currentChat.demo:', currentChat?.demo, '| iframeSrc state:', iframeSrc)
+
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
@@ -118,11 +118,7 @@ export function PreviewPanel({
 const showBuildingLoader = isBuilding && !effectiveSrc
 
 
-console.log('🖼️ effectiveSrc:', effectiveSrc)
-console.log('🖼️ showBuildingLoader:', showBuildingLoader)
-if (!effectiveSrc) {
-  console.log('🖼️ No effectiveSrc — will show No preview available')
-}
+
   // keyboard fullscreen toggle (ignore when typing in inputs)
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {

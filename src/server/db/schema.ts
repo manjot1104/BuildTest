@@ -201,6 +201,38 @@ export const conversation_messages = createTable(
   ],
 );
 
+// ─── Chat Folders ────────────────────────────────────────────────────────────
+
+export const chat_folders = createTable(
+  "chat_folders",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: d.varchar("name", { length: 100 }).notNull(),
+    color: d.varchar("color", { length: 7 }), // hex color e.g. "#3B82F6"
+    position: d.integer("position").notNull().default(0),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("chat_folders_user_id_idx").on(t.user_id),
+    unique("chat_folders_user_name_uniq").on(t.user_id, t.name),
+  ],
+);
+
+export const chatFoldersRelations = relations(chat_folders, ({ one }) => ({
+  user: one(user, { fields: [chat_folders.user_id], references: [user.id] }),
+}));
+
 // User chats - stores chat data locally for efficient history retrieval
 // Maps V0 chat IDs to user IDs and stores chat metadata
 export const user_chats = createTable(
@@ -234,9 +266,13 @@ export const user_chats = createTable(
 
     prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
 
-    conversation_id: d
-      .text("conversation_id")
-      .references(() => conversations.id, { onDelete: "set null" }),
+conversation_id: d
+  .text("conversation_id")
+  .references(() => conversations.id, { onDelete: "set null" }),
+
+folder_id: d
+  .text("folder_id")
+  .references(() => chat_folders.id, { onDelete: "set null" }),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
@@ -244,7 +280,8 @@ export const user_chats = createTable(
     index("user_chats_v0_chat_id_idx").on(t.v0_chat_id),
     index("user_chats_created_at_idx").on(t.created_at),
     index("user_chats_chat_type_idx").on(t.chat_type),
-    index("user_chats_conversation_id_idx").on(t.conversation_id),
+index("user_chats_conversation_id_idx").on(t.conversation_id),
+index("user_chats_folder_id_idx").on(t.folder_id),
   ],
 );
 
@@ -725,6 +762,35 @@ export const studio_layouts = createTable(
 export const studioLayoutsRelations = relations(studio_layouts, ({ one }) => ({
   user: one(user, { fields: [studio_layouts.user_id], references: [user.id] }),
 }));
+
+// ─── Shared Chat Links ──────────────────────────────────────────────────────
+
+export const shared_chat_links = createTable(
+  "shared_chat_links",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    token: d.varchar("token", { length: 64 }).notNull().unique(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chat_type: chatTypeEnum("chat_type").notNull(),
+    // For BUILDER chats: v0_chat_id; For OPENROUTER chats: conversation_id
+    chat_id: d.text("chat_id").notNull(),
+    title: d.text("title"),
+    // Snapshot of messages at share time (JSON array)
+    messages: d.text("messages").notNull(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    expires_at: d.timestamp("expires_at", { withTimezone: true }),
+  }),
+  (t) => [
+    index("shared_chat_links_token_idx").on(t.token),
+    index("shared_chat_links_user_id_idx").on(t.user_id),
+  ],
+);
 
 // ─── Sandbox Executions ──────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ import {
   getChatCountByIP,
   getChatDemoUrl,
   getUserChat,
+  renameUserChat,
 } from '@/server/db/queries'
 import { createChatHandler } from '@/server/api/controllers/chat.controller'
 import {
@@ -36,14 +37,11 @@ import {
   addCreditsHandler,
   deductCreditsHandler,
   toggleUserRoleHandler,
-} from "@/server/api/controllers/admin.controller";
-import { executeCodeHandler } from "@/server/api/controllers/sandbox.controller";
-import {
-  openRouterChatHandler,
-  openRouterStreamHandler,
-} from "@/server/api/controllers/openrouter.controller";
-import { getV0Client } from "@/lib/v0-client";
-import { enhanceFirstPrompt } from "@/lib/prompt-enhancer";
+} from '@/server/api/controllers/admin.controller'
+import { executeCodeHandler } from '@/server/api/controllers/sandbox.controller'
+import { openRouterChatHandler, openRouterStreamHandler } from '@/server/api/controllers/openrouter.controller'
+import { getV0Client } from '@/lib/v0-client'
+import { enhanceFirstPrompt, enhanceFollowUpPrompt } from '@/lib/prompt-enhancer'
 import {
   type ChatAttachment,
   type ApiErrorResponse,
@@ -58,7 +56,16 @@ import {
 import {
   toggleStarChat,
   getStarredChats,
-} from "@/server/api/controllers/star.controller";
+} from '@/server/api/controllers/star.controller'
+
+import {
+  createFolderHandler,
+  getFoldersHandler,
+  updateFolderHandler,
+  deleteFolderHandler,
+  assignChatToFolderHandler,
+  getFolderChatsHandler,
+} from '@/server/api/controllers/folder.controller'
 import {
   getGithubStatusHandler,
   pushToGithubHandler,
@@ -137,10 +144,11 @@ interface StreamingErrorResponse {
 
 /** Chat request body interface (matches Elysia schema) */
 interface ChatRequestBody {
-  message: string;
-  chatId?: string;
-  streaming?: boolean;
-  attachments?: ChatAttachment[];
+  message: string
+  chatId?: string
+  streaming?: boolean
+  attachments?: ChatAttachment[]
+  envVarNames?: string[] 
 }
 
 export const elysiaApp = new Elysia({ prefix: '/api' })
@@ -163,8 +171,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   .post(
     "/chat",
     async ({ body, request, set }) => {
-      const { message, chatId, streaming, attachments } =
-        body as ChatRequestBody;
+     const { message, chatId, streaming, attachments, envVarNames = [] } = body as ChatRequestBody
 
       const v0 = await getV0Client();
 
@@ -272,14 +279,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           if (chatId) {
             try {
               // Continue existing chat with streaming
-              stream = (await v0.chats.sendMessage({
-                chatId,
-                message,
-                responseMode: "experimental_stream",
-                ...(attachments && attachments.length > 0 && { attachments }),
-              })) as ReadableStream<Uint8Array>;
+          stream = (await v0.chats.sendMessage({
+  chatId,
+  message: enhanceFollowUpPrompt(message, envVarNames),
+  responseMode: 'experimental_stream',
+  ...(attachments && attachments.length > 0 && { attachments }),
+})) as ReadableStream<Uint8Array>
             } catch (error) {
-              // If chat doesn't exist (404), create a new chat instead
+              // If cha t doesn't exist (404), create a new chat instead
               const errorMessage =
                 error instanceof Error ? error.message : String(error);
               if (
@@ -289,8 +296,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
               ) {
                 // Chat not found on v0, create new chat instead
                 stream = (await v0.chats.create({
-                  message: enhanceFirstPrompt(message),
-                  responseMode: "experimental_stream",
+                  message: enhanceFirstPrompt(message, envVarNames),
+                  responseMode: 'experimental_stream',
                   ...(attachments && attachments.length > 0 && { attachments }),
                 })) as ReadableStream<Uint8Array>;
               } else {
@@ -301,8 +308,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           } else {
             // Create new chat with streaming (enhanced first prompt)
             stream = (await v0.chats.create({
-              message: enhanceFirstPrompt(message),
-              responseMode: "experimental_stream",
+             message: enhanceFirstPrompt(message, envVarNames),
+              responseMode: 'experimental_stream',
               ...(attachments && attachments.length > 0 && { attachments }),
             })) as ReadableStream<Uint8Array>;
           }
@@ -468,10 +475,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }
 
       const { chatId, isStarred } = body as {
-        chatId: string;
-        isStarred: boolean;
-      };
-
+        chatId: string
+        isStarred: boolean
+      }
+ console.log('Star API - userId:', session.user.id)  
+    console.log('Star API - chatId:', chatId)           
+    console.log('Star API - isStarred:', isStarred)     
       await toggleStarChat({
         userId: session.user.id,
         chatId,
@@ -498,7 +507,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     const chats = await getStarredChats(session.user.id)
     return chats.map((chat) => ({
       id: chat.id,
-      v0ChatId: chat.v0_chat_id || chat.conversation_id || chat.id,
+    v0ChatId: chat.v0_chat_id || chat.id,  
+  conversationId: chat.conversation_id,
       title: chat.title,
       prompt: chat.prompt,
       demoUrl: chat.demo_url,
@@ -508,6 +518,110 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
     }))
   })
+  // Rename chat
+  .post(
+    '/chat/rename',
+    async ({ body, set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+      const { chatId, title } = body as { chatId: string; title: string }
+      if (!title?.trim()) {
+        set.status = 400
+        return { error: 'Title is required' }
+      }
+      const updated = await renameUserChat({
+        chatId,
+        userId: session.user.id,
+        title: title.trim(),
+      })
+      if (!updated) {
+        set.status = 404
+        return { error: 'Chat not found' }
+      }
+      return { success: true }
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        title: t.String(),
+      }),
+    },
+  )
+  // ── Chat Folders ──────────────────────────────────────────────────────────
+  .post(
+    '/chat/folders',
+    async ({ body, set }) => {
+      const result = await createFolderHandler({ body: body as { name: string; color?: string } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { body: t.Object({ name: t.String(), color: t.Optional(t.String()) }) },
+  )
+  .get('/chat/folders', async ({ set }) => {
+    const result = await getFoldersHandler()
+    if ('error' in result && 'status' in result) {
+      set.status = result.status as number
+      return { error: result.error }
+    }
+    return result
+  })
+  .put(
+    '/chat/folders/:id',
+    async ({ params, body, set }) => {
+      const result = await updateFolderHandler({ params, body: body as { name?: string; color?: string | null; position?: number } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    {
+      params: t.Object({ id: t.String() }),
+      body: t.Object({ name: t.Optional(t.String()), color: t.Optional(t.Nullable(t.String())), position: t.Optional(t.Number()) }),
+    },
+  )
+  .delete(
+    '/chat/folders/:id',
+    async ({ params, set }) => {
+      const result = await deleteFolderHandler({ params })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
+  .post(
+    '/chat/folders/assign',
+    async ({ body, set }) => {
+      const result = await assignChatToFolderHandler({ body: body as { chatId: string; folderId: string | null } })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { body: t.Object({ chatId: t.String(), folderId: t.Nullable(t.String()) }) },
+  )
+  .get(
+    '/chat/folders/:id/chats',
+    async ({ params, set }) => {
+      const result = await getFolderChatsHandler({ params })
+      if ('error' in result && 'status' in result) {
+        set.status = result.status as number
+        return { error: result.error }
+      }
+      return result
+    },
+    { params: t.Object({ id: t.String() }) },
+  )
   // Fork chat endpoint - POST /api/chat/fork
   // Creates a copy of an existing chat for the current user
   .post(
@@ -562,10 +676,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
   // Chat history endpoint - GET /api/chats
-  .get(
-    "/chats",
-    async ({ query, set }) => {
-      const result = await getChatHistoryHandler({ query });
+ .get(
+  '/chats',
+  async ({ query, set }) => {
+    const result = await getChatHistoryHandler({ query: { ...query, page: query.page ? Number(query.page) : undefined, limit: query.limit ? Number(query.limit) : undefined } })
 
       if (isApiError(result)) {
         if (result.error === "Failed to fetch chat history") {
@@ -573,20 +687,22 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         }
       }
 
-      return result;
-    },
-    {
-      query: t.Object({
-        type: t.Optional(
-          t.Union([
-            t.Literal("all"),
-            t.Literal("builder"),
-            t.Literal("openrouter"),
-          ]),
-        ),
-      }),
-    },
-  )
+    return result
+  },
+  {
+    query: t.Object({
+      type: t.Optional(
+        t.Union([
+          t.Literal("all"),
+          t.Literal("builder"),
+          t.Literal("openrouter"),
+        ])
+      ),
+      page: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
+    }),
+  },
+)
 
   // Speech-to-text endpoint - POST /api/speech-to-text
   .post(
