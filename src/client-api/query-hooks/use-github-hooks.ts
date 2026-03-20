@@ -19,6 +19,27 @@ export interface GithubRepoInfo {
   createdAt: string
 }
 
+// NEW: Represents one repo from the user's GitHub account (for the picker)
+export interface GithubRepoListItem {
+  id: number
+  name: string
+  fullName: string
+  htmlUrl: string
+  private: boolean
+  description: string | null
+  defaultBranch: string
+  updatedAt: string
+}
+
+// NEW: Response from POST /api/github/connect
+export interface ConnectRepoResponse {
+  success: boolean
+  repoFullName: string
+  repoUrl: string
+  defaultBranch: string
+  visibility: 'public' | 'private'
+}
+
 export interface PushToGithubRequest {
   chatId: string
   branchName: string
@@ -84,7 +105,7 @@ export function useGithubStatus(enabled = true) {
 
 /**
  * Returns the active GitHub repo for a chat, or null if none exists.
- * Invalidated after every successful push.
+ * Invalidated after every successful push or connect.
  */
 export function useGithubRepoForChat(chatId: string | undefined, enabled = true) {
   return useQuery({
@@ -108,9 +129,79 @@ export function useGithubRepoForChat(chatId: string | undefined, enabled = true)
   })
 }
 
+/**
+ * NEW: Returns all GitHub repos the current user has access to.
+ * Only fetches when enabled — triggered when the user opens the "Use existing" tab.
+ * Includes own repos, collaborator repos, and org repos (affiliation set server-side).
+ */
+export function useGithubRepos(enabled = false) {
+  return useQuery({
+    queryKey: ['github-repos'],
+    queryFn: async (): Promise<GithubRepoListItem[]> => {
+      const response = await fetch('/api/github/repos')
+      const result = (await response.json()) as GithubRepoListItem[] | ApiErrorResponse
+
+      if (!response.ok || ('error' in (result as ApiErrorResponse))) {
+        throw new Error(
+          'error' in (result as ApiErrorResponse)
+            ? (result as ApiErrorResponse).error
+            : 'Failed to list repos',
+        )
+      }
+
+      return result as GithubRepoListItem[]
+    },
+    enabled,
+    staleTime: 1000 * 60 * 2, // 2 minutes
+    retry: false,
+  })
+}
+
 // ============================================================================
 // Mutation Hooks
 // ============================================================================
+
+/**
+ * NEW: Mutation hook for Step 1 of the connect-existing-repo flow.
+ *
+ * Validates the repo is accessible, saves it as the active repo for the chat,
+ * and invalidates the repo cache. Does NOT push any files.
+ *
+ * After this succeeds the dialog closes, and the user uses the normal Push
+ * button to push — which now runs as a follow-up push against the connected repo.
+ */
+export function useConnectExistingRepo(chatId: string | undefined) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (data: {
+      chatId: string
+      repoFullName: string
+    }): Promise<ConnectRepoResponse> => {
+      const response = await fetch('/api/github/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      const result = (await response.json()) as ConnectRepoResponse | ApiErrorResponse
+
+      if (!response.ok || 'error' in result) {
+        const err = result as ApiErrorResponse
+        throw new GithubPushError(
+          err.error ?? 'Failed to connect repository',
+          err.code,
+        )
+      }
+
+      return result as ConnectRepoResponse
+    },
+    onSuccess: async () => {
+      // Refresh the active repo info for this chat
+      await queryClient.invalidateQueries({ queryKey: ['github-repo', chatId] })
+    },
+  })
+}
 
 /**
  * Mutation hook for pushing code to GitHub.
@@ -118,6 +209,7 @@ export function useGithubRepoForChat(chatId: string | undefined, enabled = true)
  * Handles three cases (all via the same endpoint):
  *   - First push: pass repoName + visibility
  *   - Follow-up push to active repo: just chatId + branchName
+ *     (this now also covers repos connected via useConnectExistingRepo)
  *   - Replace active repo: pass repoName + visibility + replaceRepo: true
  *
  * Throws GithubPushError with a `code` field so the UI can react to specific cases.

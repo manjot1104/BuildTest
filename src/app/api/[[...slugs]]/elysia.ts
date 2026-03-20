@@ -70,6 +70,8 @@ import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
+  getGithubReposHandler,        // NEW
+  connectExistingRepoHandler,   // NEW
 } from '@/server/api/controllers/github.controller'
 import {
   createDesignHandler,
@@ -1210,6 +1212,67 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     {
       params: t.Object({
         id: t.String(),
+      }),
+    },
+  )
+
+  // ============================================
+  // GitHub Endpoints
+  // ============================================
+
+  // GET /api/github/status — returns whether the current user has GitHub connected
+  .get("/github/status", async ({ set }) => {
+    const result = await getGithubStatusHandler()
+    if (result && "status" in result && result.status) set.status = result.status
+    return result
+  })
+
+  // POST /api/github/push — push generated files to GitHub
+  .post(
+    "/github/push",
+    async ({ body, set }) => {
+      const result = await pushToGithubHandler({ body })
+      if (result && "status" in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:                 t.String(),
+        branchName:             t.String(),
+        commitMessage:          t.Optional(t.String()),
+        confirmExistingBranch:  t.Optional(t.Boolean()),
+        repoName:               t.Optional(t.String()),
+        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
+        replaceRepo:            t.Optional(t.Boolean()),
+      }),
+    },
+  )
+
+  // NEW: GET /api/github/repos — list user's repos for the "connect existing" picker
+  // Returns repos the user owns, collaborates on, or is an org member of.
+  // Write-permission enforcement happens at push time via the GitHub API.
+  .get('/github/repos', async ({ set }) => {
+    const result = await getGithubReposHandler()
+    if (!Array.isArray(result) && 'status' in result && result.status) {
+      set.status = result.status
+    }
+    return result
+  })
+
+  // NEW: POST /api/github/connect — Step 1 of connect-existing-repo flow
+  // Validates the repo is accessible, saves it as the active repo for the chat.
+  // Does NOT push any files. Push happens separately via /github/push.
+  .post(
+    '/github/connect',
+    async ({ body, set }) => {
+      const result = await connectExistingRepoHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:       t.String(),
+        repoFullName: t.String(), // format: "owner/repo-name"
       }),
     },
   )

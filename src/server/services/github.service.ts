@@ -41,6 +41,18 @@ export interface GithubFile {
   content: string
 }
 
+// NEW: shape of one repo returned by the /user/repos listing endpoint
+export interface GithubRepoListItem {
+  id: number
+  name: string
+  full_name: string
+  html_url: string
+  private: boolean
+  description: string | null
+  default_branch: string
+  updated_at: string
+}
+
 // ============================================================================
 // Token Retrieval
 // ============================================================================
@@ -90,7 +102,10 @@ export async function getGithubConnectionStatus(userId: string): Promise<{
       return { connected: false, hasRepoScope: false }
     }
 
-    const hasRepoScope = githubAcc.scope?.includes('repo') ?? false
+    // Split on commas/spaces and match the exact 'repo' token — not 'public_repo',
+    // which also contains the string 'repo' and would cause .includes() to return true.
+    const scopes = githubAcc.scope?.split(/[,\s]+/) ?? []
+    const hasRepoScope = scopes.includes('repo')
 
     // Verify token is still valid by fetching user
     const ghUser = await getGithubUser(githubAcc.accessToken)
@@ -409,4 +424,57 @@ export async function pushFilesToBranch(
     commitSha: newCommit.sha,
     commitUrl: newCommit.html_url,
   }
+}
+
+// ============================================================================
+// NEW: Repo listing (for the "connect existing repo" picker)
+// ============================================================================
+
+/**
+ * Lists GitHub repositories the authenticated user has access to, sorted by
+ * most recently updated. Fetches up to 3 pages (300 repos) to cover most
+ * accounts without hammering the API.
+ *
+ * affiliation=owner,collaborator,organization_member includes org repos the
+ * user has write access to — the token enforces actual permissions at push time.
+ */
+export async function listUserRepos(token: string): Promise<GithubRepoListItem[]> {
+  const allRepos: GithubRepoListItem[] = []
+  const perPage = 100
+  const maxPages = 3
+
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const repos = await githubFetch<GithubRepoListItem[]>(
+        token,
+        `/user/repos?sort=updated&direction=desc&per_page=${perPage}&page=${page}&affiliation=owner,collaborator,organization_member`,
+      )
+      allRepos.push(...repos)
+      // Fewer results than requested means we've hit the last page
+      if (repos.length < perPage) break
+    } catch {
+      break
+    }
+  }
+
+  return allRepos
+}
+
+/**
+ * Fetches full details for a single repo by owner/name.
+ * Used during the connect flow to get id, visibility, and default branch.
+ */
+export async function getRepoDetails(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<{
+  id: number
+  name: string
+  full_name: string
+  html_url: string
+  private: boolean
+  default_branch: string
+}> {
+  return githubFetch(token, `/repos/${owner}/${repo}`)
 }
