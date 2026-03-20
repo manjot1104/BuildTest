@@ -116,54 +116,67 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   }, [designId, loadLayout])
 
   // ── Save draft to DB ───────────────────────────────────────────────────────
-  const isSavingRef = useRef(false)
+  const savingPromiseRef = useRef<Promise<void> | null>(null)
+  const dispatchRef = useRef(editor.dispatch)
+  dispatchRef.current = editor.dispatch
+
   const handleSaveDraft = useCallback(async () => {
-    if (isSavingRef.current) return // prevent concurrent saves
-    isSavingRef.current = true
-    setIsSaving(true)
-    try {
-      const body = {
-        title: 'Untitled',
-        layout: JSON.stringify(elementsRef.current),
-        background: JSON.stringify(bgRef.current),
-      }
-
-      if (!currentIdRef.current) {
-        // First save — create a new draft
-        const res = await fetch('/api/design', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        if (!res.ok) throw new Error('Failed to create draft')
-        const data = (await res.json()) as { id?: string }
-        if (data.id) {
-          currentIdRef.current = data.id
-          setCurrentId(data.id)
-          // Update URL so refresh loads the right design
-          window.history.replaceState({}, '', `/buildify-studio/${data.id}`)
-        }
-      } else {
-        // Update existing draft
-        await fetch(`/api/design/${currentIdRef.current}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-      }
-
-      editor.dispatch({ type: 'SET_DIRTY', isDirty: false })
-      // Clear legacy localStorage draft after first successful DB save
-      localStorage.removeItem(LEGACY_DRAFT_KEY)
-      toast.success('Draft saved')
-    } catch (err) {
-      toast.error('Failed to save draft')
-      throw err // Re-throw so callers like onBeforePublish can detect failure
-    } finally {
-      isSavingRef.current = false
-      setIsSaving(false)
+    // If a save is already in-flight, wait for it to complete then re-save
+    // with the latest state (critical for onBeforePublish to ensure DB is current)
+    if (savingPromiseRef.current) {
+      await savingPromiseRef.current
     }
-  }, [editor])
+
+    setIsSaving(true)
+    const promise = (async () => {
+      try {
+        const body = {
+          title: 'Untitled',
+          layout: JSON.stringify(elementsRef.current),
+          background: JSON.stringify(bgRef.current),
+        }
+
+        if (!currentIdRef.current) {
+          // First save — create a new draft
+          const res = await fetch('/api/design', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error('Failed to create draft')
+          const data = (await res.json()) as { id?: string }
+          if (data.id) {
+            currentIdRef.current = data.id
+            setCurrentId(data.id)
+            // Update URL so refresh loads the right design
+            window.history.replaceState({}, '', `/buildify-studio/${data.id}`)
+          }
+        } else {
+          // Update existing draft
+          const res = await fetch(`/api/design/${currentIdRef.current}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error('Failed to save draft')
+        }
+
+        dispatchRef.current({ type: 'SET_DIRTY', isDirty: false })
+        // Clear legacy localStorage draft after first successful DB save
+        localStorage.removeItem(LEGACY_DRAFT_KEY)
+        toast.success('Draft saved')
+      } catch (err) {
+        toast.error('Failed to save draft')
+        throw err // Re-throw so callers like onBeforePublish can detect failure
+      } finally {
+        savingPromiseRef.current = null
+        setIsSaving(false)
+      }
+    })()
+
+    savingPromiseRef.current = promise
+    await promise
+  }, []) // No dependencies — reads everything from refs
 
   // Auto-save: debounce 2s after any change
   useEffect(() => {
