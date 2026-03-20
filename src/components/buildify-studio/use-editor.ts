@@ -615,7 +615,7 @@ if (type === 'section') {
             x: baseX,
             y: baseY,
             width: 600,
-            height: 300,
+         height: 340,   
             content: 'hero',  
   sectionKey: 'hero',  
             styles: {
@@ -629,7 +629,7 @@ if (type === 'section') {
             x: baseX + 60,
             y: baseY + 60,
             width: 480,
-            height: 80,
+             height: 110, 
             content: 'Build Amazing Websites',
             headingLevel: 1,
             styles: { fontSize: 48, fontWeight: '700', color: '#ffffff' },
@@ -637,7 +637,7 @@ if (type === 'section') {
           {
             type: 'paragraph',
             x: baseX + 60,
-            y: baseY + 150,
+          y: baseY + 185,
             width: 480,
             height: 60,
             content: 'Create beautiful landing pages and websites without writing a single line of code.',
@@ -646,7 +646,7 @@ if (type === 'section') {
           {
             type: 'button',
             x: baseX + 60,
-            y: baseY + 225,
+            y: baseY + 265,   
             width: 140,
             height: 48,
             content: 'Get Started',
@@ -661,7 +661,7 @@ if (type === 'section') {
           {
             type: 'button',
             x: baseX + 220,
-            y: baseY + 225,
+            y: baseY + 265,
             width: 140,
             height: 48,
             content: 'Learn More',
@@ -936,17 +936,19 @@ if (type === 'section') {
         ],
       }
 
-      const blockElements = templates[templateType]
-    const elements = blockElements.map((el, idx) => ({
+    const blockElements = templates[templateType]
+const templateBlockId = crypto.randomUUID()   
+const elements = blockElements.map((el, idx) => ({
   ...el,
   id: crypto.randomUUID(),
+  templateBlockId,                           
   link: { enabled: false, href: '', target: '_self' as const },
   enterAnimation: 'none' as const,
   hoverAnimation: 'none' as const,
   zIndex: maxZ + idx + 1,
   locked: false,
   hidden: false,
-  sectionKey: el.sectionKey, 
+  sectionKey: el.sectionKey,
 }))
 
       elements.forEach((el) => {

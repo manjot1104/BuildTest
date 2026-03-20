@@ -134,7 +134,7 @@ export interface CanvasElement {
   socialLinks?: SocialLinkItem[]
   formFields?: FormField[]
   iconName?: string
- 
+templateBlockId?: string
   sectionKey?: string
   /** Responsive overrides — tablet/mobile values merged on top of base (desktop) */
   responsiveStyles?: {
