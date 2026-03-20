@@ -74,7 +74,7 @@ function parseExperience() {
   const entries = SAMPLE_RESUME_DATA.experience.split('\n\n')
   return entries.map((entry) => {
     const lines = entry.split('\n')
-    const header = lines[0]
+    const header = lines[0] ?? ''
     const parts = header.split(' | ')
     const title = parts[0] || 'Software Engineer'
     const company = parts[1] || 'Tech Company'
@@ -107,7 +107,7 @@ function parseProjects() {
   const entries = SAMPLE_RESUME_DATA.projects.split('\n\n')
   return entries.map((entry) => {
     const lines = entry.split('\n')
-    const header = lines[0]
+    const header = lines[0] ?? ''
     const parts = header.split(' | ')
     const name = parts[0] || 'Project Name'
     const year = parts[1] || '2023'
@@ -186,7 +186,7 @@ function injectSampleDataIntoHtml(html: string): string {
   // Experience injection - handle multiple formats
   if (expEntries.length > 0) {
     // Replace single experience entry placeholders
-    const firstExp = expEntries[0]
+    const firstExp = expEntries[0]!
     out = out.replace(/(<[^>]*class="[^"]*job-title[^"]*"[^>]*>)\s*Job Title\s*(<\/[^>]+>)/gi, `$1${firstExp.title}$2`)
     out = out.replace(/>\s*Job Title\s*</gi, `>${firstExp.title}<`)
     out = out.replace(/\bJob Title\b/gi, firstExp.title)
@@ -252,7 +252,7 @@ function injectSampleDataIntoHtml(html: string): string {
   // Projects injection
   if (projEntries.length > 0) {
     // First, replace placeholder text if it exists
-    const firstProj = projEntries[0]
+    const firstProj = projEntries[0]!
     out = out.replace(/(<[^>]*class="[^"]*job-title[^"]*"[^>]*>)\s*Project Name\s*\|\s*Year\s*(<\/[^>]+>)/gi, `$1${firstProj.name} | ${firstProj.year}$2`)
     out = out.replace(/(<[^>]*class="[^"]*project-title[^"]*"[^>]*>)\s*Project Name\s*\|\s*Year\s*(<\/[^>]+>)/gi, `$1${firstProj.name} | ${firstProj.year}$2`)
     out = out.replace(/>\s*Project Name\s*\|\s*Year\s*</gi, `>${firstProj.name} | ${firstProj.year}<`)
@@ -363,7 +363,7 @@ function injectSampleDataIntoLatex(latex: string): string {
 
   // Experience injection
   if (expEntries.length > 0) {
-    const firstExp = expEntries[0]
+    const firstExp = expEntries[0]!
     out = out.replace(/\\textbf\{\\textcolor\{[^}]+\}\{Job Title\}\}/gi, `\\textbf{\\textcolor{blue!60!black}{${firstExp.title}}}`)
     out = out.replace(/\\textbf\{Job Title\}/gi, `\\textbf{${firstExp.title}}`)
     out = out.replace(/\\textit\{\\textcolor\{[^}]+\}\{Company\s*\|\s*Dates\}\}/gi, `\\textit{\\textcolor{blue!50!black}{${firstExp.company} | ${firstExp.dates}}}`)
@@ -427,7 +427,7 @@ function injectSampleDataIntoLatex(latex: string): string {
 
   // Projects injection
   if (projEntries.length > 0) {
-    const firstProj = projEntries[0]
+    const firstProj = projEntries[0]!
     out = out.replace(/\\textbf\{\\textcolor\{[^}]+\}\{Project Name\s*\|\s*Year\}\}/gi, `\\textbf{\\textcolor{blue!60!black}{${firstProj.name} | ${firstProj.year}}}`)
     out = out.replace(/\\textbf\{Project Name\s*\|\s*Year\}/gi, `\\textbf{${firstProj.name} | ${firstProj.year}}`)
     out = out.replace(/Project Name\s*—\s*Technologies\s*—\s*Year/gi, `${firstProj.name} — React, Node.js — ${firstProj.year}`)

@@ -699,8 +699,8 @@ export async function publishStudioLayout(
   userId: string,
   slug: string,
   title?: string,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const result = await db
     .update(studio_layouts)
     .set({
       slug,
@@ -710,6 +710,8 @@ export async function publishStudioLayout(
       ...(title ? { title } : {}),
     })
     .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+    .returning({ id: studio_layouts.id })
+  return result.length > 0
 }
 
 export async function unpublishStudioLayout(id: string, userId: string): Promise<void> {

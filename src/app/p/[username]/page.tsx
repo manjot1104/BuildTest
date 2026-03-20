@@ -2,7 +2,6 @@ import React from 'react'
 import { VideoElement } from '@/components/buildify-studio/video-element'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { env } from '@/env'
 import { NavbarScrollHandler } from '@/components/buildify-studio/navbar-scroll-handler'
 import {
   type CanvasElement,
@@ -11,23 +10,13 @@ import {
   DEVICE_WIDTHS,
   computeResponsiveLayout,
 } from '@/components/buildify-studio/types'
+import { getStudioLayoutBySlug } from '@/server/db/queries'
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
-interface DesignData {
-  slug: string
-  title: string
-  layout: string
-  background?: string
-  publishedAt: string
-}
-
-async function getDesign(slug: string): Promise<DesignData | null> {
+async function getDesign(slug: string) {
   try {
-    const baseUrl = env.NEXT_PUBLIC_APP_URL
-    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as DesignData
+    return await getStudioLayoutBySlug(slug)
   } catch {
     return null
   }

@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { env } from "@/env";
+import { getStudioLayoutBySlug } from "@/server/db/queries";
 
 export const runtime = "nodejs";
 
@@ -7,19 +7,9 @@ export const alt = "Buildify Studio Design";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-interface DesignData {
-  slug: string;
-  title: string;
-}
-
-async function getDesign(slug: string): Promise<DesignData | null> {
+async function getDesign(slug: string) {
   try {
-    const baseUrl = env.NEXT_PUBLIC_APP_URL;
-    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, {
-      next: { revalidate: 60 },
-    });
-    if (!res.ok) return null;
-    return (await res.json()) as DesignData;
+    return await getStudioLayoutBySlug(slug);
   } catch {
     return null;
   }

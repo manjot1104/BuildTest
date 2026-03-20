@@ -74,6 +74,8 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isPublishing] = useState(false)
+  const [publishedSlug, setPublishedSlug] = useState<string | null>(null)
+  const [designTitle, setDesignTitle] = useState('Untitled')
 
   // Blank canvas confirmation
   const [blankConfirmOpen, setBlankConfirmOpen] = useState(false)
@@ -86,13 +88,15 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
       // Load from DB
       void fetch(`/api/design/${designId}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { layout?: string; background?: string | null } | null) => {
+        .then((data: { layout?: string; background?: string | null; slug?: string | null; title?: string; isPublished?: boolean } | null) => {
           if (!data) return
           try {
             const elements = JSON.parse(data.layout ?? '[]') as CanvasElement[]
             const background = data.background ? (JSON.parse(data.background) as CanvasBackground) : undefined
             loadLayout(elements, background)
           } catch { /* ignore parse errors */ }
+          if (data.slug) setPublishedSlug(data.slug)
+          if (data.title) setDesignTitle(data.title)
         })
       return
     }
@@ -152,8 +156,9 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
       // Clear legacy localStorage draft after first successful DB save
       localStorage.removeItem(LEGACY_DRAFT_KEY)
       toast.success('Draft saved')
-    } catch {
+    } catch (err) {
       toast.error('Failed to save draft')
+      throw err // Re-throw so callers like onBeforePublish can detect failure
     } finally {
       isSavingRef.current = false
       setIsSaving(false)
@@ -366,6 +371,9 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
         onOpenChange={setPublishOpen}
         designId={currentId}
         onBeforePublish={handleSaveDraft}
+        initialSlug={publishedSlug ?? undefined}
+        initialTitle={designTitle}
+        onPublished={(slug) => setPublishedSlug(slug)}
       />
 
       {/* Real-website preview modal */}
