@@ -574,12 +574,12 @@ export async function deactivateGithubReposForChat({
 
 /**
  * Creates a new GitHub repo record and marks it as active.
- * Always call deactivateGithubReposForChat first if the chat already has a repo.
  *
  * Uses upsert on (chat_id, github_repo_id) so that reconnecting a previously-used
  * repo within the same chat updates the existing row rather than crashing.
- * Different chats — even by different users — can each link the same GitHub repo
- * independently, since the uniqueness is scoped to the (chat, repo) pair.
+ *
+ * Prefer replaceActiveGithubRepo when also needing to deactivate an existing repo —
+ * that function wraps both operations in a transaction to prevent race conditions.
  */
 export async function createGithubRepo({
   chatId,
@@ -605,9 +605,8 @@ export async function createGithubRepo({
         is_active: true,
       })
       .onConflictDoUpdate({
-        // Scoped to (chat_id, github_repo_id)
-        // This handles the case where the same chat reconnects to a repo it previously used (e.g. after a replace flow deactivated it).
-        // It does NOT affect other chats or users linking the same repo.
+        // Scoped to (chat_id, github_repo_id) — not globally unique.
+        // Fires only when the same chat reconnects to a repo it previously used.
         target: [github_repos.chat_id, github_repos.github_repo_id],
         set: {
           user_id: userId,
@@ -620,8 +619,81 @@ export async function createGithubRepo({
         },
       })
       .returning()
- 
+
     return repo!
+  } catch (error: unknown) {
+    throw error
+  }
+}
+
+/**
+ * Atomically deactivates any existing active repo for a chat and links a new one.
+ *
+ * Wraps deactivation + insert in a single transaction so concurrent requests
+ * for the same chat can never interleave and produce two active rows or a
+ * half-updated state. The upsert on (chat_id, github_repo_id) handles the
+ * case where this exact repo was previously linked to this chat (deactivated
+ * by a prior replace) — it re-activates and updates that row rather than
+ * inserting a duplicate.
+ *
+ * This is the only function the controller should call when linking a repo.
+ * deactivateGithubReposForChat and createGithubRepo remain available
+ * individually but should not be called in sequence outside a transaction.
+ */
+export async function replaceActiveGithubRepo({
+  chatId,
+  userId,
+  githubRepoId,
+  repoName,
+  repoFullName,
+  repoUrl,
+  visibility,
+}: CreateGithubRepoParams): Promise<GithubRepo> {
+  try {
+    return await db.transaction(async (tx) => {
+      // Step 1: deactivate any currently active repo for this chat
+      await tx
+        .update(github_repos)
+        .set({ is_active: false, updated_at: new Date() })
+        .where(
+          and(
+            eq(github_repos.chat_id, chatId),
+            eq(github_repos.is_active, true),
+          ),
+        )
+
+      // Step 2: insert the new repo (or re-activate if previously linked to this chat)
+      const [repo] = await tx
+        .insert(github_repos)
+        .values({
+          id: randomUUID(),
+          chat_id: chatId,
+          user_id: userId,
+          github_repo_id: githubRepoId,
+          repo_name: repoName,
+          repo_full_name: repoFullName,
+          repo_url: repoUrl,
+          visibility,
+          is_active: true,
+        })
+        .onConflictDoUpdate({
+          // Scoped to (chat_id, github_repo_id) — not globally unique.
+          // Fires only when the same chat reconnects to a repo it previously used.
+          target: [github_repos.chat_id, github_repos.github_repo_id],
+          set: {
+            user_id: userId,
+            repo_name: repoName,
+            repo_full_name: repoFullName,
+            repo_url: repoUrl,
+            visibility,
+            is_active: true,
+            updated_at: new Date(),
+          },
+        })
+        .returning()
+
+      return repo!
+    })
   } catch (error: unknown) {
     throw error
   }

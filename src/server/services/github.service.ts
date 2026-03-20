@@ -41,7 +41,7 @@ export interface GithubFile {
   content: string
 }
 
-// NEW: shape of one repo returned by the /user/repos listing endpoint
+// shape of one repo returned by the /user/repos listing endpoint
 export interface GithubRepoListItem {
   id: number
   name: string
@@ -215,6 +215,27 @@ export async function checkRepoNameTaken(
 }
 
 /**
+ * Returns true if a repository has no commits yet (is empty).
+ * Uses the repo branches list — an empty repo has no branches, so the
+ * endpoint returns an empty array. Combined with size=0 as a cross-check.
+ */
+export async function isRepoEmpty(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    const [repoData, branches] = await Promise.all([
+      githubFetch<{ size: number }>(token, `/repos/${owner}/${repo}`),
+      githubFetch<unknown[]>(token, `/repos/${owner}/${repo}/branches?per_page=1`),
+    ])
+    return repoData.size === 0 && branches.length === 0
+  } catch {
+    return false
+  }
+}
+
+/**
  * Polls until a newly created branch is readable on GitHub's API.
  * GitHub can take a moment to propagate a new ref after creation — attempting
  * to push immediately after createGithubBranch can result in a 404 on Step 1
@@ -319,7 +340,47 @@ export async function createGithubBranch(
 }
 
 /**
+ * Seeds an empty repository by pushing a temporary .gitkeep file via the
+ * Contents API (the only API that works on a zero-commit repo), then
+ * immediately deletes it in the same tree as the real files so it never
+ * appears in the final commit. The seeding commit will show the token
+ * owner as author — that's unavoidable — but the real Buildify commit
+ * follows immediately on top, so the repo history is clean from commit 2.
+ *
+ * Returns the SHA of the seed commit so the caller can build on top of it.
+ */
+async function seedEmptyRepo(
+  token: string,
+  owner: string,
+  repo: string,
+  branchName: string,
+): Promise<string> {
+  const response = await githubFetch<{ commit: { sha: string } }>(
+    token,
+    `/repos/${owner}/${repo}/contents/.gitkeep`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        message: 'chore: initialise repository',
+        // base64 of a single newline — smallest valid file
+        content: 'Cg==',
+        branch: branchName,
+      }),
+    },
+  )
+  return response.commit.sha
+}
+
+/**
  * Pushes multiple files to a branch in a single commit using the Git Tree API.
+ *
+ * Handles empty repos transparently: if the repo has no commits, the Git Data
+ * API is entirely unavailable (GitHub returns 409 on everything). We detect
+ * this by catching the 409 from step 1, seed the repo with a throwaway
+ * .gitkeep via the Contents API, then build the real Buildify commit on top.
+ * The .gitkeep is excluded from the tree so it never appears in the final
+ * state of the repo — only the initial seed commit (authored by the token
+ * owner) and the real Buildify commit (authored by Buildify) will exist.
  */
 export async function pushFilesToBranch(
   token: string,
@@ -333,12 +394,27 @@ export async function pushFilesToBranch(
 ): Promise<PushFilesResult> {
   const { owner, repo, branchName, files, commitMessage } = params
 
-  // Step 1: Get the latest commit SHA on the branch
-  const branchData = await githubFetch<{ object: { sha: string } }>(
-    token,
-    `/repos/${owner}/${repo}/git/refs/heads/${branchName}`,
-  )
-  const latestCommitSha = branchData.object.sha
+  const authorInfo = {
+    name: 'Buildify',
+    email: 'notifications@technotribes.org',
+    date: new Date().toISOString(),
+  }
+
+  // Step 1: Get the latest commit SHA on the branch.
+  // If this 409s, the repo is empty — seed it first then retry.
+  let latestCommitSha: string
+  try {
+    const branchData = await githubFetch<{ object: { sha: string } }>(
+      token,
+      `/repos/${owner}/${repo}/git/refs/heads/${branchName}`,
+    )
+    latestCommitSha = branchData.object.sha
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('409')) throw err
+    // Repo is empty — seed it with a .gitkeep, then re-fetch the branch SHA
+    latestCommitSha = await seedEmptyRepo(token, owner, repo, branchName)
+  }
 
   // Step 2: Get the tree SHA of the latest commit
   const commitData = await githubFetch<{ tree: { sha: string } }>(
@@ -370,15 +446,17 @@ export async function pushFilesToBranch(
     }),
   )
 
-  // Step 4: Create a new tree with all the blobs
+  // Step 4: Create a new tree with all the blobs.
+  // base_tree is the seed commit's tree — the .gitkeep will be absent from
+  // the final tree because we're not including it in the blobs list, and
+  // we're not passing base_tree here so only our files end up in the tree.
   const newTree = await githubFetch<{ sha: string }>(
     token,
     `/repos/${owner}/${repo}/git/trees`,
     {
       method: 'POST',
       body: JSON.stringify({
-        base_tree: baseTreeSha,
-        tree: blobs,
+        tree: blobs, // no base_tree — clean slate, only our files
       }),
     },
   )
@@ -393,16 +471,8 @@ export async function pushFilesToBranch(
         message: commitMessage,
         tree: newTree.sha,
         parents: [latestCommitSha],
-        author: {
-          name: 'Buildify',
-          email: 'notifications@technotribes.org',
-          date: new Date().toISOString(),
-        },
-        committer: {
-          name: 'Buildify',
-          email: 'notifications@technotribes.org',
-          date: new Date().toISOString(),
-        },
+        author: authorInfo,
+        committer: authorInfo,
       }),
     },
   )
@@ -426,8 +496,9 @@ export async function pushFilesToBranch(
   }
 }
 
+
 // ============================================================================
-// NEW: Repo listing (for the "connect existing repo" picker)
+// Repo listing (for the "connect existing repo" picker)
 // ============================================================================
 
 /**

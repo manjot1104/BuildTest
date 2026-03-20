@@ -10,13 +10,15 @@ import {
   checkRepoStatus,
   checkBranchExists,
   checkRepoNameTaken,
-  listUserRepos,      // NEW
-  getRepoDetails,     // NEW
+  isRepoEmpty,        // need to skip createGithubBranch on empty repos
+  listUserRepos, 
+  getRepoDetails,
 } from '@/server/services/github.service'
 import {
   getActiveGithubRepo,
   deactivateGithubReposForChat,
   createGithubRepo,
+  replaceActiveGithubRepo,
   getUserChat,
 } from '@/server/db/queries'
 
@@ -37,6 +39,7 @@ interface ErrorResponse {
     | 'token_expired'
     | 'no_files'
     | 'unauthorized'
+
   details?: string
   status?: number
 }
@@ -65,7 +68,7 @@ interface GithubRepoInfo {
   createdAt: string
 }
 
-// NEW: camelCase shape returned to the client for the repo picker
+// camelCase shape returned to the client for the repo picker
 interface GithubRepoListItemResponse {
   id: number
   name: string
@@ -77,7 +80,7 @@ interface GithubRepoListItemResponse {
   updatedAt: string
 }
 
-// NEW: response from the connect-existing endpoint
+// response from the connect-existing endpoint
 interface ConnectRepoResponse {
   success: boolean
   repoFullName: string
@@ -301,9 +304,10 @@ export async function connectExistingRepoHandler({
     // Fetch full repo details (id, visibility, default branch)
     const repoDetails = await getRepoDetails(token, repoOwner, repoName)
 
-    // Deactivate any existing active repo for this chat, then save the new one
-    await deactivateGithubReposForChat({ chatId: userChat.id })
-    await createGithubRepo({
+    // Atomically deactivate any existing active repo and save the new one.
+    // Using a single transaction prevents race conditions if two requests
+    // for the same chat arrive simultaneously.
+    await replaceActiveGithubRepo({
       chatId: userChat.id,
       userId: session.user.id,
       githubRepoId: String(repoDetails.id),
@@ -527,11 +531,17 @@ export async function pushToGithubHandler({
         }
       }
 
-      // Create the branch only if it doesn't already exist, then wait for
-      // GitHub to propagate the new ref before we attempt to push to it
+      // Create the branch only if it doesn't already exist AND the repo isn't
+      // empty. An empty repo has no refs at all — createGithubBranch would 409
+      // trying to read the default branch HEAD. pushFilesToBranch handles empty
+      // repos internally via seedEmptyRepo (Contents API), so we skip branch
+      // creation here and let it take care of initialising the repo too.
       if (!branchExists) {
-        await createGithubBranch(token, { owner: repoOwner, repo: repoName, branchName })
-        await waitForBranch(token, repoOwner, repoName, branchName)
+        const empty = await isRepoEmpty(token, repoOwner, repoName)
+        if (!empty) {
+          await createGithubBranch(token, { owner: repoOwner, repo: repoName, branchName })
+          await waitForBranch(token, repoOwner, repoName, branchName)
+        }
       }
     } else {
       // ── Case 1 or Case 3: Creating a new GitHub repo ──
@@ -560,7 +570,12 @@ export async function pushToGithubHandler({
         }
       }
 
-      // Deactivate old repo record before creating the new one
+      // For the replace case, deactivate the old repo now so it's done before
+      // the GitHub API calls. The final createGithubRepo at the bottom is
+      // wrapped in replaceActiveGithubRepo which is transactional, but since
+      // we can't hold a DB transaction open across the GitHub API calls
+      // (which can take several seconds), we deactivate eagerly here and rely
+      // on the upsert in replaceActiveGithubRepo to handle the insert safely.
       if (isReplace) {
         await deactivateGithubReposForChat({ chatId: userChat.id })
       }
@@ -601,10 +616,13 @@ export async function pushToGithubHandler({
       commitMessage: commitMessage ?? 'feat: build update from Buildify',
     })
 
-    // Only write to DB when a new repo record is needed (first push or replace).
-    // Follow-up pushes to the same repo — including connected existing repos — don't change the DB.
+    // Only write to DB when a new repo record is needed (Cases 1 and 3).
+    // Case 2 (follow-up) never writes — the existing record is still correct.
+    // replaceActiveGithubRepo is used instead of createGithubRepo directly so
+    // that the deactivation + insert is always atomic, guarding against the
+    // unlikely but possible case of a duplicate first-push request.
     if (isNewRepo) {
-      await createGithubRepo({
+      await replaceActiveGithubRepo({
         chatId: userChat.id,
         userId: session.user.id,
         githubRepoId,

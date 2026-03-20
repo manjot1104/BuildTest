@@ -841,7 +841,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
             {githubStatus?.login && (
               <div className="flex items-center gap-2 mb-4 text-sm text-muted-foreground">
                 <Github className="size-3.5" />
-                <span>Pushing as <span className="font-medium text-foreground">@{githubStatus.login}</span></span>
+                <span>Authenticated as <span className="font-medium text-foreground">@{githubStatus.login}</span> · committing as Buildify</span>
               </div>
             )}
             <PushProgress isNewRepo={showNewRepoForm} />
