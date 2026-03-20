@@ -79,6 +79,20 @@ export interface SiteContext {
   // from the actual codebase rather than inferring them from crawl data alone.
   // undefined when no GitHub repo was provided or the fetch failed.
   githubSource?: GithubSourceContext;
+   /**
+   * Optional free-text hint provided by the user at run start.
+   * Mirrors the crawlContext passed to crawlSite — injecting it here ensures
+   * the test generation AI knows about authentication flows, interaction
+   * barriers, and any other site-specific context the crawler used.
+   *
+   * Examples:
+   *   "Login with email: test@example.com and password: demo1234"
+   *   "Click 'Enter as guest' to bypass the login screen"
+   *
+   * Sanitised before reaching here (trimmed, max 500 chars).
+   * undefined when the user did not provide a hint.
+   */
+  crawlContext?: string;
 }
 
 export interface TestRunSummaryInput {
@@ -324,6 +338,25 @@ and component names rather than inferring them from crawl data alone.
 ${githubSource.rawSummaryLines.join("\n")}`;
 }
 
+// Builds the crawl context section injected into AI prompts when the
+// user supplied an auth/interaction hint at run start. Mirrors the pattern of
+// buildGithubSourceSection — returns empty string when crawlContext is absent
+// so prompts are identical to before when no hint was given.
+function buildCrawlContextSection(crawlContext: string | undefined): string {
+  if (!crawlContext?.trim()) return "";
+  return `
+ 
+## User-Provided Site Context
+The user gave the following instructions to help navigate this site.
+Factor these into your test cases — the site likely requires authentication
+or specific interaction steps before content is reachable.
+ 
+${crawlContext.trim()}
+ 
+When generating tests that require accessing protected pages or post-login UI,
+include the relevant login/interaction steps at the start of the test steps array.`;
+}
+
 const TEST_GENERATION_SYSTEM_PROMPT = `You are a senior QA automation engineer. You write browser test cases for an AI agent called TinyFish that executes steps in a real Chromium browser.
 
 CRITICAL RULES FOR WRITING STEPS:
@@ -384,6 +417,7 @@ async function generateTestsForPage(
   totalPages: number,
   targetTestCount: number,
   githubSource?: GithubSourceContext, // [GITHUB]
+  crawlContext?: string,    
 ): Promise<TestCase[]> {
   const pageCtx = buildPageContext(page);
   const hasLinks  = page.elements.filter((e) => e.type === "link").length > 0;
@@ -404,6 +438,10 @@ async function generateTestsForPage(
   // and validation rules (e.g. "password: min length") instead of guessing.
   const githubSection = githubSource ? buildGithubSourceSection(githubSource) : "";
 
+   // Append crawl context section so the AI knows about auth flows
+  // or interaction barriers and generates tests that account for them.
+  const crawlContextSection = buildCrawlContextSection(crawlContext);
+
   const userPrompt =
 `Generate exactly ${targetTestCount} browser test cases for this page.
 
@@ -414,7 +452,7 @@ Root URL of the site: ${rootUrl}
 This is page ${pageIndex + 1} of ${totalPages}.
 
 Categories to cover (only include categories where you have real elements to test):
-${relevantCategories.map((c) => `- ${c}`).join("\n")}${githubSection}
+${relevantCategories.map((c) => `- ${c}`).join("\n")}${githubSection}${crawlContextSection}
 
 Each test case JSON object:
 {
@@ -499,12 +537,14 @@ async function generateGlobalTests(
   const githubSection = context.githubSource
     ? buildGithubSourceSection(context.githubSource)
     : "";
+    // Append crawl context section to global tests prompt.
+  const crawlContextSection = buildCrawlContextSection(context.crawlContext);
 
   const userPrompt =
 `Generate ${globalCount} cross-page site-wide browser test cases.
 
 SITE DATA:
-${siteSummary}${githubSection}
+${siteSummary}${githubSection}${crawlContextSection}
 
 Focus on navigation between pages, visual consistency, a11y, and performance.
 Use exact link text from "All navigation links found" and exact URLs from "All discovered URLs".
@@ -540,12 +580,13 @@ async function generateGapFillTests(
   const githubSection = context.githubSource
     ? buildGithubSourceSection(context.githubSource)
     : "";
-
+  // Append crawl context section to gap-fill prompt.
+  const crawlContextSection = buildCrawlContextSection(context.crawlContext); 
   const userPrompt =
 `We have ${existingCount} test cases. We need ${needed} MORE that are different.
 
 SITE DATA (${context.pages.length} pages):
-${allPagesCtx}${githubSection}
+${allPagesCtx}${githubSection}${crawlContextSection}
 
 Site URL: ${context.rootUrl}
 
@@ -575,6 +616,7 @@ export async function generateTestCases(context: SiteContext): Promise<TestCase[
   console.log(
     `[OpenRouter] Generating tests | pages=${context.pages.length} | totalTarget=${totalTarget} | globalBudget=${globalBudget} | ` +
     `githubSource=${context.githubSource ? "yes" : "no"} | ` +
+    `crawlContext=${context.crawlContext ? `yes (${context.crawlContext.length} chars)` : "no"} | ` +
     `perPage: ${context.pages.map((p) => `${new URL(p.url).pathname}×${getPageCount(p.url)}`).join(", ")}`,
   );
 
@@ -588,6 +630,7 @@ export async function generateTestCases(context: SiteContext): Promise<TestCase[
           context.pages.length,
           getPageCount(page.url),
           context.githubSource, // [GITHUB] passed through to each per-page call
+          context.crawlContext,  // passed through so auth context reaches per-page prompts
         ),
       ),
     ),

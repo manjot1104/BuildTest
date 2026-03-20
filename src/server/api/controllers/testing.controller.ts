@@ -465,6 +465,7 @@ async function runPipelineStages(
       apiEndpoints: siteData.pages.flatMap((p) => p.apiEndpoints),
     },
     githubSource: githubSourceContext ?? undefined, // [GITHUB]
+    crawlContext: crawlContext ?? undefined,         // forwards auth hint into test generation prompts
   };
 
   // Run AI generation, crawl DB writes, and background screenshots all in parallel
