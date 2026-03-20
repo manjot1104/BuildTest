@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Globe, Loader2, CheckCircle2, XCircle, AlertTriangle,
   ChevronDown, ChevronUp, ExternalLink, Shield, Zap,
@@ -22,7 +22,10 @@ import {
 } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
-// Colors use Tailwind semantic classes. Only #00FF85 (brand accent) is hardcoded.
+// All accent colors now use CSS variables from global.css (Buildify blue theme).
+// --primary      = oklch(0.6907 0.1300 248.5133)  — Buildify brand blue
+// --secondary    = oklch(0.5360 0.0398 196.0280)  — teal complement
+// Font: AR One Sans (--font-sans) · Azeret Mono (--font-mono)
 
 export const CATEGORY_ICONS: Record<string, React.ElementType> = {
   navigation: Navigation, forms: FileText, visual: Eye,
@@ -43,13 +46,14 @@ export const PRIORITY_CONFIG = {
   P2: { color: "text-muted-foreground bg-muted/50 border-border"       },
 };
 
+// ── "passed" now uses Buildify primary blue instead of neon green ──
 export const STATUS_CONFIG = {
-  pending:  { icon: Clock,         color: "text-muted-foreground", bg: "bg-muted/50 border-border",             label: "Pending"  },
-  running:  { icon: Loader2,       color: "text-blue-500",         bg: "bg-blue-500/10 border-blue-500/20",      label: "Running"  },
-  passed:   { icon: CheckCircle2,  color: "text-[#00FF85]",        bg: "bg-[#00FF85]/10 border-[#00FF85]/25",    label: "Passed"   },
-  failed:   { icon: XCircle,       color: "text-red-500",          bg: "bg-red-500/10 border-red-500/20",        label: "Failed"   },
-  flaky:    { icon: AlertTriangle, color: "text-yellow-500",       bg: "bg-yellow-500/10 border-yellow-500/20",  label: "Flaky"    },
-  skipped:  { icon: Clock,         color: "text-muted-foreground", bg: "bg-muted/50 border-border",             label: "Skipped"  },
+  pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",               label: "Pending"  },
+  running:  { icon: Loader2,       color: "text-primary",           bg: "bg-primary/10 border-primary/20",          label: "Running"  },
+  passed:   { icon: CheckCircle2,  color: "text-primary",           bg: "bg-primary/10 border-primary/25",          label: "Passed"   },
+  failed:   { icon: XCircle,       color: "text-red-500",           bg: "bg-red-500/10 border-red-500/20",          label: "Failed"   },
+  flaky:    { icon: AlertTriangle, color: "text-yellow-500",        bg: "bg-yellow-500/10 border-yellow-500/20",    label: "Flaky"    },
+  skipped:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",               label: "Skipped"  },
 };
 
 export const CATEGORIES = ["navigation", "forms", "visual", "performance", "a11y", "security"];
@@ -57,16 +61,16 @@ export const CATEGORIES = ["navigation", "forms", "visual", "performance", "a11y
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
 export function statusBg(s: string) {
-  if (s === "good")             return "bg-[#00FF85]";
+  if (s === "good")              return "bg-primary";
   if (s === "needs-improvement") return "bg-yellow-500";
-  if (s === "poor")             return "bg-red-500";
+  if (s === "poor")              return "bg-red-500";
   return "bg-muted";
 }
 
 export function statusColor(s: string) {
-  if (s === "good")             return "text-[#00FF85]";
+  if (s === "good")              return "text-primary";
   if (s === "needs-improvement") return "text-yellow-500";
-  if (s === "poor")             return "text-red-500";
+  if (s === "poor")              return "text-red-500";
   return "text-muted-foreground";
 }
 
@@ -93,7 +97,7 @@ export function BfyTag({ children, className = "" }: { children: React.ReactNode
 // ─── Shared input class ────────────────────────────────────────────────────────
 
 const bfyInput =
-  "w-full rounded-md border border-input bg-background px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-[#00FF85]/50 focus:ring-1 focus:ring-[#00FF85]/30 transition-colors";
+  "w-full rounded-md border border-input bg-background px-3 text-sm font-mono text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-colors";
 
 // ─── Budget Stepper ────────────────────────────────────────────────────────────
 
@@ -112,7 +116,7 @@ export function BudgetStepper({ label, hint, value, min, max, onChange }: {
           aria-label={`Decrease ${label}`}
           onClick={() => onChange(Math.max(min, value - 1))}
           disabled={value <= min}
-          className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+          className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
         >
           <Minus className="h-3.5 w-3.5" />
         </button>
@@ -124,7 +128,7 @@ export function BudgetStepper({ label, hint, value, min, max, onChange }: {
           aria-label={`Increase ${label}`}
           onClick={() => onChange(Math.min(max, value + 1))}
           disabled={value >= max}
-          className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+          className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
@@ -154,7 +158,7 @@ export function TimeoutStepper({ label, hint, value, onChange }: {
           aria-label={`Decrease ${label}`}
           onClick={() => onChange(Math.max(TIMEOUT_MIN_MS, value - TIMEOUT_STEP_MS))}
           disabled={value <= TIMEOUT_MIN_MS}
-          className="h-8 w-8 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/30 active:scale-95 disabled:opacity-25 transition-all touch-manipulation"
+          className="h-8 w-8 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 active:scale-95 disabled:opacity-25 transition-all touch-manipulation"
         >
           <Minus className="h-3 w-3" />
         </button>
@@ -166,7 +170,7 @@ export function TimeoutStepper({ label, hint, value, onChange }: {
           aria-label={`Increase ${label}`}
           onClick={() => onChange(Math.min(TIMEOUT_MAX_MS, value + TIMEOUT_STEP_MS))}
           disabled={value >= TIMEOUT_MAX_MS}
-          className="h-8 w-8 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/30 active:scale-95 disabled:opacity-25 transition-all touch-manipulation"
+          className="h-8 w-8 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 active:scale-95 disabled:opacity-25 transition-all touch-manipulation"
         >
           <Plus className="h-3 w-3" />
         </button>
@@ -194,11 +198,10 @@ export function PipelineStepsRow({ pipelineStatus, percent }: { pipelineStatus: 
 
   return (
     <div className="w-full" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
-      {/* Step dots + connecting track */}
       <div className="flex items-center justify-between relative px-1">
         <div className="absolute top-3.5 left-1 right-1 h-px bg-border" aria-hidden="true">
           <div
-            className="h-full bg-[#00FF85] transition-all duration-700 ease-out"
+            className="h-full bg-primary transition-all duration-700 ease-out"
             style={{ width: `${Math.max(0, (currentIndex / (PIPELINE_STEPS.length - 1)) * 100)}%` }}
           />
         </div>
@@ -210,8 +213,8 @@ export function PipelineStepsRow({ pipelineStatus, percent }: { pipelineStatus: 
           return (
             <div key={step.key} className="flex flex-col items-center gap-1 z-10">
               <div className={`h-7 w-7 rounded-full flex items-center justify-center border transition-all duration-300 ${
-                isDone   ? "bg-[#00FF85] border-[#00FF85] text-black"
-                : isActive ? "bg-[#00FF85]/10 border-[#00FF85] text-[#00FF85]"
+                isDone   ? "bg-primary border-primary text-primary-foreground"
+                : isActive ? "bg-primary/10 border-primary text-primary"
                 : "bg-muted/20 border-border text-muted-foreground"
               }`}>
                 {isDone
@@ -221,9 +224,8 @@ export function PipelineStepsRow({ pipelineStatus, percent }: { pipelineStatus: 
                   : <Icon className="h-3 w-3" />
                 }
               </div>
-              {/* Label: always show on sm+ */}
               <span className={`text-[9px] font-mono leading-none hidden sm:block ${
-                isActive ? "text-[#00FF85]" : isDone ? "text-muted-foreground" : "text-muted-foreground/30"
+                isActive ? "text-primary" : isDone ? "text-muted-foreground" : "text-muted-foreground/30"
               }`}>
                 {step.label}
               </span>
@@ -232,23 +234,21 @@ export function PipelineStepsRow({ pipelineStatus, percent }: { pipelineStatus: 
         })}
       </div>
 
-      {/* Mobile: active step label only */}
       <div className="sm:hidden mt-1 text-center">
-        <span className="text-[10px] font-mono text-[#00FF85]">
+        <span className="text-[10px] font-mono text-primary">
           {PIPELINE_STEPS[currentIndex]?.label ?? "starting…"}
         </span>
       </div>
 
-      {/* Progress bar */}
       <div className="mt-3 h-1 w-full bg-border rounded-full overflow-hidden">
         <div
-          className="h-full bg-[#00FF85] rounded-full transition-all duration-500"
+          className="h-full bg-primary rounded-full transition-all duration-500"
           style={{ width: `${percent}%` }}
         />
       </div>
       <div className="flex justify-between mt-1 text-[10px] font-mono text-muted-foreground/40">
         <span>{percent}%</span>
-        <span className="text-[#00FF85]">
+        <span className="text-primary">
           {pipelineStatus === "complete" ? "complete" : `${pipelineStatus}…`}
         </span>
       </div>
@@ -263,20 +263,20 @@ export function ExecutionCounters({ passed, failed, running, skipped, total }: {
 }) {
   return (
     <div className="flex items-center gap-2 flex-wrap" role="status">
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#00FF85]/10 border border-[#00FF85]/25">
-        <CheckCircle2 className="h-3.5 w-3.5 text-[#00FF85]" />
-        <span className="text-sm font-mono font-bold text-[#00FF85] tabular-nums">{passed}</span>
-        <span className="text-[10px] font-mono text-[#00FF85]/50">passed</span>
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25">
+        <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+        <span className="text-sm font-mono font-bold text-primary tabular-nums">{passed}</span>
+        <span className="text-[10px] font-mono text-primary/50">passed</span>
       </div>
       <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
         <XCircle className="h-3.5 w-3.5 text-red-500" />
         <span className="text-sm font-mono font-bold text-red-500 tabular-nums">{failed}</span>
         <span className="text-[10px] font-mono text-red-500/50">failed</span>
       </div>
-      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
-        <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
-        <span className="text-sm font-mono font-bold text-blue-500 tabular-nums">{running}</span>
-        <span className="text-[10px] font-mono text-blue-500/50">running</span>
+      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary/10 border border-secondary/20">
+        <Loader2 className="h-3.5 w-3.5 text-secondary animate-spin" />
+        <span className="text-sm font-mono font-bold text-secondary tabular-nums">{running}</span>
+        <span className="text-[10px] font-mono text-secondary/50">running</span>
       </div>
       {total > 0 && (
         <span className="text-[10px] font-mono text-muted-foreground/40 ml-auto">
@@ -322,14 +322,13 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
 
   return (
     <div className="w-full rounded-xl border border-border overflow-hidden bg-muted/20">
-      {/* Header */}
       <button
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-2.5 px-4 py-3 hover:bg-muted/50 transition-colors text-left touch-manipulation"
       >
-        <Loader2 className="h-3.5 w-3.5 text-[#00FF85] animate-spin shrink-0" />
+        <Loader2 className="h-3.5 w-3.5 text-primary animate-spin shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-mono text-foreground truncate">{stage ?? "starting crawl…"}</p>
           {stageDescription && !expanded && (
@@ -337,7 +336,7 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
           )}
         </div>
         <div className="flex items-center gap-1.5 text-[10px] font-mono shrink-0">
-          <span className="text-[#00FF85] font-bold">{extractedPages.length}</span>
+          <span className="text-primary font-bold">{extractedPages.length}</span>
           <span className="text-muted-foreground/30">/</span>
           <span className="text-foreground font-medium">{foundUrls.length}</span>
           <span className="text-muted-foreground/40 hidden sm:inline">pages</span>
@@ -351,7 +350,6 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
 
       {expanded && hasData && (
         <>
-          {/* Tabs */}
           <div className="flex border-t border-b border-border text-[10px] font-mono" role="tablist">
             {(["urls", "pages"] as const).map((tab) => (
               <button
@@ -361,7 +359,7 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
                 onClick={() => setActiveTab(tab)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 transition-colors touch-manipulation ${
                   activeTab === tab
-                    ? "text-[#00FF85] border-b border-[#00FF85]"
+                    ? "text-primary border-b border-primary"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -375,7 +373,6 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
           </div>
 
           <div className="max-h-48 overflow-y-auto" role="tabpanel">
-            {/* URLs tab */}
             {activeTab === "urls" && (
               <div className="p-2 space-y-0.5">
                 {foundUrls.length === 0
@@ -383,14 +380,14 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
                   : foundUrls.map((u, i) => (
                     <div key={`${u.url}-${i}`} className="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50">
                       <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                        u.source === "discovery" ? "bg-[#00FF85]"
-                        : u.source === "sitemap"   ? "bg-blue-500"
+                        u.source === "discovery" ? "bg-primary"
+                        : u.source === "sitemap"   ? "bg-secondary"
                         : "bg-muted-foreground"
                       }`} />
                       <span className="text-[10px] font-mono text-muted-foreground flex-1 truncate">{urlPath(u.url)}</span>
                       <BfyTag className={
-                        u.source === "discovery" ? "text-[#00FF85] border-[#00FF85]/20 bg-[#00FF85]/5"
-                        : u.source === "sitemap"   ? "text-blue-500 border-blue-500/20 bg-blue-500/5"
+                        u.source === "discovery" ? "text-primary border-primary/20 bg-primary/5"
+                        : u.source === "sitemap"   ? "text-secondary border-secondary/20 bg-secondary/5"
                         : "text-muted-foreground border-border bg-muted/50"
                       }>
                         {u.source}
@@ -401,7 +398,6 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
               </div>
             )}
 
-            {/* Pages tab */}
             {activeTab === "pages" && (
               <div className="p-2 space-y-0.5">
                 {extractedPages.length === 0 && failedPages.length === 0
@@ -409,7 +405,7 @@ export function CrawlProgressPanel({ stage, stageDescription, foundUrls, extract
                   : <>
                     {extractedPages.map((p, i) => (
                       <div key={`${p.url}-${i}`} className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50">
-                        <CheckCircle2 className="h-3 w-3 text-[#00FF85] shrink-0 mt-0.5" />
+                        <CheckCircle2 className="h-3 w-3 text-primary shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <p className="text-[10px] font-mono text-foreground truncate">{p.title || urlPath(p.url)}</p>
                           <p className="text-[9px] font-mono text-muted-foreground/40">
@@ -457,7 +453,7 @@ export function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; al
     <div className="relative rounded-xl overflow-hidden border border-border bg-muted">
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <Loader2 className="h-5 w-5 animate-spin text-[#00FF85]" />
+          <Loader2 className="h-5 w-5 animate-spin text-primary" />
         </div>
       )}
       <img
@@ -485,7 +481,8 @@ export function ScoreGauge({ score, size = 80 }: { score: number; size?: number 
   const cx     = size / 2;
   const circ   = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
-  const color  = score >= 90 ? "#00FF85" : score >= 70 ? "#eab308" : "#ef4444";
+  // Use Buildify blue palette: primary blue for good, yellow for medium, red for poor
+  const color  = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
   const label  = score >= 90 ? "excellent" : score >= 70 ? "good" : "needs work";
 
   return (
@@ -521,7 +518,8 @@ export function CategoryDonut({ passed, total, category, onClick, active }: {
   const pct  = total > 0 ? passed / total : 0;
   const r    = 17;
   const circ = 2 * Math.PI * r;
-  const col  = pct >= 0.8 ? "#00FF85" : pct >= 0.5 ? "#eab308" : "#ef4444";
+  // Blue-palette scoring colors
+  const col  = pct >= 0.8 ? "hsl(215 80% 60%)" : pct >= 0.5 ? "#eab308" : "#ef4444";
   const Icon = CATEGORY_ICONS[category] ?? Bug;
 
   return (
@@ -530,7 +528,7 @@ export function CategoryDonut({ passed, total, category, onClick, active }: {
       aria-label={`${category}: ${Math.round(pct * 100)}%`}
       aria-pressed={active}
       className={`flex flex-col items-center gap-1 p-2 rounded-xl border transition-all touch-manipulation ${
-        active ? "border-[#00FF85]/40 bg-[#00FF85]/5" : "border-border bg-muted/20 hover:bg-muted/40"
+        active ? "border-primary/40 bg-primary/5" : "border-border bg-muted/20 hover:bg-muted/40"
       }`}
     >
       <div className="relative inline-flex items-center justify-center">
@@ -602,7 +600,8 @@ export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
   const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
   const area = `${path} L${pts[pts.length - 1]!.x},${h} L${pts[0]!.x},${h} Z`;
   const score = pts[pts.length - 1]!.d.score ?? 0;
-  const color = score >= 90 ? "#00FF85" : score >= 70 ? "#eab308" : "#ef4444";
+  // Buildify blue for the sparkline
+  const color = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
 
   return (
     <div>
@@ -637,10 +636,10 @@ export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
 // ─── Test card border helper ───────────────────────────────────────────────────
 
 function tcBorderClass(status: string) {
-  if (status === "passed")  return "border-[#00FF85]/20 bg-[#00FF85]/[0.03]";
+  if (status === "passed")  return "border-primary/20 bg-primary/[0.03]";
   if (status === "failed")  return "border-red-500/20 bg-red-500/[0.03]";
   if (status === "flaky")   return "border-yellow-500/20 bg-yellow-500/[0.03]";
-  if (status === "running") return "border-blue-500/20 bg-blue-500/[0.03]";
+  if (status === "running") return "border-secondary/20 bg-secondary/[0.03]";
   return "border-border bg-muted/20";
 }
 
@@ -707,7 +706,6 @@ export function LiveTestCaseCard({ tc }: { tc: LiveTestCase }) {
 // ─── Test Case Card ────────────────────────────────────────────────────────────
 
 export function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { status: string; durationMs?: number } }) {
-  const [expanded] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const result      = tc.results?.[0];
   const status      = liveStatus?.status ?? result?.status ?? "skipped";
@@ -833,12 +831,11 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
   const removeStep = (i: number) => setForm((f) => ({ ...f, steps: f.steps.filter((_, idx) => idx !== i) }));
 
   const selectClass =
-    "w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-mono text-foreground focus:outline-none focus:border-[#00FF85]/50 transition-colors";
+    "w-full h-9 rounded-md border border-input bg-background px-3 text-sm font-mono text-foreground focus:outline-none focus:border-primary/50 transition-colors";
 
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Title — full width */}
         <div className="sm:col-span-2 space-y-1">
           <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest" htmlFor="tc-title">
             Title *
@@ -852,7 +849,6 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
           />
         </div>
 
-        {/* Category */}
         <div className="space-y-1">
           <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest" htmlFor="tc-cat">
             Category *
@@ -867,7 +863,6 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
           </select>
         </div>
 
-        {/* Priority */}
         <div className="space-y-1">
           <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest" htmlFor="tc-pri">
             Priority
@@ -885,14 +880,13 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
         </div>
       </div>
 
-      {/* Steps */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">
           <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">Steps *</label>
           <button
             type="button"
             onClick={addStep}
-            className="text-[10px] font-mono text-[#00FF85] hover:text-[#00FF85]/70 flex items-center gap-1 touch-manipulation"
+            className="text-[10px] font-mono text-primary hover:text-primary/70 flex items-center gap-1 touch-manipulation"
           >
             <Plus className="h-3 w-3" /> add step
           </button>
@@ -922,7 +916,6 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
         </div>
       </div>
 
-      {/* Expected Result */}
       <div className="space-y-1">
         <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest" htmlFor="tc-exp">
           Expected Result *
@@ -937,7 +930,6 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
         />
       </div>
 
-      {/* Description */}
       <div className="space-y-1">
         <label className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest" htmlFor="tc-desc">
           Description <span className="normal-case">(optional)</span>
@@ -952,7 +944,6 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
         />
       </div>
 
-      {/* Action row */}
       <div className="flex items-center justify-end gap-2">
         <button
           type="button"
@@ -965,7 +956,7 @@ export function ReviewTestCaseForm({ initial, onSave, onCancel, isSaving }: {
           type="button"
           disabled={isSaving || !form.title.trim() || !form.expectedResult.trim() || form.steps.every((s) => !s.trim())}
           onClick={() => onSave(form)}
-          className="h-8 px-4 rounded-md bg-[#00FF85] text-black text-xs font-mono font-bold hover:bg-[#00FF85]/90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center gap-1.5"
+          className="h-8 px-4 rounded-md bg-primary text-primary-foreground text-xs font-mono font-bold hover:bg-primary/90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition-all touch-manipulation flex items-center gap-1.5"
         >
           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
           {isSaving ? "saving…" : "save"}
@@ -1103,10 +1094,10 @@ export function AddTestCasePanel({ testRunId, onClose }: { testRunId: string; on
   );
 
   return (
-    <div className="rounded-xl border border-[#00FF85]/20 bg-[#00FF85]/5 p-4">
+    <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
       <div className="flex items-center gap-2 mb-3">
-        <Plus className="h-4 w-4 text-[#00FF85]" />
-        <p className="text-xs font-mono text-[#00FF85]">new test case</p>
+        <Plus className="h-4 w-4 text-primary" />
+        <p className="text-xs font-mono text-primary">new test case</p>
       </div>
       <ReviewTestCaseForm
         initial={{ title: "", category: "navigation", priority: "P1", steps: [""], expectedResult: "", description: "" }}
@@ -1131,9 +1122,8 @@ export function ReviewPhase({ testRunId, targetUrl, onCancel }: {
 
   return (
     <div className="space-y-3">
-      {/* Banner */}
-      <div className="rounded-xl border border-[#00FF85]/20 bg-[#00FF85]/5 px-4 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
-        <FlaskConical className="h-4 w-4 text-[#00FF85] shrink-0" />
+      <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-center gap-3 flex-wrap sm:flex-nowrap">
+        <FlaskConical className="h-4 w-4 text-primary shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-mono font-medium text-foreground">
             review {count} test case{count !== 1 ? "s" : ""}
@@ -1146,16 +1136,15 @@ export function ReviewPhase({ testRunId, targetUrl, onCancel }: {
             onSuccess: () => toast.success("Running tests…"),
             onError: (err) => toast.error(err.message ?? "Failed"),
           })}
-          className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg bg-[#00FF85] text-black text-xs font-mono font-bold hover:bg-[#00FF85]/90 active:scale-95 disabled:opacity-30 shrink-0 touch-manipulation"
+          className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg bg-primary text-primary-foreground text-xs font-mono font-bold hover:bg-primary/90 active:scale-95 disabled:opacity-30 shrink-0 touch-manipulation"
         >
           {isConfirming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
           {isConfirming ? "starting…" : `run ${count}`}
         </button>
       </div>
 
-      {/* Cases list */}
       {isLoading
-        ? <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-[#00FF85]" /></div>
+        ? <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-primary" /></div>
         : <div className="space-y-2">
             {(cases ?? []).map((tc) => (
               <ReviewTestCaseCard key={tc.id} tc={tc} testRunId={testRunId} totalCount={count} />
@@ -1171,13 +1160,12 @@ export function ReviewPhase({ testRunId, targetUrl, onCancel }: {
 
       {showAdd && <AddTestCasePanel testRunId={testRunId} onClose={() => setShowAdd(false)} />}
 
-      {/* Actions */}
       <div className="flex items-center gap-3 flex-wrap">
         {!showAdd && (
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-dashed border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:border-[#00FF85]/30 transition-all touch-manipulation"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-dashed border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:border-primary/30 transition-all touch-manipulation"
           >
             <Plus className="h-3.5 w-3.5" /> add test case
           </button>
@@ -1220,12 +1208,10 @@ export function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => 
         className="relative z-10 w-full sm:max-w-2xl max-h-[92dvh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Mobile handle */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
           <div className="h-1 w-10 bg-border rounded-full" />
         </div>
 
-        {/* Sticky header */}
         <div className="sticky top-0 z-10 flex items-start justify-between gap-3 px-5 py-4 border-b border-border bg-background">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1.5">
@@ -1238,7 +1224,7 @@ export function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => 
               </BfyTag>
               <BfyTag className={
                 bug.status === "open"  ? "text-red-500 border-red-500/25 bg-red-500/10"
-                : bug.status === "fixed" ? "text-[#00FF85] border-[#00FF85]/25 bg-[#00FF85]/10"
+                : bug.status === "fixed" ? "text-primary border-primary/25 bg-primary/10"
                 : "text-muted-foreground border-border bg-muted/50"
               }>
                 {bug.status}
@@ -1260,7 +1246,6 @@ export function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => 
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-5 space-y-5">
           {bug.screenshot_url && (
             <div>
@@ -1286,7 +1271,7 @@ export function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => 
                   aria-label="Copy"
                   className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-foreground touch-manipulation"
                 >
-                  {copied ? <Check className="h-3 w-3 text-[#00FF85]" /> : <Copy className="h-3 w-3" />}
+                  {copied ? <Check className="h-3 w-3 text-primary" /> : <Copy className="h-3 w-3" />}
                   {copied ? "copied" : "copy"}
                 </button>
               </div>
@@ -1303,10 +1288,10 @@ export function BugDetailModal({ bug, onClose }: { bug: BugType; onClose: () => 
             </div>
           )}
           {bug.ai_fix_suggestion && (
-            <div className="rounded-xl bg-[#00FF85]/5 border border-[#00FF85]/20 p-4">
+            <div className="rounded-xl bg-primary/5 border border-primary/20 p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="h-4 w-4 text-[#00FF85]" />
-                <p className="text-[9px] font-mono text-[#00FF85] uppercase tracking-widest">ai fix suggestion</p>
+                <Sparkles className="h-4 w-4 text-primary" />
+                <p className="text-[9px] font-mono text-primary uppercase tracking-widest">ai fix suggestion</p>
               </div>
               <div className="text-xs font-mono text-foreground bg-muted rounded-lg p-3 border border-border whitespace-pre-wrap">
                 {bug.ai_fix_suggestion}
@@ -1343,7 +1328,7 @@ export function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void })
         <p className="text-sm font-medium text-foreground leading-snug">{bug.title}</p>
         <p className="mt-0.5 text-[10px] font-mono text-muted-foreground/40 truncate">{bug.page_url}</p>
         {bug.ai_fix_suggestion && (
-          <p className="mt-1 text-[10px] font-mono text-[#00FF85]/60 flex items-center gap-1">
+          <p className="mt-1 text-[10px] font-mono text-primary/60 flex items-center gap-1">
             <Sparkles className="h-3 w-3" /> ai fix available
           </p>
         )}
@@ -1387,7 +1372,6 @@ export function HistoryPanel({ onSelect, onClose }: {
         className="relative z-10 w-full sm:max-w-sm h-full bg-background border-l border-border flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
             <History className="h-4 w-4 text-muted-foreground" />
@@ -1401,11 +1385,10 @@ export function HistoryPanel({ onSelect, onClose }: {
           </button>
         </div>
 
-        {/* List */}
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {isLoading && (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-[#00FF85]" />
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
             </div>
           )}
           {!isLoading && (!history || history.length === 0) && (
@@ -1415,7 +1398,9 @@ export function HistoryPanel({ onSelect, onClose }: {
             </div>
           )}
           {history?.map((item: TestHistoryItem) => {
-            const sc        = (item.overallScore ?? 0) >= 90 ? "#00FF85" : (item.overallScore ?? 0) >= 70 ? "#eab308" : "#ef4444";
+            const sc        = (item.overallScore ?? 0) >= 90
+              ? "hsl(215 80% 60%)"
+              : (item.overallScore ?? 0) >= 70 ? "#eab308" : "#ef4444";
             const cancelled = item.status === "cancelled";
             return (
               <button
@@ -1445,7 +1430,7 @@ export function HistoryPanel({ onSelect, onClose }: {
                 </div>
                 {item.status === "complete" && (
                   <div className="flex gap-3 mt-1.5 text-[10px] font-mono">
-                    <span className="text-[#00FF85]">{item.passed ?? 0}✓</span>
+                    <span className="text-primary">{item.passed ?? 0}✓</span>
                     <span className="text-red-500">{item.failed ?? 0}✗</span>
                     <span className="text-muted-foreground/40">{item.skipped ?? 0} skip</span>
                   </div>
