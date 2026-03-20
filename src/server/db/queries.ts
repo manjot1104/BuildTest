@@ -576,9 +576,10 @@ export async function deactivateGithubReposForChat({
  * Creates a new GitHub repo record and marks it as active.
  * Always call deactivateGithubReposForChat first if the chat already has a repo.
  *
- * Uses upsert on github_repo_id so that reconnecting a previously-used repo
- * (e.g. one linked to a different chat, or deactivated by a prior replace)
- * updates the existing row rather than crashing on the unique constraint.
+ * Uses upsert on (chat_id, github_repo_id) so that reconnecting a previously-used
+ * repo within the same chat updates the existing row rather than crashing.
+ * Different chats — even by different users — can each link the same GitHub repo
+ * independently, since the uniqueness is scoped to the (chat, repo) pair.
  */
 export async function createGithubRepo({
   chatId,
@@ -604,9 +605,11 @@ export async function createGithubRepo({
         is_active: true,
       })
       .onConflictDoUpdate({
-        target: github_repos.github_repo_id,
+        // Scoped to (chat_id, github_repo_id)
+        // This handles the case where the same chat reconnects to a repo it previously used (e.g. after a replace flow deactivated it).
+        // It does NOT affect other chats or users linking the same repo.
+        target: [github_repos.chat_id, github_repos.github_repo_id],
         set: {
-          chat_id: chatId,
           user_id: userId,
           repo_name: repoName,
           repo_full_name: repoFullName,
@@ -617,7 +620,7 @@ export async function createGithubRepo({
         },
       })
       .returning()
-
+ 
     return repo!
   } catch (error: unknown) {
     throw error
