@@ -4,6 +4,7 @@ import React from 'react'
 import {
   Heading1, AlignLeft, Image, MousePointerClick, LayoutTemplate, Box,
   Minus, ArrowUpDown, Share2, Play, Star, Menu, ClipboardList, Code2,
+  MessageCircle, DollarSign, Rocket, TrendingUp, Zap, HelpCircle, AlertCircle,
 } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import { type ElementType } from './types'
@@ -11,11 +12,12 @@ import { type ElementType } from './types'
 type IconFC = React.FC<{ className?: string }>
 
 interface ElementDef {
-  type: ElementType
+  type: ElementType | 'testimonial-block' | 'pricing-block' | 'hero-block' | 'stats-block' | 'feature-card'
   label: string
   icon: IconFC
   desc: string
   iconClass: string
+  isBlock?: boolean
 }
 
 const ELEMENT_GROUPS: { title: string; dot: string; items: ElementDef[] }[] = [
@@ -56,11 +58,27 @@ const ELEMENT_GROUPS: { title: string; dot: string; items: ElementDef[] }[] = [
       { type: 'divider',   label: 'Divider',   icon: Minus as IconFC,          desc: 'Horizontal rule',  iconClass: 'bg-gray-400/15 text-gray-400 dark:text-gray-500' },
       { type: 'spacer',    label: 'Spacer',    icon: ArrowUpDown as IconFC,    desc: 'Blank spacing',    iconClass: 'bg-gray-400/15 text-gray-400 dark:text-gray-500' },
     ],
+    
+  },
+{
+    title: 'Template Blocks',
+    dot: 'bg-pink-500',
+    items: [
+      { type: 'testimonial-block' as any, label: 'Testimonial', icon: MessageCircle as IconFC, desc: 'Review with rating', iconClass: 'bg-pink-500/15 text-pink-600 dark:text-pink-400', isBlock: true },
+      { type: 'pricing-block' as any, label: 'Pricing Card', icon: DollarSign as IconFC, desc: 'Plan with features', iconClass: 'bg-green-500/15 text-green-600 dark:text-green-400', isBlock: true },
+      { type: 'hero-block' as any, label: 'Hero Section', icon: Rocket as IconFC, desc: 'Hero with CTA', iconClass: 'bg-blue-500/15 text-blue-600 dark:text-blue-400', isBlock: true },
+      { type: 'stats-block' as any, label: 'Stats Counter', icon: TrendingUp as IconFC, desc: 'Key metrics display', iconClass: 'bg-cyan-500/15 text-cyan-600 dark:text-cyan-400', isBlock: true },
+      { type: 'feature-card' as any, label: 'Feature Card', icon: Zap as IconFC, desc: 'Icon + title + desc', iconClass: 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400', isBlock: true },
+      { type: 'faq' as any, label: 'FAQ', icon: HelpCircle as IconFC, desc: 'Questions & answers', iconClass: 'bg-purple-500/15 text-purple-600 dark:text-purple-400', isBlock: true },
+      { type: 'alert' as any, label: 'Alert Banner', icon: AlertCircle as IconFC, desc: 'Important notification', iconClass: 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400', isBlock: true },
+    ],
   },
 ]
 
+
+
 interface ElementsPanelProps {
-  editor: Pick<UseEditorReturn, 'addElement'>
+  editor: Pick<UseEditorReturn, 'addElement' | 'addTemplateBlock'>
 }
 
 export function ElementsPanel({ editor }: ElementsPanelProps) {
@@ -76,11 +94,18 @@ export function ElementsPanel({ editor }: ElementsPanelProps) {
           </div>
 
           <div className="flex flex-col gap-1">
-            {items.map(({ type, label, icon: Icon, desc, iconClass }) => (
+      {items.map(({ type, label, icon: Icon, desc, iconClass, isBlock }) => (
               <button
                 key={type}
                 type="button"
-                onClick={() => editor.addElement(type)}
+               onClick={() => {
+  if (isBlock) {
+    const blockName = (type as string).replace('-block', '').replace('-card', '')
+    editor.addTemplateBlock(blockName as 'testimonial' | 'pricing' | 'hero' | 'stats' | 'feature')
+  } else {
+    editor.addElement(type as ElementType)
+  }
+}}
                 className="group flex cursor-pointer items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-all duration-150 hover:border-border/60 hover:bg-accent hover:shadow-sm active:scale-[0.98]"
               >
                 <span

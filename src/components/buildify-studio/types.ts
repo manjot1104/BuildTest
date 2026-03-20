@@ -13,6 +13,11 @@ export type ElementType =
   | 'navbar'
   | 'form'
   | 'code-block'
+  | 'testimonial-block'
+  | 'pricing-block'
+  | 'hero-block'
+  | 'stats-block'
+  | 'feature-card'
 
 export type EnterAnimation =
   | 'none'
