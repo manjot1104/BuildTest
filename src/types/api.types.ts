@@ -276,6 +276,7 @@ export interface ChatHistoryItem {
   createdAt: string
   updatedAt: string
   type: 'builder' | 'openrouter'
+  folderId?: string | null
 }
 
 /** Community build item - for discovery grid */
