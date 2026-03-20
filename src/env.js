@@ -41,6 +41,15 @@ export const env = createEnv({
 
     // ElevenLabs (optional feature)
     ELEVENLABS_API_KEY: z.string().min(1).optional(),
+
+    // AWS S3 (optional — screenshots are non-critical)
+    AWS_S3_BUCKET: z.string().min(1).optional(),
+    AWS_S3_REGION: z.string().min(1).optional(),
+    AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
+    AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+
+    // TINYFISH
+    TINYFISH_API_KEY: z.string().min(1).optional(),
   },
 
   client: {
@@ -72,6 +81,11 @@ export const env = createEnv({
     ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_RAZORPAY_KEY_ID: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
+    AWS_S3_BUCKET: process.env.AWS_S3_BUCKET,
+    AWS_S3_REGION: process.env.AWS_S3_REGION,
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+    TINYFISH_API_KEY: process.env.TINYFISH_API_KEY,
   },
 
   skipValidation: !!process.env.SKIP_ENV_VALIDATION,

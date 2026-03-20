@@ -10,6 +10,7 @@ import {
   checkRepoStatus,
   checkBranchExists,
   checkRepoNameTaken,
+  validateGithubRepoAndBranch,
 } from '@/server/services/github.service'
 import {
   getActiveGithubRepo,
@@ -61,6 +62,13 @@ interface GithubRepoInfo {
   repoUrl: string
   visibility: 'public' | 'private'
   createdAt: string
+}
+
+export interface GithubValidateResponse {
+  valid:          boolean
+  defaultBranch?: string
+  error?:         'no_github_account' | 'repo_not_found' | 'branch_not_found' | 'error'
+  message?:       string
 }
 
 // ============================================================================
@@ -136,6 +144,69 @@ export async function getGithubStatusHandler(): Promise<
       error: 'Failed to get GitHub status',
       details: 'An internal error occurred',
       status: 500,
+    }
+  }
+}
+
+/**
+ * GET /api/github/validate?owner=foo&repo=bar&branch=main
+ *
+ * Validates that a GitHub repo and branch are accessible with the current
+ * user's token. Used by the debounced live validation in the test run form.
+ *
+ * Guards:
+ *   - User must be authenticated
+ *   - User must have a GitHub token (email-only users get no_github_account)
+ *   - owner, repo, branch are all required query params
+ */
+export async function validateGithubSourceHandler({
+  query,
+}: {
+  query: { owner?: string; repo?: string; branch?: string }
+}): Promise<GithubValidateResponse> {
+  try {
+    const session = await getSession()
+    if (!session?.user?.id) {
+      return { valid: false, error: 'error', message: 'Unauthorized' }
+    }
+
+    const { owner, repo, branch } = query
+    if (!owner || !repo || !branch) {
+      return { valid: false, error: 'error', message: 'owner, repo, and branch are required' }
+    }
+
+    // Guard: user must have a GitHub token — email-only users never reach
+    // this endpoint from the UI, but we enforce it server-side too
+    const token = await getGithubToken(session.user.id)
+    if (!token) {
+      return {
+        valid:   false,
+        error:   'no_github_account',
+        message: 'Your account is not connected to GitHub.',
+      }
+    }
+
+    const result = await validateGithubRepoAndBranch(token, owner, repo, branch)
+
+    if (!result.valid) {
+      const messages: Record<typeof result.reason, string> = {
+        repo_not_found:   `Repository "${owner}/${repo}" not found or not accessible.`,
+        branch_not_found: `Branch "${branch}" does not exist in ${owner}/${repo}.`,
+        error:            'Could not reach GitHub. Please try again.',
+      }
+      return {
+        valid:   false,
+        error:   result.reason,
+        message: messages[result.reason],
+      }
+    }
+
+    return { valid: true, defaultBranch: result.defaultBranch }
+  } catch {
+    return {
+      valid:    false,
+      error:    'error',
+      message:  'An internal error occurred',
     }
   }
 }
