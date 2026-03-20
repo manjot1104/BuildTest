@@ -47,6 +47,12 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const [currentId, setCurrentId] = useState<string | undefined>(designId)
   const currentIdRef = useRef<string | undefined>(designId)
 
+  // Keep refs to latest state to avoid stale closures in save/publish
+  const elementsRef = useRef(state.elements)
+  elementsRef.current = state.elements
+  const bgRef = useRef(state.canvasBackground)
+  bgRef.current = state.canvasBackground
+
   // Clipboard for copy/paste
   const clipboardRef = useRef<CanvasElement[]>([])
 
@@ -106,13 +112,16 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   }, [designId, loadLayout])
 
   // ── Save draft to DB ───────────────────────────────────────────────────────
+  const isSavingRef = useRef(false)
   const handleSaveDraft = useCallback(async () => {
+    if (isSavingRef.current) return // prevent concurrent saves
+    isSavingRef.current = true
     setIsSaving(true)
     try {
       const body = {
         title: 'Untitled',
-        layout: JSON.stringify(state.elements),
-        background: JSON.stringify(state.canvasBackground),
+        layout: JSON.stringify(elementsRef.current),
+        background: JSON.stringify(bgRef.current),
       }
 
       if (!currentIdRef.current) {
@@ -146,16 +155,17 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
     } catch {
       toast.error('Failed to save draft')
     } finally {
+      isSavingRef.current = false
       setIsSaving(false)
     }
-  }, [state.elements, state.canvasBackground, editor])
+  }, [editor])
 
   // Auto-save: debounce 2s after any change
   useEffect(() => {
     if (!state.isDirty) return
     const timer = setTimeout(() => { void handleSaveDraft() }, 2_000)
     return () => clearTimeout(timer)
-  }, [state.isDirty, state.elements, state.canvasBackground, handleSaveDraft])
+  }, [state.isDirty, handleSaveDraft])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {

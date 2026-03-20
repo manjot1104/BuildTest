@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useRef, useCallback, useMemo, useEffect } from 'react'
+import React, { useRef, useCallback, useMemo, useEffect, useState } from 'react'
 import { ZoomIn, ZoomOut, Maximize } from 'lucide-react'
 import { type UseEditorReturn } from './use-editor'
 import { ElementRenderer } from './element-renderer'
-import { computeResponsiveLayout } from './types'
+import { computeResponsiveLayout, type CanvasElement } from './types'
 
 interface CanvasProps {
   editor: UseEditorReturn
@@ -54,11 +54,64 @@ export function Canvas({ editor }: CanvasProps) {
   const rubberBandStartRef = useRef({ vpX: 0, vpY: 0 })
   const isRubberBandRef = useRef(false)
 
-  // Compute responsive layout (auto-reflow for tablet/mobile) and sort by zIndex
+  // Compute responsive layout (auto-reflow for tablet/mobile) with stable caching.
+  // On desktop, just sort by zIndex. On mobile/tablet, use cached reflow positions
+  // and only recompute when elements are added/removed/device changes — NOT on every drag.
+  const cachedLayoutRef = useRef<CanvasElement[]>([])
+  const lastDeviceRef = useRef(activeDevice)
+  const lastElementIdsRef = useRef('')
+  const lastHistoryIdxRef = useRef(-1)
+
   const sortedElements = useMemo(() => {
-    const layout = computeResponsiveLayout(state.elements, activeDevice)
-    return [...layout].sort((a, b) => a.zIndex - b.zIndex)
-  }, [state.elements, activeDevice])
+    if (activeDevice === 'desktop') {
+      cachedLayoutRef.current = []
+      return [...state.elements].sort((a, b) => a.zIndex - b.zIndex)
+    }
+
+    // Build a fingerprint of element IDs to detect add/remove/reorder/undo
+    const elementIds = state.elements.map((e) => e.id).join(',')
+    const structureChanged =
+      elementIds !== lastElementIdsRef.current ||
+      activeDevice !== lastDeviceRef.current ||
+      state.historyIndex !== lastHistoryIdxRef.current ||
+      cachedLayoutRef.current.length === 0
+
+    if (structureChanged) {
+      lastElementIdsRef.current = elementIds
+      lastDeviceRef.current = activeDevice
+      lastHistoryIdxRef.current = state.historyIndex
+      const layout = computeResponsiveLayout(state.elements, activeDevice)
+      cachedLayoutRef.current = layout
+      return [...layout].sort((a, b) => a.zIndex - b.zIndex)
+    }
+
+    // Position-only update: merge moved elements into the cached layout
+    // without retriggering the full reflow algorithm
+    const updated = cachedLayoutRef.current.map((cached) => {
+      const current = state.elements.find((el) => el.id === cached.id)
+      if (!current) return cached
+
+      const overrides = current.responsiveStyles?.[activeDevice]
+      if (overrides?.manuallyPositioned) {
+        // User moved this element — use their position
+        return {
+          ...cached,
+          x: overrides.x ?? cached.x,
+          y: overrides.y ?? cached.y,
+          width: overrides.width ?? cached.width,
+          height: overrides.height ?? cached.height,
+          content: current.content,
+          styles: { ...cached.styles, ...overrides.styles },
+        }
+      }
+
+      // Not moved — keep cached position but update content/styles
+      return { ...cached, content: current.content, styles: current.styles }
+    })
+
+    cachedLayoutRef.current = updated
+    return [...updated].sort((a, b) => a.zIndex - b.zIndex)
+  }, [state.elements, activeDevice, state.historyIndex])
 
   // Auto-extend canvas height when reflowed elements exceed the preset height
   const canvasHeight = useMemo(() => {
