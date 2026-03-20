@@ -1,1 +1,0 @@
-ALTER TYPE "public"."test_run_status" ADD VALUE 'cancelled';
