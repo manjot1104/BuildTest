@@ -234,13 +234,34 @@ export function Canvas({ editor }: CanvasProps) {
     setPan(panX, panY)
   }, [setZoom, setPan, canvasWidth, canvasHeight])
 
-  const handleDragEnd = useCallback(
-    (id: string, x: number, y: number) => {
-      const { snap, size } = state.grid
-      updateElementResponsive(id, { x: snapToGrid(x, size, snap), y: snapToGrid(y, size, snap) })
-    },
-    [updateElementResponsive, state.grid],
-  )
+const handleDragEnd = useCallback(
+  (id: string, x: number, y: number) => {
+    const { snap, size } = state.grid
+    const snappedX = snapToGrid(x, size, snap)
+    const snappedY = snapToGrid(y, size, snap)
+
+    const draggedEl = state.elements.find((el) => el.id === id)
+
+    // If element belongs to a template block, move ALL block siblings by the same delta
+    if (draggedEl?.templateBlockId) {
+      const dx = snappedX - draggedEl.x
+      const dy = snappedY - draggedEl.y
+
+      state.elements
+        .filter((el) => el.templateBlockId === draggedEl.templateBlockId)
+        .forEach((el) => {
+          updateElementResponsive(el.id, {
+            x: el.x + dx,
+            y: el.y + dy,
+          })
+        })
+    } else {
+      // Normal single-element move
+      updateElementResponsive(id, { x: snappedX, y: snappedY })
+    }
+  },
+  [updateElementResponsive, state.grid, state.elements],
+)
 
   const handleResizeEnd = useCallback(
     (id: string, x: number, y: number, width: number, height: number) => {

@@ -209,7 +209,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
             background: getBg(),
             wordBreak: 'break-word',
             whiteSpace: 'pre-wrap',
-            overflow: 'auto',
+            overflow: 'visible',
           }}>{el.content}</p>
         )
       case 'image':

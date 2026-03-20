@@ -13,6 +13,11 @@ export type ElementType =
   | 'navbar'
   | 'form'
   | 'code-block'
+  | 'testimonial-block'
+  | 'pricing-block'
+  | 'hero-block'
+  | 'stats-block'
+  | 'feature-card'
 
 export type EnterAnimation =
   | 'none'
@@ -129,8 +134,10 @@ export interface CanvasElement {
   socialLinks?: SocialLinkItem[]
   formFields?: FormField[]
   iconName?: string
- 
+templateBlockId?: string
   sectionKey?: string
+  /** Logical group within a section (e.g. "card-1") — keeps elements together on mobile */
+  groupId?: string
   /** Responsive overrides — tablet/mobile values merged on top of base (desktop) */
   responsiveStyles?: {
     tablet?: ResponsiveOverride
@@ -234,7 +241,7 @@ export function computeResponsiveLayout(
 
       // Auto-hide decorative sections/containers (background shapes, section backgrounds)
       // that are purely visual and oversized.
-      const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim()
+      const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim() && !orig.sectionKey
       const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
       if (isDecorative && isOversized) {
         scaled[i] = { ...s, hidden: true }
@@ -466,6 +473,7 @@ export interface EditorState {
   device: DeviceConfig
   canvasBackground: CanvasBackground
   grid: GridSettings
+  themeId: string
 }
 
 export type EditorAction =
@@ -491,3 +499,5 @@ export type EditorAction =
   | { type: 'SET_DEVICE'; device: DeviceConfig }
   | { type: 'SET_CANVAS_BACKGROUND'; background: CanvasBackground }
   | { type: 'SET_GRID'; grid: GridSettings }
+  | { type: 'ADD_ELEMENTS'; elements: CanvasElement[] }
+  | { type: 'SET_THEME'; themeId: string }
