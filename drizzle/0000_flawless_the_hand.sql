@@ -1,11 +1,47 @@
+CREATE TYPE "public"."a11y_test_status" AS ENUM('pending', 'crawling', 'testing', 'generating_report', 'completed', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."chat_type" AS ENUM('BUILDER', 'OPENROUTER');--> statement-breakpoint
 CREATE TYPE "public"."demo_type" AS ENUM('featured', 'community');--> statement-breakpoint
 CREATE TYPE "public"."message_role" AS ENUM('USER', 'ASSISTANT', 'SYSTEM');--> statement-breakpoint
 CREATE TYPE "public"."payment_status" AS ENUM('pending', 'completed', 'failed', 'refunded');--> statement-breakpoint
-CREATE TYPE "public"."sandbox_execution_status" AS ENUM('pending', 'running', 'completed', 'failed', 'timeout');--> statement-breakpoint
 CREATE TYPE "public"."subscription_status" AS ENUM('active', 'cancelled', 'expired', 'pending');--> statement-breakpoint
 CREATE TYPE "public"."transaction_type" AS ENUM('subscription', 'credit_pack', 'refund');--> statement-breakpoint
 CREATE TYPE "public"."user_role" AS ENUM('user', 'admin', 'manager', 'team_member');--> statement-breakpoint
+CREATE TABLE "pg-drizzle_accessibility_page_results" (
+	"id" text PRIMARY KEY NOT NULL,
+	"test_run_id" text NOT NULL,
+	"page_url" text NOT NULL,
+	"page_title" text,
+	"violation_count" integer DEFAULT 0 NOT NULL,
+	"pass_count" integer DEFAULT 0 NOT NULL,
+	"incomplete_count" integer DEFAULT 0 NOT NULL,
+	"inapplicable_count" integer DEFAULT 0 NOT NULL,
+	"violations" text DEFAULT '[]' NOT NULL,
+	"passes" text DEFAULT '[]' NOT NULL,
+	"incomplete" text DEFAULT '[]' NOT NULL,
+	"tested_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "pg-drizzle_accessibility_test_runs" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"target_url" text NOT NULL,
+	"standards" text NOT NULL,
+	"status" "a11y_test_status" DEFAULT 'pending' NOT NULL,
+	"max_pages" integer DEFAULT 20 NOT NULL,
+	"max_depth" integer DEFAULT 3 NOT NULL,
+	"total_pages_tested" integer DEFAULT 0,
+	"total_violations" integer DEFAULT 0,
+	"total_passes" integer DEFAULT 0,
+	"total_incomplete" integer DEFAULT 0,
+	"logs" text,
+	"pdf_report_base64" text,
+	"error_message" text,
+	"started_at" timestamp with time zone,
+	"completed_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
@@ -29,6 +65,17 @@ CREATE TABLE "pg-drizzle_anonymous_chat_logs" (
 	"created_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "pg-drizzle_chat_folders" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"name" varchar(100) NOT NULL,
+	"color" varchar(7),
+	"position" integer DEFAULT 0 NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "chat_folders_user_name_uniq" UNIQUE("user_id","name")
+);
+--> statement-breakpoint
 CREATE TABLE "pg-drizzle_user_chats" (
 	"id" text PRIMARY KEY NOT NULL,
 	"v0_chat_id" varchar(255),
@@ -44,6 +91,7 @@ CREATE TABLE "pg-drizzle_user_chats" (
 	"model_name" text,
 	"prompt_metadata" jsonb,
 	"conversation_id" text,
+	"folder_id" text,
 	CONSTRAINT "pg-drizzle_user_chats_v0_chat_id_unique" UNIQUE("v0_chat_id")
 );
 --> statement-breakpoint
@@ -125,12 +173,22 @@ CREATE TABLE "pg-drizzle_post" (
 	"updatedAt" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE TABLE "pg-drizzle_resume_templates" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" varchar(255) NOT NULL,
+	"description" text,
+	"latex_template" text NOT NULL,
+	"is_default" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "pg-drizzle_sandbox_executions" (
 	"id" text PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
-	"language" varchar(50) NOT NULL,
+	"language" text NOT NULL,
 	"code" text NOT NULL,
-	"status" "sandbox_execution_status" DEFAULT 'pending' NOT NULL,
+	"status" text DEFAULT 'running' NOT NULL,
 	"output" text,
 	"error" text,
 	"exit_code" integer,
@@ -149,6 +207,33 @@ CREATE TABLE "session" (
 	"user_agent" text,
 	"user_id" text NOT NULL,
 	CONSTRAINT "session_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "pg-drizzle_shared_chat_links" (
+	"id" text PRIMARY KEY NOT NULL,
+	"token" varchar(64) NOT NULL,
+	"user_id" text NOT NULL,
+	"chat_type" "chat_type" NOT NULL,
+	"chat_id" text NOT NULL,
+	"title" text,
+	"messages" text NOT NULL,
+	"created_at" timestamp with time zone NOT NULL,
+	"expires_at" timestamp with time zone,
+	CONSTRAINT "pg-drizzle_shared_chat_links_token_unique" UNIQUE("token")
+);
+--> statement-breakpoint
+CREATE TABLE "pg-drizzle_persona_layouts" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"slug" text,
+	"title" text DEFAULT 'Untitled' NOT NULL,
+	"layout" text DEFAULT '[]' NOT NULL,
+	"background" text,
+	"is_published" boolean DEFAULT false NOT NULL,
+	"published_at" timestamp with time zone,
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "pg-drizzle_persona_layouts_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
 CREATE TABLE "pg-drizzle_subscriptions" (
@@ -190,6 +275,18 @@ CREATE TABLE "pg-drizzle_user_credits" (
 	CONSTRAINT "pg-drizzle_user_credits_user_id_unique" UNIQUE("user_id")
 );
 --> statement-breakpoint
+CREATE TABLE "pg-drizzle_user_resumes" (
+	"id" text PRIMARY KEY NOT NULL,
+	"user_id" text NOT NULL,
+	"template_id" text,
+	"resume_data" text NOT NULL,
+	"latex_content" text,
+	"pdf_url" text,
+	"title" varchar(255),
+	"created_at" timestamp with time zone NOT NULL,
+	"updated_at" timestamp with time zone NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "verification" (
 	"id" text PRIMARY KEY NOT NULL,
 	"identifier" text NOT NULL,
@@ -199,9 +296,13 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp
 );
 --> statement-breakpoint
+ALTER TABLE "pg-drizzle_accessibility_page_results" ADD CONSTRAINT "pg-drizzle_accessibility_page_results_test_run_id_pg-drizzle_accessibility_test_runs_id_fk" FOREIGN KEY ("test_run_id") REFERENCES "public"."pg-drizzle_accessibility_test_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_accessibility_test_runs" ADD CONSTRAINT "pg-drizzle_accessibility_test_runs_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_chat_folders" ADD CONSTRAINT "pg-drizzle_chat_folders_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_user_chats" ADD CONSTRAINT "pg-drizzle_user_chats_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_user_chats" ADD CONSTRAINT "pg-drizzle_user_chats_conversation_id_pg-drizzle_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."pg-drizzle_conversations"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_user_chats" ADD CONSTRAINT "pg-drizzle_user_chats_folder_id_pg-drizzle_chat_folders_id_fk" FOREIGN KEY ("folder_id") REFERENCES "public"."pg-drizzle_chat_folders"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_conversation_messages" ADD CONSTRAINT "pg-drizzle_conversation_messages_conversation_id_pg-drizzle_conversations_id_fk" FOREIGN KEY ("conversation_id") REFERENCES "public"."pg-drizzle_conversations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_conversations" ADD CONSTRAINT "pg-drizzle_conversations_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_credit_usage_logs" ADD CONSTRAINT "pg-drizzle_credit_usage_logs_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -212,16 +313,25 @@ ALTER TABLE "pg-drizzle_github_repos" ADD CONSTRAINT "pg-drizzle_github_repos_us
 ALTER TABLE "pg-drizzle_payment_transactions" ADD CONSTRAINT "pg-drizzle_payment_transactions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_payment_transactions" ADD CONSTRAINT "pg-drizzle_payment_transactions_subscription_id_pg-drizzle_subscriptions_id_fk" FOREIGN KEY ("subscription_id") REFERENCES "public"."pg-drizzle_subscriptions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_post" ADD CONSTRAINT "pg-drizzle_post_createdById_user_id_fk" FOREIGN KEY ("createdById") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "pg-drizzle_sandbox_executions" ADD CONSTRAINT "pg-drizzle_sandbox_executions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_shared_chat_links" ADD CONSTRAINT "pg-drizzle_shared_chat_links_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_persona_layouts" ADD CONSTRAINT "pg-drizzle_persona_layouts_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_subscriptions" ADD CONSTRAINT "pg-drizzle_subscriptions_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pg-drizzle_user_credits" ADD CONSTRAINT "pg-drizzle_user_credits_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_user_resumes" ADD CONSTRAINT "pg-drizzle_user_resumes_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "pg-drizzle_user_resumes" ADD CONSTRAINT "pg-drizzle_user_resumes_template_id_pg-drizzle_resume_templates_id_fk" FOREIGN KEY ("template_id") REFERENCES "public"."pg-drizzle_resume_templates"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "a11y_page_results_test_run_id_idx" ON "pg-drizzle_accessibility_page_results" USING btree ("test_run_id");--> statement-breakpoint
+CREATE INDEX "a11y_test_runs_user_id_idx" ON "pg-drizzle_accessibility_test_runs" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "a11y_test_runs_created_at_idx" ON "pg-drizzle_accessibility_test_runs" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "a11y_test_runs_status_idx" ON "pg-drizzle_accessibility_test_runs" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "anon_chat_logs_ip_created_idx" ON "pg-drizzle_anonymous_chat_logs" USING btree ("ip_address","created_at");--> statement-breakpoint
+CREATE INDEX "chat_folders_user_id_idx" ON "pg-drizzle_chat_folders" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_chats_user_id_idx" ON "pg-drizzle_user_chats" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "user_chats_v0_chat_id_idx" ON "pg-drizzle_user_chats" USING btree ("v0_chat_id");--> statement-breakpoint
 CREATE INDEX "user_chats_created_at_idx" ON "pg-drizzle_user_chats" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "user_chats_chat_type_idx" ON "pg-drizzle_user_chats" USING btree ("chat_type");--> statement-breakpoint
 CREATE INDEX "user_chats_conversation_id_idx" ON "pg-drizzle_user_chats" USING btree ("conversation_id");--> statement-breakpoint
+CREATE INDEX "user_chats_folder_id_idx" ON "pg-drizzle_user_chats" USING btree ("folder_id");--> statement-breakpoint
 CREATE INDEX "conversation_messages_conversation_id_idx" ON "pg-drizzle_conversation_messages" USING btree ("conversation_id");--> statement-breakpoint
 CREATE INDEX "conversations_user_id_idx" ON "pg-drizzle_conversations" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "credit_usage_logs_user_id_idx" ON "pg-drizzle_credit_usage_logs" USING btree ("user_id");--> statement-breakpoint
@@ -239,9 +349,13 @@ CREATE INDEX "payment_transactions_status_idx" ON "pg-drizzle_payment_transactio
 CREATE INDEX "created_by_idx" ON "pg-drizzle_post" USING btree ("createdById");--> statement-breakpoint
 CREATE INDEX "name_idx" ON "pg-drizzle_post" USING btree ("name");--> statement-breakpoint
 CREATE INDEX "sandbox_executions_user_id_idx" ON "pg-drizzle_sandbox_executions" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX "sandbox_executions_status_idx" ON "pg-drizzle_sandbox_executions" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "sandbox_executions_created_at_idx" ON "pg-drizzle_sandbox_executions" USING btree ("created_at");--> statement-breakpoint
+CREATE INDEX "shared_chat_links_token_idx" ON "pg-drizzle_shared_chat_links" USING btree ("token");--> statement-breakpoint
+CREATE INDEX "shared_chat_links_user_id_idx" ON "pg-drizzle_shared_chat_links" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "persona_layouts_user_id_idx" ON "pg-drizzle_persona_layouts" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "persona_layouts_slug_idx" ON "pg-drizzle_persona_layouts" USING btree ("slug");--> statement-breakpoint
 CREATE INDEX "subscriptions_user_id_idx" ON "pg-drizzle_subscriptions" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "subscriptions_razorpay_subscription_id_idx" ON "pg-drizzle_subscriptions" USING btree ("razorpay_subscription_id");--> statement-breakpoint
 CREATE INDEX "subscriptions_status_idx" ON "pg-drizzle_subscriptions" USING btree ("status");--> statement-breakpoint
-CREATE INDEX "user_credits_user_id_idx" ON "pg-drizzle_user_credits" USING btree ("user_id");
+CREATE INDEX "user_credits_user_id_idx" ON "pg-drizzle_user_credits" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "user_resumes_user_id_idx" ON "pg-drizzle_user_resumes" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "user_resumes_created_at_idx" ON "pg-drizzle_user_resumes" USING btree ("created_at");
