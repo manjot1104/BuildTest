@@ -194,7 +194,7 @@ export interface LiveTestCase {
   durationMs?: number;
 }
 
-// ─── [ADDED] Crawl progress types ─────────────────────────────────────────────
+// ─── Crawl progress types ─────────────────────────────────────────────
 // These mirror the CrawlProgressEvent union in tinyfish.service.ts so the
 // frontend has fully typed access to the real-time crawl state.
 // We redefine them here (rather than importing from the server module) to keep
@@ -281,7 +281,7 @@ export type PipelineSSEEvent =
       shareableSlug: string | null;
     }
   | { type: "error"; message: string }
-  // [ADDED] crawl_progress wraps one of the four crawl sub-events emitted by
+  // crawl_progress wraps one of the four crawl sub-events emitted by
   // tinyfish.service via the onProgress callback. We handle each sub-type in
   // the SSE hook switch below and store the relevant data in SSEState.
   | {
@@ -338,7 +338,7 @@ export interface SSEState {
   isAwaitingReview: boolean;
   errorMessage: string | null;
 
-  // ── [ADDED] Crawl progress state ─────────────────────────────────────────
+  // ── Crawl progress state ─────────────────────────────────────────
   // These fields are populated by crawl_progress SSE events during the
   // "crawling" pipeline stage and cleared when execution begins.
 
@@ -365,7 +365,7 @@ const INITIAL_SSE_STATE: SSEState = {
   isCancelled: false,
   isAwaitingReview: false,
   errorMessage: null,
-  // [ADDED] Crawl progress initial values
+  // Crawl progress initial values
   crawlStage: null,
   crawlStageDescription: null,
   crawlFoundUrls: [],
@@ -623,7 +623,7 @@ export function useTestRunSSE(
             },
           };
 
-          // [FIXED] Upsert into generatedTestCases rather than only updating.
+          // Upsert into generatedTestCases rather than only updating.
           //
           // WHY: test_update events fire for every test case during execution,
           // but generatedTestCases is only populated by the tests_generated event
@@ -692,7 +692,7 @@ export function useTestRunSSE(
           next = { ...prev, liveBugs: [...prev.liveBugs, event.bug] };
           break;
 
-        // [ADDED] Handle the four crawl sub-events that arrive inside crawl_progress.
+        // Handle the four crawl sub-events that arrive inside crawl_progress.
         // Each sub-event updates a different slice of the crawl progress state.
         // We use immutable spread so React always re-renders correctly.
         case "crawl_progress": {
@@ -832,7 +832,7 @@ export function useTestRunSSE(
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-// [ADDED] TimeoutOverrides mirrors the server-side interface from
+// TimeoutOverrides mirrors the server-side interface from
 // tinyfish.service.ts so the UI can pass typed timeout values through
 // useStartTestRun → POST /api/test/run without manual casting.
 export interface TimeoutOverrides {
@@ -844,7 +844,7 @@ export interface TimeoutOverrides {
   executeTestBaseMs?: number;
 }
 
-// [CHANGED] mutation input now also accepts optional concurrency, timeouts,
+// mutation input now also accepts optional concurrency, timeouts,
 // and [GITHUB] optional github source fields.
 // All fields remain optional — omitting them keeps server defaults.
 export function useStartTestRun() {
@@ -881,6 +881,17 @@ export function useStartTestRun() {
        * [GITHUB] Branch to analyse (e.g. "main").
        */
       githubBranch?: string;
+      /**
+       * Optional free-text hint to help the crawler navigate sites that
+       * require authentication or interaction before content is reachable.
+       *
+       * Examples:
+       *   "Login with email test@example.com password demo1234"
+       *   "Click 'Continue as guest' to bypass the signup wall"
+       *
+       * Sanitised server-side. Max 500 characters.
+       */
+      crawlContext?: string;
     }): Promise<{ testRunId: string }> => {
       const res = await fetch("/api/test/run", {
         method: "POST",

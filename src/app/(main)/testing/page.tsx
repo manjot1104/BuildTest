@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUserCredits } from "@/hooks/use-user-credits";
 import {
-  Globe, Play, Loader2, CheckCircle2, XCircle,
+  Globe, Play, Loader2, CheckCircle2, XCircle, KeyRound ,
   RotateCcw, ExternalLink, Zap, Bug, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download,
   Check, TrendingUp, Activity, History,
@@ -446,6 +446,118 @@ function AdvancedSettingsPanel({
   );
 }
 
+const CRAWL_CONTEXT_MAX = 500;
+ 
+function CrawlContextInput({
+  value, onChange, disabled,
+}: {
+  value: string; onChange: (v: string) => void; disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const remaining = CRAWL_CONTEXT_MAX - value.length;
+  const hasValue = value.trim().length > 0;
+ 
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors touch-manipulation group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${open ? "bg-muted" : "bg-muted/50 group-hover:bg-muted"}`}>
+            <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          <div className="text-left">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block">
+              Auth / Crawl Context
+            </span>
+            {!open && (
+              <span className="text-[9px] font-mono text-muted-foreground/40">
+                {hasValue ? "hint provided · click to edit" : "optional · help crawler past login screens"}
+              </span>
+            )}
+          </div>
+          {hasValue && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-[#00FF85] bg-[#00FF85]/10 border border-[#00FF85]/20 rounded-full px-2 py-0.5">
+              <span className="h-1 w-1 rounded-full bg-[#00FF85]" />
+              hint set
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasValue && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange(""); }}
+              className="text-[9px] font-mono text-muted-foreground/50 hover:text-muted-foreground px-2 py-1 rounded-md border border-border hover:bg-muted transition-all"
+            >
+              clear
+            </button>
+          )}
+          {open
+            ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+            : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+          }
+        </div>
+      </button>
+ 
+      {open && (
+        <div className="border-t border-border px-4 py-4 space-y-3">
+          {/* Examples */}
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-[#00FF85]/5 border border-[#00FF85]/15">
+            <Info className="h-3 w-3 text-[#00FF85] shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-[10px] font-mono text-[#00FF85]/70 leading-relaxed">
+                Provide credentials or navigation instructions so the crawler can access
+                pages behind login walls or interaction barriers.
+              </p>
+              <div className="space-y-0.5">
+                {[
+                  `Login with email: test@example.com and password: demo1234`,
+                  `Click "Enter as guest" to skip the login screen`,
+                  `Accept the cookie banner first, then navigate normally`,
+                ].map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => onChange(ex)}
+                    className="block text-left text-[9px] font-mono text-muted-foreground/50 hover:text-[#00FF85]/70 transition-colors truncate max-w-full"
+                  >
+                    ↳ {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+ 
+          {/* Textarea */}
+          <div className="space-y-1.5">
+            <textarea
+              value={value}
+              onChange={(e) => onChange(e.target.value.slice(0, CRAWL_CONTEXT_MAX))}
+              disabled={disabled}
+              placeholder="e.g. Login with email: user@example.com and password: demo1234"
+              rows={3}
+              aria-label="Crawl context hint"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-[#00FF85]/50 focus:ring-1 focus:ring-[#00FF85]/20 transition-colors resize-none disabled:opacity-40"
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-mono text-muted-foreground/30 leading-relaxed">
+                This hint is sent to the AI crawler — do not include sensitive production credentials.
+              </p>
+              <span className={`text-[9px] font-mono tabular-nums shrink-0 ${remaining < 50 ? "text-yellow-500" : "text-muted-foreground/30"}`}>
+                {remaining}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
@@ -470,6 +582,7 @@ export default function TestingPage() {
   const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
   const [executeMs, setExecuteMs]       = useState(DEFAULT_EXECUTE_MS);
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
+  const [crawlContext, setCrawlContext] = useState("");
   const [showPrefillBanner, setShowPrefillBanner] = useState(hasPrefill);
 
   // Upgrade nudge visibility for pages and tests steppers
@@ -589,6 +702,7 @@ export default function TestingPage() {
         ...(effectiveConcurrency !== CONCURRENCY_DEFAULT && { concurrency: effectiveConcurrency }),
         ...(Object.keys(timeouts).length > 0 && { timeouts }),
         ...(githubSource && { githubOwner: githubSource.owner, githubRepo: githubSource.repo, githubBranch: githubSource.branch }),
+         ...(crawlContext.trim() && { crawlContext: crawlContext.trim() }),
       },
       {
         onSuccess: (d) => { setTestRunId(d.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
@@ -606,7 +720,7 @@ export default function TestingPage() {
   };
 
   const handleReset = () => {
-    setUrl(""); setTestRunId(null); setGithubSource(null);
+    setUrl(""); setTestRunId(null); setGithubSource(null); setCrawlContext("");
     setFilterSeverity("all"); setFilterCategory("all");
     setTcFilter("all"); setActiveTab("tests"); setSelectedBug(null);
     setShowPagesUpgradeNudge(false); setShowTestsUpgradeNudge(false);
@@ -847,6 +961,10 @@ export default function TestingPage() {
                 </div>
               </div>
             </div>
+            
+            {/* ── Crawl Context ── */}
+            {/* Optional auth/interaction hint for sites behind login walls */}
+            <CrawlContextInput value={crawlContext} onChange={setCrawlContext} disabled={isStarting} />
 
             {/* ── Advanced Settings ── */}
             <AdvancedSettingsPanel
