@@ -214,6 +214,17 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, canvasBackground: action.background, isDirty: true }
     case 'SET_GRID':
       return { ...state, grid: action.grid }
+    case 'ADD_ELEMENTS': {
+      const newState = pushToHistory(state)
+      return {
+        ...newState,
+        elements: [...newState.elements, ...action.elements],
+        selectedIds: action.elements.map((el) => el.id),
+        isDirty: true,
+      }
+    }
+    case 'SET_THEME':
+      return { ...state, themeId: action.themeId }
     default:
       return state
   }
@@ -239,6 +250,7 @@ const initialState: EditorState = {
     imageUrl: '',
   },
   grid: { enabled: false, snap: false, size: 16 },
+  themeId: 'dark-indigo',
 }
 
 export function useEditor() {
@@ -1302,6 +1314,44 @@ const elements = blockElements.map((el, idx) => ({
     dispatch({ type: 'SET_GRID', grid })
   }, [])
 
+  const setTheme = useCallback((themeId: string) => {
+    dispatch({ type: 'SET_THEME', themeId })
+  }, [])
+
+  const addBlock = useCallback(
+    (blockId: string) => {
+      const { BLOCKS } = require('./blocks') as typeof import('./blocks')
+      const { getThemeById } = require('./themes') as typeof import('./themes')
+
+      const block = BLOCKS.find((b: { id: string }) => b.id === blockId)
+      if (!block) return
+
+      const theme = getThemeById(state.themeId)
+      const maxZ = Math.max(...state.elements.map((e) => e.zIndex), 0)
+
+      // Smart insert: stack below existing content
+      const bottomY = state.elements.length > 0
+        ? Math.max(...state.elements.map((e) => e.y + e.height))
+        : 0
+      const startY = bottomY
+
+      const canvasWidth = state.device.width
+      const elements = block.create(startY, canvasWidth, theme)
+
+      const templateBlockId = crypto.randomUUID()
+      const finalized = elements.map((el: CanvasElement, idx: number) => ({
+        ...el,
+        templateBlockId,
+        zIndex: maxZ + idx + 1,
+        locked: false,
+        hidden: false,
+      }))
+
+      dispatch({ type: 'ADD_ELEMENTS', elements: finalized })
+    },
+    [state.elements, state.device.width, state.themeId],
+  )
+
   const canUndo = state.historyIndex > 0
   const canRedo = state.historyIndex < state.history.length - 1
   const selectedElement =
@@ -1339,6 +1389,8 @@ const elements = blockElements.map((el, idx) => ({
     setDevice,
     setCanvasBackground,
     setGrid,
+    setTheme,
+    addBlock,
     dispatch,
   }
 }
