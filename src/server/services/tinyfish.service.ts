@@ -74,6 +74,9 @@ const HARD_CAPS = {
   MAX_CONCURRENCY: 20,
   MIN_TIMEOUT_MS: 30_000,   // 30 s — below this TinyFish almost always times out
   MAX_TIMEOUT_MS: 600_000,  // 10 min — sane upper bound
+  // Maximum length (characters) for the user-supplied crawl context hint.
+  // Keeps prompt sizes reasonable and prevents abuse.
+  MAX_CRAWL_CONTEXT_LENGTH: 500,
 } as const;
 
 //  TIMEOUTS is now mutable-compatible via a helper (resolveTimeouts)
@@ -193,6 +196,12 @@ export type CrawlProgressEvent =
 //
 //CrawlOptions now also accepts an optional onProgress callback so
 // the controller can forward live crawl events to SSE clients.
+//
+// CrawlOptions now also accepts an optional crawlContext string.
+// When provided, it is injected into both the Stage-1 discovery prompt and
+// the Stage-2 per-page extraction prompts so TinyFish can handle sites that
+// require authentication, form submission, or other user interaction to
+// access content. The value is sanitised (trimmed, length-capped) before use.
 export interface CrawlOptions {
   budget?: Partial<CrawlBudget>;
   allowedDomain?: string;
@@ -206,6 +215,20 @@ export interface CrawlOptions {
    * Omit if you don't need live progress (e.g. unit tests, single-page crawls).
    */
   onProgress?: CrawlProgressCallback;
+  /**
+   * Optional free-text hint supplied by the user to help the crawler
+   * navigate sites that require authentication or interaction.
+   *
+   * Examples:
+   *   "Login with email: user@example.com and password: demo1234"
+   *   "Click 'Enter as guest' to skip the login screen"
+   *   "The dashboard is only visible after accepting the cookie banner"
+   *
+   * This string is injected verbatim (after sanitisation) into the TinyFish
+   * discovery and extraction prompts so the agent can act on the hint.
+   * Maximum length: HARD_CAPS.MAX_CRAWL_CONTEXT_LENGTH characters.
+   */
+  crawlContext?: string;
 }
 
 export interface TinyFishRequest {
@@ -887,15 +910,37 @@ async function fetchStaticHtmlLinks(
 
 // ─── Stage 1: Discovery prompt ────────────────────────────────────────────────
 
+// sanitiseCrawlContext strips the user-supplied hint to a safe
+// plain-text string. We remove backticks and angle brackets to prevent
+// accidental prompt-injection, then hard-cap the length. Returns an empty
+// string when the input is blank so callers can skip injection cleanly.
+function sanitiseCrawlContext(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw
+    .replace(/[`<>]/g, "")   // strip prompt-injection characters
+    .trim()
+    .slice(0, HARD_CAPS.MAX_CRAWL_CONTEXT_LENGTH);
+}
+
 function buildDiscoveryGoal(
   rootUrl: string,
   allowedHostname: string,
   maxPages: number,
+  // crawlContext is appended to the discovery prompt when present so
+  // TinyFish knows how to handle login screens or interaction barriers.
+  crawlContext?: string,
 ): string {
+  const safeContext = sanitiseCrawlContext(crawlContext);
+  // Build the optional context block that is injected near the top of
+  // the discovery prompt. When absent the prompt is identical to before.
+  const contextBlock = safeContext
+    ? `\nUSER-PROVIDED CONTEXT (follow these instructions before doing anything else):\n${safeContext}\n`
+    : "";
+
   return `You are a website URL discoverer. Your ONLY job is to find all unique page URLs on this website.
 
 START URL: ${rootUrl}
-
+${contextBlock}
 STEP 1 — Navigate and wait:
 Go to the start URL. Wait for full page load.
 If you see <div id="root">, <div id="app">, or window.React exists — this is a JavaScript SPA. Wait an EXTRA 4 seconds for JS rendering.
@@ -925,9 +970,21 @@ The "urls" field must be an array of absolute URL strings.
 
 // ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
 
-function buildExtractionGoal(url: string, allowedHostname: string): string {
-  return `Navigate to this URL: ${url}
+function buildExtractionGoal(
+  url: string,
+  allowedHostname: string,
+  // crawlContext is injected into extraction prompts so TinyFish can
+  // authenticate or interact before extracting each page.
+  crawlContext?: string,
+): string {
+  const safeContext = sanitiseCrawlContext(crawlContext);
+  // Same optional context block pattern as in buildDiscoveryGoal.
+  const contextBlock = safeContext
+    ? `\nUSER-PROVIDED CONTEXT (follow these instructions before extracting the page):\n${safeContext}\n`
+    : "";
 
+  return `Navigate to this URL: ${url}
+${contextBlock}
 Wait for the page to fully load. If SPA (has <div id="root"> or <div id="app">), wait 3 extra seconds.
 Dismiss cookie banners — do NOT interact with them.
 
@@ -1122,6 +1179,10 @@ export function allocateTestBudget(
 // milestones so the controller can relay live events to SSE clients.
 // All onProgress calls are fire-and-forget (no await) — they must never
 // block or throw inside the crawl hot path.
+//
+// crawlSite reads options.crawlContext and forwards the sanitised
+// value into buildDiscoveryGoal and buildExtractionGoal so TinyFish receives
+// user-provided authentication or navigation hints in both Stage 1 and Stage 2.
 export async function crawlSite(
   rootUrl: string,
   options: CrawlOptions = {},
@@ -1154,6 +1215,15 @@ export async function crawlSite(
 
   // Per-run timeout overrides. All values are in milliseconds.
   const timeouts = resolveTimeouts(options.timeouts);
+
+  // Sanitise the crawl context once here so every downstream call
+  // receives a clean, length-capped string (or empty string = no injection).
+  const crawlContext = sanitiseCrawlContext(options.crawlContext);
+  if (crawlContext) {
+    console.log(
+      `[Crawler] crawlContext provided (${crawlContext.length} chars) — injecting into TinyFish prompts`,
+    );
+  }
 
   // Resolve effective budget: user values → defaults → hard caps.
   //  concurrency is now clamped to [MIN_CONCURRENCY, MAX_CONCURRENCY]
@@ -1248,7 +1318,9 @@ export async function crawlSite(
       runTinyFish(
         {
           url: rootUrl,
-          goal: buildDiscoveryGoal(rootUrl, allowedHostname, budget.maxPages),
+          // Pass crawlContext into the discovery goal so TinyFish
+          // can authenticate / interact before collecting URLs.
+          goal: buildDiscoveryGoal(rootUrl, allowedHostname, budget.maxPages, crawlContext),
           browser_profile: "stealth",
         },
         ctx,
@@ -1337,7 +1409,7 @@ export async function crawlSite(
 
     if (discoveredUrls.length > 0) {
       console.log(`[Stage1] ✓ Discovery found ${discoveredUrls.length} pages`);
-      // [ADDED] Emit each newly-discovered URL (not already seen from free seeding).
+      // Emit each newly-discovered URL (not already seen from free seeding).
       // We track which ones are new to avoid double-emitting root URL and sitemap links.
       const alreadyEmitted = new Set(freeUrls);
       for (const url of discoveredUrls) {
@@ -1420,7 +1492,9 @@ export async function crawlSite(
             runTinyFish(
               {
                 url: pageUrl,
-                goal: buildExtractionGoal(pageUrl, allowedHostname),
+                // Pass crawlContext into every extraction call so
+                // TinyFish can authenticate before extracting each page.
+                goal: buildExtractionGoal(pageUrl, allowedHostname, crawlContext),
                 browser_profile: "lite",
               },
               ctx,
@@ -1441,7 +1515,7 @@ export async function crawlSite(
             console.warn(
               `[Stage2] ✗ attempt ${attempt + 1} ${pageUrl}: ${result.error ?? "no data"}`,
             );
-            // [ADDED] Only emit failure after the last retry attempt so the UI
+            // Only emit failure after the last retry attempt so the UI
             // doesn't flicker between "extracting" and "failed" on transient errors.
             if (attempt === MAX_EXTRACTION_RETRIES) {
               extractedCount++;

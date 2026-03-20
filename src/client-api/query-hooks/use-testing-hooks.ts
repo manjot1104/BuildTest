@@ -194,7 +194,7 @@ export interface LiveTestCase {
   durationMs?: number;
 }
 
-// ─── [ADDED] Crawl progress types ─────────────────────────────────────────────
+// ─── Crawl progress types ─────────────────────────────────────────────
 // These mirror the CrawlProgressEvent union in tinyfish.service.ts so the
 // frontend has fully typed access to the real-time crawl state.
 // We redefine them here (rather than importing from the server module) to keep
@@ -281,7 +281,7 @@ export type PipelineSSEEvent =
       shareableSlug: string | null;
     }
   | { type: "error"; message: string }
-  // [ADDED] crawl_progress wraps one of the four crawl sub-events emitted by
+  // crawl_progress wraps one of the four crawl sub-events emitted by
   // tinyfish.service via the onProgress callback. We handle each sub-type in
   // the SSE hook switch below and store the relevant data in SSEState.
   | {
@@ -338,7 +338,7 @@ export interface SSEState {
   isAwaitingReview: boolean;
   errorMessage: string | null;
 
-  // ── [ADDED] Crawl progress state ─────────────────────────────────────────
+  // ── Crawl progress state ─────────────────────────────────────────
   // These fields are populated by crawl_progress SSE events during the
   // "crawling" pipeline stage and cleared when execution begins.
 
@@ -365,7 +365,7 @@ const INITIAL_SSE_STATE: SSEState = {
   isCancelled: false,
   isAwaitingReview: false,
   errorMessage: null,
-  // [ADDED] Crawl progress initial values
+  // Crawl progress initial values
   crawlStage: null,
   crawlStageDescription: null,
   crawlFoundUrls: [],
@@ -554,6 +554,20 @@ export function useTestRunSSE(
     // If reconnecting to a run already at review, restore that state immediately
     // by pre-seeding isAwaitingReview so the UI doesn't flash a loading state.
     const preseeded = initialStatus === "awaiting_review";
+
+    // When reconnecting mid-execution, pre-seed generatedTestCases from
+    // the React Query cache so steps/expected_result are available
+    // immediately without waiting for a tests_generated event (which
+    // only fires once and won't re-fire on reconnect).
+    const isExecuting =
+      initialStatus === "executing" || initialStatus === "reporting";
+
+    const cachedCasesOnReconnect = isExecuting
+      ? queryClient.getQueryData<ReviewTestCase[]>(
+          testingKeys.cases(testRunId),
+        )
+      : undefined;
+
     const startState: SSEState = preseeded
       ? {
           ...INITIAL_SSE_STATE,
@@ -561,7 +575,24 @@ export function useTestRunSSE(
           percent: 40,
           isAwaitingReview: true,
         }
+      : isExecuting && cachedCasesOnReconnect?.length
+      ? {
+          ...INITIAL_SSE_STATE,
+          pipelineStatus: initialStatus ?? "executing",
+          percent: initialStatus === "reporting" ? 90 : 50,
+          generatedTestCases: cachedCasesOnReconnect.map((tc) => ({
+            id: tc.id,
+            title: tc.title ?? "",
+            category: tc.category ?? "navigation",
+            priority: tc.priority ?? "P1",
+            steps: (tc.steps as string[]) ?? [],
+            expected_result: tc.expected_result ?? "",
+            target_url: (tc as { target_url?: string }).target_url ?? "",
+            status: "pending" as const,
+          })),
+        }
       : INITIAL_SSE_STATE;
+
     sseStateRef.current = startState;
     setSseState(startState);
 
@@ -607,6 +638,27 @@ export function useTestRunSSE(
             ...tc,
             status: "pending" as const,
           }));
+
+          // Persist full case data (steps, expected_result, target_url) to the
+          // React Query cache so it survives reconnects and allows the
+          // test_update upsert path to recover steps/expected_result when
+          // generatedTestCases is empty (e.g. page refresh mid-execution).
+          queryClient.setQueryData<ReviewTestCase[]>(
+            testingKeys.cases(testRunId),
+            event.testCases.map((tc) => ({
+              id: tc.id,
+              test_run_id: testRunId,
+              category: tc.category ?? null,
+              title: tc.title ?? null,
+              description: null,
+              steps: tc.steps ?? null,
+              expected_result: tc.expected_result ?? null,
+              priority: (tc.priority as "P0" | "P1" | "P2") ?? null,
+              tags: null,
+              estimated_duration: null,
+            })),
+          );
+
           next = { ...prev, generatedTestCases: liveCases };
           break;
         }
@@ -623,20 +675,6 @@ export function useTestRunSSE(
             },
           };
 
-          // [FIXED] Upsert into generatedTestCases rather than only updating.
-          //
-          // WHY: test_update events fire for every test case during execution,
-          // but generatedTestCases is only populated by the tests_generated event
-          // (sent during the generating/review phase). If the user refreshed the
-          // page after review confirmed, or reconnected mid-execution, or added
-          // cases during review that changed IDs, generatedTestCases is empty and
-          // the .map() below would find no matching ID — nothing ever appears in
-          // the live execution panel.
-          //
-          // FIX: check whether the ID already exists. If yes, update in-place.
-          // If no, append a minimal new card so the panel always shows activity.
-          // category/priority/steps are unknown here so we use safe defaults —
-          // they're cosmetic-only in the running view.
           const existingIndex = prev.generatedTestCases.findIndex(
             (tc) => tc.id === event.testCaseId,
           );
@@ -646,21 +684,35 @@ export function useTestRunSSE(
             // Card already exists — update status and duration in-place
             updatedCases = prev.generatedTestCases.map((tc) =>
               tc.id === event.testCaseId
-                ? { ...tc, status: event.status, durationMs: event.durationMs ?? tc.durationMs }
+                ? {
+                    ...tc,
+                    status: event.status,
+                    durationMs: event.durationMs ?? tc.durationMs,
+                  }
                 : tc,
             );
           } else {
-            // Card is new — build a minimal LiveTestCase and append it.
-            // This fires when generatedTestCases is empty (page refresh /
-            // reconnect after review) and execution has already started.
+            // Card is new — try to recover full data from the React Query
+            // cache (populated by the tests_generated handler above).
+            // This fires when generatedTestCases is empty due to a page
+            // refresh or reconnect after review confirmed.
+            const cachedCases = queryClient.getQueryData<ReviewTestCase[]>(
+              testingKeys.cases(testRunId),
+            );
+            const cached = cachedCases?.find(
+              (tc) => tc.id === event.testCaseId,
+            );
+
             const newCard: LiveTestCase = {
               id: event.testCaseId,
-              title: event.title,
-              category: "navigation", // cosmetic default — unknown here
-              priority: "P1",          // cosmetic default — unknown here
-              steps: [],
-              expected_result: "",
-              target_url: "",
+              title: cached?.title ?? event.title,
+              category: cached?.category ?? "navigation",
+              priority: cached?.priority ?? "P1",
+              steps: (cached?.steps as string[]) ?? [],
+              expected_result: cached?.expected_result ?? "",
+              target_url:
+                (cached as { target_url?: string } | undefined)
+                  ?.target_url ?? "",
               status: event.status,
               durationMs: event.durationMs,
             };
@@ -692,14 +744,10 @@ export function useTestRunSSE(
           next = { ...prev, liveBugs: [...prev.liveBugs, event.bug] };
           break;
 
-        // [ADDED] Handle the four crawl sub-events that arrive inside crawl_progress.
-        // Each sub-event updates a different slice of the crawl progress state.
-        // We use immutable spread so React always re-renders correctly.
         case "crawl_progress": {
           const crawlEvent = event.event;
           switch (crawlEvent.type) {
             case "crawl_stage_change":
-              // Update the current crawl stage label and description shown in the UI.
               next = {
                 ...prev,
                 crawlStage: crawlEvent.stage,
@@ -708,10 +756,6 @@ export function useTestRunSSE(
               break;
 
             case "crawl_url_found": {
-              // Add a new URL to the found list, deduplicating by URL string.
-              // We deduplicate client-side as a safety net — the service already
-              // avoids emitting the same URL twice, but network retries could
-              // cause duplicate SSE events.
               const alreadyFound = prev.crawlFoundUrls.some(
                 (u) => u.url === crawlEvent.url,
               );
@@ -730,8 +774,6 @@ export function useTestRunSSE(
             }
 
             case "crawl_page_extracted": {
-              // Replace an existing entry (by URL) or append.
-              // This handles the case where a retry succeeds after a previous failure.
               const existingIdx = prev.crawlExtractedPages.findIndex(
                 (p) => p.url === crawlEvent.url,
               );
@@ -746,7 +788,6 @@ export function useTestRunSSE(
             }
 
             case "crawl_page_failed": {
-              // Append failure only if not already recorded for this URL.
               const alreadyFailed = prev.crawlFailedPages.some(
                 (p) => p.url === crawlEvent.url,
               );
@@ -754,7 +795,10 @@ export function useTestRunSSE(
                 ? prev
                 : {
                     ...prev,
-                    crawlFailedPages: [...prev.crawlFailedPages, crawlEvent],
+                    crawlFailedPages: [
+                      ...prev.crawlFailedPages,
+                      crawlEvent,
+                    ],
                   };
               break;
             }
@@ -832,7 +876,7 @@ export function useTestRunSSE(
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
-// [ADDED] TimeoutOverrides mirrors the server-side interface from
+// TimeoutOverrides mirrors the server-side interface from
 // tinyfish.service.ts so the UI can pass typed timeout values through
 // useStartTestRun → POST /api/test/run without manual casting.
 export interface TimeoutOverrides {
@@ -844,7 +888,7 @@ export interface TimeoutOverrides {
   executeTestBaseMs?: number;
 }
 
-// [CHANGED] mutation input now also accepts optional concurrency, timeouts,
+// mutation input now also accepts optional concurrency, timeouts,
 // and [GITHUB] optional github source fields.
 // All fields remain optional — omitting them keeps server defaults.
 export function useStartTestRun() {
@@ -881,6 +925,17 @@ export function useStartTestRun() {
        * [GITHUB] Branch to analyse (e.g. "main").
        */
       githubBranch?: string;
+      /**
+       * Optional free-text hint to help the crawler navigate sites that
+       * require authentication or interaction before content is reachable.
+       *
+       * Examples:
+       *   "Login with email test@example.com password demo1234"
+       *   "Click 'Continue as guest' to bypass the signup wall"
+       *
+       * Sanitised server-side. Max 500 characters.
+       */
+      crawlContext?: string;
     }): Promise<{ testRunId: string }> => {
       const res = await fetch("/api/test/run", {
         method: "POST",

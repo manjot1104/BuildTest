@@ -19,8 +19,8 @@ import {
   MAX_TEST_RETRIES,
   type PagePerformanceMetrics,
   type PipelineSSEEvent,
-  type TimeoutOverrides, // [ADDED] import for per-run timeout override type
-  type CrawlProgressEvent, // [ADDED] import for live crawl progress event type
+  type TimeoutOverrides, // import for per-run timeout override type
+  type CrawlProgressEvent, // import for live crawl progress event type
 } from "@/server/services/tinyfish.service";
 import { uploadScreenshot, urlToSlug } from "@/server/services/s3.service";
 import {
@@ -96,10 +96,10 @@ function buildTestGoal(tc: TestCase): string {
 interface PlanLimits {
   maxPages: number;
   maxTests: number;
-  // [ADDED] Maximum test runs allowed per UTC calendar day.
+  // Maximum test runs allowed per UTC calendar day.
   // Change DAILY_RUN_LIMITS below to adjust per-plan values.
   dailyRuns: number;
-  // [ADDED] Maximum concurrent extractions allowed per run.
+  // Maximum concurrent extractions allowed per run.
   // Must stay in sync with PLAN_LIMITS.maxConcurrency in testing.page.tsx.
   maxConcurrency: number;
 }
@@ -176,7 +176,7 @@ const pipelineEmitters = new Map<string, Set<(line: string) => void>>();
 // Calling it with true resumes execution; false cancels.
 const reviewResolvers = new Map<string, (confirmed: boolean) => void>();
 
-// [ADDED] crawl_progress event buffer — stores all crawl_progress SSE lines
+// crawl_progress event buffer — stores all crawl_progress SSE lines
 // emitted so far for each active run.
 //
 // WHY: The pipeline starts immediately after POST /api/test/run, so Stage 0
@@ -190,7 +190,7 @@ const reviewResolvers = new Map<string, (confirmed: boolean) => void>();
 // (i.e. on the first non-crawl "status" event) so it never grows unbounded.
 const crawlProgressBuffers = new Map<string, string[]>();
 
-// [ADDED] Execution event buffer — stores the latest test_update line per
+// Execution event buffer — stores the latest test_update line per
 // testCaseId plus the latest counter line during the executing/reporting phase.
 //
 // WHY: Same race as crawl progress — if the user navigates back or the tab
@@ -252,13 +252,13 @@ function registerEmitter(
 }
 
 function broadcastToRun(testRunId: string, line: string): void {
-  // [ADDED] Auto-buffer crawl_progress lines so late-connecting SSE clients
+  // Auto-buffer crawl_progress lines so late-connecting SSE clients
   // get a full replay of all URLs/pages found before they connected.
   if (line.includes('"crawl_progress"')) {
     bufferCrawlProgressLine(testRunId, line);
   }
 
-  // [ADDED] Auto-buffer test_update lines, keyed by testCaseId so each card
+  // Auto-buffer test_update lines, keyed by testCaseId so each card
   // is stored only once (latest state). Late-connecting clients get the current
   // status of every test card without missing any that already ran.
   if (line.includes('"test_update"')) {
@@ -270,19 +270,19 @@ function broadcastToRun(testRunId: string, line: string): void {
     }
   }
 
-  // [ADDED] Buffer the latest counter line so reconnecting clients see the
+  // Buffer the latest counter line so reconnecting clients see the
   // current passed/failed/running counts immediately.
   if (line.includes('"counter"')) {
     bufferExecutionLine(testRunId, "counter", line);
   }
 
-  // [ADDED] When the pipeline moves past crawling (first status event that is
+  // When the pipeline moves past crawling (first status event that is
   // NOT "crawling"), clear the crawl buffer — no longer needed.
   if (line.includes('"status"') && !line.includes('"crawling"')) {
     crawlProgressBuffers.delete(testRunId);
   }
 
-  // [ADDED] When the pipeline completes/fails/cancels, clear the execution
+  // When the pipeline completes/fails/cancels, clear the execution
   // buffer — the run is terminal and no new clients need a replay.
   if (
     line.includes('"complete"') ||
@@ -309,7 +309,7 @@ function checkCancelled(testRunId: string): void {
 // Background pipeline
 // ---------------------------------------------------------------------------
 
-// [CHANGED] runPipeline now accepts optional concurrency and timeouts so they
+// runPipeline now accepts optional concurrency and timeouts so they
 // can be forwarded from the original POST /api/test/run request body all the
 // way into crawlSite() and executeTest() inside runPipelineStages().
 // [GITHUB] Also accepts optional github owner/repo/branch for source enrichment.
@@ -319,11 +319,12 @@ async function runPipeline(
   userId: string,
   userMaxPages?: number,
   userMaxTests?: number,
-  userConcurrency?: number,        // [ADDED]
-  userTimeouts?: TimeoutOverrides, // [ADDED]
+  userConcurrency?: number,        
+  userTimeouts?: TimeoutOverrides, 
   githubOwner?: string | null,     // [GITHUB]
   githubRepo?: string | null,      // [GITHUB]
   githubBranch?: string | null,    // [GITHUB]
+  crawlContext?: string,           // free text crawl hint forwaded to crawl site 
 ): Promise<void> {
   const abortController = new AbortController();
   crawlAbortControllers.set(testRunId, abortController);
@@ -341,23 +342,24 @@ async function runPipeline(
       abortController.signal,
       userMaxPages,
       userMaxTests,
-      userConcurrency,   // [ADDED]
-      userTimeouts,      // [ADDED]
+      userConcurrency,   
+      userTimeouts,      
       githubOwner,       // [GITHUB]
       githubRepo,        // [GITHUB]
       githubBranch,      // [GITHUB]
+      crawlContext,      // free text crawl hint forwarded to crawlSite
     );
   } finally {
     crawlAbortControllers.delete(testRunId);
   }
 }
 
-// [CHANGED] runPipelineStages accepts optional userConcurrency and
+// runPipelineStages accepts optional userConcurrency and
 // userTimeouts, passes both into crawlSite via CrawlOptions, and passes
 // userTimeouts into each executeTest call so test-step timeouts are also
 // governed by the user's requested override.
 //
-// [ADDED] runPipelineStages now passes an onProgress callback into crawlSite.
+// runPipelineStages now passes an onProgress callback into crawlSite.
 // When the crawl service fires a CrawlProgressEvent, we wrap it in a
 // crawl_progress PipelineSSEEvent and broadcast it to all connected SSE clients.
 // This is the only change needed in the controller — the service handles
@@ -376,11 +378,12 @@ async function runPipelineStages(
   abortSignal: AbortSignal,
   userMaxPages?: number,
   userMaxTests?: number,
-  userConcurrency?: number,        // [ADDED]
-  userTimeouts?: TimeoutOverrides, // [ADDED]
+  userConcurrency?: number,       
+  userTimeouts?: TimeoutOverrides, 
   githubOwner?: string | null,     // [GITHUB]
   githubRepo?: string | null,      // [GITHUB]
   githubBranch?: string | null,    // [GITHUB]
+  crawlContext?: string,           // free text crawl hint forwarded to crawlSite
 ): Promise<void> {
   // ─── STEP 1: CRAWL + GITHUB SOURCE CONTEXT (parallel) ───────────────────
   checkCancelled(testRunId);
@@ -410,18 +413,21 @@ async function runPipelineStages(
       budget: {
         ...(userMaxPages !== undefined && { maxPages: userMaxPages }),
         ...(userMaxTests !== undefined && { maxTests: userMaxTests }),
-        // [ADDED] Forward user-requested concurrency into the crawl budget.
+        // Forward user-requested concurrency into the crawl budget.
         ...(userConcurrency !== undefined && { concurrency: userConcurrency }),
       },
-      // [ADDED] Forward user-requested timeout overrides into the crawl call.
+      // Forward user-requested timeout overrides into the crawl call.
       timeouts: userTimeouts,
-      // [ADDED] onProgress bridges CrawlProgressEvent from the service layer
+      // onProgress bridges CrawlProgressEvent from the service layer
       // up to SSE clients by wrapping each event in a crawl_progress envelope.
       // This keeps the service free of SSE/HTTP knowledge while giving the
       // frontend full visibility into every crawl milestone.
       onProgress: (event: CrawlProgressEvent) => {
         send({ type: "crawl_progress", event });
       },
+      //Forward the user-supplied crawl context hint so TinyFish can
+      // handle authentication barriers and interaction-gated pages.
+      crawlContext: crawlContext ?? undefined,
     });
   } catch (err) {
     if (abortSignal.aborted || cancelledPipelines.has(testRunId))
@@ -459,6 +465,7 @@ async function runPipelineStages(
       apiEndpoints: siteData.pages.flatMap((p) => p.apiEndpoints),
     },
     githubSource: githubSourceContext ?? undefined, // [GITHUB]
+    crawlContext: crawlContext ?? undefined,         // forwards auth hint into test generation prompts
   };
 
   // Run AI generation, crawl DB writes, and background screenshots all in parallel
@@ -678,7 +685,7 @@ async function runPipelineStages(
           .join("\n");
         const goal = `${numberedSteps}\n\nExpected result: ${tc.expected_result ?? ""}`;
 
-        // [CHANGED] Forward userTimeouts into executeTest so per-run timeout
+        // Forward userTimeouts into executeTest so per-run timeout
         // overrides apply to individual test-step browser sessions as well.
         let result = await executeTest(testUrl, goal, false, 0, userTimeouts);
         let retryCount = 0;
@@ -690,7 +697,7 @@ async function runPipelineStages(
           attempt <= MAX_TEST_RETRIES && !result.passed;
           attempt++
         ) {
-          // [CHANGED] Pass userTimeouts into retry calls as well.
+          // Pass userTimeouts into retry calls as well.
           const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
@@ -1006,6 +1013,18 @@ export async function startTestRunHandler({
     githubRepo?: string;
     /** [GITHUB] Optional branch. e.g. "main" */
     githubBranch?: string;
+    /**
+     * Optional free-text hint to help the crawler navigate sites that
+     * require authentication, cookie acceptance, or other interaction before
+     * content is accessible.
+     *
+     * Examples:
+     *   "Login with email test@example.com and password demo1234"
+     *   "Click 'Continue as guest' to bypass the signup wall"
+     *
+     * Sanitised (trimmed, capped at 500 chars) server-side before forwarding.
+     */
+    crawlContext?: string;
   };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
   try {
@@ -1021,6 +1040,7 @@ export async function startTestRunHandler({
       githubOwner,
       githubRepo,
       githubBranch,
+      crawlContext,
     } = body;
     if (!url) return { error: "URL is required", status: 400 };
 
@@ -1107,6 +1127,14 @@ export async function startTestRunHandler({
       );
     }
 
+    // Sanitise crawlContext server-side (belt-and-suspenders alongside
+    // the sanitiseCrawlContext() call inside crawlSite in tinyfish.service.ts).
+    // We strip here so the DB insert and logs never receive raw oversized input.
+    const effectiveCrawlContext =
+      typeof crawlContext === "string" && crawlContext.trim().length > 0
+        ? crawlContext.trim().slice(0, 500)
+        : undefined;
+
     await db.insert(test_runs).values({
       id: testRunId,
       user_id: session.user.id,
@@ -1122,7 +1150,7 @@ export async function startTestRunHandler({
 
     activePipelines.add(testRunId);
 
-    // [CHANGED] Forward (already-clamped) concurrency and timeouts into the pipeline.
+    // Forward (already-clamped) concurrency and timeouts into the pipeline.
     // [GITHUB] Forward (already-guarded) GitHub fields into the pipeline.
     void runPipeline(
       testRunId,
@@ -1130,11 +1158,12 @@ export async function startTestRunHandler({
       session.user.id,
       effectiveMaxPages,
       effectiveMaxTests,
-      effectiveConcurrency,      // [ADDED] now plan-clamped, not just hard-capped
-      timeouts,                  // [ADDED] raw from body — resolveTimeouts clamps inside crawlSite/executeTest
+      effectiveConcurrency,      // now plan-clamped, not just hard-capped
+      timeouts,                  // raw from body — resolveTimeouts clamps inside crawlSite/executeTest
       effectiveGithubOwner,      // [GITHUB]
       effectiveGithubRepo,       // [GITHUB]
       effectiveGithubBranch,     // [GITHUB]
+      effectiveCrawlContext,    // sanitised crawl context
     )
       .catch(async (err) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -1154,7 +1183,7 @@ export async function startTestRunHandler({
         cancelledPipelines.delete(testRunId);
         reviewResolvers.delete(testRunId);
         pipelineEmitters.delete(testRunId);
-        // [ADDED] Clean up both event buffers so we don't leak memory
+        // Clean up both event buffers so we don't leak memory
         // after the run finishes.
         crawlProgressBuffers.delete(testRunId);
         executionBuffers.delete(testRunId);
@@ -1324,7 +1353,7 @@ export async function streamTestRunHandler({
               }),
             );
 
-            // [ADDED] Replay all buffered crawl_progress events to this client.
+            // Replay all buffered crawl_progress events to this client.
             // This handles the common race where the browser opens the SSE
             // connection AFTER the pipeline has already discovered/extracted
             // some URLs. Without this flush the CrawlProgressPanel would be
@@ -1335,7 +1364,7 @@ export async function streamTestRunHandler({
               flushCrawlProgressBuffer(params.id, emit);
             }
 
-            // [ADDED] Replay the latest test_update snapshot for every test card
+            // Replay the latest test_update snapshot for every test card
             // plus the latest counter, so a reconnecting client mid-execution
             // sees all cards with their current status immediately instead of
             // waiting for the next live event to fire.
@@ -1350,7 +1379,7 @@ export async function streamTestRunHandler({
         // NOTE: when restarting via SSE, we do NOT have user-specified maxPages/maxTests
         // because this path is for reconnecting to an already-persisted run.
         // The original maxPages/maxTests were already applied when POST /test/run was called.
-        // CHANGED: pass run.user_id so re-started pipelines can still derive plan limits.
+        //  pass run.user_id so re-started pipelines can still derive plan limits.
         // NOTE: concurrency and timeouts are also not available here — the run was
         // already launched with its original settings; we restart without overrides,
         // which will use the crawler's built-in defaults.
@@ -1400,7 +1429,7 @@ export async function streamTestRunHandler({
               }
             });
             pipelineEmitters.delete(params.id);
-            // [ADDED] Clean up both event buffers — safety-net alongside
+            // Clean up both event buffers — safety-net alongside
             // the broadcastToRun auto-clear on complete/error events.
             crawlProgressBuffers.delete(params.id);
             executionBuffers.delete(params.id);
@@ -2036,7 +2065,7 @@ export async function getEmbedBadgeHandler({
 
 // ---------------------------------------------------------------------------
 // GET /api/badge/[token]/svg
-// ADDED: Returns an actual SVG image (not JSON).
+// Returns an actual SVG image (not JSON).
 // This is what the "Copy Badge" button points to as the image src in the
 // markdown string: [![Tested by Buildify](.../svg)](report-link).
 // IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
@@ -2074,7 +2103,7 @@ export async function getEmbedBadgeSvgHandler({
   const badgeText = `Tested by Buildify — Score: ${score}`;
   const totalWidth = 220;
 
-  // ADDED: standard Shields.io-style SVG badge structure.
+  // standard Shields.io-style SVG badge structure.
   // Two text nodes (offset shadow + main) give the embossed look.
   // Whole badge is one solid color (green/yellow/red) based on score.
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${totalWidth}" height="20">
@@ -2093,9 +2122,9 @@ export async function getEmbedBadgeSvgHandler({
   return new Response(svg, {
     headers: {
       "Content-Type": "image/svg+xml",
-      // ADDED: cache for 5 minutes so score stays fresh without hammering the DB
+      // cache for 5 minutes so score stays fresh without hammering the DB
       "Cache-Control": "public, max-age=300",
-      // ADDED: allow GitHub's image proxy (camo) to load the badge cross-origin
+      // allow GitHub's image proxy (camo) to load the badge cross-origin
       "Access-Control-Allow-Origin": "*",
     },
   });
@@ -2430,7 +2459,7 @@ export async function exportTestReportPdfHandler({
         status: 500,
       };
 
-    // FIXED: pdfBytes is already a clean ArrayBuffer returned by safePdfBytes()
+    // pdfBytes is already a clean ArrayBuffer returned by safePdfBytes()
     // inside generateHtmlPdf() in puppeteer.service.ts — it owns its own memory
     // slice with no pool offset. Wrapping it in Buffer.from() then reading
     // .buffer re-attaches it to Node's shared pool, which causes the byteOffset

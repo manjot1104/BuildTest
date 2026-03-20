@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useUserCredits } from "@/hooks/use-user-credits";
 import {
-  Globe, Play, Loader2, CheckCircle2, XCircle,
+  Globe, Play, Loader2, CheckCircle2, XCircle, KeyRound,
   RotateCcw, ExternalLink, Zap, Bug, Sparkles,
   Clock, BarChart3, FlaskConical, Share2, Download,
   Check, TrendingUp, Activity, History,
@@ -40,10 +40,8 @@ const PIPELINE_ORDER: Record<string, number> = {
   crawling: 0, generating: 1, awaiting_review: 2, executing: 3, reporting: 4, complete: 5,
 };
 
-// These are the true hard ceilings across all plans — used to cap the + button
-// so users can explore but never go above what even enterprise allows.
-const ABSOLUTE_MAX_PAGES = 20;  // matches enterprise maxPages
-const ABSOLUTE_MAX_TESTS = 30;  // matches enterprise maxTests
+const ABSOLUTE_MAX_PAGES = 20;
+const ABSOLUTE_MAX_TESTS = 30;
 
 interface PlanLimits { maxPages: number; maxTests: number; maxConcurrency: number; label: string }
 const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, maxConcurrency: 3, label: "Free" };
@@ -85,14 +83,14 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
 
 function UpgradeNudge({ feature, planNeeded, onUpgrade }: { feature: string; planNeeded: string; onUpgrade: () => void }) {
   return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#00FF85]/20 bg-[#00FF85]/5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-      <Lock className="h-3 w-3 text-[#00FF85] shrink-0" />
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-primary/20 bg-primary/5 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <Lock className="h-3 w-3 text-primary shrink-0" />
       <p className="text-[10px] font-mono text-muted-foreground flex-1">
         {feature} limit reached on your plan
       </p>
       <button
         type="button"
-        className="text-[10px] font-mono text-[#00FF85] hover:text-[#00FF85]/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
+        className="text-[10px] font-mono text-primary hover:text-primary/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
         onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
       >
         {planNeeded} ↗
@@ -112,7 +110,7 @@ function BfyPrimaryBtn({ onClick, disabled, disabledReason, children, className 
       onClick={onClick}
       disabled={disabled}
       aria-disabled={disabled}
-      className={`inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-[#00FF85] text-black text-sm font-mono font-bold hover:bg-[#00FF85]/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0 ${className}`}
+      className={`inline-flex items-center justify-center gap-2 px-4 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0 ${className}`}
     >
       {children}
     </button>
@@ -146,7 +144,7 @@ function UsagePill({ runsToday, dailyLimit, planId, onUpgrade }: {
   const isAtLimit   = runsToday >= dailyLimit;
   const isNearLimit = pct >= 0.8 && !isAtLimit;
 
-  const barColor    = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-[#00FF85]";
+  const barColor    = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-primary";
   const textColor   = isAtLimit ? "text-red-400" : isNearLimit ? "text-yellow-400" : "text-muted-foreground/60";
   const borderColor = isAtLimit ? "border-red-500/25" : isNearLimit ? "border-yellow-500/20" : "border-border";
 
@@ -171,7 +169,7 @@ function UsagePill({ runsToday, dailyLimit, planId, onUpgrade }: {
       {(isAtLimit || isNearLimit) && planId === "free" && (
         <button
           type="button"
-          className="text-[10px] font-mono text-[#00FF85] hover:text-[#00FF85]/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
+          className="text-[10px] font-mono text-primary hover:text-primary/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
           onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
         >
           upgrade ↗
@@ -186,8 +184,8 @@ function UsagePill({ runsToday, dailyLimit, planId, onUpgrade }: {
 function PrefillBanner({ repoFullName, onDismiss }: { repoFullName: string; onDismiss: () => void }) {
   useEffect(() => { const t = setTimeout(onDismiss, 6000); return () => clearTimeout(t); }, [onDismiss]);
   return (
-    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-[#00FF85]/20 bg-[#00FF85]/5 text-xs font-mono text-muted-foreground animate-in fade-in-0 slide-in-from-top-1 duration-200">
-      <FlaskConical className="h-3.5 w-3.5 text-[#00FF85] shrink-0" />
+    <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border border-primary/20 bg-primary/5 text-xs font-mono text-muted-foreground animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <FlaskConical className="h-3.5 w-3.5 text-primary shrink-0" />
       <span className="flex-1 min-w-0 truncate">
         Prefilled from your project · <span className="text-foreground font-medium">{repoFullName}</span>
       </span>
@@ -230,7 +228,6 @@ function AdvancedSettingsPanel({
     },
   ];
 
-  // Thresholds relative to plan max for color coding
   const low = Math.ceil(maxConcurrency * 0.4);
   const mid = Math.ceil(maxConcurrency * 0.75);
 
@@ -257,8 +254,8 @@ function AdvancedSettingsPanel({
             )}
           </div>
           {hasChanges && (
-            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-[#00FF85] bg-[#00FF85]/10 border border-[#00FF85]/20 rounded-full px-2 py-0.5">
-              <span className="h-1 w-1 rounded-full bg-[#00FF85]" />
+            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+              <span className="h-1 w-1 rounded-full bg-primary" />
               modified
             </span>
           )}
@@ -294,7 +291,6 @@ function AdvancedSettingsPanel({
                 <Info className="h-3 w-3 text-muted-foreground/30 hover:text-muted-foreground cursor-help transition-colors" />
               </Tooltip>
             </div>
-            {/* Concurrency with visual scale */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono text-muted-foreground">concurrent extractions</span>
@@ -309,7 +305,7 @@ function AdvancedSettingsPanel({
                   type="button" aria-label="Decrease concurrency"
                   onClick={() => setConcurrency(Math.max(CONCURRENCY_MIN, concurrency - 1))}
                   disabled={concurrency <= CONCURRENCY_MIN}
-                  className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+                  className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
                 >
                   <span className="text-base font-light">−</span>
                 </button>
@@ -317,19 +313,19 @@ function AdvancedSettingsPanel({
                   <div className="h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                     <span className="text-sm font-mono font-bold text-foreground tabular-nums">{concurrency}</span>
                   </div>
-                  {/* Speed indicator bar — full 20 segments, locked ones shown dimmed */}
+                  {/* Speed indicator bar */}
                   <div className="flex gap-0.5 h-1">
                     {Array.from({ length: CONCURRENCY_MAX }).map((_, i) => {
                       const isActive = i < concurrency;
                       const isLocked = i >= maxConcurrency;
-                      const activeColor = concurrency <= low  ? "bg-[#00FF85]/70"
+                      const activeColor = concurrency <= low  ? "bg-primary/70"
                                         : concurrency <= mid  ? "bg-yellow-500/70"
                                         : "bg-orange-500/70";
                       return (
                         <div
                           key={i}
                           className={`flex-1 rounded-full transition-colors duration-150 ${
-                            isLocked  ? "bg-border/30"   // greyed-out locked segment
+                            isLocked  ? "bg-border/30"
                             : isActive ? activeColor
                             : "bg-border"
                           }`}
@@ -338,27 +334,25 @@ function AdvancedSettingsPanel({
                     })}
                   </div>
                 </div>
-                {/* + button: enabled up to CONCURRENCY_MAX, but shows upgrade nudge past plan limit */}
                 <button
                   type="button" aria-label="Increase concurrency"
                   onClick={() => setConcurrency(Math.min(CONCURRENCY_MAX, concurrency + 1))}
                   disabled={concurrency >= CONCURRENCY_MAX}
-                  className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+                  className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
                 >
                   <span className="text-base font-light">+</span>
                 </button>
               </div>
-              {/* Contextual hint — or upgrade nudge if over plan limit */}
               {concurrency > maxConcurrency ? (
                 <UpgradeNudge feature="Concurrency" planNeeded="Upgrade plan" onUpgrade={onUpgrade} />
               ) : (
                 <p className={`text-[10px] font-mono flex items-center gap-1.5 ${
-                  concurrency <= low ? "text-[#00FF85]/60"
+                  concurrency <= low ? "text-primary/60"
                   : concurrency <= mid ? "text-yellow-500/60"
                   : "text-orange-500/60"
                 }`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${
-                    concurrency <= low ? "bg-[#00FF85]/60"
+                    concurrency <= low ? "bg-primary/60"
                     : concurrency <= mid ? "bg-yellow-500/60"
                     : "bg-orange-500/60"
                   }`} />
@@ -402,7 +396,7 @@ function AdvancedSettingsPanel({
                       type="button" aria-label={`Decrease ${label} timeout`}
                       onClick={() => onChange(Math.max(TIMEOUT_MIN_MS, value - 30_000))}
                       disabled={value <= TIMEOUT_MIN_MS}
-                      className="h-7 w-7 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/30 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+                      className="h-7 w-7 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
                     >
                       <span className="text-sm font-light">−</span>
                     </button>
@@ -413,15 +407,14 @@ function AdvancedSettingsPanel({
                       type="button" aria-label={`Increase ${label} timeout`}
                       onClick={() => onChange(Math.min(TIMEOUT_MAX_MS, value + 30_000))}
                       disabled={value >= TIMEOUT_MAX_MS}
-                      className="h-7 w-7 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/30 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
+                      className="h-7 w-7 shrink-0 rounded-md border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/30 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation"
                     >
                       <span className="text-sm font-light">+</span>
                     </button>
                   </div>
-                  {/* Mini range indicator */}
                   <div className="h-0.5 rounded-full bg-border overflow-hidden">
                     <div
-                      className="h-full bg-[#00FF85]/50 rounded-full transition-all duration-300"
+                      className="h-full bg-primary/50 rounded-full transition-all duration-300"
                       style={{ width: `${((value - TIMEOUT_MIN_MS) / (TIMEOUT_MAX_MS - TIMEOUT_MIN_MS)) * 100}%` }}
                     />
                   </div>
@@ -438,6 +431,116 @@ function AdvancedSettingsPanel({
               <p className="text-[10px] font-mono text-muted-foreground/50 leading-relaxed">
                 Increasing timeouts gives your site more time to load but extends overall test duration. Only raise these if tests are timing out on your site.
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const CRAWL_CONTEXT_MAX = 500;
+
+function CrawlContextInput({
+  value, onChange, disabled,
+}: {
+  value: string; onChange: (v: string) => void; disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const remaining = CRAWL_CONTEXT_MAX - value.length;
+  const hasValue = value.trim().length > 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-muted/30 transition-colors touch-manipulation group"
+      >
+        <div className="flex items-center gap-2.5">
+          <div className={`h-7 w-7 rounded-lg flex items-center justify-center transition-colors ${open ? "bg-muted" : "bg-muted/50 group-hover:bg-muted"}`}>
+            <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+          <div className="text-left">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block">
+              Auth / Crawl Context
+            </span>
+            {!open && (
+              <span className="text-[9px] font-mono text-muted-foreground/40">
+                {hasValue ? "hint provided · click to edit" : "optional · help crawler past login screens"}
+              </span>
+            )}
+          </div>
+          {hasValue && (
+            <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+              <span className="h-1 w-1 rounded-full bg-primary" />
+              hint set
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasValue && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange(""); }}
+              className="text-[9px] font-mono text-muted-foreground/50 hover:text-muted-foreground px-2 py-1 rounded-md border border-border hover:bg-muted transition-all"
+            >
+              clear
+            </button>
+          )}
+          {open
+            ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+            : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+          }
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-border px-4 py-4 space-y-3">
+          <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-primary/5 border border-primary/15">
+            <Info className="h-3 w-3 text-primary shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-[10px] font-mono text-primary/70 leading-relaxed">
+                Provide credentials or navigation instructions so the crawler can access
+                pages behind login walls or interaction barriers.
+              </p>
+              <div className="space-y-0.5">
+                {[
+                  `Login with email: test@example.com and password: demo1234`,
+                  `Click "Enter as guest" to skip the login screen`,
+                  `Accept the cookie banner first, then navigate normally`,
+                ].map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => onChange(ex)}
+                    className="block text-left text-[9px] font-mono text-muted-foreground/50 hover:text-primary/70 transition-colors truncate max-w-full"
+                  >
+                    ↳ {ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <textarea
+              value={value}
+              onChange={(e) => onChange(e.target.value.slice(0, CRAWL_CONTEXT_MAX))}
+              disabled={disabled}
+              placeholder="e.g. Login with email: user@example.com and password: demo1234"
+              rows={3}
+              aria-label="Crawl context hint"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors resize-none disabled:opacity-40"
+            />
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-mono text-muted-foreground/30 leading-relaxed">
+                This hint is sent to the AI crawler — do not include sensitive production credentials.
+              </p>
+              <span className={`text-[9px] font-mono tabular-nums shrink-0 ${remaining < 50 ? "text-yellow-500" : "text-muted-foreground/30"}`}>
+                {remaining}
+              </span>
             </div>
           </div>
         </div>
@@ -470,9 +573,9 @@ export default function TestingPage() {
   const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
   const [executeMs, setExecuteMs]       = useState(DEFAULT_EXECUTE_MS);
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
+  const [crawlContext, setCrawlContext] = useState("");
   const [showPrefillBanner, setShowPrefillBanner] = useState(hasPrefill);
 
-  // Upgrade nudge visibility for pages and tests steppers
   const [showPagesUpgradeNudge, setShowPagesUpgradeNudge] = useState(false);
   const [showTestsUpgradeNudge, setShowTestsUpgradeNudge] = useState(false);
 
@@ -485,7 +588,6 @@ export default function TestingPage() {
     setMaxPages((p) => Math.min(p, planLimits.maxPages));
     setMaxTests((t) => Math.min(Math.max(t, 1), planLimits.maxTests));
     setConcurrency((c) => Math.min(c, planLimits.maxConcurrency));
-    // Dismiss nudges when plan changes (e.g. after upgrading)
     setShowPagesUpgradeNudge(false);
     setShowTestsUpgradeNudge(false);
   }, [planLimits]);
@@ -552,7 +654,6 @@ export default function TestingPage() {
 
   const handleMaxPagesChange = (n: number) => {
     if (n > planLimits.maxPages) {
-      // Show upgrade nudge instead of silently clamping
       setShowPagesUpgradeNudge(true);
       return;
     }
@@ -562,7 +663,6 @@ export default function TestingPage() {
     if (p > maxTests) setMaxTests(p);
   };
 
-  // Determine why Run button is disabled
   const runDisabledReason = isStarting
     ? "Starting test run…"
     : !url.trim()
@@ -577,7 +677,6 @@ export default function TestingPage() {
       toast.error(`Daily limit reached. Your ${usageData?.planId ?? "free"} plan allows ${usageData?.dailyLimit ?? 0} runs/day.`);
       return;
     }
-    // Clamp concurrency to plan limit before sending (server also enforces this)
     const effectiveConcurrency = Math.min(concurrency, planLimits.maxConcurrency);
     const timeouts: Record<string, number> = {};
     if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs       = discoveryMs;
@@ -589,6 +688,7 @@ export default function TestingPage() {
         ...(effectiveConcurrency !== CONCURRENCY_DEFAULT && { concurrency: effectiveConcurrency }),
         ...(Object.keys(timeouts).length > 0 && { timeouts }),
         ...(githubSource && { githubOwner: githubSource.owner, githubRepo: githubSource.repo, githubBranch: githubSource.branch }),
+        ...(crawlContext.trim() && { crawlContext: crawlContext.trim() }),
       },
       {
         onSuccess: (d) => { setTestRunId(d.testRunId); setActiveTab("tests"); toast.success("Test run started!"); },
@@ -606,7 +706,7 @@ export default function TestingPage() {
   };
 
   const handleReset = () => {
-    setUrl(""); setTestRunId(null); setGithubSource(null);
+    setUrl(""); setTestRunId(null); setGithubSource(null); setCrawlContext("");
     setFilterSeverity("all"); setFilterCategory("all");
     setTcFilter("all"); setActiveTab("tests"); setSelectedBug(null);
     setShowPagesUpgradeNudge(false); setShowTestsUpgradeNudge(false);
@@ -635,10 +735,12 @@ export default function TestingPage() {
         {/* ── Top bar ── */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="h-7 w-7 rounded-lg bg-[#00FF85]/10 border border-[#00FF85]/20 flex items-center justify-center shrink-0">
-              <Bug className="h-3.5 w-3.5 text-[#00FF85]" />
+            {/* Brand icon uses primary blue */}
+            <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <Bug className="h-3.5 w-3.5 text-primary" />
             </div>
-            <span className="text-sm font-mono font-semibold text-foreground">TestFish</span>
+            {/* Brand name uses AR One Sans via font-sans */}
+            <span className="text-sm font-sans font-semibold text-foreground">TestFish</span>
             <span className="text-[10px] font-mono text-muted-foreground/60 border border-border rounded-full px-1.5 py-0.5 shrink-0">BETA</span>
             {testRunId && (run?.targetUrl || url) && (
               <span className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 truncate max-w-[180px]">
@@ -665,17 +767,18 @@ export default function TestingPage() {
         {!testRunId && (
           <div className="space-y-3">
 
-            {/* Prefill banner */}
             {showPrefillBanner && prefillRepoFullName && (
               <PrefillBanner repoFullName={prefillRepoFullName} onDismiss={() => setShowPrefillBanner(false)} />
             )}
 
             {/* Hero */}
             <div className="text-center space-y-2.5 py-4">
-              <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-[#00FF85] bg-[#00FF85]/10 border border-[#00FF85]/20 px-3 py-1 rounded-full">
+              {/* Pill badge uses primary blue — matching Buildify's style */}
+              <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
                 <Zap className="h-3 w-3" /> ai-powered · 6 test categories
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+              {/* Heading uses AR One Sans via font-sans */}
+              <h1 className="text-2xl sm:text-3xl font-sans font-bold tracking-tight text-foreground">
                 Test any site. <span className="text-muted-foreground/35">Automatically.</span>
               </h1>
               <p className="text-xs text-muted-foreground font-mono">
@@ -694,7 +797,7 @@ export default function TestingPage() {
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleStart()}
                   aria-label="Website URL to test"
-                  className="w-full h-11 pl-9 pr-3 rounded-lg border border-input bg-card text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-[#00FF85]/50 focus:ring-1 focus:ring-[#00FF85]/20 transition-colors"
+                  className="w-full h-11 pl-9 pr-3 rounded-lg border border-input bg-card text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
                 />
               </div>
               <BfyPrimaryBtn
@@ -710,14 +813,14 @@ export default function TestingPage() {
               </BfyPrimaryBtn>
             </div>
 
-            {/* Usage pill — right aligned */}
+            {/* Usage pill */}
             {usageData && (
               <div className="flex items-center justify-end">
                 <UsagePill runsToday={usageData.runsToday} dailyLimit={usageData.dailyLimit} planId={usageData.planId} onUpgrade={() => setShowUpgradeModal(true)} />
               </div>
             )}
 
-            {/* ── Source Code Analysis (moved up, below URL) ── */}
+            {/* ── Source Code Analysis ── */}
             <GithubSourcePanel onChange={setGithubSource} disabled={isStarting} initialValue={githubInitial} />
 
             {/* ── Test Budget ── */}
@@ -734,7 +837,7 @@ export default function TestingPage() {
                   <button
                     type="button"
                     onClick={() => setShowUpgradeModal(true)}
-                    className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 hover:text-[#00FF85] border border-border hover:border-[#00FF85]/30 rounded-full px-2 py-0.5 transition-all"
+                    className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground/40 hover:text-primary border border-border hover:border-primary/30 rounded-full px-2 py-0.5 transition-all"
                   >
                     <Lock className="h-2.5 w-2.5" /> free plan
                   </button>
@@ -759,17 +862,16 @@ export default function TestingPage() {
                       <button type="button"
                         onClick={() => { setShowPagesUpgradeNudge(false); handleMaxPagesChange(maxPages - 1); }}
                         disabled={maxPages <= 1}
-                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
+                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">−</span>
                       </button>
                       <div className="flex-1 h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                         <span className="text-sm font-mono font-bold text-foreground tabular-nums">{maxPages}</span>
                       </div>
-                      {/* + button: enabled up to ABSOLUTE_MAX_PAGES, shows upgrade nudge past plan limit */}
                       <button type="button"
                         onClick={() => handleMaxPagesChange(maxPages + 1)}
                         disabled={maxPages >= ABSOLUTE_MAX_PAGES}
-                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
+                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">+</span>
                       </button>
                     </div>
@@ -778,7 +880,6 @@ export default function TestingPage() {
                     )}
                   </div>
 
-                  {/* Divider */}
                   <div className="hidden sm:flex items-center">
                     <div className="w-px h-12 bg-border" />
                   </div>
@@ -801,13 +902,12 @@ export default function TestingPage() {
                       <button type="button"
                         onClick={() => { setShowTestsUpgradeNudge(false); setMaxTests(Math.max(maxPages, maxTests - 1)); }}
                         disabled={maxTests <= maxPages}
-                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
+                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">−</span>
                       </button>
                       <div className="flex-1 h-9 rounded-lg border border-border bg-background flex items-center justify-center">
                         <span className="text-sm font-mono font-bold text-foreground tabular-nums">{maxTests}</span>
                       </div>
-                      {/* + button: enabled up to ABSOLUTE_MAX_TESTS, shows upgrade nudge past plan limit */}
                       <button type="button"
                         onClick={() => {
                           if (maxTests + 1 > planLimits.maxTests) {
@@ -818,7 +918,7 @@ export default function TestingPage() {
                           setMaxTests(maxTests + 1);
                         }}
                         disabled={maxTests >= ABSOLUTE_MAX_TESTS}
-                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-[#00FF85]/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
+                        className="h-9 w-9 shrink-0 rounded-lg border border-border bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-primary/40 active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed transition-all touch-manipulation">
                         <span className="text-base font-light">+</span>
                       </button>
                     </div>
@@ -828,16 +928,16 @@ export default function TestingPage() {
                   </div>
                 </div>
 
-                {/* Relationship hint + visual */}
+                {/* Relationship hint */}
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 border border-border/50">
                   <div className="flex items-center gap-1 shrink-0">
-                    <span className="text-[10px] font-mono text-[#00FF85]/70 tabular-nums">{maxPages}p</span>
+                    <span className="text-[10px] font-mono text-primary/70 tabular-nums">{maxPages}p</span>
                     <span className="text-muted-foreground/30 text-[10px]">→</span>
-                    <span className="text-[10px] font-mono text-[#00FF85] tabular-nums">{maxTests}t</span>
+                    <span className="text-[10px] font-mono text-primary tabular-nums">{maxTests}t</span>
                   </div>
                   <div className="flex-1 h-0.5 rounded-full bg-border overflow-hidden">
                     <div
-                      className="h-full bg-[#00FF85]/40 rounded-full transition-all duration-300"
+                      className="h-full bg-primary/40 rounded-full transition-all duration-300"
                       style={{ width: `${(maxTests / planLimits.maxTests) * 100}%` }}
                     />
                   </div>
@@ -847,6 +947,9 @@ export default function TestingPage() {
                 </div>
               </div>
             </div>
+
+            {/* ── Crawl Context ── */}
+            <CrawlContextInput value={crawlContext} onChange={setCrawlContext} disabled={isStarting} />
 
             {/* ── Advanced Settings ── */}
             <AdvancedSettingsPanel
@@ -914,7 +1017,7 @@ export default function TestingPage() {
 
             {pipelineStatus === "generating" && (
               <div className="rounded-xl border border-border bg-muted/20 p-4 flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-[#00FF85] shrink-0 animate-pulse" />
+                <Sparkles className="h-4 w-4 text-primary shrink-0 animate-pulse" />
                 <p className="text-xs font-mono text-muted-foreground">ai is generating test cases from crawled pages…</p>
               </div>
             )}
@@ -928,16 +1031,16 @@ export default function TestingPage() {
                   </p>
                   {liveTestCases.length > 0 && (
                     <div className="flex gap-3 text-[10px] font-mono">
-                      <span className="text-[#00FF85]">{liveTestCases.filter(t => t.status === "passed").length}✓</span>
+                      <span className="text-primary">{liveTestCases.filter(t => t.status === "passed").length}✓</span>
                       <span className="text-red-500">{liveTestCases.filter(t => t.status === "failed").length}✗</span>
-                      <span className="text-blue-500">{liveTestCases.filter(t => t.status === "running").length}⟳</span>
+                      <span className="text-secondary">{liveTestCases.filter(t => t.status === "running").length}⟳</span>
                     </div>
                   )}
                 </div>
                 {liveTestCases.length === 0
                   ? (
                     <div className="rounded-xl border border-border bg-muted/20 p-5 flex items-center justify-center gap-3">
-                      <Loader2 className="h-4 w-4 animate-spin text-[#00FF85]" />
+                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
                       <p className="text-xs font-mono text-muted-foreground">executing tests in parallel…</p>
                     </div>
                   )
@@ -978,7 +1081,7 @@ export default function TestingPage() {
               <XCircle className="h-7 w-7 text-muted-foreground" />
             </div>
             <div>
-              <h2 className="text-base font-mono font-semibold text-foreground">test run cancelled</h2>
+              <h2 className="text-base font-sans font-semibold text-foreground">test run cancelled</h2>
               <p className="text-muted-foreground text-xs font-mono mt-1">you stopped this run.</p>
               {(counter.passed > 0 || counter.failed > 0) && (
                 <p className="text-muted-foreground/40 text-[10px] font-mono mt-1.5">{counter.passed} passed · {counter.failed} failed before stopping</p>
@@ -997,7 +1100,7 @@ export default function TestingPage() {
               <XCircle className="h-7 w-7 text-red-500" />
             </div>
             <div>
-              <h2 className="text-base font-mono font-semibold text-foreground">test run failed</h2>
+              <h2 className="text-base font-sans font-semibold text-foreground">test run failed</h2>
               <p className="text-muted-foreground text-xs font-mono mt-1">{sseState.errorMessage ?? "something went wrong. please try again."}</p>
             </div>
             <button onClick={handleReset} className="inline-flex items-center gap-2 h-9 px-4 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
@@ -1024,10 +1127,10 @@ export default function TestingPage() {
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                     {[
-                      { val: report.passed,     label: "passed",  cls: "text-[#00FF85]"          },
-                      { val: report.failed,     label: "failed",  cls: "text-red-500"             },
-                      { val: report.skipped,    label: "skipped", cls: "text-muted-foreground/60" },
-                      { val: report.totalTests, label: "total",   cls: "text-foreground"           },
+                      { val: report.passed,     label: "passed",  cls: "text-primary"              },
+                      { val: report.failed,     label: "failed",  cls: "text-red-500"               },
+                      { val: report.skipped,    label: "skipped", cls: "text-muted-foreground/60"   },
+                      { val: report.totalTests, label: "total",   cls: "text-foreground"            },
                     ].map(({ val, label, cls }) => (
                       <div key={label} className="rounded-lg bg-muted/50 border border-border px-2 py-1.5">
                         <p className={`text-sm font-mono font-bold tabular-nums ${cls}`}>{val ?? 0}</p>
@@ -1036,7 +1139,7 @@ export default function TestingPage() {
                     ))}
                   </div>
                   <div className="flex gap-px h-1.5 rounded-full overflow-hidden bg-border">
-                    <div className="bg-[#00FF85] rounded-l-full" style={{ width: `${((report.passed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
+                    <div className="bg-primary rounded-l-full" style={{ width: `${((report.passed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
                     <div className="bg-red-500" style={{ width: `${((report.failed ?? 0) / (report.totalTests ?? 1)) * 100}%` }} />
                   </div>
                   <p className="text-[9px] font-mono text-muted-foreground/30 flex items-center gap-1">
@@ -1065,7 +1168,7 @@ export default function TestingPage() {
             {report.aiSummary && (
               <details className="rounded-xl border border-border bg-muted/20 overflow-hidden group">
                 <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors list-none touch-manipulation">
-                  <Sparkles className="h-4 w-4 text-[#00FF85] shrink-0" />
+                  <Sparkles className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest flex-1">AI Summary</span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40 group-open:rotate-180 transition-transform" />
                 </summary>
@@ -1086,12 +1189,12 @@ export default function TestingPage() {
                 <button key={key} role="tab" aria-selected={activeTab === key}
                   onClick={() => setActiveTab(key as typeof activeTab)}
                   className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] sm:text-xs font-mono uppercase tracking-widest border-b-2 transition-colors -mb-px shrink-0 touch-manipulation ${
-                    activeTab === key ? "border-[#00FF85] text-[#00FF85]" : "border-transparent text-muted-foreground hover:text-foreground"
+                    activeTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}>
                   <Icon className="h-3.5 w-3.5" />
                   {label}
                   {count > 0 && (
-                    <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] ${activeTab === key ? "bg-[#00FF85]/15 text-[#00FF85]" : "bg-muted text-muted-foreground/50"}`}>{count}</span>
+                    <span className={`px-1.5 py-0.5 rounded font-mono text-[9px] ${activeTab === key ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground/50"}`}>{count}</span>
                   )}
                 </button>
               ))}
@@ -1152,7 +1255,7 @@ export default function TestingPage() {
                 {filteredBugs.length === 0
                   ? (
                     <div className="rounded-xl border border-border bg-muted/20 p-6 text-center">
-                      <CheckCircle2 className="h-7 w-7 text-[#00FF85] mx-auto mb-2" />
+                      <CheckCircle2 className="h-7 w-7 text-primary mx-auto mb-2" />
                       <p className="text-xs font-mono text-muted-foreground">no bugs found for this filter</p>
                     </div>
                   )
@@ -1218,9 +1321,9 @@ export default function TestingPage() {
                       <div key={pt.runId} className={`flex items-center gap-3 text-[10px] font-mono ${pt.isCurrent ? "text-foreground" : "text-muted-foreground/40"}`}>
                         <span className="w-20 shrink-0">{new Date(pt.date).toLocaleDateString()}</span>
                         <div className="flex-1 h-1 rounded-full bg-border overflow-hidden">
-                          <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-[#00FF85]" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${pt.score ?? 0}%` }} />
+                          <div className={`h-full rounded-full ${(pt.score ?? 0) >= 90 ? "bg-primary" : (pt.score ?? 0) >= 70 ? "bg-yellow-500" : "bg-red-500"}`} style={{ width: `${pt.score ?? 0}%` }} />
                         </div>
-                        <span className={`w-8 text-right font-bold ${(pt.score ?? 0) >= 90 ? "text-[#00FF85]" : (pt.score ?? 0) >= 70 ? "text-yellow-500" : "text-red-500"}`}>{pt.score}</span>
+                        <span className={`w-8 text-right font-bold ${(pt.score ?? 0) >= 90 ? "text-primary" : (pt.score ?? 0) >= 70 ? "text-yellow-500" : "text-red-500"}`}>{pt.score}</span>
                         {pt.isCurrent && <span className="text-muted-foreground/30">(now)</span>}
                       </div>
                     ))}
@@ -1246,7 +1349,7 @@ export default function TestingPage() {
                 <button
                   onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`); setCopied(true); toast.success("Link copied!"); setTimeout(() => setCopied(false), 2000); }}
                   className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
-                  {copied ? <Check className="h-3.5 w-3.5 text-[#00FF85]" /> : <Share2 className="h-3.5 w-3.5" />}
+                  {copied ? <Check className="h-3.5 w-3.5 text-primary" /> : <Share2 className="h-3.5 w-3.5" />}
                   {copied ? "copied!" : "share"}
                 </button>
               )}
