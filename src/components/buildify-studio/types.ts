@@ -111,9 +111,14 @@ export interface ResponsiveOverride {
   height?: number
   hidden?: boolean
   styles?: Partial<ElementStyles>
+  /** When true, the user manually positioned this element on this device — skip auto-reflow */
+  manuallyPositioned?: boolean
 }
 
 export type ResponsiveDevice = 'desktop' | 'tablet' | 'mobile'
+
+/** How children of a section/container should flow in the published page */
+export type LayoutHint = 'stack' | 'row' | 'grid'
 
 export interface CanvasElement {
   id: string
@@ -134,10 +139,16 @@ export interface CanvasElement {
   socialLinks?: SocialLinkItem[]
   formFields?: FormField[]
   iconName?: string
-templateBlockId?: string
+  templateBlockId?: string
   sectionKey?: string
+  /** Parent section/container ID — enables semantic grouping for published page */
+  parentId?: string
   /** Logical group within a section (e.g. "card-1") — keeps elements together on mobile */
   groupId?: string
+  /** How children should flow in published view (for section/container elements) */
+  layoutHint?: LayoutHint
+  /** Number of grid columns (when layoutHint is 'grid') */
+  gridColumns?: number
   /** Responsive overrides — tablet/mobile values merged on top of base (desktop) */
   responsiveStyles?: {
     tablet?: ResponsiveOverride
@@ -207,6 +218,9 @@ export function getResponsiveElement(
 /**
  * Compute a fully-reflowed responsive layout for ALL elements.
  *
+ * Key improvement: respects `groupId` to keep logically-grouped elements together
+ * (e.g. project card = image + title + description stay as a unit on mobile).
+ *
  * Mobile: groups desktop elements into rows, then stacks them vertically
  *         making most elements full-width for readability.
  * Tablet: groups into rows, keeps elements side-by-side if they fit,
@@ -233,202 +247,384 @@ export function computeResponsiveLayout(
   )
 
   // Step 1b: Auto-fix elements that break mobile/tablet layouts.
-  if (device === 'mobile' || device === 'tablet') {
-    for (let i = 0; i < scaled.length; i++) {
-      const orig = elements[i]!
-      const s = scaled[i]!
-      if (s.hidden) continue
+  for (let i = 0; i < scaled.length; i++) {
+    const orig = elements[i]!
+    const s = scaled[i]!
+    if (s.hidden) continue
 
-      // Auto-hide decorative sections/containers (background shapes, section backgrounds)
-      // that are purely visual and oversized.
-      const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim() && !orig.sectionKey
-      const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
-      if (isDecorative && isOversized) {
-        scaled[i] = { ...s, hidden: true }
-        continue
-      }
+    // Auto-hide decorative sections/containers (background shapes, section backgrounds)
+    // that are purely visual and oversized.
+    const isDecorative = (orig.type === 'section' || orig.type === 'container') && !orig.content.trim() && !orig.sectionKey
+    const isOversized = orig.width >= desktopWidth * 0.9 || (orig.width >= 400 && orig.height >= 400)
+    if (isDecorative && isOversized) {
+      scaled[i] = { ...s, hidden: true }
+      continue
+    }
 
-      // Auto-cap image height on mobile if the user hasn't set an explicit mobile height.
-      // Without this, a 420px tall desktop image renders at 420px on a 375px wide screen.
-      if (device === 'mobile' && orig.type === 'image' && !orig.responsiveStyles?.mobile?.height) {
-        const maxImgH = Math.round(targetWidth * 0.6) // 60% of width = max ~225px on 375px
-        if (s.height > maxImgH) {
-          scaled[i] = { ...s, height: maxImgH }
-        }
-      }
-      if (device === 'tablet' && orig.type === 'image' && !orig.responsiveStyles?.tablet?.height) {
-        const maxImgH = Math.round(targetWidth * 0.55) // ~422px on 768px
-        if (s.height > maxImgH) {
-          scaled[i] = { ...s, height: maxImgH }
-        }
+    // Auto-cap image height
+    if (device === 'mobile' && orig.type === 'image' && !orig.responsiveStyles?.mobile?.height) {
+      const maxImgH = Math.round(targetWidth * 0.6)
+      if (s.height > maxImgH) scaled[i] = { ...s, height: maxImgH }
+    }
+    if (device === 'tablet' && orig.type === 'image' && !orig.responsiveStyles?.tablet?.height) {
+      const maxImgH = Math.round(targetWidth * 0.55)
+      if (s.height > maxImgH) scaled[i] = { ...s, height: maxImgH }
+    }
+
+    // Auto-grow text element height when squeezed to narrower width.
+    // When a wide heading (680px) goes to 355px mobile, text wraps and needs more height.
+    // Always run this for text elements — even if they have an explicit responsive height,
+    // the explicit value may be too small for the actual wrapped text.
+    const isTextType = orig.type === 'heading' || orig.type === 'paragraph'
+    if (isTextType && orig.content.trim()) {
+      const origW = orig.width
+      const newW = Math.max(targetWidth - margin * 2, 40)
+      // Estimate how many lines the text will need at the target width
+      const fs = s.styles.fontSize ?? (orig.type === 'heading' ? 48 : 16)
+      const lh = s.styles.lineHeight ?? (orig.type === 'heading' ? 1.2 : 1.6)
+      const lineH = fs * (typeof lh === 'number' ? lh : 1.4)
+      const padding = (s.styles.padding ?? 4) * 2
+      const textLen = orig.content.length
+      // Average character width: bold/heavy text is wider (~65% of font size), normal is ~50%
+      const isBold = s.styles.fontWeight && parseInt(s.styles.fontWeight) >= 700
+      const charWidthRatio = isBold ? 0.65 : 0.50
+      const charsPerLine = Math.max(1, Math.floor(newW / (fs * charWidthRatio)))
+      const lineCount = Math.max(1, Math.ceil(textLen / charsPerLine))
+      // Also count explicit newlines
+      const newlineCount = (orig.content.match(/\n/g) ?? []).length
+      const totalLines = Math.max(lineCount, newlineCount + 1)
+      // Add 30% safety margin — character width estimation is inherently imprecise
+      const estimatedH = Math.ceil(totalLines * lineH * 1.3 + padding)
+      if (estimatedH > s.height) {
+        scaled[i] = { ...s, height: estimatedH }
       }
     }
   }
 
-  // Step 2: Build reading order from DESKTOP positions (Y then X) and group into rows.
-  // Use a capped "effective height" for row grouping to prevent tall side-by-side elements
-  // (like a 420px image next to 100px text) from creating a mega-row that absorbs everything.
-  const HEIGHT_CAP = 200 // Max height contribution for row boundary calculation
+  // Step 2: Separate manually positioned elements from auto-laid-out ones
+  const positions = new Array<{ x: number; y: number; w: number; h: number } | null>(
+    elements.length,
+  ).fill(null)
+
   type Item = { orig: CanvasElement; scaled: CanvasElement; idx: number }
-  const visible: Item[] = elements
-    .map((el, i) => ({ orig: el, scaled: scaled[i]!, idx: i }))
-    .filter((item) => !item.scaled.hidden)
-    .sort((a, b) => {
+  const autoItems: Item[] = []
+
+  for (let i = 0; i < elements.length; i++) {
+    const orig = elements[i]!
+    const s = scaled[i]!
+    if (s.hidden) continue
+
+    const overrides = orig.responsiveStyles?.[device]
+    if (overrides?.manuallyPositioned) {
+      // User explicitly placed this — keep their position
+      positions[i] = { x: s.x, y: s.y, w: s.width, h: s.height }
+    } else {
+      autoItems.push({ orig, scaled: s, idx: i })
+    }
+  }
+
+  // Step 3: Check if elements use groupId for semantic grouping
+  const hasGroups = autoItems.some((item) => item.orig.groupId)
+
+  if (hasGroups) {
+    // ── Group-aware layout ──
+    // Collect items into groups (by parentId + groupId), and ungrouped items
+    type Group = { groupId: string; parentId?: string; items: Item[] }
+    const groupMap = new Map<string, Group>()
+    const ungrouped: Item[] = []
+
+    for (const item of autoItems) {
+      if (item.orig.groupId) {
+        const key = `${item.orig.parentId ?? ''}::${item.orig.groupId}`
+        if (!groupMap.has(key)) {
+          groupMap.set(key, { groupId: item.orig.groupId, parentId: item.orig.parentId, items: [] })
+        }
+        groupMap.get(key)!.items.push(item)
+      } else {
+        ungrouped.push(item)
+      }
+    }
+
+    // Sort items within each group by Y then X (desktop reading order)
+    for (const group of groupMap.values()) {
+      group.items.sort((a, b) => a.orig.y - b.orig.y || a.orig.x - b.orig.x)
+    }
+
+    // Build a mixed list of "layout units" (a group or a single element)
+    type LayoutUnit = { kind: 'group'; group: Group; topY: number } | { kind: 'single'; item: Item; topY: number }
+    const units: LayoutUnit[] = []
+
+    for (const group of groupMap.values()) {
+      const topY = Math.min(...group.items.map((i) => i.orig.y))
+      units.push({ kind: 'group', group, topY })
+    }
+    for (const item of ungrouped) {
+      units.push({ kind: 'single', item, topY: item.orig.y })
+    }
+
+    // Sort units by desktop Y position
+    units.sort((a, b) => a.topY - b.topY)
+
+    // Group units into visual rows by Y overlap (same logic as before, but operating on units)
+    type UnitRow = LayoutUnit[]
+    const unitRows: UnitRow[] = []
+    let currentUnitRow: UnitRow = []
+
+    for (const unit of units) {
+      if (currentUnitRow.length === 0) {
+        currentUnitRow.push(unit)
+        continue
+      }
+      const rowTopY = Math.min(...currentUnitRow.map((u) => u.topY))
+      // Use a generous threshold for grouping units into the same row
+      const threshold = 80
+      if (unit.topY < rowTopY + threshold) {
+        currentUnitRow.push(unit)
+      } else {
+        unitRows.push(currentUnitRow)
+        currentUnitRow = [unit]
+      }
+    }
+    if (currentUnitRow.length > 0) unitRows.push(currentUnitRow)
+
+    // Lay out unit rows
+    let cursorY = unitRows[0]?.[0]?.topY ?? 0
+
+    for (let ri = 0; ri < unitRows.length; ri++) {
+      const unitRow = unitRows[ri]!
+
+      if (ri > 0) {
+        cursorY += gap * 2
+      }
+
+      if (device === 'mobile') {
+        // Mobile: stack all units vertically. Within a group, stack elements vertically (card layout).
+        for (const unit of unitRow) {
+          if (unit.kind === 'group') {
+            // Render group as a card: elements stacked vertically, full width
+            for (const item of unit.group.items) {
+              const w = maxW
+              const x = margin
+              positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
+              cursorY += item.scaled.height + gap
+            }
+            cursorY += gap // extra gap between cards
+          } else {
+            const item = unit.item
+            const isSmall = item.orig.width < 120 && item.orig.height < 80
+            const w = isSmall ? Math.min(item.scaled.width, maxW) : maxW
+            const x = isSmall ? Math.round((targetWidth - w) / 2) : margin
+            positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
+            cursorY += item.scaled.height + gap
+          }
+        }
+      } else {
+        // Tablet: try to fit groups side by side
+        const unitCount = unitRow.length
+        if (unitCount > 1) {
+          const perUnitWidth = Math.floor((maxW - gap * (unitCount - 1)) / unitCount)
+          let xPos = margin
+          let maxRowH = 0
+
+          for (const unit of unitRow) {
+            if (unit.kind === 'group') {
+              let innerY = cursorY
+              for (const item of unit.group.items) {
+                positions[item.idx] = { x: xPos, y: innerY, w: perUnitWidth, h: item.scaled.height }
+                innerY += item.scaled.height + gap
+              }
+              maxRowH = Math.max(maxRowH, innerY - cursorY)
+            } else {
+              positions[unit.item.idx] = { x: xPos, y: cursorY, w: perUnitWidth, h: unit.item.scaled.height }
+              maxRowH = Math.max(maxRowH, unit.item.scaled.height + gap)
+            }
+            xPos += perUnitWidth + gap
+          }
+          cursorY += maxRowH
+        } else {
+          // Single unit in row — full width, stack children
+          const unit = unitRow[0]!
+          if (unit.kind === 'group') {
+            for (const item of unit.group.items) {
+              const w = maxW
+              positions[item.idx] = { x: margin, y: cursorY, w, h: item.scaled.height }
+              cursorY += item.scaled.height + gap
+            }
+          } else {
+            const item = unit.item
+            const isSubstantial = item.orig.width > 200
+            const w = isSubstantial ? maxW : Math.min(item.scaled.width, maxW)
+            const x = isSubstantial ? margin : Math.round((targetWidth - w) / 2)
+            positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
+            cursorY += item.scaled.height + gap
+          }
+        }
+      }
+    }
+  } else {
+    // ── Legacy layout (no groupId) — original Y-overlap row grouping ──
+    const HEIGHT_CAP = 200
+    const visible = autoItems.sort((a, b) => {
       const threshold = Math.min(a.orig.height, b.orig.height) * 0.3
       if (Math.abs(a.orig.y - b.orig.y) < Math.max(threshold, 20))
         return a.orig.x - b.orig.x
       return a.orig.y - b.orig.y
     })
 
-  const rows: Item[][] = []
-  let currentRow: Item[] = []
-  for (const item of visible) {
-    if (currentRow.length === 0) {
-      currentRow.push(item)
-      continue
-    }
-    // Use capped heights to prevent one tall element from absorbing the entire page
-    const rowTop = Math.min(...currentRow.map((r) => r.orig.y))
-    const rowBottom = Math.max(...currentRow.map((r) => r.orig.y + Math.min(r.orig.height, HEIGHT_CAP)))
-    const itemEffH = Math.min(item.orig.height, HEIGHT_CAP)
-    const overlap = Math.min(rowBottom - rowTop, itemEffH) * 0.3
-    if (item.orig.y < rowBottom - overlap) {
-      currentRow.push(item)
-    } else {
-      rows.push(currentRow)
-      currentRow = [item]
-    }
-  }
-  if (currentRow.length > 0) rows.push(currentRow)
-
-  // Step 2b: On mobile, reorder within each row so images/code-blocks come after text.
-  // This produces a natural mobile reading order: heading → text → image
-  // instead of the desktop X-sorted order which may put images before text.
-  if (device === 'mobile') {
-    const textTypes = new Set(['heading', 'paragraph', 'button', 'navbar', 'social-links', 'form', 'divider', 'spacer'])
-    for (const row of rows) {
-      if (row.length <= 1) continue
-      const textEls = row.filter((item) => textTypes.has(item.orig.type))
-      const mediaEls = row.filter((item) => !textTypes.has(item.orig.type))
-      // Only reorder if there's a mix of text and media
-      if (textEls.length > 0 && mediaEls.length > 0) {
-        // Within text elements, keep their original sort order (by desktop Y then X)
-        row.length = 0
-        row.push(...textEls, ...mediaEls)
+    const rows: Item[][] = []
+    let currentRow: Item[] = []
+    for (const item of visible) {
+      if (currentRow.length === 0) {
+        currentRow.push(item)
+        continue
       }
-    }
-  }
-
-  // Step 3: Lay out each row
-  const positions = new Array<{ x: number; y: number; w: number; h: number } | null>(
-    elements.length,
-  ).fill(null)
-
-  // Preserve the original first-element gap from the top
-  let cursorY = rows[0]?.[0]?.orig.y ?? 0
-
-  for (let ri = 0; ri < rows.length; ri++) {
-    const row = rows[ri]!
-
-    // Preserve inter-row gaps from desktop (clamped so we don't get huge whitespace)
-    if (ri > 0) {
-      const prevRow = rows[ri - 1]!
-      const prevBottom = Math.max(...prevRow.map((r) => r.orig.y + r.orig.height))
-      const thisTop = Math.min(...row.map((r) => r.orig.y))
-      const desktopGap = thisTop - prevBottom
-      cursorY += Math.max(gap, Math.min(desktopGap, gap * 4))
-    }
-
-    if (device === 'mobile') {
-      // ── Mobile: stack everything vertically, most elements full-width ──
-      for (const item of row) {
-        // Respect explicit user overrides
-        if (
-          item.orig.responsiveStyles?.mobile?.x !== undefined &&
-          item.orig.responsiveStyles?.mobile?.y !== undefined
-        ) {
-          positions[item.idx] = {
-            x: item.scaled.x,
-            y: item.scaled.y,
-            w: item.scaled.width,
-            h: item.scaled.height,
-          }
-          continue
-        }
-
-        // Small elements (icons, small buttons) stay proportional & centered
-        const isSmall = item.orig.width < 120 && item.orig.height < 80
-
-        const w = isSmall ? Math.min(item.scaled.width, maxW) : maxW
-        const x = isSmall ? Math.round((targetWidth - w) / 2) : margin
-
-        positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
-        cursorY += item.scaled.height + gap
-      }
-    } else {
-      // ── Tablet: keep side-by-side if they fit, otherwise stack ──
-      const scaledWidths = row.map((item) =>
-        Math.min(item.scaled.width, maxW),
-      )
-      const totalW =
-        scaledWidths.reduce((s, w) => s + w, 0) + gap * (row.length - 1)
-
-      if (totalW <= maxW && row.length > 1) {
-        // Row fits side by side
-        let xPos = margin
-        const rowH = Math.max(...row.map((item) => item.scaled.height))
-        for (let ci = 0; ci < row.length; ci++) {
-          const item = row[ci]!
-          if (
-            item.orig.responsiveStyles?.tablet?.x !== undefined &&
-            item.orig.responsiveStyles?.tablet?.y !== undefined
-          ) {
-            positions[item.idx] = {
-              x: item.scaled.x,
-              y: item.scaled.y,
-              w: item.scaled.width,
-              h: item.scaled.height,
-            }
-            continue
-          }
-          positions[item.idx] = {
-            x: xPos,
-            y: cursorY,
-            w: scaledWidths[ci]!,
-            h: item.scaled.height,
-          }
-          xPos += scaledWidths[ci]! + gap
-        }
-        cursorY += rowH + gap
+      const rowTop = Math.min(...currentRow.map((r) => r.orig.y))
+      const rowBottom = Math.max(...currentRow.map((r) => r.orig.y + Math.min(r.orig.height, HEIGHT_CAP)))
+      const itemEffH = Math.min(item.orig.height, HEIGHT_CAP)
+      const overlap = Math.min(rowBottom - rowTop, itemEffH) * 0.3
+      if (item.orig.y < rowBottom - overlap) {
+        currentRow.push(item)
       } else {
-        // Stack vertically
-        for (const item of row) {
-          if (
-            item.orig.responsiveStyles?.tablet?.x !== undefined &&
-            item.orig.responsiveStyles?.tablet?.y !== undefined
-          ) {
-            positions[item.idx] = {
-              x: item.scaled.x,
-              y: item.scaled.y,
-              w: item.scaled.width,
-              h: item.scaled.height,
+        rows.push(currentRow)
+        currentRow = [item]
+      }
+    }
+    if (currentRow.length > 0) rows.push(currentRow)
+
+    // Auto-detect column patterns: when consecutive rows have elements at matching
+    // X positions (e.g. 3 images at x=100,520,940 then 3 titles at x=100,520,940),
+    // regroup into columns so mobile renders as cards instead of row-by-row.
+    if (device === 'mobile' && rows.length >= 2) {
+      const columnsDetected: Item[][] = []
+      let ri = 0
+
+      while (ri < rows.length) {
+        const row = rows[ri]!
+
+        // Check if this row + next rows form a grid pattern (same X positions, same count)
+        if (row.length >= 2 && ri + 1 < rows.length) {
+          const xPositions = row.map((item) => item.orig.x).sort((a, b) => a - b)
+          let gridRows = [row]
+          let nextRi = ri + 1
+
+          while (nextRi < rows.length) {
+            const nextRow = rows[nextRi]!
+            if (nextRow.length !== row.length) break
+            const nextXs = nextRow.map((item) => item.orig.x).sort((a, b) => a - b)
+            // Check if X positions match within tolerance (50px)
+            const matches = xPositions.every((x, i) => Math.abs(x - (nextXs[i] ?? 0)) < 50)
+            if (matches) {
+              gridRows.push(nextRow)
+              nextRi++
+            } else {
+              break
             }
+          }
+
+          if (gridRows.length >= 2) {
+            // Detected a grid! Regroup into columns
+            const colCount = row.length
+            for (let ci = 0; ci < colCount; ci++) {
+              const column: Item[] = []
+              for (const gridRow of gridRows) {
+                // Find the element in this row closest to the target X
+                const targetX = xPositions[ci]!
+                const closest = gridRow.reduce((best, item) =>
+                  Math.abs(item.orig.x - targetX) < Math.abs(best.orig.x - targetX) ? item : best
+                )
+                column.push(closest)
+              }
+              columnsDetected.push(column)
+            }
+            ri = nextRi
             continue
           }
-          const isSubstantial = item.orig.width > 200
-          const w = isSubstantial ? maxW : Math.min(item.scaled.width, maxW)
-          const x = isSubstantial
-            ? margin
-            : Math.round((targetWidth - w) / 2)
+        }
 
+        // Not a grid row — keep as-is (single items)
+        for (const item of row) {
+          columnsDetected.push([item])
+        }
+        ri++
+      }
+
+      // Replace the layout logic: stack columns vertically
+      let cursorY = columnsDetected[0]?.[0]?.orig.y ?? 0
+      for (let ci = 0; ci < columnsDetected.length; ci++) {
+        const col = columnsDetected[ci]!
+        if (ci > 0) cursorY += gap * 2
+
+        for (const item of col) {
+          const w = maxW
+          const x = margin
           positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
           cursorY += item.scaled.height + gap
         }
       }
+    } else {
+    // Reorder within rows: text before media on mobile (fallback for non-mobile)
+    if (device === 'mobile') {
+      const textTypes = new Set(['heading', 'paragraph', 'button', 'navbar', 'social-links', 'form', 'divider', 'spacer'])
+      for (const row of rows) {
+        if (row.length <= 1) continue
+        const textEls = row.filter((item) => textTypes.has(item.orig.type))
+        const mediaEls = row.filter((item) => !textTypes.has(item.orig.type))
+        if (textEls.length > 0 && mediaEls.length > 0) {
+          row.length = 0
+          row.push(...textEls, ...mediaEls)
+        }
+      }
     }
-  }
 
-  // Step 4: Merge positions back, preserving hidden elements unchanged
+    let cursorY = rows[0]?.[0]?.orig.y ?? 0
+
+    for (let ri = 0; ri < rows.length; ri++) {
+      const row = rows[ri]!
+
+      if (ri > 0) {
+        const prevRow = rows[ri - 1]!
+        const prevBottom = Math.max(...prevRow.map((r) => r.orig.y + r.orig.height))
+        const thisTop = Math.min(...row.map((r) => r.orig.y))
+        const desktopGap = thisTop - prevBottom
+        cursorY += Math.max(gap, Math.min(desktopGap, gap * 4))
+      }
+
+      if (device === 'mobile') {
+        for (const item of row) {
+          const isSmall = item.orig.width < 120 && item.orig.height < 80
+          const w = isSmall ? Math.min(item.scaled.width, maxW) : maxW
+          const x = isSmall ? Math.round((targetWidth - w) / 2) : margin
+          positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
+          cursorY += item.scaled.height + gap
+        }
+      } else {
+        const scaledWidths = row.map((item) => Math.min(item.scaled.width, maxW))
+        const totalW = scaledWidths.reduce((s, w) => s + w, 0) + gap * (row.length - 1)
+
+        if (totalW <= maxW && row.length > 1) {
+          let xPos = margin
+          const rowH = Math.max(...row.map((item) => item.scaled.height))
+          for (let ci = 0; ci < row.length; ci++) {
+            const item = row[ci]!
+            positions[item.idx] = { x: xPos, y: cursorY, w: scaledWidths[ci]!, h: item.scaled.height }
+            xPos += scaledWidths[ci]! + gap
+          }
+          cursorY += rowH + gap
+        } else {
+          for (const item of row) {
+            const isSubstantial = item.orig.width > 200
+            const w = isSubstantial ? maxW : Math.min(item.scaled.width, maxW)
+            const x = isSubstantial ? margin : Math.round((targetWidth - w) / 2)
+            positions[item.idx] = { x, y: cursorY, w, h: item.scaled.height }
+            cursorY += item.scaled.height + gap
+          }
+        }
+      }
+    }
+    } // close else for column-detection
+  } // close else for hasGroups
+
+  // Final: Merge positions back, preserving hidden elements unchanged
   return elements.map((el, i) => {
     const s = scaled[i]!
     const p = positions[i]

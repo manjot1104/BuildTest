@@ -1220,6 +1220,16 @@ const elements = blockElements.map((el, idx) => ({
       const el = state.elements.find((e) => e.id === id)
       if (!el) return
 
+      // Content, formFields, socialLinks, iconName are NOT device-specific —
+      // they should always update the base element regardless of device.
+      const baseUpdates: Partial<CanvasElement> = {}
+      if (updates.content !== undefined) baseUpdates.content = updates.content
+      if (updates.formFields !== undefined) baseUpdates.formFields = updates.formFields
+      if (updates.socialLinks !== undefined) baseUpdates.socialLinks = updates.socialLinks
+      if (updates.iconName !== undefined) baseUpdates.iconName = updates.iconName
+      if (updates.headingLevel !== undefined) baseUpdates.headingLevel = updates.headingLevel
+      if (updates.link !== undefined) baseUpdates.link = updates.link
+
       const override: ResponsiveOverride = {}
       if (updates.x !== undefined) override.x = updates.x
       if (updates.y !== undefined) override.y = updates.y
@@ -1229,16 +1239,25 @@ const elements = blockElements.map((el, idx) => ({
       if (updates.styles) {
         override.styles = { ...(el.responsiveStyles?.[device]?.styles ?? {}), ...updates.styles }
       }
+      // Mark as manually positioned when user explicitly sets position/size
+      if (updates.x !== undefined || updates.y !== undefined || updates.width !== undefined || updates.height !== undefined) {
+        override.manuallyPositioned = true
+      }
 
-      const newResponsive = {
+      // Only add responsive overrides if there are actual responsive changes
+      const hasResponsiveChanges = Object.keys(override).length > 0
+      const newResponsive = hasResponsiveChanges ? {
         ...el.responsiveStyles,
         [device]: { ...(el.responsiveStyles?.[device] ?? {}), ...override },
-      }
+      } : el.responsiveStyles
 
       dispatch({
         type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
         id,
-        updates: { responsiveStyles: newResponsive },
+        updates: {
+          ...baseUpdates,
+          ...(hasResponsiveChanges ? { responsiveStyles: newResponsive } : {}),
+        },
       })
     },
     [state.device.preset, state.elements],
