@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { FileText, ArrowRight, Briefcase, GraduationCap, Sparkles, Palette, User, Eye } from 'lucide-react'
-import { RESUME_TEMPLATES, type ResumeTemplate, type ResumeTemplateCategory } from '../templates'
+import type { ResumeTemplate, ResumeTemplateCategory } from '../templates'
 import { ResumeTemplatePreviewModal } from './template-preview-modal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -52,9 +52,20 @@ export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: Resu
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [previewTemplate, setPreviewTemplate] = useState<ResumeTemplate | null>(null)
   const [previewFormat, setPreviewFormat] = useState<'latex' | 'html'>(defaultFormat)
+  const [templates, setTemplates] = useState<ResumeTemplate[]>([])
+
+  // Dynamically import templates to avoid memory issues
+  useEffect(() => {
+    import('../templates').then((module) => {
+      setTemplates(module.RESUME_TEMPLATES)
+    }).catch((error) => {
+      console.error('Failed to load templates:', error)
+    })
+  }, [])
 
   // Filter templates by format (LaTeX or HTML)
-  const formatFiltered = RESUME_TEMPLATES.filter((t) => {
+  const formatFiltered = useMemo(() => {
+    return templates.filter((t) => {
     if (!t.format || t.format === 'both') {
       // If no format specified or 'both', show only HTML templates for HTML format, LaTeX for LaTeX format
       // For backward compatibility, assume existing templates without format are HTML
@@ -62,9 +73,21 @@ export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: Resu
     }
     return t.format === defaultFormat
   })
+  }, [templates, defaultFormat])
 
-  const filtered =
-    activeCategory === 'all' ? formatFiltered : formatFiltered.filter((t) => t.category === activeCategory)
+  const filtered = useMemo(() => {
+    return activeCategory === 'all' ? formatFiltered : formatFiltered.filter((t) => t.category === activeCategory)
+  }, [formatFiltered, activeCategory])
+
+  // Show loading state while templates are loading
+  if (templates.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 px-4 py-12">
+        <div className="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="text-sm text-muted-foreground">Loading templates...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6 px-4 py-6">
