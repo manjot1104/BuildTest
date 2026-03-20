@@ -346,6 +346,13 @@ function DynamicPlaceholder({ paused }: { paused: boolean }) {
 
 const FEATURE_DEMOS = [
     {
+        title: 'Accessibility Tester',
+        description: 'Scan any website for accessibility issues with a single URL. Get detailed WCAG compliance reports, violation breakdowns, and actionable fixes — all powered by automation.',
+        bullets: ['Automated WCAG compliance scanning', 'Detailed violation reports with fixes', 'Live test logs and history tracking'],
+        video: '/videos/accessibility-tester-demo.mp4',
+        href: '/dashboard/accessibility-tester',
+    },
+    {
         title: 'Builder',
         description: 'Describe any application in plain English and watch it come to life. Buildify generates production-ready, full-stack code from a single conversation.',
         bullets: ['Natural language to working app', 'Full-stack code generation', 'Iterate through conversation'],
