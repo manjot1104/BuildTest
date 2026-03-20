@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import type { ResumeTemplate } from './templates'
@@ -137,6 +137,13 @@ export default function AIResumeBuilderPage() {
   const [isProcessingFollowUp, setIsProcessingFollowUp] = useState(false)
   const [usedModel, setUsedModel] = useState<string | null>(null)
   const [isFallback, setIsFallback] = useState(false)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [jdFile, setJdFile] = useState<File | null>(null)
+  const [isParsingFiles, setIsParsingFiles] = useState(false)
+  const [parsedData, setParsedData] = useState<{
+    resumeData?: any
+    jdRequirements?: any
+  } | null>(null)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -164,19 +171,43 @@ export default function AIResumeBuilderPage() {
 
     try {
       const endpoint = isLaTeX ? '/api/resume/generate-latex' : '/api/resume/generate-html'
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          ...data, 
-          model: selectedModel,
-          templateId: selectedTemplate?.id,
-          templateStyleGuide: selectedTemplate?.styleGuide,
-        }),
-      })
+      
+      // Create AbortController for timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes timeout
+
+      let response: Response
+      try {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            ...data, 
+            model: selectedModel,
+            templateId: selectedTemplate?.id,
+            templateStyleGuide: selectedTemplate?.styleGuide,
+          }),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        
+        if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+          throw new Error('Request timed out. Please try again with a smaller template or simpler data.')
+        }
+        
+        if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
+          throw new Error('Unable to connect to server. Please check your internet connection and try again.')
+        }
+        
+        throw fetchError
+      }
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ error: `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'}` }))
+        const error = await response.json().catch(() => ({ 
+          error: `Server returned error: ${response.status} ${response.statusText}` 
+        }))
         throw new Error(error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`)
       }
 
@@ -207,10 +238,17 @@ export default function AIResumeBuilderPage() {
       }
     } catch (error) {
       console.error(`Error generating ${isLaTeX ? 'LaTeX' : 'HTML'}:`, error)
-      toast.error(
-        error instanceof Error ? error.message : `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code. Please try again.`,
-        { id: 'resume-generate' }
-      )
+      
+      let errorMessage = `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code. Please try again.`
+      
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      toast.error(errorMessage, { 
+        id: 'resume-generate',
+        duration: 5000,
+      })
     } finally {
       setIsGenerating(false)
     }
@@ -358,7 +396,195 @@ export default function AIResumeBuilderPage() {
     setShowRawResponse(false)
     setUsedModel(null)
     setIsFallback(false)
+    setResumeFile(null)
+    setJdFile(null)
+    setParsedData(null)
     form.reset()
+  }
+
+  // Handle file uploads and parsing
+  const handleFileUpload = async (type: 'resume' | 'jd', file: File) => {
+    if (type === 'resume') {
+      setResumeFile(file)
+    } else {
+      setJdFile(file)
+    }
+
+    // Auto-parse if both files are uploaded or if single file is uploaded
+    if ((type === 'resume' && file) || (type === 'jd' && file)) {
+      await parseUploadedFiles(type === 'resume' ? file : resumeFile, type === 'jd' ? file : jdFile)
+    }
+  }
+
+  const parseUploadedFiles = async (resume: File | null, jd: File | null) => {
+    if (!resume && !jd) return
+
+    setIsParsingFiles(true)
+    
+    // Show progress updates
+    toast.loading('Extracting text from files...', { id: 'parse-files' })
+    
+    try {
+      const formData = new FormData()
+      if (resume) formData.append('resume', resume)
+      if (jd) formData.append('jd', jd)
+
+      // Update progress
+      setTimeout(() => {
+        toast.loading('Analyzing content with AI...', { id: 'parse-files' })
+      }, 2000)
+
+      let response: Response
+      try {
+        response = await fetch('/api/resume/parse-files', {
+          method: 'POST',
+          body: formData,
+          // Add timeout to prevent hanging
+          signal: AbortSignal.timeout(60000), // 60 seconds
+        })
+      } catch (fetchError) {
+        console.error('[parse-files] Fetch error:', fetchError)
+        
+        if (fetchError instanceof Error) {
+          if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
+            throw new Error('Request timed out. The files might be too large. Please try smaller files or fill the form manually.')
+          }
+          if (fetchError.message === 'Failed to fetch') {
+            throw new Error('Unable to connect to server. Please check if the server is running and try again.')
+          }
+          throw fetchError
+        }
+        throw new Error('Network error occurred. Please check your connection and try again.')
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }))
+        const errorMessage = errorData.error || errorData.details || 'Failed to parse files'
+        throw new Error(errorMessage)
+      }
+
+      toast.loading('Processing extracted data...', { id: 'parse-files' })
+
+      const result = await response.json()
+      console.log('[parse-files] API response:', result)
+      console.log('[parse-files] Extracted resume data:', result.extractedResumeData)
+      console.log('[parse-files] JD requirements:', result.jdRequirements)
+      
+      // Check if extraction failed - but still continue if success is true
+      if (result.success === false) {
+        toast.warning(
+          result.error || 'Could not extract data from files. Please fill the form manually.',
+          { 
+            id: 'parse-files',
+            description: result.details || 'The files might be image-based PDFs or in an unsupported format.',
+            duration: 6000,
+          }
+        )
+        setIsParsingFiles(false)
+        return
+      }
+      
+      // If no data extracted, show friendly info message (not error)
+      if (!result.extractedResumeData && !result.jdRequirements) {
+        // Show as info message - this is normal for image-based PDFs
+        toast.info(
+          'Files uploaded successfully',
+          { 
+            id: 'parse-files',
+            description: 'PDF text extraction wasn\'t possible (likely image-based PDFs). Please fill the form manually.',
+            duration: 4000,
+          }
+        )
+        setIsParsingFiles(false)
+        return // Exit early since there's no data to process
+      }
+      
+      setParsedData({
+        resumeData: result.extractedResumeData,
+        jdRequirements: result.jdRequirements,
+      })
+
+      // Auto-fill form if resume data is extracted
+      let fieldsFilled = 0
+      if (result.extractedResumeData) {
+        const data = result.extractedResumeData
+        console.log('[parse-files] Auto-filling form with data:', data)
+        
+        if (data.fullName) {
+          form.setValue('fullName', data.fullName)
+          fieldsFilled++
+        }
+        if (data.email) {
+          form.setValue('email', data.email)
+          fieldsFilled++
+        }
+        if (data.phone) {
+          form.setValue('phone', data.phone)
+          fieldsFilled++
+        }
+        if (data.skills) {
+          form.setValue('skills', data.skills)
+          fieldsFilled++
+        }
+        if (data.experience) {
+          form.setValue('experience', data.experience)
+          fieldsFilled++
+        }
+        // Education - always set, even if empty (will use fallback from API)
+        if (data.education) {
+          form.setValue('education', data.education)
+          fieldsFilled++
+          console.log('[parse-files] ✅ Education field filled:', data.education.substring(0, 50))
+        } else {
+          console.warn('[parse-files] ⚠️ Education field missing in extracted data')
+          // Set a default value if missing
+          form.setValue('education', 'Not specified')
+        }
+        
+        // Projects - always set, even if empty (will use fallback from API)
+        if (data.projects) {
+          form.setValue('projects', data.projects)
+          fieldsFilled++
+          console.log('[parse-files] ✅ Projects field filled:', data.projects.substring(0, 50))
+        } else {
+          console.warn('[parse-files] ⚠️ Projects field missing in extracted data')
+          // Set a default value if missing
+          form.setValue('projects', 'Not specified')
+        }
+        
+        console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
+        console.log('[parse-files] Form values after auto-fill:', {
+          education: form.getValues('education'),
+          projects: form.getValues('projects'),
+        })
+      } else {
+        console.warn('[parse-files] No extractedResumeData found in response')
+      }
+
+      // Add JD requirements to additional instructions if JD is provided
+      if (result.jdRequirements && jd) {
+        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${result.jdRequirements.requiredSkills?.join(', ') || 'N/A'}\n- Qualifications: ${result.jdRequirements.qualifications || 'N/A'}\n- Key Requirements: ${result.jdRequirements.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
+        const currentInstructions = form.getValues('additionalInstructions') || ''
+        form.setValue('additionalInstructions', currentInstructions + jdInstructions)
+        console.log('[parse-files] Added JD requirements to instructions')
+      }
+
+      if (fieldsFilled > 0) {
+        toast.success(`Files parsed successfully! ${fieldsFilled} form fields auto-filled.`, { id: 'parse-files' })
+      } else if (result.extractedResumeData) {
+        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', { id: 'parse-files' })
+      } else {
+        toast.success('Files parsed successfully!', { id: 'parse-files' })
+      }
+    } catch (error) {
+      console.error('Error parsing files:', error)
+      const errorMessage = error instanceof Error && error.message.includes('timeout')
+        ? 'Parsing took too long. Please try with smaller files or check your connection.'
+        : 'Failed to parse files. Please try again.'
+      toast.error(errorMessage, { id: 'parse-files' })
+    } finally {
+      setIsParsingFiles(false)
+    }
   }
 
   const handleResumeTemplateSelect = (template: ResumeTemplate) => {
@@ -639,6 +865,126 @@ export default function AIResumeBuilderPage() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onGenerateResume)} className="space-y-6">
+          {/* File Upload Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.01, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Upload className="size-4 text-muted-foreground" />
+              <span className="text-sm font-medium text-muted-foreground">Quick Upload (Optional)</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="p-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                {/* Resume Upload */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">Upload Your Resume</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload('resume', file)
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isParsingFiles}
+                    />
+                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                      {resumeFile ? (
+                        <>
+                          <FileCheck className="size-4 text-green-600" />
+                          <span className="text-xs font-medium truncate flex-1">{resumeFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setResumeFile(null)
+                              setParsedData(null)
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* JD Upload */}
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground">Upload Job Description</label>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) handleFileUpload('jd', file)
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      disabled={isParsingFiles}
+                    />
+                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                      {jdFile ? (
+                        <>
+                          <FileCheck className="size-4 text-green-600" />
+                          <span className="text-xs font-medium truncate flex-1">{jdFile.name}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setJdFile(null)
+                              if (parsedData) {
+                                const currentInstructions = form.getValues('additionalInstructions') || ''
+                                // Remove JD instructions if they exist
+                                const cleaned = currentInstructions.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '')
+                                form.setValue('additionalInstructions', cleaned)
+                              }
+                            }}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="size-3.5" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="size-4 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {isParsingFiles && (
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Parsing files and extracting data...</span>
+                </div>
+              )}
+              {parsedData && !isParsingFiles && (
+                <div className="mt-3 rounded-lg bg-green-500/10 border border-green-500/20 px-3 py-2">
+                  <p className="text-xs text-green-600 font-medium">
+                    ✓ Files parsed successfully! Form fields auto-filled and JD requirements added to instructions.
+                  </p>
+                </div>
+              )}
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Upload your existing resume to auto-fill the form, or upload a job description to tailor your resume to specific requirements.
+              </p>
+            </div>
+          </motion.div>
+
           {/* Selected Template & Format Display */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}

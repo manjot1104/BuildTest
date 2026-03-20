@@ -445,9 +445,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         chatId: string
         isStarred: boolean
       }
- console.log('Star API - userId:', session.user.id)  
-    console.log('Star API - chatId:', chatId)           
-    console.log('Star API - isStarred:', isStarred)     
       await toggleStarChat({
         userId: session.user.id,
         chatId,
@@ -474,8 +471,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     const chats = await getStarredChats(session.user.id)
     return chats.map((chat) => ({
       id: chat.id,
-    v0ChatId: chat.v0_chat_id || chat.id,  
-  conversationId: chat.conversation_id,
+      v0ChatId: chat.v0_chat_id || chat.id,
+      conversationId: chat.conversation_id,
       title: chat.title,
       prompt: chat.prompt,
       demoUrl: chat.demo_url,
@@ -483,6 +480,8 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       createdAt: chat.created_at.toISOString(),
       updatedAt: chat.updated_at.toISOString(),
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
+      folderId: chat.folder_id ?? null,
+      is_starred: chat.is_starred,
     }))
   })
   // Rename chat
