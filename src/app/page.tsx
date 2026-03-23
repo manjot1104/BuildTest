@@ -15,7 +15,7 @@ import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, 
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
@@ -436,6 +436,217 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
                 </div>
             </motion.div>
         </div>
+    )
+}
+
+// --- AI Chat Flow Section ---
+
+const AI_CHAT_PROMPT = 'Build me a portfolio website with dark theme'
+
+const AI_RESPONSE_LINES = [
+    "I'll create a modern portfolio with:",
+    '  Dark theme with subtle gradients',
+    '  Hero section with animated intro',
+    '  Projects grid with hover effects',
+    '  Contact form with validation',
+]
+
+function FlowAIChatVisual({ inView }: { inView: boolean }) {
+    const [typedChars, setTypedChars] = useState(0)
+    const [showResponse, setShowResponse] = useState(false)
+    const [visibleLines, setVisibleLines] = useState(0)
+    const hasStarted = useRef(false)
+
+    useEffect(() => {
+        if (!inView || hasStarted.current) return
+        hasStarted.current = true
+
+        // Start typing after a short delay
+        const startDelay = setTimeout(() => {
+            let charIndex = 0
+            const typeInterval = setInterval(() => {
+                charIndex++
+                setTypedChars(charIndex)
+                if (charIndex >= AI_CHAT_PROMPT.length) {
+                    clearInterval(typeInterval)
+                    // Show response after typing finishes
+                    setTimeout(() => {
+                        setShowResponse(true)
+                        // Reveal lines one by one
+                        let lineIdx = 0
+                        const lineInterval = setInterval(() => {
+                            lineIdx++
+                            setVisibleLines(lineIdx)
+                            if (lineIdx >= AI_RESPONSE_LINES.length) clearInterval(lineInterval)
+                        }, 180)
+                    }, 600)
+                }
+            }, 45)
+            return () => clearInterval(typeInterval)
+        }, 400)
+
+        return () => clearTimeout(startDelay)
+    }, [inView])
+
+    return (
+        <div className="relative">
+            {/* Subtle glow behind container */}
+            <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+
+            {/* Chat container */}
+            <motion.div
+                animate={inView ? { y: [0, -4, 0] } : {}}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
+            >
+                {/* Title bar */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-muted/30">
+                    <div className="flex gap-1.5">
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground/50 ml-2">Buildify Chat</span>
+                </div>
+
+                {/* Chat body */}
+                <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
+                    {/* User message */}
+                    <div className="flex justify-end">
+                        <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-3">
+                            <p className="text-sm text-foreground/90 leading-relaxed">
+                                {AI_CHAT_PROMPT.slice(0, typedChars)}
+                                {typedChars < AI_CHAT_PROMPT.length && (
+                                    <span className="inline-block w-[2px] h-[14px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
+                                )}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* AI response */}
+                    {showResponse && (
+                        <div className="flex justify-start">
+                            <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-3">
+                                {/* AI avatar */}
+                                <div className="flex items-center gap-2 mb-2.5">
+                                    <div className="size-5 rounded-md bg-primary/10 flex items-center justify-center">
+                                        <Sparkles className="size-3 text-primary/60" />
+                                    </div>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50">Buildify AI</span>
+                                </div>
+                                <div className="space-y-1">
+                                    {AI_RESPONSE_LINES.map((line, i) => (
+                                        <motion.p
+                                            key={i}
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={i < visibleLines ? { opacity: 1, y: 0 } : {}}
+                                            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                                            className={cn(
+                                                'text-sm leading-relaxed',
+                                                line.startsWith('  ')
+                                                    ? 'text-muted-foreground/60 pl-3 border-l border-primary/15'
+                                                    : 'text-foreground/80 font-medium'
+                                            )}
+                                        >
+                                            {line.trim()}
+                                        </motion.p>
+                                    ))}
+                                    {visibleLines < AI_RESPONSE_LINES.length && (
+                                        <div className="flex items-center gap-1.5 pt-1">
+                                            <span className="size-1.5 rounded-full bg-primary/40 animate-pulse" />
+                                            <span className="size-1.5 rounded-full bg-primary/30 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                            <span className="size-1.5 rounded-full bg-primary/20 animate-pulse" style={{ animationDelay: '300ms' }} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Input bar */}
+                <div className="px-4 pb-4">
+                    <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5">
+                        <span className="text-xs text-muted-foreground/30 flex-1">Type a message...</span>
+                        <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <SendHorizonal className="size-3.5 text-primary/40" />
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+function FlowAIChatSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+
+    return (
+        <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                    {/* Text — staggered entrance */}
+                    <div>
+                        <motion.span
+                            variants={fadeIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0}
+                            className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                        >
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            Step 01
+                        </motion.span>
+
+                        <div className="overflow-hidden">
+                            <motion.h2
+                                variants={slideUp}
+                                initial="hidden"
+                                animate={isInView ? 'visible' : 'hidden'}
+                                custom={0.1}
+                                className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                            >
+                                Plan with AI
+                            </motion.h2>
+                        </div>
+
+                        <motion.p
+                            variants={blurIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.25}
+                            className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg"
+                        >
+                            Describe what you want to build and let AI generate the foundation instantly.
+                        </motion.p>
+
+                        <motion.div
+                            variants={fadeIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.4}
+                            className="mt-8 flex items-center gap-3"
+                        >
+                            <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                <MessageSquareText className="size-[18px] text-primary/60" />
+                            </div>
+                            <span className="text-sm font-medium text-muted-foreground/60">AI-powered chat interface</span>
+                        </motion.div>
+                    </div>
+
+                    {/* Visual — chat UI */}
+                    <motion.div
+                        variants={scaleIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.15}
+                    >
+                        <FlowAIChatVisual inView={isInView} />
+                    </motion.div>
+                </div>
+            </div>
+        </section>
     )
 }
 
@@ -1301,42 +1512,7 @@ export default function LandingPage() {
 
             {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
             <div className="section-divider" />
-            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                        {/* Text */}
-                        <div>
-                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
-                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                                Step 01
-                            </span>
-                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
-                                Plan with AI
-                            </h2>
-                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
-                                Describe what you want to build and let AI generate the foundation instantly.
-                            </p>
-                            <div className="mt-8 flex items-center gap-3">
-                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                    <MessageSquareText className="size-[18px] text-primary/60" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground/60">AI-powered chat interface</span>
-                            </div>
-                        </div>
-                        {/* Visual placeholder */}
-                        <div className="relative">
-                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                        <MessageSquareText className="size-6 text-primary/40" />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground/40">Chat UI preview</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <FlowAIChatSection />
 
             {/* 2. Studio (Design) — Visual Left, Text Right */}
             <div className="section-divider" />
