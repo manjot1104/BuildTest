@@ -441,10 +441,10 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
 
 // --- AI Chat Flow Section ---
 
-const AI_CHAT_PROMPT = 'Build me a portfolio website with dark theme'
+const AI_CHAT_PROMPT = 'Plan a portfolio website with dark theme'
 
 const AI_RESPONSE_LINES = [
-    "I'll create a modern portfolio with:",
+    "Here's a plan for your portfolio:",
     '  Dark theme with subtle gradients',
     '  Hero section with animated intro',
     '  Projects grid with hover effects',
@@ -673,7 +673,7 @@ function FlowChatToStudioTransition() {
                         >
                             <div className="flex justify-end">
                                 <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-2.5">
-                                    <p className="text-xs text-foreground/70">Build me a portfolio website with dark theme</p>
+                                    <p className="text-xs text-foreground/70">Plan a portfolio website with dark theme</p>
                                 </div>
                             </div>
                             <div className="flex justify-start">
@@ -1066,9 +1066,9 @@ function FlowStudioSection() {
                                     <div className="absolute inset-2.5 md:inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90">
                                         {/* Navbar */}
                                         <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5">
-                                            <span className="text-[10px] font-bold text-white/85 tracking-tight">DevFolio</span>
+                                            <span className="text-[10px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
                                             <div className="flex items-center gap-4">
-                                                {['Projects', 'Skills', 'Blog', 'Contact'].map((link) => (
+                                                {['Work', 'About', 'Skills', 'Contact'].map((link) => (
                                                     <span key={link} className={cn(
                                                         'text-[8px] cursor-default transition-colors duration-200',
                                                         link === 'Contact' ? 'text-white/55 hover:text-white/70' : 'text-white/35 hover:text-white/50'
@@ -1080,16 +1080,16 @@ function FlowStudioSection() {
                                         {/* Hero */}
                                         <div className="flex-1 flex items-center px-5 gap-4">
                                             <div className="flex-1">
-                                                <p className="text-[16px] md:text-[18px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Alex Johnson</p>
-                                                <p className="text-[9px] font-semibold text-blue-400/80 mt-1">Full Stack Developer &amp; OSS Contributor</p>
-                                                <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Crafting scalable web applications and open-source tools.</p>
-                                                <p className="text-[6px] text-white/20 mt-1">TypeScript · React · Node.js · PostgreSQL · Docker</p>
+                                                <p className="text-[16px] md:text-[18px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Ethan Carter</p>
+                                                <p className="text-[9px] font-semibold text-blue-400/80 mt-1">Product Designer &amp; Developer</p>
+                                                <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Designing intuitive products and building polished digital experiences.</p>
+                                                <p className="text-[6px] text-white/20 mt-1">Figma · React · TypeScript · Next.js · Tailwind</p>
                                                 <div className="mt-3 flex gap-2">
                                                     <div className="h-6 px-2.5 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20 cursor-default transition-all duration-200 hover:bg-blue-500/90 hover:shadow-md hover:shadow-blue-500/30">
-                                                        <span className="text-[7px] font-semibold text-white">View Projects</span>
+                                                        <span className="text-[7px] font-semibold text-white">View Work</span>
                                                     </div>
                                                     <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center cursor-default transition-all duration-200 hover:border-white/25 hover:bg-white/[0.03]">
-                                                        <span className="text-[7px] text-white/50">Download CV</span>
+                                                        <span className="text-[7px] text-white/50">About Me</span>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2 mt-3">
@@ -1109,17 +1109,15 @@ function FlowStudioSection() {
                                                 </div>
                                                 <div className="space-y-1.5">
                                                     <p className="text-[6px] font-mono"><span className="text-white/20">{'// '}</span><span className="text-green-400/50">portfolio.js</span></p>
-                                                    <p className="text-[6px] font-mono text-purple-400/50">const <span className="text-blue-400/60">alex</span> = {'{'}</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-amber-400/50">&quot;TypeScript&quot;</span>, <span className="text-amber-400/50">&quot;React&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;Node.js&quot;</span>, <span className="text-amber-400/50">&quot;PostgreSQL&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;Docker&quot;</span>],</p>
-                                                    <p className="text-[6px] font-mono pl-2 text-white/20">{'},'}</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">currentProject: </span></p>
-                                                    <p className="text-[6px] font-mono pl-4"><span className="text-green-400/50">&quot;Open Source CLI Tool&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">coffee: </span><span className="text-blue-400/50">Infinity</span>,</p>
+                                                    <p className="text-[6px] font-mono text-purple-400/50">const <span className="text-blue-400/60">ethan</span> = {'{'}</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">role: </span><span className="text-amber-400/50">&quot;Product Designer&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-amber-400/50">&quot;Figma&quot;</span>, <span className="text-amber-400/50">&quot;React&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;TypeScript&quot;</span>, <span className="text-amber-400/50">&quot;Next.js&quot;</span>],</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">focus: </span><span className="text-green-400/50">&quot;Design Systems&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">projects: </span><span className="text-blue-400/50">12</span>,</p>
                                                     <p className="text-[6px] font-mono pl-2"><span className="text-white/30">available: </span><span className="text-green-400/50">true</span>,</p>
                                                     <p className="text-[6px] font-mono text-purple-400/50">{'}'}</p>
-                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-amber-400/40">&quot;building the future...&quot;</span><span className="text-white/15">)</span></p>
+                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-amber-400/40">&quot;designing the future...&quot;</span><span className="text-white/15">)</span></p>
                                                 </div>
                                             </div>
                                         </div>
@@ -1129,10 +1127,10 @@ function FlowStudioSection() {
                                             <p className="text-[7px] font-semibold text-white/40 mb-2">Tech Stack</p>
                                             <div className="grid grid-cols-4 gap-1.5">
                                                 {[
+                                                    { cat: 'Design', items: 'Figma · Framer · Principle' },
                                                     { cat: 'Frontend', items: 'React · Next.js · TypeScript' },
-                                                    { cat: 'Backend', items: 'Node.js · PostgreSQL · Redis' },
-                                                    { cat: 'DevOps', items: 'Docker · AWS · CI/CD' },
-                                                    { cat: 'Tools', items: 'Git · VS Code · Figma' },
+                                                    { cat: 'Styling', items: 'Tailwind · CSS · Motion' },
+                                                    { cat: 'Tools', items: 'Git · VS Code · Vercel' },
                                                 ].map((s, i) => (
                                                     <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5 cursor-default transition-colors duration-200 hover:bg-white/[0.04] hover:border-white/[0.07]">
                                                         <p className="text-[6px] font-semibold text-white/50">{s.cat}</p>
@@ -1147,9 +1145,9 @@ function FlowStudioSection() {
                                             <p className="text-[7px] font-semibold text-white/40 mb-2">Featured Projects</p>
                                             <div className="grid grid-cols-3 gap-1.5">
                                                 {[
-                                                    { name: 'Portfolio CLI', desc: 'Scaffolding tool for dev projects', tech: 'TypeScript · Node.js · npm' },
-                                                    { name: 'React Dashboard', desc: 'Real-time analytics with D3 charts', tech: 'React · D3.js · WebSocket' },
-                                                    { name: 'API Gateway', desc: 'High-performance GraphQL API', tech: 'Node.js · GraphQL · Redis' },
+                                                    { name: 'Design System', desc: 'Component library with tokens and docs', tech: 'Figma · React · Storybook' },
+                                                    { name: 'SaaS Dashboard', desc: 'Analytics UI with real-time charts', tech: 'Next.js · D3.js · Tailwind' },
+                                                    { name: 'E-commerce App', desc: 'Modern storefront with checkout flow', tech: 'React · Stripe · Framer' },
                                                 ].map((proj, i) => (
                                                     <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2 cursor-default transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.08] hover:-translate-y-px">
                                                         <p className="text-[7px] font-semibold text-white/60">{proj.name}</p>
