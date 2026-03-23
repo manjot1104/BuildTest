@@ -1239,8 +1239,8 @@ export default function LandingPage() {
 
             {/* ── Developer Flow Pipeline Section ── */}
             <div className="section-divider" />
-            <section className="relative py-20 md:py-24 px-6 overflow-hidden">
-                <div className="max-w-[1240px] mx-auto">
+            <section className="relative py-20 md:py-28 px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto">
                     {/* Header */}
                     <div className="text-center mb-16">
                         <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
@@ -1292,6 +1292,247 @@ export default function LandingPage() {
                                     </span>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Buildify Developer Flow — 6 Full-Screen Sections ── */}
+
+            {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Text */}
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 01
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Plan with AI
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Describe what you want to build and let AI generate the foundation instantly.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <MessageSquareText className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">AI-powered chat interface</span>
+                            </div>
+                        </div>
+                        {/* Visual placeholder */}
+                        <div className="relative">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                        <MessageSquareText className="size-6 text-primary/40" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">Chat UI preview</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 2. Studio (Design) — Visual Left, Text Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Visual placeholder */}
+                        <div className="relative md:order-1 order-2">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                        <Palette className="size-6 text-primary/40" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">Design editor preview</span>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Text */}
+                        <div className="md:order-2 order-1">
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 02
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Design Visually
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Structure your ideas with an intuitive visual editor and real-time layout control.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <Palette className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">Drag-and-drop studio</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 3. Builder (Development) — Text Left, Visual Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Text */}
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 03
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Build Instantly
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Convert designs into functional components and production-ready code.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <Code2 className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">Production-ready code generation</span>
+                            </div>
+                        </div>
+                        {/* Visual placeholder */}
+                        <div className="relative">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                        <Code2 className="size-6 text-primary/40" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">App builder preview</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 4. Deploy + Testing — Visual Left, Text Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Visual placeholder */}
+                        <div className="relative md:order-1 order-2">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="flex gap-3">
+                                        <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                            <Rocket className="size-6 text-primary/40" />
+                                        </div>
+                                        <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                            <FlaskConical className="size-6 text-primary/40" />
+                                        </div>
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">Deploy &amp; testing preview</span>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Text */}
+                        <div className="md:order-2 order-1">
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 04
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Ship with Confidence
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Deploy seamlessly and test your product with integrated tools like TinyFish.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <Rocket className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">One-click deploy + test suite</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 5. Accessibility — Text Left, Visual Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Text */}
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 05
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Ensure Accessibility
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Automatically detect and fix accessibility issues for an inclusive experience.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <ScanEye className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">Automated a11y scanning</span>
+                            </div>
+                        </div>
+                        {/* Visual placeholder */}
+                        <div className="relative">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                        <ScanEye className="size-6 text-primary/40" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">Accessibility report preview</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* 6. Live (Final Output) — Visual Left, Text Right */}
+            <div className="section-divider" />
+            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Visual placeholder */}
+                        <div className="relative md:order-1 order-2">
+                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
+                                <div className="flex flex-col items-center gap-3">
+                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
+                                        <Radio className="size-6 text-primary/40" />
+                                    </div>
+                                    <span className="text-xs text-muted-foreground/40">Live product preview</span>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Text */}
+                        <div className="md:order-2 order-1">
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 06
+                            </span>
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Go Live
+                            </h2>
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Launch your product and make it available to users instantly.
+                            </p>
+                            <div className="mt-8 flex items-center gap-3">
+                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                    <Radio className="size-[18px] text-primary/60" />
+                                </div>
+                                <span className="text-sm font-medium text-muted-foreground/60">Instant public launch</span>
+                            </div>
                         </div>
                     </div>
                 </div>
