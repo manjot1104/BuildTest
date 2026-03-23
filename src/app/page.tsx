@@ -923,9 +923,199 @@ function FlowChatToStudioTransition() {
 
 // --- Studio Section — real Buildify Studio editor interface ---
 
+// --- Studio interaction state ---
+
+type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' | 'editing-text' | 'hover-elements-tab' | 'click-elements-tab' | 'hover-element' | 'click-element' | 'click-color' | 'hover-button' | 'hover-preview' | 'click-preview' | 'preview-mode' | 'click-exit-preview'
+
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
+    const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
+    const [cursorVisible, setCursorVisible] = useState(false)
+    const [cursorClicking, setCursorClicking] = useState(false)
+    const [heroEditing, setHeroEditing] = useState(false)
+    const [heroText, setHeroText] = useState("Hi, I'm Ethan Carter")
+    const [templateHighlight, setTemplateHighlight] = useState(false)
+    const [activeTab, setActiveTab] = useState(0) // 0=Templates, 1=Elements, 2=Layers
+    const [newSection, setNewSection] = useState(false)
+    const [newCards, setNewCards] = useState(0) // 0, 1, 2, 3
+    const [previewMode, setPreviewMode] = useState(false)
+    const cursorTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Run cursor sequence
+    useEffect(() => {
+        if (!isInView) return
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            cursorTimers.current.push(t)
+        })
+
+        let cancelled = false
+
+        const click = async () => {
+            setCursorClicking(true)
+            await delay(150)
+            if (!cancelled) setCursorClicking(false)
+        }
+
+        const moveTo = async (x: number, y: number, ms = 800) => {
+            setCursorPos({ x, y })
+            await delay(ms)
+        }
+
+        const runSequence = async () => {
+            await delay(1200)
+            if (cancelled) return
+            setCursorVisible(true)
+
+            // 1. Select template
+            setCursorAction('idle')
+            await moveTo(10, 28, 900)
+            if (cancelled) return
+            setCursorAction('hover-template')
+            await delay(400)
+            if (cancelled) return
+            setCursorAction('click-template')
+            await click()
+            if (cancelled) return
+            setTemplateHighlight(true)
+            await delay(300)
+            if (cancelled) return
+            setTemplateHighlight(false)
+            setCursorAction('idle')
+            await delay(600)
+
+            // 2. Switch to Elements tab
+            if (cancelled) return
+            await moveTo(10, 6, 700)
+            if (cancelled) return
+            setCursorAction('hover-elements-tab')
+            await delay(300)
+            if (cancelled) return
+            setCursorAction('click-elements-tab')
+            await click()
+            if (cancelled) return
+            setActiveTab(1)
+            await delay(500)
+
+            // 3. Click "Section" element to add
+            if (cancelled) return
+            await moveTo(10, 22, 600)
+            if (cancelled) return
+            setCursorAction('hover-element')
+            await delay(300)
+            if (cancelled) return
+            setCursorAction('click-element')
+            await click()
+            if (cancelled) return
+            setNewSection(true)
+            setCursorAction('idle')
+            await delay(800)
+
+            // 4. Click to add cards (3 clicks for 3 cards)
+            if (cancelled) return
+            await moveTo(10, 32, 500)
+            if (cancelled) return
+            setCursorAction('hover-element')
+            await delay(200)
+            for (let c = 1; c <= 3; c++) {
+                if (cancelled) return
+                await click()
+                setNewCards(c)
+                await delay(350)
+            }
+            setCursorAction('idle')
+            await delay(500)
+
+            // 5. Switch back to Templates tab
+            if (cancelled) return
+            setActiveTab(0)
+
+            // 6. Edit hero text
+            if (cancelled) return
+            await moveTo(38, 30, 900)
+            if (cancelled) return
+            setCursorAction('click-text')
+            await click()
+            if (cancelled) return
+            setHeroEditing(true)
+            setCursorAction('editing-text')
+
+            // Delete + retype
+            const original = "Hi, I'm Ethan Carter"
+            const edited = "Hey, I'm Ethan"
+            for (let i = original.length; i >= edited.length - 2; i--) {
+                if (cancelled) return
+                setHeroText(original.slice(0, i))
+                await delay(55)
+            }
+            for (let i = 0; i <= edited.length; i++) {
+                if (cancelled) return
+                setHeroText(edited.slice(0, i))
+                await delay(50 + Math.random() * 30)
+            }
+            await delay(400)
+            if (cancelled) return
+            setHeroEditing(false)
+            setCursorAction('idle')
+            await delay(500)
+
+            // 7. Change color
+            if (cancelled) return
+            await moveTo(89, 55, 1000)
+            if (cancelled) return
+            setCursorAction('click-color')
+            await click()
+            // NOTE: removed emerald color change — staying blue only
+            setCursorAction('idle')
+            await delay(600)
+
+            // 8. Preview mode
+            if (cancelled) return
+            await moveTo(62, -4, 800) // toolbar Preview button (above editor area, hence negative y)
+            if (cancelled) return
+            setCursorAction('hover-preview')
+            await delay(400)
+            if (cancelled) return
+            setCursorAction('click-preview')
+            await click()
+            if (cancelled) return
+            setPreviewMode(true)
+            setCursorAction('preview-mode')
+            await delay(2500)
+
+            // 9. Exit preview
+            if (cancelled) return
+            await moveTo(62, -4, 600)
+            setCursorAction('click-exit-preview')
+            await click()
+            if (cancelled) return
+            setPreviewMode(false)
+            setCursorAction('idle')
+            await delay(800)
+
+            // Done — hide cursor
+            if (cancelled) return
+            setCursorVisible(false)
+
+            // Reset after pause
+            await delay(2000)
+            if (cancelled) return
+            setHeroText("Hi, I'm Ethan Carter")
+            setHeroEditing(false)
+            setActiveTab(0)
+            setNewSection(false)
+            setNewCards(0)
+            setPreviewMode(false)
+        }
+
+        runSequence()
+        return () => {
+            cancelled = true
+            cursorTimers.current.forEach(clearTimeout)
+        }
+    }, [isInView])
 
     return (
         <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
@@ -1039,9 +1229,14 @@ function FlowStudioSection() {
                                         ))}
                                     </div>
                                     <div className="w-px h-3.5 bg-border/20" />
-                                    <div className="flex items-center gap-1 px-1">
-                                        <Eye className="size-3 text-muted-foreground/40" />
-                                        <span className="text-[8px] text-muted-foreground/40">Preview</span>
+                                    <div className={cn(
+                                        "flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-200",
+                                        cursorAction === 'hover-preview' || cursorAction === 'click-preview' || previewMode
+                                            ? 'bg-primary/10 text-primary/70'
+                                            : 'text-muted-foreground/40'
+                                    )}>
+                                        <Eye className="size-3" />
+                                        <span className="text-[8px]">{previewMode ? 'Exit Preview' : 'Preview'}</span>
                                     </div>
                                 </div>
 
@@ -1059,26 +1254,59 @@ function FlowStudioSection() {
                             </motion.div>
 
                             {/* ── Main Editor Area ── */}
-                            <div className="flex" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                            <div className="flex relative" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                                {/* Animated cursor */}
+                                {cursorVisible && (
+                                    <motion.div
+                                        className="absolute z-50 pointer-events-none"
+                                        animate={{ left: `${cursorPos.x}%`, top: `${cursorPos.y}%` }}
+                                        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+                                    >
+                                        {/* Cursor SVG */}
+                                        <motion.div
+                                            animate={cursorClicking ? { scale: 0.8 } : { scale: 1 }}
+                                            transition={{ duration: 0.1 }}
+                                        >
+                                            <svg width="16" height="20" viewBox="0 0 16 20" fill="none" className="drop-shadow-md">
+                                                <path d="M0 0L12.5 12.5H5.5L2.5 19.5L0 0Z" fill="white" stroke="black" strokeWidth="1" strokeLinejoin="round" />
+                                            </svg>
+                                        </motion.div>
+                                        {/* Click ripple */}
+                                        {cursorClicking && (
+                                            <motion.div
+                                                initial={{ scale: 0, opacity: 0.5 }}
+                                                animate={{ scale: 2.5, opacity: 0 }}
+                                                transition={{ duration: 0.5 }}
+                                                className="absolute top-0 left-0 size-4 rounded-full bg-primary/30 -translate-x-1/2 -translate-y-1/2"
+                                            />
+                                        )}
+                                    </motion.div>
+                                )}
                                 {/* Left Sidebar */}
                                 <motion.div
                                     initial={{ opacity: 0, x: -12 }}
-                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
-                                    transition={{ duration: 0.5, delay: 0.4 }}
-                                    className="w-[120px] md:w-[140px] border-r border-border/25 bg-muted/8 flex-shrink-0 hidden md:flex flex-col"
+                                    animate={isInView
+                                        ? previewMode
+                                            ? { opacity: 0, x: -20, width: 0, borderWidth: 0, padding: 0 }
+                                            : { opacity: 1, x: 0, width: 140, borderWidth: 1, padding: undefined }
+                                        : {}
+                                    }
+                                    transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                    className="border-r border-border/25 bg-muted/8 flex-shrink-0 hidden md:flex flex-col overflow-hidden"
                                 >
                                     {/* Tabs */}
                                     <div className="flex border-b border-border/20 px-1">
                                         {[
-                                            { icon: LayoutTemplate, label: 'Templates', active: true },
-                                            { icon: Type, label: 'Elements', active: false },
-                                            { icon: Layers, label: 'Layers', active: false },
+                                            { icon: LayoutTemplate, label: 'Templates' },
+                                            { icon: Type, label: 'Elements' },
+                                            { icon: Layers, label: 'Layers' },
                                         ].map((tab, i) => (
                                             <div
                                                 key={i}
                                                 className={cn(
-                                                    'flex-1 flex flex-col items-center gap-0.5 py-2 cursor-default transition-colors duration-200',
-                                                    tab.active ? 'text-primary/80 border-b-2 border-primary/50' : 'text-muted-foreground/25 hover:text-muted-foreground/40'
+                                                    'flex-1 flex flex-col items-center gap-0.5 py-2 cursor-default transition-all duration-200',
+                                                    activeTab === i ? 'text-primary/80 border-b-2 border-primary/50' : 'text-muted-foreground/25',
+                                                    (cursorAction === 'hover-elements-tab' && i === 1) && 'text-muted-foreground/50'
                                                 )}
                                             >
                                                 <tab.icon className="size-3" />
@@ -1087,74 +1315,110 @@ function FlowStudioSection() {
                                         ))}
                                     </div>
 
-                                    {/* Template cards */}
+                                    {/* Sidebar content — switches between tabs */}
                                     <div className="flex-1 overflow-hidden px-2 py-2 space-y-1.5">
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 6 }}
-                                            animate={isInView ? { opacity: 1, y: 0 } : {}}
-                                            transition={{ duration: 0.4, delay: 0.55 }}
-                                            className="rounded-lg border border-primary/20 bg-card/60 overflow-hidden transition-all duration-200 hover:border-primary/30 hover:shadow-sm"
-                                        >
-                                            <div className="h-14 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-2 flex flex-col justify-between">
-                                                <div className="flex justify-between">
-                                                    <div className="h-1 w-8 rounded bg-white/15" />
-                                                    <div className="flex gap-0.5">
-                                                        <div className="h-1 w-3 rounded bg-white/8" />
-                                                        <div className="h-1 w-3 rounded bg-white/8" />
+                                        {activeTab === 0 ? (
+                                            <>
+                                                {/* Template cards */}
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 6 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ duration: 0.3 }}
+                                                    className={cn(
+                                                        "rounded-lg border bg-card/60 overflow-hidden transition-all duration-300",
+                                                        templateHighlight || cursorAction === 'hover-template'
+                                                            ? 'border-primary/40 shadow-md shadow-primary/10 scale-[1.02]'
+                                                            : 'border-primary/20'
+                                                    )}
+                                                >
+                                                    <div className="h-14 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-2 flex flex-col justify-between">
+                                                        <div className="flex justify-between">
+                                                            <div className="h-1 w-8 rounded bg-white/15" />
+                                                            <div className="flex gap-0.5">
+                                                                <div className="h-1 w-3 rounded bg-white/8" />
+                                                                <div className="h-1 w-3 rounded bg-white/8" />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="h-1.5 w-14 rounded bg-white/25 mb-0.5" />
+                                                            <div className="h-1 w-9 rounded bg-blue-400/30" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2 py-1.5 flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-[7px] font-semibold text-foreground/65">Developer Dark</p>
+                                                            <p className="text-[5.5px] text-muted-foreground/30">Developer</p>
+                                                        </div>
+                                                        <div className="h-4 px-1.5 rounded bg-primary/15 flex items-center gap-0.5">
+                                                            <span className="text-[5.5px] font-medium text-primary/70">Use</span>
+                                                            <ArrowRight className="size-2 text-primary/50" />
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+
+                                                <div className="rounded-lg border border-border/20 bg-card/30 overflow-hidden">
+                                                    <div className="h-14 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-2 flex flex-col justify-between">
+                                                        <div className="h-1 w-6 rounded bg-black/8" />
+                                                        <div className="flex gap-1">
+                                                            <div className="size-3.5 rounded bg-blue-500/20" />
+                                                            <div className="size-3.5 rounded bg-blue-500/10" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2 py-1.5">
+                                                        <p className="text-[7px] font-semibold text-foreground/55">Designer Clean</p>
+                                                        <p className="text-[5.5px] text-muted-foreground/25">Designer</p>
                                                     </div>
                                                 </div>
-                                                <div>
-                                                    <div className="h-1.5 w-14 rounded bg-white/25 mb-0.5" />
-                                                    <div className="h-1 w-9 rounded bg-blue-400/30" />
-                                                </div>
-                                            </div>
-                                            <div className="px-2 py-1.5 flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-[7px] font-semibold text-foreground/65">Developer Dark</p>
-                                                    <p className="text-[5.5px] text-muted-foreground/30">Developer</p>
-                                                </div>
-                                                <div className="h-4 px-1.5 rounded bg-primary/15 flex items-center gap-0.5 transition-colors duration-200 hover:bg-primary/25">
-                                                    <span className="text-[5.5px] font-medium text-primary/70">Use</span>
-                                                    <ArrowRight className="size-2 text-primary/50" />
-                                                </div>
-                                            </div>
-                                        </motion.div>
 
-                                        <motion.div
-                                            initial={{ opacity: 0, y: 6 }}
-                                            animate={isInView ? { opacity: 1, y: 0 } : {}}
-                                            transition={{ duration: 0.4, delay: 0.65 }}
-                                            className="rounded-lg border border-border/20 bg-card/30 overflow-hidden transition-all duration-200 hover:border-border/35"
-                                        >
-                                            <div className="h-14 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-2 flex flex-col justify-between">
-                                                <div className="h-1 w-6 rounded bg-black/8" />
-                                                <div className="flex gap-1">
-                                                    <div className="size-3.5 rounded bg-blue-500/20" />
-                                                    <div className="size-3.5 rounded bg-emerald-500/15" />
-                                                    <div className="size-3.5 rounded bg-amber-500/12" />
+                                                <div className="rounded-lg border border-border/12 bg-card/15 overflow-hidden">
+                                                    <div className="h-14 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-2 flex flex-col justify-between">
+                                                        <div className="h-1 w-7 rounded bg-white/6" />
+                                                        <div className="h-1 w-10 rounded bg-white/5" />
+                                                    </div>
+                                                    <div className="px-2 py-1.5">
+                                                        <p className="text-[7px] text-foreground/25">Minimal Pro</p>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="px-2 py-1.5 flex items-center justify-between">
-                                                <div>
-                                                    <p className="text-[7px] font-semibold text-foreground/55">Designer Clean</p>
-                                                    <p className="text-[5.5px] text-muted-foreground/25">Designer</p>
-                                                </div>
-                                                <div className="h-4 px-1.5 rounded border border-border/25 flex items-center gap-0.5">
-                                                    <span className="text-[5.5px] font-medium text-muted-foreground/35">Use</span>
-                                                    <ArrowRight className="size-2 text-muted-foreground/25" />
-                                                </div>
-                                            </div>
-                                        </motion.div>
-
-                                        <div className="rounded-lg border border-border/12 bg-card/15 overflow-hidden">
-                                            <div className="h-14 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-2 flex flex-col justify-between">
-                                                <div className="h-1 w-7 rounded bg-white/6" />
-                                                <div className="h-1 w-10 rounded bg-white/5" />
-                                            </div>
-                                            <div className="px-2 py-1.5">
-                                                <p className="text-[7px] text-foreground/25">Minimal Pro</p>
-                                            </div>
-                                        </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {/* Elements list */}
+                                                <motion.div
+                                                    initial={{ opacity: 0, x: -6 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ duration: 0.25 }}
+                                                    className="space-y-1"
+                                                >
+                                                    {[
+                                                        { icon: Layers, label: 'Section', desc: 'Content block' },
+                                                        { icon: Grid3X3, label: 'Card Grid', desc: '3-column cards' },
+                                                        { icon: Type, label: 'Heading', desc: 'Text element' },
+                                                        { icon: FileText, label: 'Paragraph', desc: 'Body text' },
+                                                        { icon: MousePointerClick, label: 'Button', desc: 'CTA element' },
+                                                    ].map((el, i) => (
+                                                        <div
+                                                            key={el.label}
+                                                            className={cn(
+                                                                "flex items-center gap-2 px-2 py-1.5 rounded-md transition-all duration-200 cursor-default",
+                                                                (cursorAction === 'hover-element' && i === 0) || (cursorAction === 'click-element' && i === 0)
+                                                                    ? 'bg-primary/10 border border-primary/20'
+                                                                    : (cursorAction === 'hover-element' && i === 1)
+                                                                        ? 'bg-primary/10 border border-primary/20'
+                                                                        : 'border border-transparent hover:bg-muted/30'
+                                                            )}
+                                                        >
+                                                            <div className="size-6 rounded bg-muted/30 flex items-center justify-center flex-shrink-0">
+                                                                <el.icon className="size-3 text-muted-foreground/40" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[7px] font-semibold text-foreground/60">{el.label}</p>
+                                                                <p className="text-[5.5px] text-muted-foreground/30">{el.desc}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </motion.div>
+                                            </>
+                                        )}
                                     </div>
                                 </motion.div>
 
@@ -1165,10 +1429,24 @@ function FlowStudioSection() {
                                     transition={{ duration: 0.6, delay: 0.3 }}
                                     className="flex-1 bg-muted/5 relative overflow-hidden"
                                 >
-                                    <div className="absolute inset-0 dot-grid-bg opacity-20" />
+                                    <motion.div
+                                        animate={{ opacity: previewMode ? 0 : 0.2 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="absolute inset-0 dot-grid-bg"
+                                    />
 
                                     {/* Dark dev portfolio */}
-                                    <div className="absolute inset-2.5 md:inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90">
+                                    <motion.div
+                                        animate={previewMode
+                                            ? { left: 0, right: 0, top: 0, bottom: 0, borderRadius: 0 }
+                                            : { left: 12, right: 12, top: 10, bottom: 10, borderRadius: 8 }
+                                        }
+                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                        className={cn(
+                                            "absolute border bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90",
+                                            previewMode ? 'border-transparent' : 'border-border/30'
+                                        )}
+                                    >
                                         {/* Navbar */}
                                         <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5">
                                             <span className="text-[10px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
@@ -1185,12 +1463,22 @@ function FlowStudioSection() {
                                         {/* Hero */}
                                         <div className="flex-1 flex items-center px-5 gap-4">
                                             <div className="flex-1">
-                                                <p className="text-[16px] md:text-[18px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Ethan Carter</p>
+                                                <p className={cn(
+                                                    "text-[16px] md:text-[18px] font-extrabold leading-tight transition-all duration-200",
+                                                    heroEditing ? 'text-white/95 bg-white/[0.04] rounded px-1 -mx-1 ring-1 ring-blue-400/30' : 'text-white/90'
+                                                )}>
+                                                    {heroText}
+                                                    {heroEditing && <span className="inline-block w-[2px] h-[16px] bg-blue-400/80 ml-0.5 align-middle animate-pulse" />}
+                                                </p>
                                                 <p className="text-[9px] font-semibold text-blue-400/80 mt-1">Product Designer &amp; Developer</p>
                                                 <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Designing intuitive products and building polished digital experiences.</p>
                                                 <p className="text-[6px] text-white/20 mt-1">Figma · React · TypeScript · Next.js · Tailwind</p>
                                                 <div className="mt-3 flex gap-2">
-                                                    <div className="h-6 px-2.5 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20 cursor-default transition-all duration-200 hover:bg-blue-500/90 hover:shadow-md hover:shadow-blue-500/30">
+                                                    <div className={cn(
+                                                        "h-6 px-2.5 rounded-md flex items-center shadow-sm cursor-default transition-all duration-300",
+                                                        'bg-blue-500/80 shadow-blue-500/20 hover:bg-blue-500/90',
+                                                        cursorAction === 'hover-button' && 'scale-105 shadow-md shadow-blue-500/30'
+                                                    )}>
                                                         <span className="text-[7px] font-semibold text-white">View Work</span>
                                                     </div>
                                                     <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center cursor-default transition-all duration-200 hover:border-white/25 hover:bg-white/[0.03]">
@@ -1208,21 +1496,21 @@ function FlowStudioSection() {
                                             {/* Code block */}
                                             <div className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
                                                 <div className="flex gap-1 mb-2.5">
-                                                    <div className="size-1.5 rounded-full bg-[#ff5f57]/50" />
-                                                    <div className="size-1.5 rounded-full bg-[#febc2e]/50" />
-                                                    <div className="size-1.5 rounded-full bg-[#28c840]/50" />
+                                                    <div className="size-1.5 rounded-full bg-blue-400/40" />
+                                                    <div className="size-1.5 rounded-full bg-blue-300/30" />
+                                                    <div className="size-1.5 rounded-full bg-blue-200/25" />
                                                 </div>
                                                 <div className="space-y-1.5">
-                                                    <p className="text-[6px] font-mono"><span className="text-white/20">{'// '}</span><span className="text-green-400/50">portfolio.js</span></p>
-                                                    <p className="text-[6px] font-mono text-purple-400/50">const <span className="text-blue-400/60">ethan</span> = {'{'}</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">role: </span><span className="text-amber-400/50">&quot;Product Designer&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-amber-400/50">&quot;Figma&quot;</span>, <span className="text-amber-400/50">&quot;React&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;TypeScript&quot;</span>, <span className="text-amber-400/50">&quot;Next.js&quot;</span>],</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">focus: </span><span className="text-green-400/50">&quot;Design Systems&quot;</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">projects: </span><span className="text-blue-400/50">12</span>,</p>
-                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">available: </span><span className="text-green-400/50">true</span>,</p>
-                                                    <p className="text-[6px] font-mono text-purple-400/50">{'}'}</p>
-                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-amber-400/40">&quot;designing the future...&quot;</span><span className="text-white/15">)</span></p>
+                                                    <p className="text-[6px] font-mono"><span className="text-white/20">{'// '}</span><span className="text-blue-300/50">portfolio.js</span></p>
+                                                    <p className="text-[6px] font-mono text-blue-400/50">const <span className="text-blue-300/70">ethan</span> = {'{'}</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">role: </span><span className="text-blue-200/50">&quot;Product Designer&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-blue-200/50">&quot;Figma&quot;</span>, <span className="text-blue-200/50">&quot;React&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-blue-200/50">&quot;TypeScript&quot;</span>, <span className="text-blue-200/50">&quot;Next.js&quot;</span>],</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">focus: </span><span className="text-blue-300/50">&quot;Design Systems&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">projects: </span><span className="text-blue-400/60">12</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">available: </span><span className="text-blue-300/60">true</span>,</p>
+                                                    <p className="text-[6px] font-mono text-blue-400/50">{'}'}</p>
+                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-blue-200/40">&quot;designing the future...&quot;</span><span className="text-white/15">)</span></p>
                                                 </div>
                                             </div>
                                         </div>
@@ -1246,7 +1534,7 @@ function FlowStudioSection() {
                                         </div>
 
                                         {/* Featured projects */}
-                                        <div className="px-5 pb-3">
+                                        <div className="px-5 pb-2">
                                             <p className="text-[7px] font-semibold text-white/40 mb-2">Featured Projects</p>
                                             <div className="grid grid-cols-3 gap-1.5">
                                                 {[
@@ -1262,15 +1550,52 @@ function FlowStudioSection() {
                                                 ))}
                                             </div>
                                         </div>
-                                    </div>
+
+                                        {/* Dynamically added section */}
+                                        {newSection && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                className="px-5 pb-3 overflow-hidden"
+                                            >
+                                                <p className="text-[7px] font-semibold text-white/40 mb-2">Testimonials</p>
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {[
+                                                        { quote: 'Incredible design sense and attention to detail.', name: 'Sarah K.' },
+                                                        { quote: 'Delivered on time with pixel-perfect results.', name: 'James L.' },
+                                                        { quote: 'A true professional. Highly recommended.', name: 'Maria C.' },
+                                                    ].map((card, i) => (
+                                                        i < newCards && (
+                                                            <motion.div
+                                                                key={i}
+                                                                initial={{ opacity: 0, scale: 0.9, y: 6 }}
+                                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                                                                className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5"
+                                                            >
+                                                                <p className="text-[5.5px] text-white/30 italic leading-relaxed">&quot;{card.quote}&quot;</p>
+                                                                <p className="text-[5px] text-white/50 mt-1 font-medium">— {card.name}</p>
+                                                            </motion.div>
+                                                        )
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
                                 </motion.div>
 
                                 {/* Right Sidebar — Properties Panel */}
                                 <motion.div
                                     initial={{ opacity: 0, x: 14 }}
-                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
-                                    transition={{ duration: 0.5, delay: 0.5 }}
-                                    className="w-[150px] md:w-[170px] border-l border-border/30 bg-muted/10 flex-shrink-0 hidden md:flex flex-col"
+                                    animate={isInView
+                                        ? previewMode
+                                            ? { opacity: 0, x: 20, width: 0, borderWidth: 0, padding: 0 }
+                                            : { opacity: 1, x: 0, width: 170, borderWidth: 1, padding: undefined }
+                                        : {}
+                                    }
+                                    transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                    className="border-l border-border/30 bg-muted/10 flex-shrink-0 hidden md:flex flex-col overflow-hidden"
                                 >
                                     <div className="px-3 py-2 border-b border-border/25">
                                         <p className="text-[8px] font-semibold text-foreground/55 uppercase tracking-[0.1em]">Properties</p>
@@ -1326,15 +1651,18 @@ function FlowStudioSection() {
                                             <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Fill</p>
                                             <div className="flex items-center gap-1.5 mb-2">
                                                 {[
-                                                    { bg: 'bg-blue-500', ring: true },
-                                                    { bg: 'bg-white', ring: false },
-                                                    { bg: 'bg-[#0f1117]', ring: false },
-                                                    { bg: 'bg-blue-400/60', ring: false },
-                                                ].map((c, i) => (
-                                                    <div key={i} className={cn(
+                                                    { bg: 'bg-blue-500', id: 'blue', active: true },
+                                                    { bg: 'bg-blue-300', id: 'light', active: false },
+                                                    { bg: 'bg-[#0f1117]', id: 'dark', active: false },
+                                                    { bg: 'bg-white', id: 'white', active: false },
+                                                ].map((c) => (
+                                                    <div key={c.id} className={cn(
                                                         'size-5 rounded-md border cursor-default transition-all duration-200 hover:scale-110',
                                                         c.bg,
-                                                        c.ring ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border/30'
+                                                        c.active
+                                                            ? 'border-primary/50 ring-1 ring-primary/20 scale-110'
+                                                            : 'border-border/30',
+                                                        cursorAction === 'click-color' && c.id === 'light' && 'ring-2 ring-primary/30 scale-110'
                                                     )} />
                                                 ))}
                                                 <div className="size-5 rounded-md border border-dashed border-border/30 flex items-center justify-center">
