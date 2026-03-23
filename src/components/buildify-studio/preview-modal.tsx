@@ -79,6 +79,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
               padding: styles.padding ?? 4,
               wordBreak: 'break-word', whiteSpace: 'pre-wrap',
               display: 'flex', alignItems: 'center',
+              justifyContent: styles.textAlign === 'center' ? 'center' : styles.textAlign === 'right' ? 'flex-end' : 'flex-start',
             } as React.CSSProperties}>{el.content}</Tag>
         )
       }
@@ -306,9 +307,9 @@ function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, contai
           height: contentHeight,
           position: 'absolute',
           top: 0,
-          left: 0,
-          transform: `scale(${scale})`,
-          transformOrigin: 'top left',
+          left: '50%',
+          transform: `translateX(-50%) scale(${scale})`,
+          transformOrigin: 'top center',
           ...getBgStyle(background),
           fontFamily: 'system-ui, -apple-system, sans-serif',
           overflow: 'hidden',
