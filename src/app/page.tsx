@@ -954,110 +954,130 @@ function FlowStudioSection() {
                             </motion.div>
 
                             {/* ── Main Editor Area ── */}
-                            <div className="flex" style={{ height: 'clamp(320px, 42vw, 500px)' }}>
-                                {/* Left Sidebar — narrow, faded supporting element */}
+                            <div className="flex" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                                {/* Left Sidebar */}
                                 <motion.div
                                     initial={{ opacity: 0, x: -12 }}
-                                    animate={isInView ? { opacity: 0.7, x: 0 } : {}}
+                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
                                     transition={{ duration: 0.5, delay: 0.4 }}
-                                    className="w-[110px] md:w-[130px] border-r border-border/20 bg-muted/5 flex-shrink-0 hidden md:flex flex-col"
+                                    className="w-[120px] md:w-[140px] border-r border-border/25 bg-muted/8 flex-shrink-0 hidden md:flex flex-col"
                                 >
-                                    {/* Tabs — icon only */}
-                                    <div className="flex border-b border-border/15 px-1">
+                                    {/* Tabs */}
+                                    <div className="flex border-b border-border/20 px-1">
                                         {[
-                                            { icon: LayoutTemplate, active: true },
-                                            { icon: Type, active: false },
-                                            { icon: Layers, active: false },
+                                            { icon: LayoutTemplate, label: 'Templates', active: true },
+                                            { icon: Type, label: 'Elements', active: false },
+                                            { icon: Layers, label: 'Layers', active: false },
                                         ].map((tab, i) => (
                                             <div
                                                 key={i}
                                                 className={cn(
-                                                    'flex-1 flex items-center justify-center py-2 cursor-default',
-                                                    tab.active ? 'text-primary/70 border-b border-primary/40' : 'text-muted-foreground/20'
+                                                    'flex-1 flex flex-col items-center gap-0.5 py-2 cursor-default transition-colors duration-200',
+                                                    tab.active ? 'text-primary/80 border-b-2 border-primary/50' : 'text-muted-foreground/25 hover:text-muted-foreground/40'
                                                 )}
                                             >
                                                 <tab.icon className="size-3" />
+                                                <span className="text-[6px] font-medium">{tab.label}</span>
                                             </div>
                                         ))}
                                     </div>
 
-                                    {/* Template cards — compact */}
+                                    {/* Template cards */}
                                     <div className="flex-1 overflow-hidden px-2 py-2 space-y-1.5">
-                                        {/* Template 1 — active */}
                                         <motion.div
                                             initial={{ opacity: 0, y: 6 }}
                                             animate={isInView ? { opacity: 1, y: 0 } : {}}
                                             transition={{ duration: 0.4, delay: 0.55 }}
-                                            className="rounded-md border border-primary/15 bg-card/50 overflow-hidden"
+                                            className="rounded-lg border border-primary/20 bg-card/60 overflow-hidden transition-all duration-200 hover:border-primary/30 hover:shadow-sm"
                                         >
-                                            <div className="h-12 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-1.5 flex flex-col justify-between">
-                                                <div className="h-1 w-8 rounded bg-white/15" />
-                                                <div className="h-1 w-12 rounded bg-white/20" />
+                                            <div className="h-14 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-2 flex flex-col justify-between">
+                                                <div className="flex justify-between">
+                                                    <div className="h-1 w-8 rounded bg-white/15" />
+                                                    <div className="flex gap-0.5">
+                                                        <div className="h-1 w-3 rounded bg-white/8" />
+                                                        <div className="h-1 w-3 rounded bg-white/8" />
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <div className="h-1.5 w-14 rounded bg-white/25 mb-0.5" />
+                                                    <div className="h-1 w-9 rounded bg-blue-400/30" />
+                                                </div>
                                             </div>
-                                            <div className="px-1.5 py-1 flex items-center justify-between">
-                                                <span className="text-[6px] font-semibold text-foreground/60">Developer Dark</span>
-                                                <div className="h-3.5 px-1 rounded bg-primary/12 flex items-center">
-                                                    <span className="text-[5px] font-medium text-primary/60">Use</span>
+                                            <div className="px-2 py-1.5 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-[7px] font-semibold text-foreground/65">Developer Dark</p>
+                                                    <p className="text-[5.5px] text-muted-foreground/30">Developer</p>
+                                                </div>
+                                                <div className="h-4 px-1.5 rounded bg-primary/15 flex items-center gap-0.5 transition-colors duration-200 hover:bg-primary/25">
+                                                    <span className="text-[5.5px] font-medium text-primary/70">Use</span>
+                                                    <ArrowRight className="size-2 text-primary/50" />
                                                 </div>
                                             </div>
                                         </motion.div>
 
-                                        {/* Template 2 */}
                                         <motion.div
                                             initial={{ opacity: 0, y: 6 }}
                                             animate={isInView ? { opacity: 1, y: 0 } : {}}
                                             transition={{ duration: 0.4, delay: 0.65 }}
-                                            className="rounded-md border border-border/15 bg-card/30 overflow-hidden"
+                                            className="rounded-lg border border-border/20 bg-card/30 overflow-hidden transition-all duration-200 hover:border-border/35"
                                         >
-                                            <div className="h-12 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-1.5 flex flex-col justify-between">
+                                            <div className="h-14 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-2 flex flex-col justify-between">
                                                 <div className="h-1 w-6 rounded bg-black/8" />
                                                 <div className="flex gap-1">
-                                                    <div className="size-3 rounded bg-blue-500/15" />
-                                                    <div className="size-3 rounded bg-emerald-500/10" />
+                                                    <div className="size-3.5 rounded bg-blue-500/20" />
+                                                    <div className="size-3.5 rounded bg-emerald-500/15" />
+                                                    <div className="size-3.5 rounded bg-amber-500/12" />
                                                 </div>
                                             </div>
-                                            <div className="px-1.5 py-1">
-                                                <span className="text-[6px] font-semibold text-foreground/50">Designer Clean</span>
+                                            <div className="px-2 py-1.5 flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-[7px] font-semibold text-foreground/55">Designer Clean</p>
+                                                    <p className="text-[5.5px] text-muted-foreground/25">Designer</p>
+                                                </div>
+                                                <div className="h-4 px-1.5 rounded border border-border/25 flex items-center gap-0.5">
+                                                    <span className="text-[5.5px] font-medium text-muted-foreground/35">Use</span>
+                                                    <ArrowRight className="size-2 text-muted-foreground/25" />
+                                                </div>
                                             </div>
                                         </motion.div>
 
-                                        {/* Template 3 hint */}
-                                        <div className="rounded-md border border-border/10 bg-card/20 overflow-hidden">
-                                            <div className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-1.5 flex flex-col justify-between">
-                                                <div className="h-1 w-7 rounded bg-white/8" />
-                                                <div className="h-1 w-10 rounded bg-white/6" />
+                                        <div className="rounded-lg border border-border/12 bg-card/15 overflow-hidden">
+                                            <div className="h-14 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-2 flex flex-col justify-between">
+                                                <div className="h-1 w-7 rounded bg-white/6" />
+                                                <div className="h-1 w-10 rounded bg-white/5" />
                                             </div>
-                                            <div className="px-1.5 py-1">
-                                                <span className="text-[6px] text-foreground/30">Minimal Pro</span>
+                                            <div className="px-2 py-1.5">
+                                                <p className="text-[7px] text-foreground/25">Minimal Pro</p>
                                             </div>
                                         </div>
                                     </div>
                                 </motion.div>
 
-                                {/* Center Canvas — primary focus */}
+                                {/* Center Canvas */}
                                 <motion.div
                                     initial={{ opacity: 0, scale: 0.97 }}
                                     animate={isInView ? { opacity: 1, scale: 1 } : {}}
                                     transition={{ duration: 0.6, delay: 0.3 }}
                                     className="flex-1 bg-muted/5 relative overflow-hidden"
                                 >
-                                    {/* Canvas grid bg */}
                                     <div className="absolute inset-0 dot-grid-bg opacity-20" />
 
-                                    {/* Design on canvas — dark dev portfolio */}
+                                    {/* Dark dev portfolio */}
                                     <div className="absolute inset-2.5 md:inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90">
-                                        {/* Canvas navbar */}
+                                        {/* Navbar */}
                                         <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5">
                                             <span className="text-[10px] font-bold text-white/85 tracking-tight">DevFolio</span>
                                             <div className="flex items-center gap-4">
-                                                <span className="text-[8px] text-white/35">Projects</span>
-                                                <span className="text-[8px] text-white/35">Skills</span>
-                                                <span className="text-[8px] text-white/35">Blog</span>
-                                                <span className="text-[8px] text-white/55">Contact</span>
+                                                {['Projects', 'Skills', 'Blog', 'Contact'].map((link) => (
+                                                    <span key={link} className={cn(
+                                                        'text-[8px] cursor-default transition-colors duration-200',
+                                                        link === 'Contact' ? 'text-white/55 hover:text-white/70' : 'text-white/35 hover:text-white/50'
+                                                    )}>{link}</span>
+                                                ))}
                                             </div>
                                         </div>
 
-                                        {/* Canvas hero */}
+                                        {/* Hero */}
                                         <div className="flex-1 flex items-center px-5 gap-4">
                                             <div className="flex-1">
                                                 <p className="text-[16px] md:text-[18px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Alex Johnson</p>
@@ -1065,22 +1085,22 @@ function FlowStudioSection() {
                                                 <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Crafting scalable web applications and open-source tools.</p>
                                                 <p className="text-[6px] text-white/20 mt-1">TypeScript · React · Node.js · PostgreSQL · Docker</p>
                                                 <div className="mt-3 flex gap-2">
-                                                    <div className="h-6 px-2.5 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20">
+                                                    <div className="h-6 px-2.5 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20 cursor-default transition-all duration-200 hover:bg-blue-500/90 hover:shadow-md hover:shadow-blue-500/30">
                                                         <span className="text-[7px] font-semibold text-white">View Projects</span>
                                                     </div>
-                                                    <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center">
+                                                    <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center cursor-default transition-all duration-200 hover:border-white/25 hover:bg-white/[0.03]">
                                                         <span className="text-[7px] text-white/50">Download CV</span>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2 mt-3">
                                                     {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
-                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center">
+                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center cursor-default transition-colors duration-200 hover:bg-white/[0.08]">
                                                             <Icon className="size-3 text-white/25" />
                                                         </div>
                                                     ))}
                                                 </div>
                                             </div>
-                                            {/* Code block visual */}
+                                            {/* Code block */}
                                             <div className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
                                                 <div className="flex gap-1 mb-2.5">
                                                     <div className="size-1.5 rounded-full bg-[#ff5f57]/50" />
@@ -1114,7 +1134,7 @@ function FlowStudioSection() {
                                                     { cat: 'DevOps', items: 'Docker · AWS · CI/CD' },
                                                     { cat: 'Tools', items: 'Git · VS Code · Figma' },
                                                 ].map((s, i) => (
-                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5">
+                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5 cursor-default transition-colors duration-200 hover:bg-white/[0.04] hover:border-white/[0.07]">
                                                         <p className="text-[6px] font-semibold text-white/50">{s.cat}</p>
                                                         <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
                                                     </div>
@@ -1131,7 +1151,7 @@ function FlowStudioSection() {
                                                     { name: 'React Dashboard', desc: 'Real-time analytics with D3 charts', tech: 'React · D3.js · WebSocket' },
                                                     { name: 'API Gateway', desc: 'High-performance GraphQL API', tech: 'Node.js · GraphQL · Redis' },
                                                 ].map((proj, i) => (
-                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2">
+                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2 cursor-default transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.08] hover:-translate-y-px">
                                                         <p className="text-[7px] font-semibold text-white/60">{proj.name}</p>
                                                         <p className="text-[5.5px] text-white/25 mt-0.5">{proj.desc}</p>
                                                         <p className="text-[5px] text-white/15 mt-1.5">{proj.tech}</p>
@@ -1142,33 +1162,111 @@ function FlowStudioSection() {
                                     </div>
                                 </motion.div>
 
-                                {/* Right edge — thin properties hint */}
+                                {/* Right Sidebar — Properties Panel */}
                                 <motion.div
-                                    initial={{ opacity: 0, x: 10 }}
-                                    animate={isInView ? { opacity: 0.5, x: 0 } : {}}
+                                    initial={{ opacity: 0, x: 14 }}
+                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
                                     transition={{ duration: 0.5, delay: 0.5 }}
-                                    className="w-[80px] md:w-[100px] border-l border-border/15 bg-muted/5 flex-shrink-0 hidden lg:flex flex-col"
+                                    className="w-[150px] md:w-[170px] border-l border-border/30 bg-muted/10 flex-shrink-0 hidden md:flex flex-col"
                                 >
-                                    <div className="px-2 py-2 border-b border-border/10">
-                                        <p className="text-[7px] font-semibold text-foreground/35 uppercase tracking-wider">Properties</p>
+                                    <div className="px-3 py-2 border-b border-border/25">
+                                        <p className="text-[8px] font-semibold text-foreground/55 uppercase tracking-[0.1em]">Properties</p>
                                     </div>
-                                    <div className="px-2 py-2 space-y-2 flex-1">
-                                        <div className="space-y-1">
-                                            {['X: 0', 'Y: 0', 'W: 960'].map((v) => (
-                                                <div key={v} className="h-4 rounded bg-background/30 border border-border/10 flex items-center px-1.5">
-                                                    <span className="text-[6px] text-muted-foreground/25 font-mono">{v}</span>
+                                    <div className="px-3 py-2.5 space-y-3 flex-1 overflow-hidden">
+                                        {/* Position & Size */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Position &amp; Size</p>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                {[
+                                                    { label: 'X', value: '0' },
+                                                    { label: 'Y', value: '0' },
+                                                    { label: 'W', value: '960' },
+                                                    { label: 'H', value: 'auto' },
+                                                ].map((field) => (
+                                                    <div key={field.label} className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5 gap-1 transition-colors duration-200 hover:border-primary/20">
+                                                        <span className="text-[6px] text-muted-foreground/30">{field.label}</span>
+                                                        <span className="text-[7px] text-muted-foreground/50 font-mono">{field.value}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Typography */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Typography</p>
+                                            <div className="space-y-1">
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5 transition-colors duration-200 hover:border-primary/20">
+                                                    <span className="text-[7px] text-muted-foreground/50">Inter</span>
+                                                    <ChevronRight className="size-2.5 text-muted-foreground/25" />
                                                 </div>
-                                            ))}
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                        <span className="text-[7px] text-muted-foreground/50 font-mono">18px</span>
+                                                    </div>
+                                                    <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                        <span className="text-[7px] text-muted-foreground/50">ExtraBold</span>
+                                                    </div>
+                                                </div>
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/40">Line Height</span>
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">1.15</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div className="w-full h-px bg-border/10" />
-                                        <div className="flex gap-1">
-                                            {['bg-blue-500/40', 'bg-white/30', 'bg-[#0f1117]/60'].map((c, i) => (
-                                                <div key={i} className={cn('size-3.5 rounded border border-border/15', c)} />
-                                            ))}
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Fill & Colors */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Fill</p>
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                                {[
+                                                    { bg: 'bg-blue-500', ring: true },
+                                                    { bg: 'bg-white', ring: false },
+                                                    { bg: 'bg-[#0f1117]', ring: false },
+                                                    { bg: 'bg-blue-400/60', ring: false },
+                                                ].map((c, i) => (
+                                                    <div key={i} className={cn(
+                                                        'size-5 rounded-md border cursor-default transition-all duration-200 hover:scale-110',
+                                                        c.bg,
+                                                        c.ring ? 'border-primary/50 ring-1 ring-primary/20' : 'border-border/30'
+                                                    )} />
+                                                ))}
+                                                <div className="size-5 rounded-md border border-dashed border-border/30 flex items-center justify-center">
+                                                    <Plus className="size-2.5 text-muted-foreground/20" />
+                                                </div>
+                                            </div>
+                                            <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5">
+                                                <span className="text-[7px] text-muted-foreground/40">Opacity</span>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-12 h-1 rounded-full bg-border/30 overflow-hidden">
+                                                        <div className="w-[85%] h-full bg-primary/30 rounded-full" />
+                                                    </div>
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">85%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Border */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Border</p>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">0px</span>
+                                                </div>
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/50">8px rad</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="px-2 py-1.5 border-t border-border/10">
-                                        <p className="text-[5.5px] text-muted-foreground/20 text-center">Select an element</p>
+
+                                    <div className="px-3 py-2 border-t border-border/25">
+                                        <p className="text-[7px] text-muted-foreground/30 text-center">Select an element to edit its properties</p>
                                     </div>
                                 </motion.div>
                             </div>
@@ -1178,20 +1276,20 @@ function FlowStudioSection() {
                                 initial={{ opacity: 0 }}
                                 animate={isInView ? { opacity: 1 } : {}}
                                 transition={{ duration: 0.4, delay: 0.6 }}
-                                className="flex items-center justify-between px-3 py-1.5 border-t border-border/25 bg-muted/15"
+                                className="flex items-center justify-between px-3 py-1.5 border-t border-border/30 bg-muted/15"
                             >
-                                <span className="text-[8px] text-muted-foreground/30">Alt+drag · Ctrl+scroll · Shift+click multi-select</span>
+                                <span className="text-[8px] text-muted-foreground/35">Alt+drag · Ctrl+scroll · Shift+click multi-select</span>
                                 <div className="flex items-center gap-3">
                                     <div className="flex items-center gap-1">
                                         <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
                                             <Plus className="size-2.5" />
                                         </button>
-                                        <span className="text-[8px] text-muted-foreground/40 font-mono">44%</span>
+                                        <span className="text-[8px] text-muted-foreground/45 font-mono">44%</span>
                                         <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
                                             <X className="size-2.5" />
                                         </button>
                                     </div>
-                                    <span className="text-[8px] text-muted-foreground/30">Desktop · 1440×1000 · 44% zoom</span>
+                                    <span className="text-[8px] text-muted-foreground/35">Desktop · 1440×1000 · 44% zoom</span>
                                 </div>
                             </motion.div>
                         </div>
