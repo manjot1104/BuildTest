@@ -10,9 +10,17 @@ import {
   checkRepoStatus,
   checkBranchExists,
   checkRepoNameTaken,
-  isRepoEmpty,        // need to skip createGithubBranch on empty repos
-  listUserRepos, 
+  isRepoEmpty,
+  listUserRepos,
   getRepoDetails,
+  // PR service functions
+  listRepoBranches,
+  listPullRequests,
+  getPullRequest,
+  createPullRequest,
+  mergePullRequest,
+  type MergeMethod,
+  type NormalisedPR,
 } from '@/server/services/github.service'
 import {
   getActiveGithubRepo,
@@ -39,6 +47,10 @@ interface ErrorResponse {
     | 'token_expired'
     | 'no_files'
     | 'unauthorized'
+    | 'pr_already_exists'
+    | 'no_commits_between_branches'
+    | 'pr_not_mergeable'
+    | 'pr_not_found'
 
   details?: string
   status?: number
@@ -87,6 +99,19 @@ interface ConnectRepoResponse {
   repoUrl: string
   defaultBranch: string
   visibility: 'public' | 'private'
+}
+
+// Branch list item returned to the client
+interface BranchListItem {
+  name: string
+  protected: boolean
+}
+
+// Merge response returned to the client
+interface MergeResponse {
+  success: boolean
+  message: string
+  sha: string
 }
 
 // ============================================================================
@@ -140,6 +165,75 @@ async function getFilesForChat(chatId: string) {
   }
 
   return files
+}
+
+/**
+ * Shared auth + repo resolution helper used by all PR handlers.
+ * Verifies session, gets token, validates token, verifies chat ownership,
+ * and returns the active repo's owner/name parsed from repoFullName.
+ *
+ * Returns an ErrorResponse if anything fails, or the resolved context if ok.
+ */
+async function resolveRepoContext(chatId: string): Promise<
+  | ErrorResponse
+  | {
+      token: string
+      repoOwner: string
+      repoName: string
+      repoFullName: string
+      repoUrl: string
+    }
+> {
+  const session = await getSession()
+  if (!session?.user?.id) {
+    return { error: 'Unauthorized', code: 'unauthorized', status: 401 }
+  }
+
+  const token = await getGithubToken(session.user.id)
+  if (!token) {
+    return {
+      error: 'GitHub account not connected. Please sign in with GitHub.',
+      code: 'github_not_connected',
+      status: 403,
+    }
+  }
+
+  const ghUser = await getGithubUser(token)
+  if (!ghUser) {
+    return {
+      error: 'Your GitHub token has expired or been revoked. Please sign out and sign back in with GitHub.',
+      code: 'token_expired',
+      status: 403,
+    }
+  }
+
+  const userChat = await getUserChat({ v0ChatId: chatId })
+  if (!userChat) return { error: 'Chat not found', status: 404 }
+  if (userChat.user_id !== session.user.id) return { error: 'Forbidden', status: 403 }
+
+  const activeRepo = await getActiveGithubRepo({ chatId: userChat.id })
+  if (!activeRepo) {
+    return {
+      error: 'No GitHub repository is linked to this chat. Push your code first.',
+      status: 400,
+    }
+  }
+
+  // Parse owner from the stored full name — handles org repos correctly
+  const repoOwner = activeRepo.repo_full_name.split('/')[0] ?? ghUser.login
+
+  return {
+    token,
+    repoOwner,
+    repoName: activeRepo.repo_name,
+    repoFullName: activeRepo.repo_full_name,
+    repoUrl: activeRepo.repo_url,
+  }
+}
+
+/** Type guard — narrows resolveRepoContext result to ErrorResponse */
+function isErrorResponse(val: unknown): val is ErrorResponse {
+  return typeof val === 'object' && val !== null && 'error' in val
 }
 
 // ============================================================================
@@ -645,6 +739,300 @@ export async function pushToGithubHandler({
     console.error('[github] pushToGithubHandler:', err)
     return {
       error: 'Failed to push to GitHub',
+      details: 'An internal error occurred',
+      status: 500,
+    }
+  }
+}
+
+// ============================================================================
+// Pull Request Handlers
+// ============================================================================
+
+/**
+ * GET /api/github/branches/:chatId
+ *
+ * Returns all branches for the active repo linked to a chat.
+ * Used to populate the head/base branch selectors in the PR creation form.
+ * Requires an active linked repo — returns 400 if none exists.
+ */
+export async function listRepoBranchesHandler({
+  params,
+}: {
+  params: { chatId: string }
+}): Promise<BranchListItem[] | ErrorResponse> {
+  try {
+    const ctx = await resolveRepoContext(params.chatId)
+    if (isErrorResponse(ctx)) return ctx
+
+    const branches = await listRepoBranches(ctx.token, ctx.repoOwner, ctx.repoName)
+
+    // Map to a minimal shape — client only needs name and protected flag
+    return branches.map((b) => ({
+      name: b.name,
+      protected: b.protected,
+    }))
+  } catch (err) {
+    console.error('[github] listRepoBranchesHandler:', err)
+    return {
+      error: 'Failed to list branches',
+      details: 'An internal error occurred',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * GET /api/github/prs/:chatId
+ *
+ * Returns all open PRs for the active repo linked to a chat.
+ * Fast path — single GitHub API call, all PRs returned with
+ * mergeableStatus: 'unknown'. Use GET /api/github/pr/:chatId/:prNumber
+ * to get real mergeability for a specific PR.
+ */
+export async function listPullRequestsHandler({
+  params,
+}: {
+  params: { chatId: string }
+}): Promise<NormalisedPR[] | ErrorResponse> {
+  try {
+    const ctx = await resolveRepoContext(params.chatId)
+    if (isErrorResponse(ctx)) return ctx
+
+    return await listPullRequests(ctx.token, ctx.repoOwner, ctx.repoName)
+  } catch (err) {
+    console.error('[github] listPullRequestsHandler:', err)
+    return {
+      error: 'Failed to list pull requests',
+      details: 'An internal error occurred',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * GET /api/github/pr/:chatId/:prNumber
+ *
+ * Returns a single PR with full detail including real mergeability status.
+ * Called lazily when the user selects/expands a PR in the UI.
+ *
+ * If mergeableStatus comes back as 'unknown', GitHub is still computing —
+ * the UI should show a spinner and retry after ~3 seconds.
+ */
+export async function getPullRequestHandler({
+  params,
+}: {
+  params: { chatId: string; prNumber: string }
+}): Promise<NormalisedPR | ErrorResponse> {
+  try {
+    const ctx = await resolveRepoContext(params.chatId)
+    if (isErrorResponse(ctx)) return ctx
+
+    const prNumber = parseInt(params.prNumber, 10)
+    if (isNaN(prNumber)) {
+      return { error: 'Invalid PR number', status: 400 }
+    }
+
+    return await getPullRequest(ctx.token, ctx.repoOwner, ctx.repoName, prNumber)
+  } catch (err) {
+    console.error('[github] getPullRequestHandler:', err)
+    const msg = err instanceof Error ? err.message : ''
+    // Surface GitHub 404 as a proper not-found response
+    if (msg.includes('404')) {
+      return { error: 'Pull request not found', code: 'pr_not_found', status: 404 }
+    }
+    return {
+      error: 'Failed to get pull request',
+      details: 'An internal error occurred',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * POST /api/github/pr/create
+ *
+ * Creates a new pull request on the active repo for a chat.
+ *
+ * Required: { chatId, title, head, base, body? }
+ *   head → source branch (the branch with changes)
+ *   base → target branch (where changes will be merged into)
+ *
+ * Error codes:
+ *   pr_already_exists           → a PR for this head→base already exists
+ *   no_commits_between_branches → head and base are identical, nothing to merge
+ */
+export async function createPullRequestHandler({
+  body,
+}: {
+  body: {
+    chatId: string
+    title: string
+    head: string
+    base: string
+    body?: string
+  }
+}): Promise<NormalisedPR | ErrorResponse> {
+  try {
+    const { chatId, title, head, base } = body
+    const prBody = body.body ?? ''
+
+    if (!chatId || !title || !head || !base) {
+      return { error: 'chatId, title, head, and base are required', status: 400 }
+    }
+
+    if (head === base) {
+      return {
+        error: 'Head and base branches must be different.',
+        status: 400,
+      }
+    }
+
+    if (!isValidBranchName(head) || !isValidBranchName(base)) {
+      return { error: 'Invalid branch name.', status: 400 }
+    }
+
+    const ctx = await resolveRepoContext(chatId)
+    if (isErrorResponse(ctx)) return ctx
+
+    return await createPullRequest(ctx.token, {
+      owner: ctx.repoOwner,
+      repo: ctx.repoName,
+      title,
+      body: prBody,
+      head,
+      base,
+    })
+  } catch (err) {
+    console.error('[github] createPullRequestHandler:', err)
+    const msg = err instanceof Error ? err.message : ''
+
+    // GitHub returns 422 for these two common cases — surface them specifically
+    // so the UI can show a targeted message instead of a generic error
+    if (msg.includes('A pull request already exists')) {
+      return {
+        error: 'A pull request for this branch already exists.',
+        code: 'pr_already_exists',
+        status: 422,
+      }
+    }
+    if (msg.includes('No commits between')) {
+      return {
+        error: 'No commits between these branches. Push some changes first.',
+        code: 'no_commits_between_branches',
+        status: 422,
+      }
+    }
+    return {
+      error: 'Failed to create pull request',
+      details: 'An internal error occurred',
+      status: 500,
+    }
+  }
+}
+
+/**
+ * POST /api/github/pr/merge
+ *
+ * Merges a pull request using the specified merge method.
+ * Validates mergeability server-side before attempting — returns pr_not_mergeable
+ * if the PR has conflicts or is otherwise blocked, so a stale UI can never
+ * trigger a bad merge.
+ *
+ * Required: { chatId, prNumber, mergeMethod }
+ * mergeMethod: 'merge' | 'squash' | 'rebase'
+ *
+ * Error codes:
+ *   pr_not_mergeable → PR has conflicts or is blocked (see error message for reason)
+ *   pr_not_found     → PR was closed or deleted before merge
+ */
+export async function mergePullRequestHandler({
+  body,
+}: {
+  body: {
+    chatId: string
+    prNumber: number
+    mergeMethod: MergeMethod
+    commitTitle?: string
+  }
+}): Promise<MergeResponse | ErrorResponse> {
+  try {
+    const { chatId, prNumber, mergeMethod, commitTitle } = body
+
+    if (!chatId || !prNumber || !mergeMethod) {
+      return { error: 'chatId, prNumber, and mergeMethod are required', status: 400 }
+    }
+
+    const validMergeMethods: MergeMethod[] = ['merge', 'squash', 'rebase']
+    if (!validMergeMethods.includes(mergeMethod)) {
+      return { error: 'mergeMethod must be one of: merge, squash, rebase', status: 400 }
+    }
+
+    const ctx = await resolveRepoContext(chatId)
+    if (isErrorResponse(ctx)) return ctx
+
+    // Fetch the current PR state before attempting merge —
+    // we verify mergeability server-side so a stale UI can't trigger a bad merge
+    const pr = await getPullRequest(ctx.token, ctx.repoOwner, ctx.repoName, prNumber)
+
+    if (pr.state !== 'open') {
+      return {
+        error: `This pull request is already ${pr.state}.`,
+        code: 'pr_not_mergeable',
+        status: 422,
+      }
+    }
+
+    if (pr.mergeableStatus !== 'mergeable') {
+      // Specific message per status so the UI can explain it clearly
+      const reasons: Record<string, string> = {
+        conflicting: 'This PR has merge conflicts. Resolve them on GitHub before merging.',
+        blocked:     'This PR is blocked by branch protection rules (required reviews or status checks).',
+        behind:      'This branch is behind the base branch. Update it on GitHub before merging.',
+        unstable:    'CI checks are pending or failing. Wait for them to pass before merging.',
+        draft:       'Draft PRs cannot be merged. Mark it as ready for review first.',
+        unknown:     'Mergeability is still being computed. Please try again in a moment.',
+      }
+      return {
+        error: reasons[pr.mergeableStatus] ?? 'This PR cannot be merged right now.',
+        code: 'pr_not_mergeable',
+        status: 422,
+      }
+    }
+
+    const result = await mergePullRequest(ctx.token, {
+      owner: ctx.repoOwner,
+      repo: ctx.repoName,
+      prNumber,
+      mergeMethod,
+      commitTitle,
+    })
+
+    return {
+      success: result.merged,
+      message: result.message,
+      sha: result.sha,
+    }
+  } catch (err) {
+    console.error('[github] mergePullRequestHandler:', err)
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('404')) {
+      return {
+        error: 'Pull request not found or already closed.',
+        code: 'pr_not_found',
+        status: 404,
+      }
+    }
+    if (msg.includes('405')) {
+      // GitHub returns 405 when the PR is not mergeable at the API level
+      return {
+        error: 'This PR cannot be merged. It may have conflicts or unresolved review requests.',
+        code: 'pr_not_mergeable',
+        status: 422,
+      }
+    }
+    return {
+      error: 'Failed to merge pull request',
       details: 'An internal error occurred',
       status: 500,
     }

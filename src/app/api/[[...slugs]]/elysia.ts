@@ -70,8 +70,13 @@ import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
-  getGithubReposHandler,        // NEW
-  connectExistingRepoHandler,   // NEW
+  getGithubReposHandler,
+  connectExistingRepoHandler,
+  listRepoBranchesHandler,
+  listPullRequestsHandler,
+  getPullRequestHandler,
+  createPullRequestHandler,
+  mergePullRequestHandler,
 } from '@/server/api/controllers/github.controller'
 import {
   createDesignHandler,
@@ -1277,6 +1282,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
+  // GET /api/github/repo/:chatId — active repo info for a chat
   .get(
     '/github/repo/:chatId',
     async ({ params, set }) => {
@@ -1286,6 +1292,102 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // ── Pull Request Endpoints ──────────────────────────────────────────────
+
+  // GET /api/github/branches/:chatId — list branches for the active repo
+  // Used to populate head/base branch selectors in the PR creation form
+  .get(
+    '/github/branches/:chatId',
+    async ({ params, set }) => {
+      const result = await listRepoBranchesHandler({ params })
+      if (!Array.isArray(result) && 'status' in result && result.status) {
+        set.status = result.status
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // GET /api/github/prs/:chatId — list all open PRs for the active repo
+  // Fast path: all PRs returned with mergeableStatus: 'unknown'
+  // Use GET /api/github/pr/:chatId/:prNumber for real mergeability
+  .get(
+    '/github/prs/:chatId',
+    async ({ params, set }) => {
+      const result = await listPullRequestsHandler({ params })
+      if (!Array.isArray(result) && 'status' in result && result.status) {
+        set.status = result.status
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // GET /api/github/pr/:chatId/:prNumber — single PR with real mergeability
+  // Called lazily when the user expands a PR card in the UI
+  .get(
+    '/github/pr/:chatId/:prNumber',
+    async ({ params, set }) => {
+      const result = await getPullRequestHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({
+        chatId:   t.String(),
+        prNumber: t.String(), // parsed to int inside the handler
+      }),
+    },
+  )
+
+  // POST /api/github/pr/create — create a new pull request
+  // IMPORTANT: must come before /github/pr/:chatId/:prNumber to avoid
+  // Elysia treating "create" as a prNumber param
+  .post(
+    '/github/pr/create',
+    async ({ body, set }) => {
+      const result = await createPullRequestHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId: t.String(),
+        title:  t.String(),
+        head:   t.String(), // source branch
+        base:   t.String(), // target branch
+        body:   t.Optional(t.String()), // PR description
+      }),
+    },
+  )
+
+  // POST /api/github/pr/merge — merge a pull request
+  // Only succeeds if the PR is currently mergeable (verified server-side)
+  .post(
+    '/github/pr/merge',
+    async ({ body, set }) => {
+      const result = await mergePullRequestHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:      t.String(),
+        prNumber:    t.Number(),
+        mergeMethod: t.Union([
+          t.Literal('merge'),
+          t.Literal('squash'),
+          t.Literal('rebase'),
+        ]),
+        commitTitle: t.Optional(t.String()),
+      }),
     },
   )
 

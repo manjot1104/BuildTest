@@ -15,11 +15,17 @@ import {
   XCircle,
   ArrowUpRight,
   LogOut,
-  Search,       // NEW
-  ChevronDown,  // NEW
-  FolderGit2,   // NEW
-  Plus,         // NEW
-  Link,         // NEW
+  Search,
+  ChevronDown,
+  FolderGit2,
+  Plus,
+  Link,
+  GitPullRequest,     // PR tab icon
+  GitMerge,           // merge icon
+  GitPullRequestDraft,// draft PR icon
+  ChevronRight,       // expand arrow
+  RefreshCw,          // retry mergeability
+  X,                  // close PR detail
 } from 'lucide-react'
 import {
   Dialog,
@@ -36,9 +42,17 @@ import {
   useGithubStatus,
   useGithubRepoForChat,
   usePushToGithub,
-  useGithubRepos,           // NEW
-  useConnectExistingRepo,   // NEW
-  type GithubRepoListItem,  // NEW
+  useGithubRepos,
+  useConnectExistingRepo,
+  useRepoBranches,
+  usePullRequests,
+  useDetailedPR,
+  useCreatePullRequest,
+  useMergePullRequest,
+  type GithubRepoListItem,
+  type NormalisedPR,
+  type MergeMethod,
+  type MergeableStatus,
 } from '@/client-api/query-hooks/use-github-hooks'
 import { authClient } from '@/server/better-auth/client'
 import { cn } from '@/lib/utils'
@@ -55,10 +69,13 @@ interface GithubPushDialogProps {
 
 type Visibility = 'public' | 'private'
 
-// NEW: Which top-level mode the form is in.
+// Which top-level mode the form is in.
 // 'follow-up' is the default when a repo is already linked.
 // 'new-repo' and 'connect-existing' are available on first push or replace.
 type PushMode = 'new-repo' | 'connect-existing' | 'follow-up'
+
+// Top-level dialog tab: push code or manage PRs
+type DialogTab = 'push' | 'prs'
 
 type ErrorCode =
   | 'branch_already_exists'
@@ -69,6 +86,10 @@ type ErrorCode =
   | 'token_expired'
   | 'no_files'
   | 'unauthorized'
+  | 'pr_already_exists'
+  | 'no_commits_between_branches'
+  | 'pr_not_mergeable'
+  | 'pr_not_found'
 
 interface PushError {
   message: string
@@ -137,7 +158,7 @@ function InlineAlert({
 }
 
 // ============================================================================
-// NEW: Repo picker — inline combo input (type to filter OR type freeform)
+// Repo picker — inline combo input (type to filter OR type freeform)
 //
 // The trigger IS the text field. Typing filters the dropdown and simultaneously
 // acts as freeform input for repos not in the list. Selecting from the list
@@ -289,7 +310,7 @@ function RepoPicker({ repos, isLoading, selected, onSelect, typedValue, onTyped 
 }
 
 // ============================================================================
-// NEW: Mode selector tabs (Create new / Use existing)
+// Mode selector tabs (Create new / Use existing)
 // Only shown on first push or when replacing a linked repo.
 // ============================================================================
 
@@ -387,7 +408,6 @@ function SuccessScreen({
   )
 }
 
-
 // ============================================================================
 // Push progress indicator
 // ============================================================================
@@ -440,6 +460,605 @@ function PushProgress({ isNewRepo }: { isNewRepo: boolean }) {
 }
 
 // ============================================================================
+// PR helpers
+// ============================================================================
+
+/** Human-readable label + colour for each mergeableStatus value */
+function MergeabilityBadge({ status }: { status: MergeableStatus }) {
+  const config: Record<MergeableStatus, { label: string; className: string }> = {
+    mergeable:  { label: 'Ready to merge',      className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' },
+    conflicting:{ label: 'Has conflicts',        className: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300' },
+    blocked:    { label: 'Blocked',              className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
+    behind:     { label: 'Branch behind',        className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
+    unstable:   { label: 'Checks pending/failing', className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300' },
+    draft:      { label: 'Draft',                className: 'bg-muted text-muted-foreground' },
+    unknown:    { label: 'Checking…',            className: 'bg-muted text-muted-foreground' },
+  }
+  const c = config[status]
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full', c.className)}>
+      {status === 'unknown' && <Loader2 className="size-3 animate-spin" />}
+      {c.label}
+    </span>
+  )
+}
+
+/** Small badge for PR state (open / closed / merged) */
+function PRStateBadge({ state }: { state: NormalisedPR['state'] }) {
+  const config = {
+    open:   { label: 'Open',   className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' },
+    closed: { label: 'Closed', className: 'bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-300' },
+    merged: { label: 'Merged', className: 'bg-purple-100 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300' },
+  }
+  const c = config[state]
+  return (
+    <span className={cn('inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full', c.className)}>
+      {state === 'merged' ? <GitMerge className="size-3" /> : <GitPullRequest className="size-3" />}
+      {c.label}
+    </span>
+  )
+}
+
+/** Relative time — "2 hours ago", "3 days ago" */
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1)   return 'just now'
+  if (mins < 60)  return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs  < 24)  return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 30)  return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+// ============================================================================
+// Branch selector — a simple native <select> styled to match the design system
+// ============================================================================
+
+interface BranchSelectProps {
+  id: string
+  value: string
+  onChange: (v: string) => void
+  branches: { name: string; protected: boolean }[]
+  placeholder?: string
+  className?: string
+}
+
+function BranchSelect({ id, value, onChange, branches, placeholder = 'Select branch', className }: BranchSelectProps) {
+  return (
+    <div className={cn('relative', className)}>
+      <GitBranch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+      <select
+        id={id}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full appearance-none rounded-md border bg-background/50 pl-8 pr-8 py-2 text-sm outline-none focus:ring-2 focus:ring-ring transition-colors"
+      >
+        <option value="" disabled>{placeholder}</option>
+        {branches.map((b) => (
+          <option key={b.name} value={b.name}>
+            {b.name}{b.protected ? ' 🔒' : ''}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+    </div>
+  )
+}
+
+// ============================================================================
+// PR Detail panel — shown when user clicks a PR card
+// ============================================================================
+
+interface PRDetailPanelProps {
+  chatId: string
+  pr: NormalisedPR  // initial data from the list (mergeableStatus: 'unknown')
+  onBack: () => void
+  onMerged: () => void
+}
+
+function PRDetailPanel({ chatId, pr, onBack, onMerged }: PRDetailPanelProps) {
+  const [mergeMethod, setMergeMethod] = useState<MergeMethod>('squash')
+  const [mergeError, setMergeError] = useState<string | null>(null)
+  const [mergeSuccess, setMergeSuccess] = useState(false)
+
+  // Fetch full PR detail (real mergeability). Refetches automatically every 3s
+  // while mergeableStatus is 'unknown' (GitHub lazy eval — see hook).
+  const { data: detail, isLoading, refetch } = useDetailedPR(chatId, pr.number, true)
+  const mergeMutation = useMergePullRequest(chatId)
+
+  // Use fetched detail when available, fall back to list data
+  const current = detail ?? pr
+
+  const handleMerge = async () => {
+    setMergeError(null)
+    try {
+      await mergeMutation.mutateAsync({ chatId, prNumber: pr.number, mergeMethod })
+      setMergeSuccess(true)
+      setTimeout(onMerged, 2000)
+    } catch (err) {
+      const raw = err as { message?: string }
+      setMergeError(raw?.message ?? 'Failed to merge pull request')
+    }
+  }
+
+  if (mergeSuccess) {
+    return (
+      <div className="flex flex-col items-center gap-4 py-8 animate-in fade-in-0 zoom-in-95 duration-300">
+        <div className="flex items-center justify-center size-14 rounded-full bg-purple-100 dark:bg-purple-950/50">
+          <GitMerge className="size-7 text-purple-600 dark:text-purple-400" />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="font-semibold">Pull request merged!</p>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-mono">{current.headBranch}</span> → <span className="font-mono">{current.baseBranch}</span>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-right-4 duration-200">
+      {/* Header row */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Back to PR list"
+        >
+          <X className="size-4" />
+        </button>
+        <h3 className="text-sm font-semibold flex-1 leading-tight line-clamp-2">{current.title}</h3>
+        <a href={current.prUrl} target="_blank" rel="noopener noreferrer"
+          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Open on GitHub">
+          <ExternalLink className="size-4" />
+        </a>
+      </div>
+
+      {/* State + mergeability badges */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <PRStateBadge state={current.state} />
+        {current.state === 'open' && (
+          isLoading
+            ? <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="size-3 animate-spin" />Checking mergeability…</span>
+            : <MergeabilityBadge status={current.mergeableStatus} />
+        )}
+        {current.draft && (
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+            <GitPullRequestDraft className="size-3" />
+            Draft
+          </span>
+        )}
+      </div>
+
+      {/* Branch flow */}
+      <div className="flex items-center gap-2 text-sm rounded-lg border border-border bg-muted/30 px-3.5 py-2.5">
+        <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded truncate max-w-[38%]">{current.headBranch}</span>
+        <ChevronRight className="size-3.5 text-muted-foreground shrink-0" />
+        <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded truncate max-w-[38%]">{current.baseBranch}</span>
+        <span className="ml-auto text-xs text-muted-foreground shrink-0">{relativeTime(current.createdAt)}</span>
+      </div>
+
+      {/* Author */}
+      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <img src={current.author.avatarUrl} alt="" className="size-4 rounded-full" />
+        Opened by <span className="font-medium text-foreground">@{current.author.login}</span>
+      </p>
+
+      {/* PR body */}
+      {current.body && (
+        <div className="text-sm text-muted-foreground rounded-lg border border-border bg-muted/20 px-3.5 py-3 max-h-28 overflow-y-auto whitespace-pre-wrap leading-relaxed">
+          {current.body}
+        </div>
+      )}
+
+      {/* Merge section — only for open, non-draft PRs */}
+      {current.state === 'open' && !current.draft && (
+        <>
+          {/* Merge method selector */}
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-sm font-medium">Merge method</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: 'merge'  as const, label: 'Merge commit',    desc: 'Preserve all commits' },
+                { value: 'squash' as const, label: 'Squash & merge',  desc: 'Combine into one' },
+                { value: 'rebase' as const, label: 'Rebase & merge',  desc: 'Replay onto base' },
+              ]).map(({ value, label, desc }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMergeMethod(value)}
+                  className={cn(
+                    'flex flex-col items-start gap-0.5 rounded-lg border px-2.5 py-2 text-left transition-all duration-150 text-xs',
+                    mergeMethod === value
+                      ? 'border-primary bg-muted shadow-sm'
+                      : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30',
+                  )}
+                >
+                  <span className={cn('font-medium', mergeMethod === value ? 'text-foreground' : 'text-muted-foreground')}>
+                    {label}
+                  </span>
+                  <span className="text-muted-foreground leading-tight">{desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Merge-blocking explanations */}
+          {!isLoading && current.mergeableStatus !== 'mergeable' && current.mergeableStatus !== 'unknown' && (
+            <InlineAlert
+              variant={current.mergeableStatus === 'conflicting' ? 'error' : 'warning'}
+              message={{
+                conflicting: 'This PR has merge conflicts. Resolve them on GitHub before merging.',
+                blocked:     'Blocked by branch protection rules (required reviews or status checks).',
+                behind:      'This branch is behind the base. Update it on GitHub before merging.',
+                unstable:    'CI checks are pending or failing. Wait for them to pass.',
+                draft:       'Draft PRs cannot be merged. Mark as ready for review first.',
+                unknown:     'Mergeability is still being computed…',
+                mergeable:   '',
+              }[current.mergeableStatus]}
+              action={{ label: 'Open on GitHub', onClick: () => window.open(current.prUrl, '_blank') }}
+            />
+          )}
+
+          {/* Merge error */}
+          {mergeError && <InlineAlert variant="error" message={mergeError} />}
+
+          {/* Retry mergeability when still unknown */}
+          {current.mergeableStatus === 'unknown' && !isLoading && (
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <RefreshCw className="size-3" />
+              Retry mergeability check
+            </button>
+          )}
+
+          {/* Merge button */}
+          <Button
+            className="w-full gap-2"
+            disabled={
+              mergeMutation.isPending ||
+              isLoading ||
+              current.mergeableStatus !== 'mergeable'
+            }
+            onClick={() => void handleMerge()}
+          >
+            {mergeMutation.isPending
+              ? <><Loader2 className="size-4 animate-spin" /> Merging…</>
+              : <><GitMerge className="size-4" /> Merge pull request</>
+            }
+          </Button>
+        </>
+      )}
+
+      {/* Already merged / closed info */}
+      {current.state !== 'open' && (
+        <div className="rounded-lg border border-border bg-muted/20 px-3.5 py-3 text-sm text-muted-foreground text-center">
+          This pull request is {current.state}.{' '}
+          <a href={current.prUrl} target="_blank" rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground transition-colors">
+            View on GitHub
+          </a>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// PR list + create panel — the full PRs tab content
+// ============================================================================
+
+interface PRTabProps {
+  chatId: string
+}
+
+function PRTab({ chatId }: PRTabProps) {
+  // 'list' | 'create' | pr number (detail view)
+  const [view, setView] = useState<'list' | 'create' | number>('list')
+
+  // PR create form state
+  const [prTitle, setPrTitle]   = useState('')
+  const [prHead, setPrHead]     = useState('')
+  const [prBase, setPrBase]     = useState('')
+  const [prBody, setPrBody]     = useState('')
+  const [createError, setCreateError] = useState<string | null>(null)
+
+  // Fetch branches + PRs — both only when the tab is mounted
+  const { data: branches = [], isLoading: isLoadingBranches } = useRepoBranches(chatId, true)
+  const { data: prs = [], isLoading: isLoadingPRs, refetch: refetchPRs } = usePullRequests(chatId, true)
+
+  const createMutation = useCreatePullRequest(chatId)
+
+  // The PR the user has clicked into (from the list data, stale-but-immediate)
+  const selectedPR = typeof view === 'number' ? prs.find((p) => p.number === view) ?? null : null
+
+  const resetCreateForm = () => {
+    setPrTitle('')
+    setPrHead('')
+    setPrBase('')
+    setPrBody('')
+    setCreateError(null)
+  }
+
+  const handleCreate = async () => {
+    setCreateError(null)
+    if (!prTitle.trim()) { setCreateError('Title is required.'); return }
+    if (!prHead)          { setCreateError('Select a source (head) branch.'); return }
+    if (!prBase)          { setCreateError('Select a target (base) branch.'); return }
+    if (prHead === prBase){ setCreateError('Head and base branches must be different.'); return }
+
+    try {
+      const created = await createMutation.mutateAsync({ chatId, title: prTitle.trim(), head: prHead, base: prBase, body: prBody.trim() || undefined })
+      resetCreateForm()
+      // Jump straight into the new PR's detail view
+      setView(created.number)
+    } catch (err) {
+      const raw = err as { message?: string; code?: string }
+      const code = raw?.code
+      if (code === 'pr_already_exists') {
+        setCreateError('A pull request for this branch already exists.')
+      } else if (code === 'no_commits_between_branches') {
+        setCreateError('No commits between these branches. Push some changes first.')
+      } else {
+        setCreateError(raw?.message ?? 'Failed to create pull request.')
+      }
+    }
+  }
+
+  // ── Detail view ──
+  if (typeof view === 'number' && selectedPR) {
+    return (
+      <PRDetailPanel
+        chatId={chatId}
+        pr={selectedPR}
+        onBack={() => setView('list')}
+        onMerged={() => {
+          void refetchPRs()
+          setView('list')
+        }}
+      />
+    )
+  }
+
+  // ── Create form ──
+  if (view === 'create') {
+    return (
+      <div className="flex flex-col gap-4 animate-in fade-in-0 slide-in-from-right-4 duration-200">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setView('list'); resetCreateForm() }}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Back to PR list"
+          >
+            <X className="size-4" />
+          </button>
+          <h3 className="text-sm font-semibold">Open a pull request</h3>
+        </div>
+
+        {/* Branch selectors */}
+        {isLoadingBranches ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading branches…
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pr-head" className="text-xs text-muted-foreground font-medium">From (head)</Label>
+              <BranchSelect
+                id="pr-head"
+                value={prHead}
+                onChange={setPrHead}
+                branches={branches}
+                placeholder="Source branch"
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="pr-base" className="text-xs text-muted-foreground font-medium">Into (base)</Label>
+              <BranchSelect
+                id="pr-base"
+                value={prBase}
+                onChange={setPrBase}
+                branches={branches}
+                placeholder="Target branch"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Title */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="pr-title" className="text-sm font-medium">Title</Label>
+          <Input
+            id="pr-title"
+            placeholder="Add a descriptive title…"
+            value={prTitle}
+            onChange={(e) => setPrTitle(e.target.value)}
+            className="bg-background/50"
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleCreate() }}
+          />
+        </div>
+
+        {/* Description */}
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="pr-body" className="text-sm font-medium">
+            Description
+            <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+          </Label>
+          <Textarea
+            id="pr-body"
+            placeholder="Describe the changes in this pull request…"
+            value={prBody}
+            onChange={(e) => setPrBody(e.target.value)}
+            className="bg-background/50 min-h-[80px] resize-none"
+            rows={3}
+          />
+        </div>
+
+        {/* Error */}
+        {createError && <InlineAlert variant="error" message={createError} />}
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" className="flex-1" onClick={() => { setView('list'); resetCreateForm() }}>
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 gap-2"
+            disabled={createMutation.isPending || !prTitle.trim() || !prHead || !prBase}
+            onClick={() => void handleCreate()}
+          >
+            {createMutation.isPending
+              ? <><Loader2 className="size-4 animate-spin" /> Creating…</>
+              : <><GitPullRequest className="size-4" /> Open PR</>
+            }
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── PR list ──
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-muted-foreground">
+          {isLoadingPRs ? 'Loading…' : `${prs.length} open pull request${prs.length !== 1 ? 's' : ''}`}
+        </span>
+        <Button size="sm" className="gap-1.5 h-8" onClick={() => setView('create')}>
+          <Plus className="size-3.5" />
+          New PR
+        </Button>
+      </div>
+
+      {/* Loading skeleton */}
+      {isLoadingPRs && (
+        <div className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-16 rounded-lg border border-border bg-muted/30 animate-pulse" />
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!isLoadingPRs && prs.length === 0 && (
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <div className="flex items-center justify-center size-12 rounded-full bg-muted">
+            <GitPullRequest className="size-6 text-muted-foreground" />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium">No open pull requests</p>
+            <p className="text-xs text-muted-foreground">Push to a branch then open a PR to merge it.</p>
+          </div>
+          <Button size="sm" variant="outline" className="gap-1.5 mt-1" onClick={() => setView('create')}>
+            <Plus className="size-3.5" />
+            Open a pull request
+          </Button>
+        </div>
+      )}
+
+      {/* PR cards */}
+      {!isLoadingPRs && prs.length > 0 && (
+        <ul className="space-y-2">
+          {prs.map((pr) => (
+            <li key={pr.number}>
+              <button
+                type="button"
+                onClick={() => setView(pr.number)}
+                className="w-full flex items-start gap-3 rounded-lg border border-border bg-background/50 px-3.5 py-3 text-left hover:bg-muted/40 transition-colors group"
+              >
+                {/* Icon */}
+                <div className="shrink-0 mt-0.5">
+                  {pr.draft
+                    ? <GitPullRequestDraft className="size-4 text-muted-foreground" />
+                    : <GitPullRequest className="size-4 text-emerald-500" />
+                  }
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-tight line-clamp-1 group-hover:text-primary transition-colors">
+                    {pr.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-xs text-muted-foreground font-mono">
+                      #{pr.number}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {pr.headBranch} → {pr.baseBranch}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{relativeTime(pr.updatedAt)}</span>
+                  </div>
+                </div>
+
+                {/* Chevron */}
+                <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-0.5 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Top-level dialog tab bar (Push / Pull Requests)
+// Only shown when a repo is already linked.
+// ============================================================================
+
+function DialogTabBar({
+  activeTab,
+  onChange,
+  prCount,
+}: {
+  activeTab: DialogTab
+  onChange: (t: DialogTab) => void
+  prCount?: number
+}) {
+  return (
+    <div className="flex rounded-lg border border-border overflow-hidden">
+      {([
+        { value: 'push' as const, label: 'Push Code',      icon: <Github className="size-3.5" /> },
+        { value: 'prs'  as const, label: 'Pull Requests',  icon: <GitPullRequest className="size-3.5" />, badge: prCount },
+      ]).map((tab) => (
+        <button
+          key={tab.value}
+          type="button"
+          onClick={() => onChange(tab.value)}
+          className={cn(
+            'flex-1 flex items-center justify-center gap-1.5 py-2 text-sm font-medium transition-colors relative',
+            activeTab === tab.value
+              ? 'bg-muted text-foreground'
+              : 'text-muted-foreground hover:text-foreground hover:bg-muted/40',
+          )}
+        >
+          {tab.icon}
+          {tab.label}
+          {/* PR count badge */}
+          {tab.badge !== undefined && tab.badge > 0 && (
+            <span className="ml-0.5 inline-flex items-center justify-center size-4 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+              {tab.badge > 9 ? '9+' : tab.badge}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// ============================================================================
 // Component
 // ============================================================================
 
@@ -447,12 +1066,15 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   const { data: githubStatus, isLoading: isLoadingStatus } = useGithubStatus()
   const { data: existingRepo, isLoading: isLoadingRepo } = useGithubRepoForChat(chatId)
   const pushMutation = usePushToGithub(chatId)
-  const connectMutation = useConnectExistingRepo(chatId) // NEW
+  const connectMutation = useConnectExistingRepo(chatId)
 
   const isFirstPush = !existingRepo
   const isLoading = isLoadingStatus || isLoadingRepo
 
-  // NEW: Push mode
+  // ── Top-level tab (Push / PRs) — only relevant when a repo is linked ──
+  const [activeTab, setActiveTab] = useState<DialogTab>('push')
+
+  // Push mode
   const [pushMode, setPushMode] = useState<PushMode>('new-repo')
 
   // Form state
@@ -461,7 +1083,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   const [visibility, setVisibility] = useState<Visibility>('public')
   const [commitMessage, setCommitMessage] = useState('')
 
-  // NEW: Connect-existing state
+  // Connect-existing state
   const [selectedRepo, setSelectedRepo] = useState<GithubRepoListItem | null>(null)
   const [typedRepoValue, setTypedRepoValue] = useState('')
 
@@ -471,7 +1093,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
 
   // Error state
   const [pushError, setPushError] = useState<PushError | null>(null)
-  const [connectError, setConnectError] = useState<PushError | null>(null) // NEW
+  const [connectError, setConnectError] = useState<PushError | null>(null)
 
   // Branch confirmation
   const [confirmExistingBranch, setConfirmExistingBranch] = useState(false)
@@ -483,7 +1105,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
     isNewRepo: boolean
   } | null>(null)
 
-  // NEW: After connect succeeds, flip to the push step within the same dialog.
+  // After connect succeeds, flip to the push step within the same dialog.
   // connectedRepoInfo holds just enough data to show the repo pill before
   // the invalidated useGithubRepoForChat query comes back.
   const [connectStep, setConnectStep] = useState(false)
@@ -494,6 +1116,9 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
     visibility: 'public' | 'private'
   } | null>(null)
 
+  // Fetch PR count for the badge — only when a repo is linked
+  const { data: prs = [] } = usePullRequests(chatId, open && !isFirstPush)
+
   // Refs
   const repoNameRef = useRef<HTMLInputElement>(null)
   const branchNameRef = useRef<HTMLInputElement>(null)
@@ -503,7 +1128,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   // connectStep=true means connect succeeded; hide the picker and show push form
   const showConnectExistingForm = (isFirstPush || replaceRepo) && pushMode === 'connect-existing' && !connectStep
 
-  // NEW: Fetch repos only when connect-existing mode is active
+  // Fetch repos only when connect-existing mode is active
   const { data: userRepos = [], isLoading: isLoadingRepos } = useGithubRepos(
     open && showConnectExistingForm && !!githubStatus?.connected,
   )
@@ -511,6 +1136,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   // Reset everything when dialog opens
   useEffect(() => {
     if (open) {
+      setActiveTab('push')
       setPushMode(isFirstPush ? 'new-repo' : 'follow-up')
       setRepoName('')
       const today = new Date().toISOString().slice(0, 10)
@@ -552,12 +1178,12 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchName, repoName])
 
-  // NEW: Clear connect error when user changes the repo selection
+  // Clear connect error when user changes the repo selection
   useEffect(() => {
     setConnectError(null)
   }, [selectedRepo, typedRepoValue])
 
-  // NEW: Handle connect-existing submit
+  // Handle connect-existing submit
   const handleConnect = useCallback(async () => {
     setConnectError(null)
 
@@ -643,7 +1269,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         void handlePush()
       }
     }
-  }, [handlePush, handleConnect, pushMutation.isPending, connectMutation.isPending, showConnectExistingForm])
+  }, [handlePush, handleConnect, pushMutation.isPending, connectMutation.isPending, showConnectExistingForm, connectStep])
 
   // Block close during push or connect
   const handleOpenChange = useCallback((nextOpen: boolean) => {
@@ -800,26 +1426,30 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Github className="size-5" />
-            {showConnectExistingForm
-              ? 'Connect Repository'
-              : connectStep
-                ? 'Push to Connected Repository'
-                : showNewRepoForm && replaceRepo
-                  ? 'Create New Repository'
-                  : isFirstPush
-                    ? 'Push to GitHub'
-                    : 'Push Update'}
+            {activeTab === 'prs'
+              ? 'Pull Requests'
+              : showConnectExistingForm
+                ? 'Connect Repository'
+                : connectStep
+                  ? 'Push to Connected Repository'
+                  : showNewRepoForm && replaceRepo
+                    ? 'Create New Repository'
+                    : isFirstPush
+                      ? 'Push to GitHub'
+                      : 'Push Update'}
           </DialogTitle>
           <DialogDescription>
-            {showConnectExistingForm
-              ? 'Link an existing GitHub repository to this chat. You can push to it afterwards.'
-              : connectStep && connectedRepoInfo
-                ? `Push your code to ${connectedRepoInfo.repoFullName}.`
-                : showNewRepoForm && replaceRepo
-                  ? 'Create a new repository and link it to this chat.'
-                  : isFirstPush
-                    ? 'Create a new repository and push your generated code.'
-                    : `Push a new update to ${existingRepo?.repoFullName}`}
+            {activeTab === 'prs'
+              ? `Manage pull requests for ${existingRepo?.repoFullName ?? 'your repository'}.`
+              : showConnectExistingForm
+                ? 'Link an existing GitHub repository to this chat. You can push to it afterwards.'
+                : connectStep && connectedRepoInfo
+                  ? `Push your code to ${connectedRepoInfo.repoFullName}.`
+                  : showNewRepoForm && replaceRepo
+                    ? 'Create a new repository and link it to this chat.'
+                    : isFirstPush
+                      ? 'Create a new repository and push your generated code.'
+                      : `Push a new update to ${existingRepo?.repoFullName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -847,7 +1477,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
             <PushProgress isNewRepo={showNewRepoForm} />
           </div>
         ) : connectMutation.isPending ? (
-          // NEW: Connect in progress
+          // Connect in progress
           <div className="py-8 flex flex-col items-center gap-3 animate-in fade-in-0 duration-200">
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Verifying repository access…</p>
@@ -855,406 +1485,426 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         ) : (
           <div className="flex flex-col gap-4 pt-1" onKeyDown={handleKeyDown}>
 
-            {/* Connected user indicator */}
-            {githubStatus?.login && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
-                <div className="relative">
-                  <Github className="size-3.5" />
-                  <span className="absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-500" />
-                </div>
-                <span>Connected as <span className="font-medium text-foreground">@{githubStatus.login}</span></span>
-              </div>
-            )}
-
-            {/* NEW: Mode tabs — shown on first push or when replacing, but not after connect succeeds */}
-            {(isFirstPush || replaceRepo) && !connectStep && (
-              <ModeTabs
-                mode={pushMode}
-                onChange={(m) => {
-                  setPushMode(m)
-                  setPushError(null)
-                  setConnectError(null)
-                  setConfirmExistingBranch(false)
-                }}
+            {/* Top-level tab bar — only visible when a repo is already linked
+                and not in the middle of a replace flow */}
+            {!isFirstPush && !replaceRepo && !connectStep && (
+              <DialogTabBar
+                activeTab={activeTab}
+                onChange={setActiveTab}
+                prCount={prs.length}
               />
             )}
 
-            {/* Existing repo info (follow-up push) */}
-            {!isFirstPush && !replaceRepo && existingRepo && (
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 transition-colors">
-                <Github className="size-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-medium truncate">{existingRepo.repoFullName}</span>
-                <span className={cn(
-                  'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
-                  existingRepo.visibility === 'public'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-                )}>
-                  {existingRepo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
-                  {existingRepo.visibility}
-                </span>
-                <a
-                  href={existingRepo.repoUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </div>
+            {/* ── PR tab content ── */}
+            {activeTab === 'prs' && !isFirstPush && !replaceRepo && (
+              <PRTab chatId={chatId} />
             )}
 
-            {/* Repo pill when connect just succeeded (before query invalidation resolves) */}
-            {connectStep && connectedRepoInfo && !existingRepo && (
-              <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800/50 px-3.5 py-2.5">
-                <Check className="size-4 text-emerald-500 shrink-0" />
-                <span className="text-sm font-medium truncate">{connectedRepoInfo.repoFullName}</span>
-                <span className={cn(
-                  'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
-                  connectedRepoInfo.visibility === 'public'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-                )}>
-                  {connectedRepoInfo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
-                  {connectedRepoInfo.visibility}
-                </span>
-                <a href={connectedRepoInfo.repoUrl} target="_blank" rel="noopener noreferrer"
-                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
-                  <ExternalLink className="size-3.5" />
-                </a>
-              </div>
-            )}
-
-            {/* ── Connect existing form ── */}
-            {showConnectExistingForm && (
+            {/* ── Push tab content ── */}
+            {(activeTab === 'push' || isFirstPush || replaceRepo) && (
               <>
-                <div className="flex flex-col gap-1.5">
-                  <Label className="text-sm font-medium">Repository</Label>
-                  <RepoPicker
-                    repos={userRepos}
-                    isLoading={isLoadingRepos}
-                    selected={selectedRepo}
-                    onSelect={setSelectedRepo}
-                    typedValue={typedRepoValue}
-                    onTyped={setTypedRepoValue}
-                  />
-                  {selectedRepo ? (
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      {selectedRepo.private ? <Lock className="size-3" /> : <Globe className="size-3" />}
-                      {selectedRepo.private ? 'Private' : 'Public'} · Default branch:{' '}
-                      <span className="font-mono">{selectedRepo.defaultBranch}</span>
-                    </p>
-                  ) : typedRepoValue.trim() && !typedRepoValue.includes('/') ? (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
-                      <AlertTriangle className="size-3" />
-                      Include the owner prefix, e.g.{' '}
-                      <span className="font-mono">your-username/{typedRepoValue.trim()}</span>
-                    </p>
-                  ) : null}
-                </div>
-
-                {/* Connect error */}
-                {connectError && (
-                  <InlineAlert
-                    variant={connectError.code === 'repo_archived' ? 'warning' : 'error'}
-                    message={connectError.message}
-                    action={connectError.code === 'repo_archived' ? {
-                      label: 'Open on GitHub',
-                      onClick: () => window.open(selectedRepo?.htmlUrl, '_blank'),
-                    } : connectError.code === 'token_expired' ? {
-                      label: 'Sign out & reconnect',
-                      onClick: () => {
-                        void authClient.signOut().then(() => { window.location.href = '/login' })
-                      },
-                    } : undefined}
-                  />
-                )}
-
-                <div className="flex gap-2 pt-1">
-                  <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    className="flex-1 gap-2"
-                    onClick={() => void handleConnect()}
-                    disabled={
-                      connectMutation.isPending ||
-                      (!selectedRepo && !typedRepoValue.trim()) ||
-                      connectError?.code === 'repo_archived' ||
-                      connectError?.code === 'token_expired'
-                    }
-                  >
-                    <Link className="size-4" />
-                    Connect
-                  </Button>
-                </div>
-              </>
-            )}
-
-            {/* ── Push form (new repo or follow-up) ── */}
-            {!showConnectExistingForm && (
-              <>
-                {/* Error alerts */}
-                {pushError?.code === 'repo_not_found' && (
-                  <InlineAlert
-                    variant="error"
-                    message={pushError.message}
-                    action={{
-                      label: 'Create a new repository instead',
-                      onClick: () => {
-                        setPushError(null)
-                        setShowReplaceWarning(false)
-                        setReplaceRepo(true)
-                        setRepoName('')
-                        setBranchName('main')
-                        setPushMode('new-repo')
-                      },
-                    }}
-                  />
-                )}
-
-                {pushError?.code === 'repo_archived' && (
-                  <InlineAlert
-                    variant="error"
-                    message={pushError.message}
-                    action={{
-                      label: 'Open repository on GitHub',
-                      onClick: () => window.open(existingRepo?.repoUrl, '_blank'),
-                    }}
-                  />
-                )}
-
-                {pushError?.code === 'token_expired' && (
-                  <InlineAlert
-                    variant="error"
-                    message="Your GitHub session has expired. Sign out and sign back in with GitHub."
-                    action={{
-                      label: 'Sign out & reconnect',
-                      onClick: () => {
-                        void authClient.signOut().then(() => {
-                          window.location.href = '/login'
-                        })
-                      },
-                    }}
-                  />
-                )}
-
-                {pushError?.code === 'no_files' && (
-                  <InlineAlert
-                    variant="warning"
-                    message="No generated files found for this chat. Build something first, then push."
-                  />
-                )}
-
-                {pushError && !pushError.code && (
-                  <InlineAlert variant="error" message={pushError.message} />
-                )}
-
-                {/* Repo name (new repo form only) */}
-                {showNewRepoForm && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="repo-name" className="text-sm font-medium">
-                      Repository name
-                    </Label>
+                {/* Connected user indicator */}
+                {githubStatus?.login && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
                     <div className="relative">
-                      <Input
-                        ref={repoNameRef}
-                        id="repo-name"
-                        placeholder="my-buildify-app"
-                        value={repoName}
-                        onChange={(e) =>
-                          setRepoName(e.target.value.replace(/\s+/g, '-').toLowerCase())
+                      <Github className="size-3.5" />
+                      <span className="absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-500" />
+                    </div>
+                    <span>Connected as <span className="font-medium text-foreground">@{githubStatus.login}</span></span>
+                  </div>
+                )}
+
+                {/* Mode tabs — shown on first push or when replacing, but not after connect succeeds */}
+                {(isFirstPush || replaceRepo) && !connectStep && (
+                  <ModeTabs
+                    mode={pushMode}
+                    onChange={(m) => {
+                      setPushMode(m)
+                      setPushError(null)
+                      setConnectError(null)
+                      setConfirmExistingBranch(false)
+                    }}
+                  />
+                )}
+
+                {/* Existing repo info (follow-up push) */}
+                {!isFirstPush && !replaceRepo && existingRepo && (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 transition-colors">
+                    <Github className="size-4 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium truncate">{existingRepo.repoFullName}</span>
+                    <span className={cn(
+                      'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
+                      existingRepo.visibility === 'public'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+                    )}>
+                      {existingRepo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
+                      {existingRepo.visibility}
+                    </span>
+                    <a
+                      href={existingRepo.repoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </div>
+                )}
+
+                {/* Repo pill when connect just succeeded (before query invalidation resolves) */}
+                {connectStep && connectedRepoInfo && !existingRepo && (
+                  <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800/50 px-3.5 py-2.5">
+                    <Check className="size-4 text-emerald-500 shrink-0" />
+                    <span className="text-sm font-medium truncate">{connectedRepoInfo.repoFullName}</span>
+                    <span className={cn(
+                      'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
+                      connectedRepoInfo.visibility === 'public'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+                    )}>
+                      {connectedRepoInfo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
+                      {connectedRepoInfo.visibility}
+                    </span>
+                    <a href={connectedRepoInfo.repoUrl} target="_blank" rel="noopener noreferrer"
+                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
+                      <ExternalLink className="size-3.5" />
+                    </a>
+                  </div>
+                )}
+
+                {/* ── Connect existing form ── */}
+                {showConnectExistingForm && (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <Label className="text-sm font-medium">Repository</Label>
+                      <RepoPicker
+                        repos={userRepos}
+                        isLoading={isLoadingRepos}
+                        selected={selectedRepo}
+                        onSelect={setSelectedRepo}
+                        typedValue={typedRepoValue}
+                        onTyped={setTypedRepoValue}
+                      />
+                      {selectedRepo ? (
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          {selectedRepo.private ? <Lock className="size-3" /> : <Globe className="size-3" />}
+                          {selectedRepo.private ? 'Private' : 'Public'} · Default branch:{' '}
+                          <span className="font-mono">{selectedRepo.defaultBranch}</span>
+                        </p>
+                      ) : typedRepoValue.trim() && !typedRepoValue.includes('/') ? (
+                        <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                          <AlertTriangle className="size-3" />
+                          Include the owner prefix, e.g.{' '}
+                          <span className="font-mono">your-username/{typedRepoValue.trim()}</span>
+                        </p>
+                      ) : null}
+                    </div>
+
+                    {/* Connect error */}
+                    {connectError && (
+                      <InlineAlert
+                        variant={connectError.code === 'repo_archived' ? 'warning' : 'error'}
+                        message={connectError.message}
+                        action={connectError.code === 'repo_archived' ? {
+                          label: 'Open on GitHub',
+                          onClick: () => window.open(selectedRepo?.htmlUrl, '_blank'),
+                        } : connectError.code === 'token_expired' ? {
+                          label: 'Sign out & reconnect',
+                          onClick: () => {
+                            void authClient.signOut().then(() => { window.location.href = '/login' })
+                          },
+                        } : undefined}
+                      />
+                    )}
+
+                    <div className="flex gap-2 pt-1">
+                      <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        className="flex-1 gap-2"
+                        onClick={() => void handleConnect()}
+                        disabled={
+                          connectMutation.isPending ||
+                          (!selectedRepo && !typedRepoValue.trim()) ||
+                          connectError?.code === 'repo_archived' ||
+                          connectError?.code === 'token_expired'
                         }
+                      >
+                        <Link className="size-4" />
+                        Connect
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {/* ── Push form (new repo or follow-up) ── */}
+                {!showConnectExistingForm && (
+                  <>
+                    {/* Error alerts */}
+                    {pushError?.code === 'repo_not_found' && (
+                      <InlineAlert
+                        variant="error"
+                        message={pushError.message}
+                        action={{
+                          label: 'Create a new repository instead',
+                          onClick: () => {
+                            setPushError(null)
+                            setShowReplaceWarning(false)
+                            setReplaceRepo(true)
+                            setRepoName('')
+                            setBranchName('main')
+                            setPushMode('new-repo')
+                          },
+                        }}
+                      />
+                    )}
+
+                    {pushError?.code === 'repo_archived' && (
+                      <InlineAlert
+                        variant="error"
+                        message={pushError.message}
+                        action={{
+                          label: 'Open repository on GitHub',
+                          onClick: () => window.open(existingRepo?.repoUrl, '_blank'),
+                        }}
+                      />
+                    )}
+
+                    {pushError?.code === 'token_expired' && (
+                      <InlineAlert
+                        variant="error"
+                        message="Your GitHub session has expired. Sign out and sign back in with GitHub."
+                        action={{
+                          label: 'Sign out & reconnect',
+                          onClick: () => {
+                            void authClient.signOut().then(() => {
+                              window.location.href = '/login'
+                            })
+                          },
+                        }}
+                      />
+                    )}
+
+                    {pushError?.code === 'no_files' && (
+                      <InlineAlert
+                        variant="warning"
+                        message="No generated files found for this chat. Build something first, then push."
+                      />
+                    )}
+
+                    {pushError && !pushError.code && (
+                      <InlineAlert variant="error" message={pushError.message} />
+                    )}
+
+                    {/* Repo name (new repo form only) */}
+                    {showNewRepoForm && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor="repo-name" className="text-sm font-medium">
+                          Repository name
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            ref={repoNameRef}
+                            id="repo-name"
+                            placeholder="my-buildify-app"
+                            value={repoName}
+                            onChange={(e) =>
+                              setRepoName(e.target.value.replace(/\s+/g, '-').toLowerCase())
+                            }
+                            className={cn(
+                              'bg-background/50 pr-8',
+                              pushError?.code === 'repo_name_taken' && 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/20',
+                            )}
+                          />
+                          {repoName && !pushError?.code && (
+                            <Check className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
+                          )}
+                        </div>
+                        {pushError?.code === 'repo_name_taken' ? (
+                          <p className="text-xs text-red-500">{pushError.message}</p>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            Lowercase letters, numbers, and hyphens only.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Branch name */}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="branch-name" className="flex items-center gap-1.5 text-sm font-medium">
+                        <GitBranch className="size-3.5 text-muted-foreground" />
+                        Branch
+                      </Label>
+                      <Input
+                        ref={branchNameRef}
+                        id="branch-name"
+                        placeholder="main"
+                        value={branchName}
+                        onChange={(e) => setBranchName(e.target.value.replace(/\s+/g, '-'))}
                         className={cn(
-                          'bg-background/50 pr-8',
-                          pushError?.code === 'repo_name_taken' && 'border-red-500 focus-visible:border-red-500 focus-visible:ring-red-500/20',
+                          'bg-background/50',
+                          pushError?.code === 'branch_already_exists' && 'border-amber-500 focus-visible:border-amber-500 focus-visible:ring-amber-500/20',
                         )}
                       />
-                      {repoName && !pushError?.code && (
-                        <Check className="absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-emerald-500" />
-                      )}
-                    </div>
-                    {pushError?.code === 'repo_name_taken' ? (
-                      <p className="text-xs text-red-500">{pushError.message}</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        Lowercase letters, numbers, and hyphens only.
-                      </p>
-                    )}
-                  </div>
-                )}
 
-                {/* Branch name */}
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="branch-name" className="flex items-center gap-1.5 text-sm font-medium">
-                    <GitBranch className="size-3.5 text-muted-foreground" />
-                    Branch
-                  </Label>
-                  <Input
-                    ref={branchNameRef}
-                    id="branch-name"
-                    placeholder="main"
-                    value={branchName}
-                    onChange={(e) => setBranchName(e.target.value.replace(/\s+/g, '-'))}
-                    className={cn(
-                      'bg-background/50',
-                      pushError?.code === 'branch_already_exists' && 'border-amber-500 focus-visible:border-amber-500 focus-visible:ring-amber-500/20',
-                    )}
-                  />
-
-                  {/* Branch already exists — inline confirm */}
-                  {pushError?.code === 'branch_already_exists' && (
-                    <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800/60 px-3.5 py-3 text-sm text-amber-900 dark:text-amber-100 animate-in fade-in-0 slide-in-from-top-1 duration-200">
-                      <div className="flex items-start gap-2.5">
-                        <AlertTriangle className="size-4 mt-0.5 shrink-0 text-amber-500" />
-                        <div>
-                          <p className="leading-relaxed">
-                            Branch <strong className="font-semibold">{branchName}</strong> already exists.
-                            Pushing will add a new commit.
-                          </p>
-                          <div className="flex items-center gap-3 mt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConfirmExistingBranch(true)
-                                void handlePush(true)
-                              }}
-                              className="text-sm font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline transition-colors"
-                            >
-                              Push anyway
-                            </button>
-                            <span className="text-amber-400 dark:text-amber-600 select-none">/</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPushError(null)
-                                setBranchName('')
-                                branchNameRef.current?.focus()
-                              }}
-                              className="text-sm font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline transition-colors"
-                            >
-                              Rename branch
-                            </button>
+                      {/* Branch already exists — inline confirm */}
+                      {pushError?.code === 'branch_already_exists' && (
+                        <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 dark:bg-amber-950/30 dark:border-amber-800/60 px-3.5 py-3 text-sm text-amber-900 dark:text-amber-100 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                          <div className="flex items-start gap-2.5">
+                            <AlertTriangle className="size-4 mt-0.5 shrink-0 text-amber-500" />
+                            <div>
+                              <p className="leading-relaxed">
+                                Branch <strong className="font-semibold">{branchName}</strong> already exists.
+                                Pushing will add a new commit.
+                              </p>
+                              <div className="flex items-center gap-3 mt-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setConfirmExistingBranch(true)
+                                    void handlePush(true)
+                                  }}
+                                  className="text-sm font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline transition-colors"
+                                >
+                                  Push anyway
+                                </button>
+                                <span className="text-amber-400 dark:text-amber-600 select-none">/</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPushError(null)
+                                    setBranchName('')
+                                    branchNameRef.current?.focus()
+                                  }}
+                                  className="text-sm font-medium text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline transition-colors"
+                                >
+                                  Rename branch
+                                </button>
+                              </div>
+                            </div>
                           </div>
                         </div>
+                      )}
+                    </div>
+
+                    {/* Visibility (new repo form only) */}
+                    {showNewRepoForm && (
+                      <div className="flex flex-col gap-1.5">
+                        <Label className="text-sm font-medium">Visibility</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {([
+                            { value: 'public' as const, icon: Globe, label: 'Public', desc: 'Anyone can see' },
+                            { value: 'private' as const, icon: Lock, label: 'Private', desc: 'Only you' },
+                          ] as const).map(({ value, icon: Icon, label, desc }) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setVisibility(value)}
+                              className={cn(
+                                'flex flex-col items-start gap-0.5 rounded-lg border px-3.5 py-2.5 text-left transition-all duration-150',
+                                visibility === value
+                                  ? 'border-primary bg-muted shadow-sm'
+                                  : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30',
+                              )}
+                            >
+                              <span className={cn(
+                                'flex items-center gap-2 text-sm font-medium',
+                                visibility === value ? 'text-foreground' : 'text-muted-foreground',
+                              )}>
+                                <Icon className="size-3.5" />
+                                {label}
+                              </span>
+                              <span className="text-xs text-muted-foreground">{desc}</span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
+                    )}
 
-                {/* Visibility (new repo form only) */}
-                {showNewRepoForm && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label className="text-sm font-medium">Visibility</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { value: 'public' as const, icon: Globe, label: 'Public', desc: 'Anyone can see' },
-                        { value: 'private' as const, icon: Lock, label: 'Private', desc: 'Only you' },
-                      ] as const).map(({ value, icon: Icon, label, desc }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          onClick={() => setVisibility(value)}
-                          className={cn(
-                            'flex flex-col items-start gap-0.5 rounded-lg border px-3.5 py-2.5 text-left transition-all duration-150',
-                            visibility === value
-                              ? 'border-primary bg-muted shadow-sm'
-                              : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30',
-                          )}
+                    {/* Commit message */}
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="commit-message" className="text-sm font-medium">
+                        Commit message
+                        <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                      </Label>
+                      <Textarea
+                        id="commit-message"
+                        placeholder={showNewRepoForm ? 'feat: initial build from Buildify' : 'feat: update from Buildify'}
+                        value={commitMessage}
+                        onChange={(e) => setCommitMessage(e.target.value)}
+                        className="bg-background/50 min-h-[72px] resize-none"
+                        rows={2}
+                      />
+                    </div>
+
+                    {/* Actions */}
+                    {pushError?.code !== 'branch_already_exists' && (
+                      <div className="flex gap-2 pt-1">
+                        {/* Back to repo picker when coming from connect-existing flow */}
+                        {connectStep ? (
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => {
+                              setConnectStep(false)
+                              setPushError(null)
+                              setConfirmExistingBranch(false)
+                            }}
+                          >
+                            ← Back
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => onOpenChange(false)}
+                          >
+                            Cancel
+                          </Button>
+                        )}
+                        <Button
+                          className="flex-1 gap-2"
+                          onClick={() => void handlePush()}
+                          disabled={
+                            pushMutation.isPending ||
+                            !branchName.trim() ||
+                            (showNewRepoForm && !repoName.trim()) ||
+                            pushError?.code === 'repo_not_found' ||
+                            pushError?.code === 'repo_archived' ||
+                            pushError?.code === 'token_expired'
+                          }
                         >
-                          <span className={cn(
-                            'flex items-center gap-2 text-sm font-medium',
-                            visibility === value ? 'text-foreground' : 'text-muted-foreground',
-                          )}>
-                            <Icon className="size-3.5" />
-                            {label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">{desc}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                          <Github className="size-4" />
+                          {showNewRepoForm ? 'Create & Push' : 'Push'}
+                        </Button>
+                      </div>
+                    )}
 
-                {/* Commit message */}
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="commit-message" className="text-sm font-medium">
-                    Commit message
-                    <span className="text-muted-foreground font-normal ml-1">(optional)</span>
-                  </Label>
-                  <Textarea
-                    id="commit-message"
-                    placeholder={showNewRepoForm ? 'feat: initial build from Buildify' : 'feat: update from Buildify'}
-                    value={commitMessage}
-                    onChange={(e) => setCommitMessage(e.target.value)}
-                    className="bg-background/50 min-h-[72px] resize-none"
-                    rows={2}
-                  />
-                </div>
-
-                {/* Actions */}
-                {pushError?.code !== 'branch_already_exists' && (
-                  <div className="flex gap-2 pt-1">
-                    {/* Back to repo picker when coming from connect-existing flow */}
-                    {connectStep ? (
+                    {/* Cancel only when branch_already_exists */}
+                    {pushError?.code === 'branch_already_exists' && (
                       <Button
                         variant="outline"
-                        className="flex-1"
-                        onClick={() => {
-                          setConnectStep(false)
-                          setPushError(null)
-                          setConfirmExistingBranch(false)
-                        }}
-                      >
-                        ← Back
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        className="flex-1"
+                        className="w-full"
                         onClick={() => onOpenChange(false)}
                       >
                         Cancel
                       </Button>
                     )}
-                    <Button
-                      className="flex-1 gap-2"
-                      onClick={() => void handlePush()}
-                      disabled={
-                        pushMutation.isPending ||
-                        !branchName.trim() ||
-                        (showNewRepoForm && !repoName.trim()) ||
-                        pushError?.code === 'repo_not_found' ||
-                        pushError?.code === 'repo_archived' ||
-                        pushError?.code === 'token_expired'
-                      }
-                    >
-                      <Github className="size-4" />
-                      {showNewRepoForm ? 'Create & Push' : 'Push'}
-                    </Button>
-                  </div>
-                )}
 
-                {/* Cancel only when branch_already_exists */}
-                {pushError?.code === 'branch_already_exists' && (
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    Cancel
-                  </Button>
-                )}
-
-                {/* Use a different repository link */}
-                {!isFirstPush && !replaceRepo && !connectStep && (
-                  <button
-                    type="button"
-                    onClick={() => setShowReplaceWarning(true)}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1"
-                  >
-                    Use a different repository
-                  </button>
+                    {/* Use a different repository link */}
+                    {!isFirstPush && !replaceRepo && !connectStep && (
+                      <button
+                        type="button"
+                        onClick={() => setShowReplaceWarning(true)}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors text-center py-1"
+                      >
+                        Use a different repository
+                      </button>
+                    )}
+                  </>
                 )}
               </>
             )}
