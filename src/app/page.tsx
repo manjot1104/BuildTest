@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -1233,6 +1233,66 @@ export default function LandingPage() {
                                 </div>
                             )
                         })}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Developer Flow Pipeline Section ── */}
+            <div className="section-divider" />
+            <section className="relative py-20 md:py-24 px-6 overflow-hidden">
+                <div className="max-w-[1240px] mx-auto">
+                    {/* Header */}
+                    <div className="text-center mb-16">
+                        <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            The Buildify Flow
+                        </span>
+                        <h2 className="mt-5 text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                            From idea to live &mdash; all in one place
+                        </h2>
+                        <p className="mt-4 text-base md:text-lg text-muted-foreground/60 max-w-2xl mx-auto">
+                            Plan, design, build, test, and launch &mdash; without switching tools.
+                        </p>
+                    </div>
+
+                    {/* Pipeline */}
+                    <div className="relative">
+                        {/* Connecting line (desktop) */}
+                        <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/60 hidden md:block" />
+
+                        {/* Connecting line (mobile) */}
+                        <div className="absolute top-0 bottom-0 left-6 w-px bg-border/60 md:hidden" />
+
+                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 md:gap-3">
+                            {[
+                                { icon: MessageSquareText, title: 'AI Chat' },
+                                { icon: Palette, title: 'Studio' },
+                                { icon: Code2, title: 'Builder' },
+                                { icon: Rocket, title: 'Deploy' },
+                                { icon: FlaskConical, title: 'Testing' },
+                                { icon: ScanEye, title: 'Accessibility' },
+                                { icon: Radio, title: 'Live' },
+                            ].map((step, index) => (
+                                <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-4 md:gap-0">
+                                    {/* Node dot */}
+                                    <div className="relative z-10 size-12 rounded-xl border border-border/80 bg-background flex items-center justify-center shrink-0">
+                                        <step.icon className="size-[18px] text-primary/70" />
+                                    </div>
+
+                                    {/* Arrow between cards (desktop only) */}
+                                    {index < 6 && (
+                                        <div className="absolute top-6 -right-[calc(50%-6px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                            <ArrowRight className="size-3 text-muted-foreground/30" />
+                                        </div>
+                                    )}
+
+                                    {/* Title */}
+                                    <span className="md:mt-3 text-sm font-medium text-foreground/80 text-center">
+                                        {step.title}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </div>
             </section>
