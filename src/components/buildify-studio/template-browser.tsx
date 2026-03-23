@@ -16,6 +16,7 @@ interface TemplateBrowserProps {
 
 const CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
+  { id: 'saas', label: 'SaaS' },
   { id: 'developer', label: 'Developer' },
   { id: 'designer', label: 'Designer' },
   { id: 'personal', label: 'Personal' },
