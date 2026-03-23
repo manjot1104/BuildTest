@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2 } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -1731,6 +1731,762 @@ function FlowStudioSection() {
     )
 }
 
+// --- Studio → Builder Transition ---
+
+function FlowStudioToBuilderTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start start', 'end end'],
+    })
+
+    // Canvas zoom
+    const canvasScale = useTransform(scrollYProgress, [0, 0.3, 0.6], [0.92, 1.0, 1.05])
+    // Chrome fades
+    const chromeOpacity = useTransform(scrollYProgress, [0, 0.2], [0.6, 0])
+    // Canvas border dissolves
+    const canvasBorder = useTransform(scrollYProgress, [0.1, 0.35], [1, 0])
+    // Grid fades out
+    const gridOpacity = useTransform(scrollYProgress, [0, 0.25], [0.15, 0])
+
+    // UI sections separate (gap grows)
+    const sectionGap = useTransform(scrollYProgress, [0.2, 0.5], [0, 8])
+    // Section highlights
+    const highlightOpacity = useTransform(scrollYProgress, [0.3, 0.5, 0.7], [0, 1, 0.3])
+    // Component labels
+    const labelsOpacity = useTransform(scrollYProgress, [0.35, 0.55], [0, 1])
+
+    // Code panel slides in
+    const codePanelX = useTransform(scrollYProgress, [0.5, 0.75], [100, 0])
+    const codePanelOpacity = useTransform(scrollYProgress, [0.5, 0.7], [0, 1])
+    // Divider appears
+    const dividerOpacity = useTransform(scrollYProgress, [0.55, 0.7], [0, 1])
+
+    // Overall container morphs
+    const containerBg = useTransform(scrollYProgress, [0.6, 0.85], [0, 1])
+
+    return (
+        <section ref={ref} className="relative" style={{ height: '200vh' }}>
+            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <motion.div
+                        style={{ scale: canvasScale }}
+                        className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden"
+                    >
+                        {/* Fading toolbar ghost */}
+                        <motion.div
+                            style={{ opacity: chromeOpacity }}
+                            className="flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-semibold text-foreground/50">Buildify Studio</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="h-5 w-12 rounded bg-border/15" />
+                                <div className="h-5 w-16 rounded bg-primary/10" />
+                            </div>
+                        </motion.div>
+
+                        {/* Morphing toolbar — Builder appears */}
+                        <motion.div
+                            style={{ opacity: codePanelOpacity }}
+                            className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20 z-10"
+                        >
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-[10px] font-semibold text-foreground/70">Buildify Builder</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] text-muted-foreground/40">
+                                    <Terminal className="size-3" />
+                                    Ready
+                                </div>
+                                <div className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold">
+                                    <Zap className="size-3" />
+                                    Generate
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Main area */}
+                        <div className="flex" style={{ height: 'clamp(320px, 40vw, 480px)' }}>
+                            {/* Canvas with deconstructing UI */}
+                            <div className="flex-1 bg-muted/5 relative overflow-hidden">
+                                <motion.div style={{ opacity: gridOpacity }} className="absolute inset-0 dot-grid-bg" />
+
+                                <motion.div
+                                    style={{ opacity: useTransform(canvasBorder, (v) => 0.3 + v * 0.7) }}
+                                    className="absolute inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-lg flex flex-col text-white/90"
+                                >
+                                    {/* Navbar */}
+                                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                                        <span className="text-[9px] font-bold text-white/85">Ethan.dev</span>
+                                        <div className="flex items-center gap-3">
+                                            {['Work', 'About', 'Contact'].map((l) => (
+                                                <span key={l} className="text-[7px] text-white/35">{l}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* Hero — separates + highlights */}
+                                    <motion.div
+                                        style={{
+                                            marginBottom: sectionGap,
+                                            boxShadow: useTransform(highlightOpacity, (v) =>
+                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
+                                            ),
+                                        }}
+                                        className="flex-1 flex items-center px-4 gap-3 relative rounded-sm"
+                                    >
+                                        <motion.div
+                                            style={{ opacity: labelsOpacity }}
+                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
+                                        >
+                                            {'<Hero />'}
+                                        </motion.div>
+                                        <div className="flex-1">
+                                            <p className="text-[14px] md:text-[16px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</p>
+                                            <p className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</p>
+                                            <p className="text-[6px] text-white/25 mt-1.5 max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
+                                            <div className="mt-2.5 flex gap-1.5">
+                                                <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
+                                                <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
+                                            </div>
+                                        </div>
+                                        <div className="w-[28%] aspect-[4/5] rounded-lg bg-blue-500/[0.06] border border-white/5 flex items-center justify-center hidden md:flex">
+                                            <Globe className="size-5 text-blue-400/20" />
+                                        </div>
+                                    </motion.div>
+
+                                    {/* Projects — separates + highlights */}
+                                    <motion.div
+                                        style={{
+                                            marginBottom: sectionGap,
+                                            boxShadow: useTransform(highlightOpacity, (v) =>
+                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
+                                            ),
+                                        }}
+                                        className="px-4 py-2 relative rounded-sm"
+                                    >
+                                        <motion.div
+                                            style={{ opacity: labelsOpacity }}
+                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
+                                        >
+                                            {'<Projects />'}
+                                        </motion.div>
+                                        <p className="text-[7px] font-semibold text-white/40 mb-1.5">Featured Projects</p>
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            {[{ name: 'Design System', tech: 'Figma · React' }, { name: 'SaaS Dashboard', tech: 'Next.js · D3' }, { name: 'E-commerce', tech: 'React · Stripe' }].map((p, i) => (
+                                                <div key={i} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                    <p className="text-[6px] font-semibold text-white/55">{p.name}</p>
+                                                    <p className="text-[5px] text-white/20 mt-0.5">{p.tech}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </motion.div>
+
+                                    {/* Contact — separates + highlights */}
+                                    <motion.div
+                                        style={{
+                                            boxShadow: useTransform(highlightOpacity, (v) =>
+                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
+                                            ),
+                                        }}
+                                        className="px-4 py-2 border-t border-white/[0.03] relative rounded-sm"
+                                    >
+                                        <motion.div
+                                            style={{ opacity: labelsOpacity }}
+                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
+                                        >
+                                            {'<Contact />'}
+                                        </motion.div>
+                                        <p className="text-[7px] font-semibold text-white/40 mb-1.5">Get in Touch</p>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 h-5 rounded bg-white/[0.03] border border-white/[0.05] px-2 flex items-center"><span className="text-[6px] text-white/20">Your email</span></div>
+                                            <div className="h-5 px-2.5 rounded bg-blue-500/60 flex items-center"><span className="text-[6px] font-semibold text-white/80">Send</span></div>
+                                        </div>
+                                    </motion.div>
+                                </motion.div>
+                            </div>
+
+                            {/* Divider — appears */}
+                            <motion.div style={{ opacity: dividerOpacity }} className="w-px bg-border/30" />
+
+                            {/* Code panel — slides in */}
+                            <motion.div
+                                style={{ x: codePanelX, opacity: codePanelOpacity }}
+                                className="w-[38%] bg-[#0d1117] flex flex-col hidden md:flex"
+                            >
+                                <div className="flex items-center px-3 py-1.5 border-b border-white/5 bg-white/[0.02]">
+                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-t bg-white/[0.04] border-b border-blue-400/30">
+                                        <Code2 className="size-2.5 text-blue-400/50" />
+                                        <span className="text-[7px] text-white/50">page.tsx</span>
+                                    </div>
+                                </div>
+                                <div className="flex-1 p-3 font-mono">
+                                    <div className="space-y-0.5">
+                                        {BUILD_CODE_LINES.map((line, i) => (
+                                            <motion.div
+                                                key={i}
+                                                style={{
+                                                    opacity: useTransform(scrollYProgress, [0.6 + i * 0.02, 0.65 + i * 0.02], [0, 1]),
+                                                    x: useTransform(scrollYProgress, [0.6 + i * 0.02, 0.65 + i * 0.02], [-6, 0]),
+                                                }}
+                                                className="flex items-start gap-2"
+                                            >
+                                                <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
+                                                <pre className={cn(
+                                                    "text-[6.5px] leading-relaxed whitespace-pre",
+                                                    line.code.includes('import') || line.code.includes('export') || line.code.includes('function') || line.code.includes('return')
+                                                        ? 'text-blue-400/50'
+                                                        : line.code.includes('"')
+                                                            ? 'text-blue-200/45'
+                                                            : line.code.includes('<') || line.code.includes('/>')
+                                                                ? 'text-blue-300/50'
+                                                                : 'text-white/30'
+                                                )}>
+                                                    {line.code || ' '}
+                                                </pre>
+                                            </motion.div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="border-t border-white/5 px-3 py-2 bg-white/[0.01]">
+                                    <div className="flex items-center gap-1.5">
+                                        <Terminal className="size-2.5 text-white/20" />
+                                        <span className="text-[7px] text-white/25">Terminal</span>
+                                    </div>
+                                    <motion.p
+                                        style={{ opacity: useTransform(scrollYProgress, [0.85, 0.95], [0, 1]) }}
+                                        className="text-[6px] font-mono text-white/20 mt-1"
+                                    >
+                                        $ buildify generate --ready
+                                    </motion.p>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </motion.div>
+                </div>
+            </div>
+        </section>
+    )
+}
+
+// --- Builder Section — design to code with GitHub push ---
+
+const BUILD_CODE_LINES = [
+    { code: 'import { Hero, Projects, Contact } from "./components"', highlight: '' },
+    { code: '', highlight: '' },
+    { code: 'export default function Portfolio() {', highlight: '' },
+    { code: '  return (', highlight: '' },
+    { code: '    <main className="min-h-screen bg-dark">', highlight: '' },
+    { code: '      <Hero', highlight: 'hero' },
+    { code: '        name="Ethan Carter"', highlight: 'hero' },
+    { code: '        role="Product Designer"', highlight: 'hero' },
+    { code: '      />', highlight: 'hero' },
+    { code: '      <Projects items={3} />', highlight: 'projects' },
+    { code: '      <Contact', highlight: 'contact' },
+    { code: '        email="hello@ethan.dev"', highlight: 'contact' },
+    { code: '      />', highlight: 'contact' },
+    { code: '    </main>', highlight: '' },
+    { code: '  )', highlight: '' },
+    { code: '}', highlight: '' },
+]
+
+type BuildPhase = 'idle' | 'clicking' | 'building' | 'syncing' | 'done' | 'pushing' | 'pushed' | 'complete'
+
+function FlowBuilderSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const [phase, setPhase] = useState<BuildPhase>('idle')
+    const [visibleLines, setVisibleLines] = useState(0)
+    const [activeHighlight, setActiveHighlight] = useState<string | null>(null)
+    const [buildProgress, setBuildProgress] = useState(0)
+    const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
+    const [cursorVisible, setCursorVisible] = useState(false)
+    const [cursorClicking, setCursorClicking] = useState(false)
+    const [pushProgress, setPushProgress] = useState(0)
+    const [commitFiles, setCommitFiles] = useState(0)
+    const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            buildTimers.current.push(t)
+        })
+
+        const click = async () => {
+            setCursorClicking(true)
+            await delay(150)
+            if (!cancelled) setCursorClicking(false)
+        }
+
+        const runSequence = async () => {
+            await delay(1000)
+            if (cancelled) return
+
+            // 1. Cursor appears, moves to "Generate" button
+            setCursorVisible(true)
+            setCursorPos({ x: 82, y: -4 })
+            await delay(800)
+            if (cancelled) return
+
+            // 2. Click generate
+            setPhase('clicking')
+            await click()
+            if (cancelled) return
+            await delay(400)
+
+            // 3. Build phase — code types line by line
+            if (cancelled) return
+            setPhase('building')
+            setCursorPos({ x: 75, y: 30 }) // move cursor to code area
+            await delay(300)
+
+            for (let i = 0; i < BUILD_CODE_LINES.length; i++) {
+                if (cancelled) return
+                setVisibleLines(i + 1)
+                setBuildProgress(Math.round(((i + 1) / BUILD_CODE_LINES.length) * 100))
+                const line = BUILD_CODE_LINES[i]!
+                if (line.highlight) setActiveHighlight(line.highlight)
+                await delay(120 + Math.random() * 60) // 120–180ms per line
+            }
+
+            // 4. Syncing
+            if (cancelled) return
+            setPhase('syncing')
+            setActiveHighlight(null)
+            await delay(600)
+
+            // 5. Build done
+            if (cancelled) return
+            setPhase('done')
+            setBuildProgress(100)
+            await delay(1200)
+
+            // 6. Cursor moves to "Push to GitHub"
+            if (cancelled) return
+            setCursorPos({ x: 92, y: -4 })
+            await delay(700)
+            if (cancelled) return
+            setPhase('pushing')
+            await click()
+            if (cancelled) return
+
+            // 7. Push animation — files upload
+            for (let f = 1; f <= 5; f++) {
+                if (cancelled) return
+                setCommitFiles(f)
+                setPushProgress(f * 20)
+                await delay(400)
+            }
+
+            // 8. Push complete
+            if (cancelled) return
+            setPhase('pushed')
+            await delay(1500)
+
+            // 9. Final state
+            if (cancelled) return
+            setPhase('complete')
+            setCursorVisible(false)
+        }
+
+        runSequence()
+        return () => {
+            cancelled = true
+            buildTimers.current.forEach(clearTimeout)
+        }
+    }, [isInView])
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                {/* Text — top */}
+                <div className="max-w-xl mb-12 md:mb-16">
+                    <motion.span
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0}
+                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                    >
+                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                        Step 03
+                    </motion.span>
+
+                    <div className="overflow-hidden">
+                        <motion.h2
+                            variants={slideUp}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.1}
+                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                        >
+                            Build Instantly
+                        </motion.h2>
+                    </div>
+
+                    <motion.p
+                        variants={blurIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.25}
+                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
+                    >
+                        Convert your design into functional components and production-ready code.
+                    </motion.p>
+
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.4}
+                        className="mt-6 flex items-center gap-3"
+                    >
+                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                            <Code2 className="size-[18px] text-primary/60" />
+                        </div>
+                        <span className="text-sm font-medium text-muted-foreground/60">Production-ready code generation</span>
+                    </motion.div>
+                </div>
+
+                {/* Builder preview — full width */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                    <div className="relative">
+                        <motion.div
+                            animate={phase === 'complete' ? { opacity: 0.08 } : { opacity: 0.05 }}
+                            className="absolute -inset-8 rounded-3xl bg-primary blur-3xl pointer-events-none transition-opacity duration-1000"
+                        />
+
+                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
+                            {/* Top bar */}
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                transition={{ duration: 0.5, delay: 0.3 }}
+                                className="flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20 relative"
+                            >
+                                {/* Cursor overlay for toolbar */}
+                                {cursorVisible && (
+                                    <motion.div
+                                        className="absolute z-50 pointer-events-none"
+                                        animate={{ left: `${cursorPos.x}%`, top: `${cursorPos.y < 0 ? 50 : 50}%` }}
+                                        transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+                                    >
+                                        <motion.div animate={cursorClicking ? { scale: 0.8 } : { scale: 1 }} transition={{ duration: 0.1 }}>
+                                            <svg width="14" height="18" viewBox="0 0 16 20" fill="none" className="drop-shadow-md">
+                                                <path d="M0 0L12.5 12.5H5.5L2.5 19.5L0 0Z" fill="white" stroke="black" strokeWidth="1" strokeLinejoin="round" />
+                                            </svg>
+                                        </motion.div>
+                                        {cursorClicking && (
+                                            <motion.div
+                                                initial={{ scale: 0, opacity: 0.5 }}
+                                                animate={{ scale: 2.5, opacity: 0 }}
+                                                transition={{ duration: 0.4 }}
+                                                className="absolute top-0 left-0 size-3 rounded-full bg-primary/30 -translate-x-1/2 -translate-y-1/2"
+                                            />
+                                        )}
+                                    </motion.div>
+                                )}
+
+                                <div className="flex items-center gap-2.5">
+                                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
+                                        <ChevronLeft className="size-3" />
+                                        <span>Back</span>
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/30" />
+                                    <span className="text-[10px] font-semibold text-foreground/70">Buildify Builder</span>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    {/* Build status */}
+                                    <div className={cn(
+                                        "flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] transition-all duration-300",
+                                        phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete'
+                                            ? 'bg-primary/10 text-primary/70'
+                                            : phase === 'building' || phase === 'syncing'
+                                                ? 'bg-primary/5 text-primary/50'
+                                                : 'text-muted-foreground/40'
+                                    )}>
+                                        {phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete' ? (
+                                            <><CircleCheck className="size-3" /> Built</>
+                                        ) : phase === 'building' || phase === 'syncing' ? (
+                                            <><Loader2 className="size-3 animate-spin" /> Building... {buildProgress}%</>
+                                        ) : (
+                                            <><Terminal className="size-3" /> Ready</>
+                                        )}
+                                    </div>
+
+                                    {/* Generate button */}
+                                    <button className={cn(
+                                        "h-6 px-2.5 rounded-md flex items-center gap-1.5 text-[8px] font-semibold transition-all duration-200",
+                                        phase === 'clicking'
+                                            ? 'bg-primary/80 text-primary-foreground scale-95 shadow-lg shadow-primary/30'
+                                            : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                                    )}>
+                                        <Zap className="size-3" />
+                                        Generate
+                                    </button>
+
+                                    {/* Push to GitHub button */}
+                                    <button className={cn(
+                                        "h-6 px-2.5 rounded-md border flex items-center gap-1.5 text-[8px] font-medium transition-all duration-200",
+                                        phase === 'pushing'
+                                            ? 'border-primary/40 text-primary/70 bg-primary/5 scale-95'
+                                            : phase === 'pushed' || phase === 'complete'
+                                                ? 'border-primary/30 text-primary/60 bg-primary/5'
+                                                : 'border-border/40 text-muted-foreground/50'
+                                    )}>
+                                        <Globe className="size-3" />
+                                        {phase === 'pushed' || phase === 'complete' ? 'Pushed' : 'Push to GitHub'}
+                                    </button>
+                                </div>
+                            </motion.div>
+
+                            {/* Main split view: UI + Code */}
+                            <div className="flex" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                                {/* Left — Live UI preview */}
+                                <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={isInView ? { opacity: 1 } : {}}
+                                    transition={{ duration: 0.6, delay: 0.35 }}
+                                    className="flex-1 bg-muted/5 relative overflow-hidden"
+                                >
+                                    <div className="absolute inset-0 dot-grid-bg opacity-10" />
+
+                                    <div className="absolute inset-2 md:inset-3 rounded-lg border border-border/20 bg-[#0f1117] overflow-hidden shadow-lg flex flex-col text-white/90">
+                                        {/* Navbar */}
+                                        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                                            <span className="text-[9px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
+                                            <div className="flex items-center gap-3">
+                                                {['Work', 'About', 'Contact'].map((l) => (
+                                                    <span key={l} className="text-[7px] text-white/35">{l}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Hero */}
+                                        <motion.div
+                                            animate={{ boxShadow: activeHighlight === 'hero' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
+                                            transition={{ duration: 0.3 }}
+                                            className="flex-1 flex items-center px-4 gap-3 relative"
+                                        >
+                                            {activeHighlight === 'hero' && (
+                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Hero />'}</motion.div>
+                                            )}
+                                            <div className="flex-1">
+                                                <p className="text-[14px] md:text-[16px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</p>
+                                                <p className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</p>
+                                                <p className="text-[6px] text-white/25 mt-1.5 max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
+                                                <div className="mt-2.5 flex gap-1.5">
+                                                    <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
+                                                    <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
+                                                </div>
+                                            </div>
+                                            <div className="w-[30%] aspect-[4/5] rounded-lg bg-blue-500/[0.06] border border-white/5 flex items-center justify-center hidden md:flex">
+                                                <Globe className="size-6 text-blue-400/20" />
+                                            </div>
+                                        </motion.div>
+
+                                        {/* Projects */}
+                                        <motion.div
+                                            animate={{ boxShadow: activeHighlight === 'projects' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
+                                            transition={{ duration: 0.3 }}
+                                            className="px-4 py-2.5 relative"
+                                        >
+                                            {activeHighlight === 'projects' && (
+                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Projects />'}</motion.div>
+                                            )}
+                                            <p className="text-[7px] font-semibold text-white/40 mb-1.5">Featured Projects</p>
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {[{ name: 'Design System', tech: 'Figma · React' }, { name: 'SaaS Dashboard', tech: 'Next.js · D3' }, { name: 'E-commerce', tech: 'React · Stripe' }].map((p, i) => (
+                                                    <div key={i} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                        <p className="text-[6px] font-semibold text-white/55">{p.name}</p>
+                                                        <p className="text-[5px] text-white/20 mt-0.5">{p.tech}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </motion.div>
+
+                                        {/* Contact */}
+                                        <motion.div
+                                            animate={{ boxShadow: activeHighlight === 'contact' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
+                                            transition={{ duration: 0.3 }}
+                                            className="px-4 py-2 border-t border-white/[0.03] relative"
+                                        >
+                                            {activeHighlight === 'contact' && (
+                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Contact />'}</motion.div>
+                                            )}
+                                            <p className="text-[7px] font-semibold text-white/40 mb-1.5">Get in Touch</p>
+                                            <div className="flex gap-2">
+                                                <div className="flex-1 h-5 rounded bg-white/[0.03] border border-white/[0.05] px-2 flex items-center"><span className="text-[6px] text-white/20">Your email</span></div>
+                                                <div className="h-5 px-2.5 rounded bg-blue-500/60 flex items-center"><span className="text-[6px] font-semibold text-white/80">Send</span></div>
+                                            </div>
+                                        </motion.div>
+                                    </div>
+
+                                    {/* Build complete glow */}
+                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="absolute inset-0 pointer-events-none">
+                                            <div className="absolute inset-2 md:inset-3 rounded-lg ring-1 ring-primary/20 shadow-[0_0_30px_-5px] shadow-primary/10" />
+                                        </motion.div>
+                                    )}
+                                </motion.div>
+
+                                <div className="w-px bg-border/30" />
+
+                                {/* Right — Code + Terminal + GitHub */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: 16 }}
+                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
+                                    transition={{ duration: 0.5, delay: 0.5 }}
+                                    className="w-[40%] md:w-[38%] bg-[#0d1117] flex flex-col hidden md:flex"
+                                >
+                                    {/* Tab bar */}
+                                    <div className="flex items-center px-3 py-1.5 border-b border-white/5 bg-white/[0.02]">
+                                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-t bg-white/[0.04] border-b border-blue-400/30">
+                                            <Code2 className="size-2.5 text-blue-400/50" />
+                                            <span className="text-[7px] text-white/50">page.tsx</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 px-2 py-1 ml-1">
+                                            <span className="text-[7px] text-white/20">styles.css</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Code content */}
+                                    <div className="flex-1 p-3 overflow-hidden font-mono">
+                                        <div className="space-y-0.5">
+                                            {BUILD_CODE_LINES.map((line, i) => (
+                                                <motion.div
+                                                    key={i}
+                                                    initial={{ opacity: 0, x: -8 }}
+                                                    animate={i < visibleLines ? { opacity: 1, x: 0 } : {}}
+                                                    transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                                                    className="flex items-start gap-2"
+                                                >
+                                                    <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
+                                                    <pre className={cn(
+                                                        "text-[6.5px] leading-relaxed whitespace-pre",
+                                                        line.highlight && activeHighlight === line.highlight
+                                                            ? 'text-blue-300/80 bg-blue-400/[0.06] -mx-1 px-1 rounded'
+                                                            : line.code.includes('import') || line.code.includes('export') || line.code.includes('function') || line.code.includes('return')
+                                                                ? 'text-blue-400/50'
+                                                                : line.code.includes('"')
+                                                                    ? 'text-blue-200/45'
+                                                                    : line.code.includes('<') || line.code.includes('/>')
+                                                                        ? 'text-blue-300/50'
+                                                                        : 'text-white/30'
+                                                    )}>
+                                                        {line.code || ' '}
+                                                    </pre>
+                                                </motion.div>
+                                            ))}
+                                            {phase === 'building' && (
+                                                <div className="flex items-start gap-2 mt-0.5">
+                                                    <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0">{visibleLines + 1}</span>
+                                                    <span className="inline-block w-[4px] h-[10px] bg-blue-400/60 animate-pulse" />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+                                                className="mt-3 flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5 border border-primary/10"
+                                            >
+                                                <CircleCheck className="size-3 text-primary/60" />
+                                                <span className="text-[7px] text-primary/60">Build complete — ready to deploy</span>
+                                            </motion.div>
+                                        )}
+                                    </div>
+
+                                    {/* Terminal + GitHub push */}
+                                    <div className="border-t border-white/5 px-3 py-2 bg-white/[0.01]">
+                                        <div className="flex items-center gap-1.5 mb-1.5">
+                                            <Terminal className="size-2.5 text-white/20" />
+                                            <span className="text-[7px] text-white/25">Terminal</span>
+                                        </div>
+                                        <div className="space-y-0.5 text-[6px] font-mono">
+                                            {phase !== 'idle' && phase !== 'clicking' && (
+                                                <>
+                                                    <p className="text-white/20">$ buildify generate --components</p>
+                                                    {buildProgress > 30 && <p className="text-blue-400/30">✓ Hero component generated</p>}
+                                                    {buildProgress > 60 && <p className="text-blue-400/30">✓ Projects component generated</p>}
+                                                    {buildProgress > 85 && <p className="text-blue-400/30">✓ Contact component generated</p>}
+                                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                                        <p className="text-blue-300/40">✓ Build complete in 1.2s</p>
+                                                    )}
+                                                </>
+                                            )}
+                                            {/* GitHub push output */}
+                                            {(phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                                <>
+                                                    <div className="w-full h-px bg-white/5 my-1" />
+                                                    <p className="text-white/20">$ git push origin main</p>
+                                                    {commitFiles >= 1 && <p className="text-blue-400/30">  page.tsx</p>}
+                                                    {commitFiles >= 2 && <p className="text-blue-400/30">  styles.css</p>}
+                                                    {commitFiles >= 3 && <p className="text-blue-400/30">  components/Hero.tsx</p>}
+                                                    {commitFiles >= 4 && <p className="text-blue-400/30">  components/Projects.tsx</p>}
+                                                    {commitFiles >= 5 && <p className="text-blue-400/30">  components/Contact.tsx</p>}
+                                                    {(phase === 'pushed' || phase === 'complete') && (
+                                                        <>
+                                                            <p className="text-blue-300/40 mt-0.5">✓ Pushed to ethan-portfolio/main</p>
+                                                            <p className="text-white/15">  &quot;Initial commit: portfolio site&quot;</p>
+                                                        </>
+                                                    )}
+                                                    {phase === 'pushing' && (
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <div className="w-20 h-1 rounded-full bg-white/5 overflow-hidden">
+                                                                <motion.div className="h-full bg-blue-400/30 rounded-full" animate={{ width: `${pushProgress}%` }} transition={{ duration: 0.3 }} />
+                                                            </div>
+                                                            <span className="text-white/20">{pushProgress}%</span>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </div>
+
+                            {/* Bottom status */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={isInView ? { opacity: 1 } : {}}
+                                transition={{ duration: 0.4, delay: 0.6 }}
+                                className="flex items-center justify-between px-4 py-1.5 border-t border-border/30 bg-muted/15"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[8px] text-muted-foreground/35">page.tsx</span>
+                                    <span className="text-[8px] text-muted-foreground/25">·</span>
+                                    <span className="text-[8px] text-muted-foreground/35">{BUILD_CODE_LINES.length} lines</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    {phase !== 'idle' && (
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-16 h-1 rounded-full bg-border/30 overflow-hidden">
+                                                <motion.div className="h-full bg-primary/40 rounded-full" animate={{ width: `${buildProgress}%` }} transition={{ duration: 0.3 }} />
+                                            </div>
+                                            <span className="text-[8px] text-muted-foreground/40 font-mono">{buildProgress}%</span>
+                                        </div>
+                                    )}
+                                    <span className="text-[8px] text-muted-foreground/30">TypeScript · React</span>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
@@ -2673,44 +3429,11 @@ export default function LandingPage() {
             {/* 2. Studio (Design) — Visual Left, Text Right */}
             <FlowStudioSection />
 
-            {/* 3. Builder (Development) — Text Left, Visual Right */}
-            <div className="section-divider" />
-            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                        {/* Text */}
-                        <div>
-                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
-                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                                Step 03
-                            </span>
-                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
-                                Build Instantly
-                            </h2>
-                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
-                                Convert designs into functional components and production-ready code.
-                            </p>
-                            <div className="mt-8 flex items-center gap-3">
-                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                    <Code2 className="size-[18px] text-primary/60" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground/60">Production-ready code generation</span>
-                            </div>
-                        </div>
-                        {/* Visual placeholder */}
-                        <div className="relative">
-                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                        <Code2 className="size-6 text-primary/40" />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground/40">App builder preview</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            {/* Transition: Studio → Builder */}
+            <FlowStudioToBuilderTransition />
+
+            {/* 3. Builder (Development) */}
+            <FlowBuilderSection />
 
             {/* 4. Deploy + Testing — Visual Left, Text Right */}
             <div className="section-divider" />
