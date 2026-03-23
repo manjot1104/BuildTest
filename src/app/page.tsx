@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2 } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -702,22 +702,24 @@ function FlowChatToStudioTransition() {
                         </motion.div>
 
                         {/* Real UI forming inside — the same container */}
-                        <div className="absolute inset-0 p-4 md:p-5 flex flex-col gap-3">
+                        <div className="absolute inset-0 p-3 md:p-4 flex flex-col gap-2">
                             {/* Navbar */}
                             <motion.div
                                 style={{ opacity: navbarOpacity, y: navbarY }}
-                                className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/8 bg-primary/[0.02]"
+                                className="flex items-center justify-between px-3 py-2 rounded-lg bg-card/60"
                             >
-                                <div className="flex items-center gap-2">
-                                    <div className="size-5 rounded bg-primary/12" />
-                                    <div className="h-2.5 w-14 rounded bg-foreground/10" />
+                                <div className="flex items-center gap-1.5">
+                                    <div className="size-4 rounded bg-primary/20 flex items-center justify-center">
+                                        <Sparkles className="size-2.5 text-primary/60" />
+                                    </div>
+                                    <span className="text-[8px] font-bold text-foreground/70 tracking-tight">Portfolio</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="h-2 w-8 rounded bg-muted-foreground/15" />
-                                    <div className="h-2 w-10 rounded bg-muted-foreground/15" />
-                                    <div className="h-2 w-8 rounded bg-muted-foreground/15" />
-                                    <div className="h-5 w-14 rounded-md bg-primary/15 flex items-center justify-center">
-                                        <span className="text-[7px] font-medium text-primary/60">Contact</span>
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[7px] font-medium text-primary/70">Home</span>
+                                    <span className="text-[7px] text-muted-foreground/50">About</span>
+                                    <span className="text-[7px] text-muted-foreground/50">Work</span>
+                                    <div className="h-[18px] px-2 rounded-md bg-primary/15 flex items-center justify-center">
+                                        <span className="text-[6px] font-semibold text-primary/70">Contact</span>
                                     </div>
                                 </div>
                             </motion.div>
@@ -725,32 +727,44 @@ function FlowChatToStudioTransition() {
                             {/* Hero section */}
                             <motion.div
                                 style={{ opacity: heroOpacity, scale: heroScale }}
-                                className="flex-1 flex items-center px-3 rounded-lg border border-primary/6 bg-primary/[0.015]"
+                                className="flex-1 flex items-center px-4 rounded-lg bg-gradient-to-br from-primary/[0.03] to-transparent"
                             >
-                                <div className="flex-1 space-y-2.5">
-                                    <div className="h-3.5 w-[75%] rounded bg-foreground/12" />
-                                    <div className="h-3 w-[55%] rounded bg-foreground/8" />
-                                    <div className="h-2 w-[65%] rounded bg-muted-foreground/10 mt-1" />
-                                    <div className="mt-3 flex gap-2">
-                                        <div className="h-6 w-20 rounded-md bg-primary/15 flex items-center justify-center">
-                                            <span className="text-[7px] font-medium text-primary/60">View Work</span>
+                                <div className="flex-1 py-3">
+                                    <p className="text-[6px] font-semibold uppercase tracking-[0.15em] text-primary/50 mb-1">Portfolio</p>
+                                    <p className="text-[11px] md:text-[13px] font-bold text-foreground/80 leading-tight">Design your future</p>
+                                    <p className="text-[10px] md:text-[12px] font-bold text-foreground/50 leading-tight">with Buildify</p>
+                                    <p className="text-[7px] text-muted-foreground/50 mt-1.5 leading-relaxed max-w-[80%]">Crafting digital experiences that inspire and engage your audience.</p>
+                                    <div className="mt-2.5 flex gap-1.5">
+                                        <div className="h-5 px-2.5 rounded-md bg-primary/20 flex items-center justify-center">
+                                            <span className="text-[6px] font-semibold text-primary/80">View Work</span>
                                         </div>
-                                        <div className="h-6 w-16 rounded-md border border-border/40 flex items-center justify-center">
-                                            <span className="text-[7px] font-medium text-muted-foreground/40">About</span>
+                                        <div className="h-5 px-2 rounded-md border border-border/50 flex items-center justify-center">
+                                            <span className="text-[6px] font-medium text-muted-foreground/50">About Me</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="w-[35%] aspect-square rounded-lg bg-gradient-to-br from-primary/8 to-primary/3 ml-4" />
+                                <div className="w-[30%] aspect-[4/5] rounded-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/8 flex items-center justify-center">
+                                    <div className="size-8 rounded-full bg-primary/8 flex items-center justify-center">
+                                        <Globe className="size-4 text-primary/30" />
+                                    </div>
+                                </div>
                             </motion.div>
 
                             {/* 3 Cards */}
-                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-2">
-                                {[0, 1, 2].map((i) => (
-                                    <div key={i} className="rounded-lg border border-primary/6 bg-primary/[0.015] p-2 group/card cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12">
-                                        <div className="aspect-[3/2] rounded bg-gradient-to-br from-primary/6 to-transparent mb-2" />
-                                        <div className="h-2 w-[70%] rounded bg-foreground/10 mb-1" />
-                                        <div className="h-1.5 w-full rounded bg-muted-foreground/8" />
-                                        <div className="h-1.5 w-[80%] rounded bg-muted-foreground/6 mt-0.5" />
+                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-1.5">
+                                {[
+                                    { title: 'Web Design', desc: 'Modern responsive interfaces' },
+                                    { title: 'Branding', desc: 'Identity and visual systems' },
+                                    { title: 'Development', desc: 'Full-stack applications' },
+                                ].map((card, i) => (
+                                    <div key={i} className="rounded-lg border border-border/30 bg-card/40 p-2 group/card cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12">
+                                        <div className="aspect-[16/9] rounded bg-gradient-to-br from-primary/8 via-primary/4 to-transparent mb-1.5 flex items-center justify-center">
+                                            <div className="size-5 rounded bg-primary/10 flex items-center justify-center">
+                                                <Code2 className="size-3 text-primary/30" />
+                                            </div>
+                                        </div>
+                                        <p className="text-[7px] font-semibold text-foreground/70 mb-0.5">{card.title}</p>
+                                        <p className="text-[6px] text-muted-foreground/45 leading-relaxed">{card.desc}</p>
                                     </div>
                                 ))}
                             </motion.div>
@@ -758,13 +772,13 @@ function FlowChatToStudioTransition() {
                             {/* Footer */}
                             <motion.div
                                 style={{ opacity: footerOpacity }}
-                                className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/6 bg-primary/[0.015]"
+                                className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-card/40"
                             >
-                                <div className="h-2 w-20 rounded bg-muted-foreground/10" />
-                                <div className="flex gap-3">
-                                    <div className="h-1.5 w-8 rounded bg-muted-foreground/8" />
-                                    <div className="h-1.5 w-10 rounded bg-muted-foreground/8" />
-                                    <div className="h-1.5 w-6 rounded bg-muted-foreground/8" />
+                                <span className="text-[6px] text-muted-foreground/35">&copy; 2026 Portfolio. All rights reserved.</span>
+                                <div className="flex gap-2">
+                                    <span className="text-[6px] text-muted-foreground/30">Twitter</span>
+                                    <span className="text-[6px] text-muted-foreground/30">GitHub</span>
+                                    <span className="text-[6px] text-muted-foreground/30">LinkedIn</span>
                                 </div>
                             </motion.div>
                         </div>
@@ -802,206 +816,387 @@ function FlowChatToStudioTransition() {
     )
 }
 
-// --- Studio Section (with real UI visual) ---
+// --- Studio Section — real Buildify Studio editor interface ---
 
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
 
     return (
-        <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                    {/* Visual — real UI wireframe */}
-                    <motion.div
-                        variants={scaleIn}
+                {/* Text — top */}
+                <div className="max-w-xl mb-12 md:mb-16">
+                    <motion.span
+                        variants={fadeIn}
                         initial="hidden"
                         animate={isInView ? 'visible' : 'hidden'}
-                        custom={0.1}
-                        className="md:order-1 order-2"
+                        custom={0}
+                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
                     >
-                        <div className="relative">
-                            <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                        Step 02
+                    </motion.span>
+
+                    <div className="overflow-hidden">
+                        <motion.h2
+                            variants={slideUp}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.1}
+                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                        >
+                            Design Visually
+                        </motion.h2>
+                    </div>
+
+                    <motion.p
+                        variants={blurIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.25}
+                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
+                    >
+                        Structure your ideas with an intuitive visual editor and real-time layout control.
+                    </motion.p>
+
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.4}
+                        className="mt-6 flex items-center gap-3"
+                    >
+                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                            <Palette className="size-[18px] text-primary/60" />
+                        </div>
+                        <span className="text-sm font-medium text-muted-foreground/60">Drag-and-drop studio</span>
+                    </motion.div>
+                </div>
+
+                {/* Studio preview — full width */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                    <div className="relative">
+                        <div className="absolute -inset-8 rounded-3xl bg-primary/[0.05] blur-3xl pointer-events-none" />
+
+                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
+                            {/* ── Top Toolbar ── */}
                             <motion.div
-                                animate={isInView ? { y: [0, -4, 0] } : {}}
-                                transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-                                className="relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                transition={{ duration: 0.5, delay: 0.3 }}
+                                className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-muted/20"
                             >
-                                {/* Title bar */}
-                                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-muted/30">
-                                    <div className="flex gap-1.5">
-                                        <div className="size-2.5 rounded-full bg-border/60" />
-                                        <div className="size-2.5 rounded-full bg-border/60" />
-                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                {/* Left: back + title */}
+                                <div className="flex items-center gap-2.5">
+                                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
+                                        <ChevronLeft className="size-3" />
+                                        <span>Back</span>
                                     </div>
-                                    <span className="text-[11px] font-medium text-muted-foreground/50 ml-2">Buildify Studio</span>
-                                    <div className="ml-auto flex items-center gap-2">
-                                        <div className="h-5 w-14 rounded-md bg-border/20 flex items-center justify-center">
-                                            <Layers className="size-3 text-muted-foreground/30" />
-                                        </div>
-                                        <div className="h-5 w-10 rounded-md bg-primary/10 flex items-center justify-center">
-                                            <Palette className="size-3 text-primary/40" />
-                                        </div>
+                                    <div className="w-px h-3.5 bg-border/30" />
+                                    <span className="text-[10px] font-semibold text-foreground/70">Buildify Studio</span>
+                                </div>
+
+                                {/* Center: tools */}
+                                <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        <button className="size-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:bg-muted/40 transition-colors">
+                                            <Undo2 className="size-3" />
+                                        </button>
+                                        <button className="size-6 rounded-md flex items-center justify-center text-muted-foreground/25">
+                                            <Redo2 className="size-3" />
+                                        </button>
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        {[Grid3X3, Palette, MousePointerClick].map((Icon, i) => (
+                                            <button key={i} className={cn(
+                                                'size-6 rounded-md flex items-center justify-center transition-colors',
+                                                i === 0 ? 'bg-primary/10 text-primary/70' : 'text-muted-foreground/40 hover:bg-muted/40'
+                                            )}>
+                                                <Icon className="size-3" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        {[Monitor, Tablet, Smartphone].map((Icon, i) => (
+                                            <button key={i} className={cn(
+                                                'size-6 rounded-md flex items-center justify-center transition-colors',
+                                                i === 0 ? 'text-foreground/60' : 'text-muted-foreground/30'
+                                            )}>
+                                                <Icon className="size-3" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className="flex items-center gap-1 px-1">
+                                        <Eye className="size-3 text-muted-foreground/40" />
+                                        <span className="text-[8px] text-muted-foreground/40">Preview</span>
                                     </div>
                                 </div>
 
-                                {/* Canvas — real UI */}
-                                <div className="relative p-4 md:p-5 flex flex-col gap-2.5" style={{ aspectRatio: '4/3' }}>
-                                    {/* Grid overlay */}
-                                    <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={isInView ? { opacity: 0.4 } : {}}
-                                        transition={{ duration: 0.8, delay: 0.2 }}
-                                        className="absolute inset-4 md:inset-5 pointer-events-none"
-                                    >
-                                        {[25, 50, 75].map((p) => (
-                                            <div key={`sv-${p}`} className="absolute top-0 bottom-0 w-px bg-primary/8" style={{ left: `${p}%` }} />
-                                        ))}
-                                        {[25, 50, 75].map((p) => (
-                                            <div key={`sh-${p}`} className="absolute left-0 right-0 h-px bg-primary/8" style={{ top: `${p}%` }} />
-                                        ))}
-                                    </motion.div>
-
-                                    {/* Navbar */}
-                                    <motion.div
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={isInView ? { opacity: 1, y: 0 } : {}}
-                                        transition={{ duration: 0.5, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                                        className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/8 bg-primary/[0.02] group/block cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <div className="size-5 rounded bg-primary/12" />
-                                            <div className="h-2.5 w-14 rounded bg-foreground/10" />
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="h-2 w-8 rounded bg-muted-foreground/15" />
-                                            <div className="h-2 w-10 rounded bg-muted-foreground/15" />
-                                            <div className="h-2 w-8 rounded bg-muted-foreground/15" />
-                                            <div className="h-5 w-14 rounded-md bg-primary/15 flex items-center justify-center">
-                                                <span className="text-[7px] font-medium text-primary/60">Contact</span>
-                                            </div>
-                                        </div>
-                                    </motion.div>
-
-                                    {/* Hero */}
-                                    <motion.div
-                                        initial={{ opacity: 0, scale: 0.95 }}
-                                        animate={isInView ? { opacity: 1, scale: 1 } : {}}
-                                        transition={{ duration: 0.5, delay: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
-                                        className="flex-1 flex items-center px-3 rounded-lg border border-primary/6 bg-primary/[0.015] group/block cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12"
-                                    >
-                                        <div className="flex-1 space-y-2.5">
-                                            <div className="h-3.5 w-[75%] rounded bg-foreground/12" />
-                                            <div className="h-3 w-[55%] rounded bg-foreground/8" />
-                                            <div className="h-2 w-[65%] rounded bg-muted-foreground/10 mt-1" />
-                                            <div className="mt-3 flex gap-2">
-                                                <div className="h-6 w-20 rounded-md bg-primary/15 flex items-center justify-center">
-                                                    <span className="text-[7px] font-medium text-primary/60">View Work</span>
-                                                </div>
-                                                <div className="h-6 w-16 rounded-md border border-border/40 flex items-center justify-center">
-                                                    <span className="text-[7px] font-medium text-muted-foreground/40">About</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="w-[35%] aspect-square rounded-lg bg-gradient-to-br from-primary/8 to-primary/3 ml-4" />
-                                    </motion.div>
-
-                                    {/* Cards */}
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 12 }}
-                                        animate={isInView ? { opacity: 1, y: 0 } : {}}
-                                        transition={{ duration: 0.5, delay: 0.6, ease: [0.25, 0.1, 0.25, 1] }}
-                                        className="grid grid-cols-3 gap-2"
-                                    >
-                                        {[0, 1, 2].map((i) => (
-                                            <div key={i} className="rounded-lg border border-primary/6 bg-primary/[0.015] p-2 group/card cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12">
-                                                <div className="aspect-[3/2] rounded bg-gradient-to-br from-primary/6 to-transparent mb-2" />
-                                                <div className="h-2 w-[70%] rounded bg-foreground/10 mb-1" />
-                                                <div className="h-1.5 w-full rounded bg-muted-foreground/8" />
-                                                <div className="h-1.5 w-[80%] rounded bg-muted-foreground/6 mt-0.5" />
-                                            </div>
-                                        ))}
-                                    </motion.div>
-
-                                    {/* Footer */}
-                                    <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={isInView ? { opacity: 1 } : {}}
-                                        transition={{ duration: 0.5, delay: 0.75, ease: [0.25, 0.1, 0.25, 1] }}
-                                        className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/6 bg-primary/[0.015] group/block cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12"
-                                    >
-                                        <div className="h-2 w-20 rounded bg-muted-foreground/10" />
-                                        <div className="flex gap-3">
-                                            <div className="h-1.5 w-8 rounded bg-muted-foreground/8" />
-                                            <div className="h-1.5 w-10 rounded bg-muted-foreground/8" />
-                                            <div className="h-1.5 w-6 rounded bg-muted-foreground/8" />
-                                        </div>
-                                    </motion.div>
+                                {/* Right: actions */}
+                                <div className="flex items-center gap-1.5">
+                                    <button className="h-6 px-2.5 rounded-md border border-border/40 flex items-center gap-1.5 text-[8px] text-muted-foreground/50">
+                                        <Save className="size-3" />
+                                        Save
+                                    </button>
+                                    <button className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold shadow-sm shadow-primary/20">
+                                        <Upload className="size-3" />
+                                        Publish
+                                    </button>
                                 </div>
+                            </motion.div>
 
-                                {/* Status bar */}
-                                <div className="flex items-center justify-between px-4 py-1.5 border-t border-border/30 bg-muted/20">
-                                    <span className="text-[9px] text-muted-foreground/30">1440 × 900</span>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[9px] text-muted-foreground/30">100%</span>
-                                        <div className="h-1 w-12 rounded-full bg-border/30 overflow-hidden">
-                                            <div className="h-full w-1/2 bg-primary/20 rounded-full" />
+                            {/* ── Main Editor Area ── */}
+                            <div className="flex" style={{ height: 'clamp(320px, 42vw, 500px)' }}>
+                                {/* Left Sidebar — narrow, faded supporting element */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: -12 }}
+                                    animate={isInView ? { opacity: 0.7, x: 0 } : {}}
+                                    transition={{ duration: 0.5, delay: 0.4 }}
+                                    className="w-[110px] md:w-[130px] border-r border-border/20 bg-muted/5 flex-shrink-0 hidden md:flex flex-col"
+                                >
+                                    {/* Tabs — icon only */}
+                                    <div className="flex border-b border-border/15 px-1">
+                                        {[
+                                            { icon: LayoutTemplate, active: true },
+                                            { icon: Type, active: false },
+                                            { icon: Layers, active: false },
+                                        ].map((tab, i) => (
+                                            <div
+                                                key={i}
+                                                className={cn(
+                                                    'flex-1 flex items-center justify-center py-2 cursor-default',
+                                                    tab.active ? 'text-primary/70 border-b border-primary/40' : 'text-muted-foreground/20'
+                                                )}
+                                            >
+                                                <tab.icon className="size-3" />
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Template cards — compact */}
+                                    <div className="flex-1 overflow-hidden px-2 py-2 space-y-1.5">
+                                        {/* Template 1 — active */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                            transition={{ duration: 0.4, delay: 0.55 }}
+                                            className="rounded-md border border-primary/15 bg-card/50 overflow-hidden"
+                                        >
+                                            <div className="h-12 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-1.5 flex flex-col justify-between">
+                                                <div className="h-1 w-8 rounded bg-white/15" />
+                                                <div className="h-1 w-12 rounded bg-white/20" />
+                                            </div>
+                                            <div className="px-1.5 py-1 flex items-center justify-between">
+                                                <span className="text-[6px] font-semibold text-foreground/60">Developer Dark</span>
+                                                <div className="h-3.5 px-1 rounded bg-primary/12 flex items-center">
+                                                    <span className="text-[5px] font-medium text-primary/60">Use</span>
+                                                </div>
+                                            </div>
+                                        </motion.div>
+
+                                        {/* Template 2 */}
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                            transition={{ duration: 0.4, delay: 0.65 }}
+                                            className="rounded-md border border-border/15 bg-card/30 overflow-hidden"
+                                        >
+                                            <div className="h-12 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-1.5 flex flex-col justify-between">
+                                                <div className="h-1 w-6 rounded bg-black/8" />
+                                                <div className="flex gap-1">
+                                                    <div className="size-3 rounded bg-blue-500/15" />
+                                                    <div className="size-3 rounded bg-emerald-500/10" />
+                                                </div>
+                                            </div>
+                                            <div className="px-1.5 py-1">
+                                                <span className="text-[6px] font-semibold text-foreground/50">Designer Clean</span>
+                                            </div>
+                                        </motion.div>
+
+                                        {/* Template 3 hint */}
+                                        <div className="rounded-md border border-border/10 bg-card/20 overflow-hidden">
+                                            <div className="h-12 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-1.5 flex flex-col justify-between">
+                                                <div className="h-1 w-7 rounded bg-white/8" />
+                                                <div className="h-1 w-10 rounded bg-white/6" />
+                                            </div>
+                                            <div className="px-1.5 py-1">
+                                                <span className="text-[6px] text-foreground/30">Minimal Pro</span>
+                                            </div>
                                         </div>
                                     </div>
+                                </motion.div>
+
+                                {/* Center Canvas — primary focus */}
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.97 }}
+                                    animate={isInView ? { opacity: 1, scale: 1 } : {}}
+                                    transition={{ duration: 0.6, delay: 0.3 }}
+                                    className="flex-1 bg-muted/5 relative overflow-hidden"
+                                >
+                                    {/* Canvas grid bg */}
+                                    <div className="absolute inset-0 dot-grid-bg opacity-20" />
+
+                                    {/* Design on canvas — dark dev portfolio */}
+                                    <div className="absolute inset-2.5 md:inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90">
+                                        {/* Canvas navbar */}
+                                        <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5">
+                                            <span className="text-[10px] font-bold text-white/85 tracking-tight">DevFolio</span>
+                                            <div className="flex items-center gap-4">
+                                                <span className="text-[8px] text-white/35">Projects</span>
+                                                <span className="text-[8px] text-white/35">Skills</span>
+                                                <span className="text-[8px] text-white/35">Blog</span>
+                                                <span className="text-[8px] text-white/55">Contact</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Canvas hero */}
+                                        <div className="flex-1 flex items-center px-5 gap-4">
+                                            <div className="flex-1">
+                                                <p className="text-[16px] md:text-[18px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Alex Johnson</p>
+                                                <p className="text-[9px] font-semibold text-blue-400/80 mt-1">Full Stack Developer &amp; OSS Contributor</p>
+                                                <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Crafting scalable web applications and open-source tools.</p>
+                                                <p className="text-[6px] text-white/20 mt-1">TypeScript · React · Node.js · PostgreSQL · Docker</p>
+                                                <div className="mt-3 flex gap-2">
+                                                    <div className="h-6 px-2.5 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20">
+                                                        <span className="text-[7px] font-semibold text-white">View Projects</span>
+                                                    </div>
+                                                    <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center">
+                                                        <span className="text-[7px] text-white/50">Download CV</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 mt-3">
+                                                    {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
+                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center">
+                                                            <Icon className="size-3 text-white/25" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {/* Code block visual */}
+                                            <div className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
+                                                <div className="flex gap-1 mb-2.5">
+                                                    <div className="size-1.5 rounded-full bg-[#ff5f57]/50" />
+                                                    <div className="size-1.5 rounded-full bg-[#febc2e]/50" />
+                                                    <div className="size-1.5 rounded-full bg-[#28c840]/50" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[6px] font-mono"><span className="text-white/20">{'// '}</span><span className="text-green-400/50">portfolio.js</span></p>
+                                                    <p className="text-[6px] font-mono text-purple-400/50">const <span className="text-blue-400/60">alex</span> = {'{'}</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-amber-400/50">&quot;TypeScript&quot;</span>, <span className="text-amber-400/50">&quot;React&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;Node.js&quot;</span>, <span className="text-amber-400/50">&quot;PostgreSQL&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-amber-400/50">&quot;Docker&quot;</span>],</p>
+                                                    <p className="text-[6px] font-mono pl-2 text-white/20">{'},'}</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">currentProject: </span></p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-green-400/50">&quot;Open Source CLI Tool&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">coffee: </span><span className="text-blue-400/50">Infinity</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">available: </span><span className="text-green-400/50">true</span>,</p>
+                                                    <p className="text-[6px] font-mono text-purple-400/50">{'}'}</p>
+                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-amber-400/40">&quot;building the future...&quot;</span><span className="text-white/15">)</span></p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Tech stack */}
+                                        <div className="px-5 py-2 border-t border-white/[0.03]">
+                                            <p className="text-[7px] font-semibold text-white/40 mb-2">Tech Stack</p>
+                                            <div className="grid grid-cols-4 gap-1.5">
+                                                {[
+                                                    { cat: 'Frontend', items: 'React · Next.js · TypeScript' },
+                                                    { cat: 'Backend', items: 'Node.js · PostgreSQL · Redis' },
+                                                    { cat: 'DevOps', items: 'Docker · AWS · CI/CD' },
+                                                    { cat: 'Tools', items: 'Git · VS Code · Figma' },
+                                                ].map((s, i) => (
+                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5">
+                                                        <p className="text-[6px] font-semibold text-white/50">{s.cat}</p>
+                                                        <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Featured projects */}
+                                        <div className="px-5 pb-3">
+                                            <p className="text-[7px] font-semibold text-white/40 mb-2">Featured Projects</p>
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {[
+                                                    { name: 'Portfolio CLI', desc: 'Scaffolding tool for dev projects', tech: 'TypeScript · Node.js · npm' },
+                                                    { name: 'React Dashboard', desc: 'Real-time analytics with D3 charts', tech: 'React · D3.js · WebSocket' },
+                                                    { name: 'API Gateway', desc: 'High-performance GraphQL API', tech: 'Node.js · GraphQL · Redis' },
+                                                ].map((proj, i) => (
+                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2">
+                                                        <p className="text-[7px] font-semibold text-white/60">{proj.name}</p>
+                                                        <p className="text-[5.5px] text-white/25 mt-0.5">{proj.desc}</p>
+                                                        <p className="text-[5px] text-white/15 mt-1.5">{proj.tech}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+
+                                {/* Right edge — thin properties hint */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: 10 }}
+                                    animate={isInView ? { opacity: 0.5, x: 0 } : {}}
+                                    transition={{ duration: 0.5, delay: 0.5 }}
+                                    className="w-[80px] md:w-[100px] border-l border-border/15 bg-muted/5 flex-shrink-0 hidden lg:flex flex-col"
+                                >
+                                    <div className="px-2 py-2 border-b border-border/10">
+                                        <p className="text-[7px] font-semibold text-foreground/35 uppercase tracking-wider">Properties</p>
+                                    </div>
+                                    <div className="px-2 py-2 space-y-2 flex-1">
+                                        <div className="space-y-1">
+                                            {['X: 0', 'Y: 0', 'W: 960'].map((v) => (
+                                                <div key={v} className="h-4 rounded bg-background/30 border border-border/10 flex items-center px-1.5">
+                                                    <span className="text-[6px] text-muted-foreground/25 font-mono">{v}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="w-full h-px bg-border/10" />
+                                        <div className="flex gap-1">
+                                            {['bg-blue-500/40', 'bg-white/30', 'bg-[#0f1117]/60'].map((c, i) => (
+                                                <div key={i} className={cn('size-3.5 rounded border border-border/15', c)} />
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="px-2 py-1.5 border-t border-border/10">
+                                        <p className="text-[5.5px] text-muted-foreground/20 text-center">Select an element</p>
+                                    </div>
+                                </motion.div>
+                            </div>
+
+                            {/* ── Bottom Status Bar ── */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={isInView ? { opacity: 1 } : {}}
+                                transition={{ duration: 0.4, delay: 0.6 }}
+                                className="flex items-center justify-between px-3 py-1.5 border-t border-border/25 bg-muted/15"
+                            >
+                                <span className="text-[8px] text-muted-foreground/30">Alt+drag · Ctrl+scroll · Shift+click multi-select</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1">
+                                        <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
+                                            <Plus className="size-2.5" />
+                                        </button>
+                                        <span className="text-[8px] text-muted-foreground/40 font-mono">44%</span>
+                                        <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
+                                            <X className="size-2.5" />
+                                        </button>
+                                    </div>
+                                    <span className="text-[8px] text-muted-foreground/30">Desktop · 1440×1000 · 44% zoom</span>
                                 </div>
                             </motion.div>
                         </div>
-                    </motion.div>
-
-                    {/* Text — staggered entrance */}
-                    <div className="md:order-2 order-1">
-                        <motion.span
-                            variants={fadeIn}
-                            initial="hidden"
-                            animate={isInView ? 'visible' : 'hidden'}
-                            custom={0}
-                            className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
-                        >
-                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                            Step 02
-                        </motion.span>
-
-                        <div className="overflow-hidden">
-                            <motion.h2
-                                variants={slideUp}
-                                initial="hidden"
-                                animate={isInView ? 'visible' : 'hidden'}
-                                custom={0.1}
-                                className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
-                            >
-                                Design Visually
-                            </motion.h2>
-                        </div>
-
-                        <motion.p
-                            variants={blurIn}
-                            initial="hidden"
-                            animate={isInView ? 'visible' : 'hidden'}
-                            custom={0.25}
-                            className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg"
-                        >
-                            Structure your ideas with an intuitive visual editor and real-time layout control.
-                        </motion.p>
-
-                        <motion.div
-                            variants={fadeIn}
-                            initial="hidden"
-                            animate={isInView ? 'visible' : 'hidden'}
-                            custom={0.4}
-                            className="mt-8 flex items-center gap-3"
-                        >
-                            <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                <Palette className="size-[18px] text-primary/60" />
-                            </div>
-                            <span className="text-sm font-medium text-muted-foreground/60">Drag-and-drop studio</span>
-                        </motion.div>
                     </div>
-                </div>
+                </motion.div>
             </div>
         </section>
     )
