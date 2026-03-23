@@ -451,42 +451,86 @@ const AI_RESPONSE_LINES = [
     '  Contact form with validation',
 ]
 
+// Phase: typing → sent → bubble → delay → AI response
+type ChatPhase = 'idle' | 'typing' | 'sending' | 'sent' | 'thinking' | 'responding' | 'done'
+
 function FlowAIChatVisual({ inView }: { inView: boolean }) {
+    const [phase, setPhase] = useState<ChatPhase>('idle')
     const [typedChars, setTypedChars] = useState(0)
-    const [showResponse, setShowResponse] = useState(false)
     const [visibleLines, setVisibleLines] = useState(0)
+    const [sendPulse, setSendPulse] = useState(false)
     const hasStarted = useRef(false)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    const schedule = useCallback((fn: () => void, ms: number) => {
+        const t = setTimeout(fn, ms)
+        timers.current.push(t)
+        return t
+    }, [])
 
     useEffect(() => {
         if (!inView || hasStarted.current) return
         hasStarted.current = true
 
-        // Start typing after a short delay
-        const startDelay = setTimeout(() => {
-            let charIndex = 0
-            const typeInterval = setInterval(() => {
-                charIndex++
-                setTypedChars(charIndex)
-                if (charIndex >= AI_CHAT_PROMPT.length) {
-                    clearInterval(typeInterval)
-                    // Show response after typing finishes
-                    setTimeout(() => {
-                        setShowResponse(true)
-                        // Reveal lines one by one
-                        let lineIdx = 0
-                        const lineInterval = setInterval(() => {
-                            lineIdx++
-                            setVisibleLines(lineIdx)
-                            if (lineIdx >= AI_RESPONSE_LINES.length) clearInterval(lineInterval)
-                        }, 180)
-                    }, 600)
-                }
-            }, 45)
-            return () => clearInterval(typeInterval)
-        }, 400)
+        // Natural delay per character — pauses after spaces and punctuation
+        const getCharDelay = (index: number) => {
+            const base = 45 + Math.random() * 35 // 45–80ms base
+            if (index === 0) return base
+            const prev = AI_CHAT_PROMPT[index - 1]!
+            if (prev === ' ') return base + 80 + Math.random() * 70 // word pause
+            if (',.:;!?'.includes(prev)) return base + 150 + Math.random() * 100 // punctuation
+            return base
+        }
 
-        return () => clearTimeout(startDelay)
-    }, [inView])
+        const typeNextChar = (index: number) => {
+            if (index >= AI_CHAT_PROMPT.length) {
+                // Pause before sending — cursor blinks for a beat
+                schedule(() => {
+                    setSendPulse(true)
+                    setPhase('sending')
+
+                    schedule(() => {
+                        setSendPulse(false)
+                        setPhase('sent')
+
+                        schedule(() => {
+                            setPhase('thinking')
+
+                            schedule(() => {
+                                setPhase('responding')
+                                let lineIdx = 0
+                                const lineInterval = setInterval(() => {
+                                    lineIdx++
+                                    setVisibleLines(lineIdx)
+                                    if (lineIdx >= AI_RESPONSE_LINES.length) {
+                                        clearInterval(lineInterval)
+                                        schedule(() => setPhase('done'), 300)
+                                    }
+                                }, 200)
+                                timers.current.push(lineInterval as unknown as ReturnType<typeof setTimeout>)
+                            }, 800)
+                        }, 400)
+                    }, 350)
+                }, 300)
+                return
+            }
+            setTypedChars(index + 1)
+            schedule(() => typeNextChar(index + 1), getCharDelay(index + 1))
+        }
+
+        // Start typing after initial delay
+        schedule(() => {
+            setPhase('typing')
+            typeNextChar(0)
+        }, 500)
+
+        return () => { timers.current.forEach(clearTimeout) }
+    }, [inView, schedule])
+
+    const isTypingInInput = phase === 'typing'
+    const showBubble = phase === 'sent' || phase === 'thinking' || phase === 'responding' || phase === 'done'
+    const showThinking = phase === 'thinking'
+    const showAIResponse = phase === 'responding' || phase === 'done'
 
     return (
         <div className="relative">
@@ -511,21 +555,54 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
 
                 {/* Chat body */}
                 <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
-                    {/* User message */}
-                    <div className="flex justify-end">
-                        <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-3">
-                            <p className="text-sm text-foreground/90 leading-relaxed">
-                                {AI_CHAT_PROMPT.slice(0, typedChars)}
-                                {typedChars < AI_CHAT_PROMPT.length && (
-                                    <span className="inline-block w-[2px] h-[14px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
-                                )}
-                            </p>
-                        </div>
-                    </div>
+                    {/* User message bubble — appears after send */}
+                    {showBubble && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="flex justify-end"
+                        >
+                            <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-3">
+                                <p className="text-sm text-foreground/90 leading-relaxed">
+                                    {AI_CHAT_PROMPT}
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* AI thinking indicator */}
+                    {showThinking && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex justify-start"
+                        >
+                            <div className="rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="size-5 rounded-md bg-primary/10 flex items-center justify-center">
+                                        <Sparkles className="size-3 text-primary/60" />
+                                    </div>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50">Buildify AI</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 py-1">
+                                    <span className="size-1.5 rounded-full bg-primary/40 animate-pulse" />
+                                    <span className="size-1.5 rounded-full bg-primary/30 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                    <span className="size-1.5 rounded-full bg-primary/20 animate-pulse" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
 
                     {/* AI response */}
-                    {showResponse && (
-                        <div className="flex justify-start">
+                    {showAIResponse && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="flex justify-start"
+                        >
                             <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-3">
                                 {/* AI avatar */}
                                 <div className="flex items-center gap-2 mb-2.5">
@@ -560,17 +637,45 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
                                     )}
                                 </div>
                             </div>
-                        </div>
+                        </motion.div>
                     )}
                 </div>
 
-                {/* Input bar */}
+                {/* Input bar — active during typing phase */}
                 <div className="px-4 pb-4">
-                    <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2.5">
-                        <span className="text-xs text-muted-foreground/30 flex-1">Type a message...</span>
-                        <div className="size-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                            <SendHorizonal className="size-3.5 text-primary/40" />
+                    <div className={cn(
+                        'flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-colors duration-200',
+                        isTypingInInput ? 'border-primary/30 bg-background/80' : 'border-border/40 bg-background/60'
+                    )}>
+                        <div className="flex-1 min-h-[20px] flex items-center">
+                            {isTypingInInput ? (
+                                <p className="text-sm text-foreground/80 leading-relaxed">
+                                    {AI_CHAT_PROMPT.slice(0, typedChars)}
+                                    <span className="inline-block w-[2px] h-[14px] bg-primary/70 ml-0.5 align-middle animate-pulse" />
+                                </p>
+                            ) : (
+                                <span className="text-xs text-muted-foreground/30">
+                                    {showBubble ? 'Type a message...' : 'Type a message...'}
+                                </span>
+                            )}
                         </div>
+                        <motion.div
+                            animate={sendPulse ? { scale: [1, 0.85, 1.15, 1] } : {}}
+                            transition={{ duration: 0.35, ease: 'easeOut' }}
+                            className={cn(
+                                'size-7 rounded-lg flex items-center justify-center transition-colors duration-200',
+                                isTypingInInput || phase === 'sending'
+                                    ? 'bg-primary shadow-sm shadow-primary/20'
+                                    : 'bg-primary/10'
+                            )}
+                        >
+                            <SendHorizonal className={cn(
+                                'size-3.5 transition-colors duration-200',
+                                isTypingInInput || phase === 'sending'
+                                    ? 'text-primary-foreground'
+                                    : 'text-primary/40'
+                            )} />
+                        </motion.div>
                     </div>
                 </div>
             </motion.div>
