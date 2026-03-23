@@ -262,7 +262,7 @@ function StaticEl({ el }: { el: CanvasElement }) {
 
 // ─── Scaled preview canvas ────────────────────────────────────────────────────
 
-function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH: _containerH, deviceId }: {
+export function PreviewCanvas({ elements, background, deviceWidth, deviceHeight, containerW, containerH: _containerH, deviceId }: {
   elements: CanvasElement[]
   background: CanvasBackground
   deviceWidth: number

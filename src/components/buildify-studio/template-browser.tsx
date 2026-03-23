@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { LayoutTemplate, ArrowRight } from 'lucide-react'
+import { LayoutTemplate, ArrowRight, Eye } from 'lucide-react'
 import { TEMPLATES, type StudioTemplate, type TemplateCategory } from './templates'
 import { type CanvasElement, type CanvasBackground } from './types'
 
@@ -16,7 +16,6 @@ interface TemplateBrowserProps {
 
 const CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'saas', label: 'SaaS' },
   { id: 'developer', label: 'Developer' },
   { id: 'designer', label: 'Designer' },
   { id: 'personal', label: 'Personal' },
@@ -192,6 +191,21 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
                 {template.category}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem('template-preview', JSON.stringify({
+                  elements: template.elements,
+                  background: template.background,
+                  name: template.name,
+                }))
+                window.open('/template-preview', '_blank')
+              }}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground active:scale-95"
+              title="Preview in new tab"
+            >
+              <Eye className="size-3" />
+            </button>
             <button
               type="button"
               onClick={() => {
