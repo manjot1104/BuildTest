@@ -45,7 +45,16 @@ export async function createDesignHandler({
 export async function listDesignsHandler() {
   const user = await requireSession()
   if (!user) return { error: 'Unauthorized', status: 401 as const }
-  return getStudioLayoutsByUserId(user.id)
+  const rows = await getStudioLayoutsByUserId(user.id)
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    slug: r.slug,
+    isPublished: r.is_published,
+    publishedAt: r.published_at?.toISOString() ?? null,
+    createdAt: r.created_at.toISOString(),
+    updatedAt: r.updated_at.toISOString(),
+  }))
 }
 
 /** GET /api/design/:id — get one design (owned) */
@@ -56,7 +65,14 @@ export async function getDesignByIdHandler({ params }: { params: { id: string } 
   const row = await getStudioLayoutById(params.id)
   if (!row || row.user_id !== user.id) return { error: 'Not found', status: 404 as const }
 
-  return row
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    layout: row.layout,
+    background: row.background,
+    isPublished: row.is_published,
+  }
 }
 
 /** PUT /api/design/:id — save/update a draft */
@@ -99,7 +115,8 @@ export async function publishDesignByIdHandler({
     return { error: 'This URL is already taken', status: 409 as const }
   }
 
-  await publishStudioLayout(params.id, user.id, cleanSlug, body.title)
+  const updated = await publishStudioLayout(params.id, user.id, cleanSlug, body.title)
+  if (!updated) return { error: 'Design not found', status: 404 as const }
 
   return { success: true as const, slug: cleanSlug }
 }

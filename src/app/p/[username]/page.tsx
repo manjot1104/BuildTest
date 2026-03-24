@@ -2,33 +2,21 @@ import React from 'react'
 import { VideoElement } from '@/components/buildify-studio/video-element'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { env } from '@/env'
 import { NavbarScrollHandler } from '@/components/buildify-studio/navbar-scroll-handler'
 import {
   type CanvasElement,
   type CanvasBackground,
   type EnterAnimation,
-  type ResponsiveDevice,
   DEVICE_WIDTHS,
   computeResponsiveLayout,
 } from '@/components/buildify-studio/types'
+import { getStudioLayoutBySlug } from '@/server/db/queries'
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
-interface DesignData {
-  slug: string
-  title: string
-  layout: string
-  background?: string
-  publishedAt: string
-}
-
-async function getDesign(slug: string): Promise<DesignData | null> {
+async function getDesign(slug: string) {
   try {
-    const baseUrl = env.NEXT_PUBLIC_APP_URL
-    const res = await fetch(`${baseUrl}/api/design/public/${slug}`, { cache: 'no-store' })
-    if (!res.ok) return null
-    return (await res.json()) as DesignData
+    return await getStudioLayoutBySlug(slug)
   } catch {
     return null
   }
@@ -90,59 +78,6 @@ function enterAnimClass(anim: EnterAnimation | undefined): string {
   return map[anim] ?? ''
 }
 
-// ─── Responsive CSS generation ────────────────────────────────────────────────
-
-/** Generate responsive CSS for a given breakpoint using the full reflow layout. */
-function buildBreakpointCss(
-  elements: CanvasElement[],
-  device: 'tablet' | 'mobile',
-  maxWidth: number,
-  desktopWidth: number,
-): string {
-  const targetWidth = DEVICE_WIDTHS[device]
-  const layout = computeResponsiveLayout(elements, device, desktopWidth)
-  let rules = ''
-
-  for (let i = 0; i < elements.length; i++) {
-    const orig = elements[i]
-    const eff = layout[i]
-    if (!orig || !eff) continue
-    let css = ''
-    css += `left:${eff.x}px!important;`
-    css += `top:${eff.y}px!important;`
-    css += `width:${eff.width}px!important;`
-    css += `height:${eff.height}px!important;`
-    if (eff.hidden) css += `display:none!important;`
-
-    // Style properties from the computed layout
-    const s = eff.styles
-    if (s.fontSize !== undefined) css += `font-size:${s.fontSize}px!important;`
-    if (s.padding !== undefined) css += `padding:${s.padding}px!important;`
-    if (s.color) css += `color:${s.color}!important;`
-    if (s.backgroundColor) css += `background-color:${s.backgroundColor}!important;`
-    if (s.borderRadius !== undefined) css += `border-radius:${s.borderRadius}px!important;`
-    if (s.fontWeight) css += `font-weight:${s.fontWeight}!important;`
-    if (s.textAlign) css += `text-align:${s.textAlign}!important;`
-    if (s.lineHeight !== undefined) css += `line-height:${s.lineHeight}!important;`
-    if (s.letterSpacing !== undefined) css += `letter-spacing:${s.letterSpacing}px!important;`
-    if (s.gap !== undefined) css += `gap:${s.gap}px!important;`
-    if (s.opacity !== undefined) css += `opacity:${s.opacity / 100}!important;`
-    if (s.border) css += `border:${s.border}!important;`
-    if (s.boxShadow) css += `box-shadow:${s.boxShadow}!important;`
-
-    rules += `[data-el-id="${orig.id}"]{${css}}\n`
-  }
-
-  return `@media(max-width:${maxWidth}px){main{width:${targetWidth}px!important;}\n${rules}}\n`
-}
-
-function buildResponsiveCss(elements: CanvasElement[], desktopWidth = 1440): string {
-  let css = ''
-  css += buildBreakpointCss(elements, 'tablet', 768, desktopWidth)
-  css += buildBreakpointCss(elements, 'mobile', 480, desktopWidth)
-  return css
-}
-
 // ─── Static element renderer ──────────────────────────────────────────────────
 
 function StaticElement({ el }: { el: CanvasElement }) {
@@ -157,12 +92,14 @@ function StaticElement({ el }: { el: CanvasElement }) {
     return styles.backgroundColor
   }
 
+  // Text elements use minHeight so content can grow naturally without overflow/overlap
+  const isTextEl = el.type === 'heading' || el.type === 'paragraph'
   const wrapStyle: React.CSSProperties = {
     position: 'absolute',
     left: el.x,
     top: el.y,
     width: el.width,
-    height: el.height,
+    ...(isTextEl ? { minHeight: el.height } : { height: el.height }),
     zIndex: el.zIndex,
     opacity: styles.opacity !== undefined ? styles.opacity / 100 : 1,
     display: el.hidden ? 'none' : undefined,
@@ -178,7 +115,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
             id={slugId}
             data-heading={el.content.toLowerCase()}
             style={{
-              width: '100%', height: '100%', margin: 0,
+              width: '100%', minHeight: '100%', margin: 0,
               color: styles.color ?? '#1a1a1a',
               fontSize: styles.fontSize ?? 48,
               fontWeight: styles.fontWeight ?? '700',
@@ -187,8 +124,9 @@ function StaticElement({ el }: { el: CanvasElement }) {
               letterSpacing: styles.letterSpacing ? `${styles.letterSpacing}px` : undefined,
               lineHeight: styles.lineHeight ?? '1.2',
               padding: styles.padding ?? 4,
-              wordBreak: 'break-word',
-              whiteSpace: 'pre-wrap',
+              wordBreak: 'normal',
+              overflowWrap: 'break-word',
+              whiteSpace: 'normal',
               display: 'flex',
               alignItems: 'center',
             } as React.CSSProperties}>{el.content}</Tag>
@@ -197,7 +135,7 @@ function StaticElement({ el }: { el: CanvasElement }) {
       case 'paragraph':
         return (
           <p style={{
-            width: '100%', height: '100%', margin: 0,
+            width: '100%', minHeight: '100%', margin: 0,
             color: styles.color ?? '#374151',
             fontSize: styles.fontSize ?? 16,
             fontWeight: styles.fontWeight ?? '400',
@@ -207,9 +145,13 @@ function StaticElement({ el }: { el: CanvasElement }) {
             lineHeight: styles.lineHeight ?? '1.6',
             padding: styles.padding ?? 4,
             background: getBg(),
-            wordBreak: 'break-word',
+            borderRadius: styles.borderRadius,
+            border: styles.border,
+            boxShadow: styles.boxShadow,
+            wordBreak: 'normal',
+            overflowWrap: 'break-word',
             whiteSpace: 'pre-wrap',
-            overflow: 'auto',
+            overflow: 'visible',
           }}>{el.content}</p>
         )
       case 'image':
@@ -284,15 +226,25 @@ function StaticElement({ el }: { el: CanvasElement }) {
       case 'form': {
         const formFields = el.formFields ?? []
         return (
-          <div style={{ width: '100%', height: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {el.content && <h3 style={{ margin: 0, fontSize: 16, fontWeight: '600', color: '#1a1a1a' }}>{el.content}</h3>}
+          <div style={{ width: '100%', minHeight: '100%', background: getBg() ?? '#ffffff', border: styles.border ?? '1px solid #e2e8f0', borderRadius: styles.borderRadius ?? 12, padding: styles.padding ?? 24, display: 'flex', flexDirection: 'column', gap: 12, boxSizing: 'border-box' }}>
+            {el.content && <h3 style={{ margin: 0, fontSize: 16, fontWeight: '600', color: styles.color ?? '#1a1a1a' }}>{el.content}</h3>}
             {formFields.map((f) => (
-              <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label style={{ fontSize: 12, fontWeight: '500', color: '#374151' }}>{f.label}</label>
-                {f.type === 'textarea' ? <textarea placeholder={f.placeholder} rows={2} style={{ padding: '6px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, fontFamily: 'inherit', resize: 'none' }} /> : <input type={f.type} placeholder={f.placeholder} style={{ padding: '6px 10px', fontSize: 13, border: '1px solid #e2e8f0', borderRadius: 6, fontFamily: 'inherit' }} />}
+              <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, width: '100%' }}>
+                <label style={{ fontSize: 12, fontWeight: '500', color: styles.color ?? '#374151' }}>{f.label}{f.required && <span style={{ color: '#ef4444' }}>*</span>}</label>
+                {f.type === 'textarea'
+                  ? <textarea placeholder={f.placeholder} rows={3} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'inherit', resize: 'vertical', backgroundColor: 'rgba(255,255,255,0.05)', color: 'inherit', boxSizing: 'border-box' }} />
+                  : f.type === 'select'
+                    ? <select style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'inherit', backgroundColor: 'rgba(255,255,255,0.05)', color: 'inherit', boxSizing: 'border-box' }}>
+                        <option value="">{f.placeholder ?? 'Select...'}</option>
+                        {f.options?.map((opt, oi) => <option key={oi} value={opt}>{opt}</option>)}
+                      </select>
+                    : f.type === 'checkbox'
+                      ? <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}><input type="checkbox" /> {f.placeholder ?? f.label}</label>
+                      : <input type={f.type} placeholder={f.placeholder} style={{ width: '100%', padding: '8px 12px', fontSize: 13, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, fontFamily: 'inherit', backgroundColor: 'rgba(255,255,255,0.05)', color: 'inherit', boxSizing: 'border-box' }} />
+                }
               </div>
             ))}
-            <button type="submit" style={{ padding: '8px 16px', backgroundColor: '#3b82f6', color: '#ffffff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: '600', cursor: 'pointer', alignSelf: 'flex-start', fontFamily: 'inherit' }}>Submit</button>
+            <button type="submit" style={{ width: '100%', padding: '10px 16px', backgroundColor: '#3b82f6', color: '#ffffff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', marginTop: 4 }}>Submit</button>
           </div>
         )
       }
@@ -335,25 +287,19 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
   try { elements = JSON.parse(design.layout) as CanvasElement[] } catch { elements = [] }
   try { if (design.background) bg = JSON.parse(design.background) as CanvasBackground } catch { bg = null }
 
-  const sorted = [...elements].sort((a, b) => a.zIndex - b.zIndex)
   const bgCss = getBgCss(bg)
 
-  // Compute page height from element positions (absolute positioning doesn't contribute to parent height)
-  const pageHeight = elements.length > 0
-    ? Math.max(960, ...elements.map((el) => el.y + el.height)) + 40
-    : 960
+  // Compute responsive layouts for each device
+  const desktopLayout = [...elements].sort((a, b) => a.zIndex - b.zIndex)
+  const tabletLayout = [...computeResponsiveLayout(elements, 'tablet')].sort((a, b) => a.zIndex - b.zIndex)
+  const mobileLayout = [...computeResponsiveLayout(elements, 'mobile')].sort((a, b) => a.zIndex - b.zIndex)
 
-  // Generate responsive CSS for tablet/mobile overrides
-  const responsiveCss = buildResponsiveCss(elements)
+  const heightOf = (layout: CanvasElement[]) =>
+    layout.length > 0 ? Math.max(960, ...layout.map((el) => el.y + el.height)) + 40 : 960
 
-  // Compute page heights for each breakpoint using the full reflow layout
-  const computeLayoutHeight = (els: CanvasElement[], device: ResponsiveDevice) => {
-    const layout = computeResponsiveLayout(els, device)
-    if (layout.length === 0) return 960
-    return Math.max(960, ...layout.map((el) => el.y + el.height)) + 40
-  }
-  const tabletHeight = computeLayoutHeight(elements, 'tablet')
-  const mobileHeight = computeLayoutHeight(elements, 'mobile')
+  const desktopH = heightOf(desktopLayout)
+  const tabletH = heightOf(tabletLayout)
+  const mobileH = heightOf(mobileLayout)
 
   return (
     <>
@@ -373,26 +319,41 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         .pb-anim-zoomin{animation:pb-zoomin 0.5s ease forwards}
         .pb-anim-bounce{animation:pb-bounce 1s ease infinite}
         *{box-sizing:border-box;margin:0;padding:0}
-        html{scroll-behavior:smooth;overflow-x:hidden}
-        body{font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-        main{position:relative;width:1440px;min-height:${pageHeight}px;margin:0 auto;${bgCss}}
+        html{scroll-behavior:smooth;overflow-x:hidden;max-width:100vw}
+        body{font-family:system-ui,-apple-system,sans-serif;overflow-x:hidden;-webkit-font-smoothing:antialiased;max-width:100vw}
+        .pb-desktop,.pb-tablet,.pb-mobile{display:none}
+        .pb-desktop{display:block}
+        .pb-desktop{position:relative;width:1440px;min-height:${desktopH}px;margin:0 auto;${bgCss};overflow-x:hidden}
         @media(max-width:1460px) and (min-width:769px){
-          main{transform-origin:top left;transform:scale(calc(100vw / 1440));width:1440px;min-height:${pageHeight}px}
-          body{height:calc(${pageHeight}px * (100vw / 1440));overflow:hidden}
+          .pb-desktop{transform-origin:top left;transform:scale(calc(100vw / 1440))}
+          body{height:calc(${desktopH}px * (100vw / 1440));overflow-x:hidden;overflow-y:hidden}
         }
         @media(max-width:768px) and (min-width:481px){
-          main{width:${DEVICE_WIDTHS.tablet}px!important;min-height:${tabletHeight}px!important;transform:none!important;margin:0 auto}
-          body{height:auto}
+          .pb-desktop{display:none}
+          .pb-tablet{display:block;position:relative;width:100vw;max-width:${DEVICE_WIDTHS.tablet}px;min-height:${tabletH}px;margin:0 auto;${bgCss};overflow-x:hidden}
+          body{height:auto;overflow-y:auto}
         }
         @media(max-width:480px){
-          main{width:${DEVICE_WIDTHS.mobile}px!important;min-height:${mobileHeight}px!important;transform:none!important;margin:0 auto}
-          body{height:auto}
+          .pb-desktop{display:none}
+          .pb-tablet{display:none}
+          .pb-mobile{display:block;position:relative;width:100vw;max-width:${DEVICE_WIDTHS.mobile}px;min-height:${mobileH}px;margin:0 auto;${bgCss};overflow-x:hidden}
+          body{height:auto;overflow-y:auto}
         }
-        ${responsiveCss}
       `}</style>
-      <main>
+      {/* Desktop layout */}
+      <main className="pb-desktop">
         <NavbarScrollHandler />
-        {sorted.map((el) => <StaticElement key={el.id} el={el} />)}
+        {desktopLayout.map((el) => !el.hidden && <StaticElement key={el.id} el={el} />)}
+      </main>
+      {/* Tablet layout — pre-computed positions from computeResponsiveLayout */}
+      <main className="pb-tablet">
+        <NavbarScrollHandler />
+        {tabletLayout.map((el) => !el.hidden && <StaticElement key={`t-${el.id}`} el={el} />)}
+      </main>
+      {/* Mobile layout — pre-computed positions from computeResponsiveLayout */}
+      <main className="pb-mobile">
+        <NavbarScrollHandler />
+        {mobileLayout.map((el) => !el.hidden && <StaticElement key={`m-${el.id}`} el={el} />)}
       </main>
     </>
   )

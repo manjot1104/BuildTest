@@ -47,6 +47,12 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const [currentId, setCurrentId] = useState<string | undefined>(designId)
   const currentIdRef = useRef<string | undefined>(designId)
 
+  // Keep refs to latest state to avoid stale closures in save/publish
+  const elementsRef = useRef(state.elements)
+  elementsRef.current = state.elements
+  const bgRef = useRef(state.canvasBackground)
+  bgRef.current = state.canvasBackground
+
   // Clipboard for copy/paste
   const clipboardRef = useRef<CanvasElement[]>([])
 
@@ -68,6 +74,8 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isPublishing] = useState(false)
+  const [publishedSlug, setPublishedSlug] = useState<string | null>(null)
+  const [designTitle, setDesignTitle] = useState('Untitled')
 
   // Blank canvas confirmation
   const [blankConfirmOpen, setBlankConfirmOpen] = useState(false)
@@ -80,13 +88,15 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
       // Load from DB
       void fetch(`/api/design/${designId}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((data: { layout?: string; background?: string | null } | null) => {
+        .then((data: { layout?: string; background?: string | null; slug?: string | null; title?: string; isPublished?: boolean } | null) => {
           if (!data) return
           try {
             const elements = JSON.parse(data.layout ?? '[]') as CanvasElement[]
             const background = data.background ? (JSON.parse(data.background) as CanvasBackground) : undefined
             loadLayout(elements, background)
           } catch { /* ignore parse errors */ }
+          if (data.slug) setPublishedSlug(data.slug)
+          if (data.title) setDesignTitle(data.title)
         })
       return
     }
@@ -106,56 +116,74 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
   }, [designId, loadLayout])
 
   // ── Save draft to DB ───────────────────────────────────────────────────────
+  const savingPromiseRef = useRef<Promise<void> | null>(null)
+  const dispatchRef = useRef(editor.dispatch)
+  dispatchRef.current = editor.dispatch
+
   const handleSaveDraft = useCallback(async () => {
-    setIsSaving(true)
-    try {
-      const body = {
-        title: 'Untitled',
-        layout: JSON.stringify(state.elements),
-        background: JSON.stringify(state.canvasBackground),
-      }
-
-      if (!currentIdRef.current) {
-        // First save — create a new draft
-        const res = await fetch('/api/design', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-        if (!res.ok) throw new Error('Failed to create draft')
-        const data = (await res.json()) as { id?: string }
-        if (data.id) {
-          currentIdRef.current = data.id
-          setCurrentId(data.id)
-          // Update URL so refresh loads the right design
-          window.history.replaceState({}, '', `/buildify-studio/${data.id}`)
-        }
-      } else {
-        // Update existing draft
-        await fetch(`/api/design/${currentIdRef.current}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        })
-      }
-
-      editor.dispatch({ type: 'SET_DIRTY', isDirty: false })
-      // Clear legacy localStorage draft after first successful DB save
-      localStorage.removeItem(LEGACY_DRAFT_KEY)
-      toast.success('Draft saved')
-    } catch {
-      toast.error('Failed to save draft')
-    } finally {
-      setIsSaving(false)
+    // If a save is already in-flight, wait for it to complete then re-save
+    // with the latest state (critical for onBeforePublish to ensure DB is current)
+    if (savingPromiseRef.current) {
+      await savingPromiseRef.current
     }
-  }, [state.elements, state.canvasBackground, editor])
+
+    setIsSaving(true)
+    const promise = (async () => {
+      try {
+        const body = {
+          title: 'Untitled',
+          layout: JSON.stringify(elementsRef.current),
+          background: JSON.stringify(bgRef.current),
+        }
+
+        if (!currentIdRef.current) {
+          // First save — create a new draft
+          const res = await fetch('/api/design', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error('Failed to create draft')
+          const data = (await res.json()) as { id?: string }
+          if (data.id) {
+            currentIdRef.current = data.id
+            setCurrentId(data.id)
+            // Update URL so refresh loads the right design
+            window.history.replaceState({}, '', `/buildify-studio/${data.id}`)
+          }
+        } else {
+          // Update existing draft
+          const res = await fetch(`/api/design/${currentIdRef.current}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error('Failed to save draft')
+        }
+
+        dispatchRef.current({ type: 'SET_DIRTY', isDirty: false })
+        // Clear legacy localStorage draft after first successful DB save
+        localStorage.removeItem(LEGACY_DRAFT_KEY)
+        toast.success('Draft saved')
+      } catch (err) {
+        toast.error('Failed to save draft')
+        throw err // Re-throw so callers like onBeforePublish can detect failure
+      } finally {
+        savingPromiseRef.current = null
+        setIsSaving(false)
+      }
+    })()
+
+    savingPromiseRef.current = promise
+    await promise
+  }, []) // No dependencies — reads everything from refs
 
   // Auto-save: debounce 2s after any change
   useEffect(() => {
     if (!state.isDirty) return
     const timer = setTimeout(() => { void handleSaveDraft() }, 2_000)
     return () => clearTimeout(timer)
-  }, [state.isDirty, state.elements, state.canvasBackground, handleSaveDraft])
+  }, [state.isDirty, handleSaveDraft])
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -356,6 +384,9 @@ export function BuildifyStudioEditor({ designId }: BuildifyStudioEditorProps) {
         onOpenChange={setPublishOpen}
         designId={currentId}
         onBeforePublish={handleSaveDraft}
+        initialSlug={publishedSlug ?? undefined}
+        initialTitle={designTitle}
+        onPublished={(slug) => setPublishedSlug(slug)}
       />
 
       {/* Real-website preview modal */}

@@ -615,6 +615,8 @@ if (type === "openrouter" || type === "all") {
       preview_url: null,
       created_at: chat.created_at,
       updated_at: chat.created_at,
+      chat_type: "OPENROUTER",
+      folder_id: null,
     }))
   )
 }
@@ -631,6 +633,7 @@ if (type === "openrouter" || type === "all") {
         createdAt: chat.created_at.toISOString(),
         updatedAt: chat.updated_at.toISOString(),
         type: (chat.chat_type?.toLowerCase() === 'openrouter' || !chat.demo_url && chat.v0_chat_id && chat.v0_chat_id === chat.id ? 'openrouter' : 'builder') as 'builder' | 'openrouter',
+        folderId: chat.folder_id ?? null,
       }))
       .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 

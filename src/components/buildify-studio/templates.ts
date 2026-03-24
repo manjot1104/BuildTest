@@ -427,14 +427,14 @@ export const TEMPLATES: StudioTemplate[] = [
         { color: '#f1f5f9', fontSize: 52, fontWeight: '800', lineHeight: 1.1, letterSpacing: -1 },
         { headingLevel: 1, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
           tablet: { height: 80, styles: { fontSize: 40 } },
-          mobile: { height: 64, styles: { fontSize: 28, letterSpacing: 0 } },
+          mobile: { height: 80, styles: { fontSize: 28, letterSpacing: 0 } },
         } }),
 
       el('fd-hero-role', 'heading', 100, 234, 560, 36, 'Full Stack Developer',
         { color: 'transparent', fontSize: 26, fontWeight: '700', gradientType: 'linear', gradientFrom: '#60a5fa', gradientTo: '#a78bfa', gradientAngle: 90 },
         { headingLevel: 2, zIndex: 2, enterAnimation: 'slideUp', responsiveStyles: {
           tablet: { height: 32, styles: { fontSize: 20 } },
-          mobile: { height: 28, styles: { fontSize: 17 } },
+          mobile: { height: 32, styles: { fontSize: 17 } },
         } }),
 
       el('fd-hero-desc', 'paragraph', 100, 284, 520, 64,
@@ -442,7 +442,7 @@ export const TEMPLATES: StudioTemplate[] = [
         { color: '#94a3b8', fontSize: 15, lineHeight: 1.75 },
         { zIndex: 2, enterAnimation: 'fadeIn', responsiveStyles: {
           tablet: { height: 60, styles: { fontSize: 14 } },
-          mobile: { height: 68, styles: { fontSize: 13, lineHeight: 1.6 } },
+          mobile: { height: 100, styles: { fontSize: 13, lineHeight: 1.6 } },
         } }),
 
       el('fd-hero-btn1', 'button', 100, 364, 160, 44, 'Download CV',
@@ -616,56 +616,56 @@ export const TEMPLATES: StudioTemplate[] = [
           mobile: { height: 32, styles: { fontSize: 20 } },
         } }),
 
-      // Project 1
+      // Project 1 — grouped as card
       el('fd-p1-img', 'image', 100, 1502, 400, 160,
         'https://placehold.co/400x200/0f172a/3b82f6?text=Project+01',
         { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(59,130,246,0.1)' },
-        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+        { zIndex: 2, groupId: 'proj-1', responsiveStyles: { mobile: { height: 140 } } }),
       el('fd-p1-title', 'heading', 100, 1674, 400, 24, 'Cloud Dashboard',
         { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
-        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+        { headingLevel: 3, zIndex: 2, groupId: 'proj-1', responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
       el('fd-p1-desc', 'paragraph', 100, 1704, 400, 34,
         'Real-time monitoring dashboard for cloud infrastructure.',
         { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-1' }),
       el('fd-p1-tech', 'paragraph', 100, 1744, 400, 18,
         'React · D3.js · WebSockets · AWS',
         { color: '#60a5fa', fontSize: 10, fontWeight: '500' },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-1' }),
 
-      // Project 2
+      // Project 2 — grouped as card
       el('fd-p2-img', 'image', 520, 1502, 400, 160,
         'https://placehold.co/400x200/0f172a/8b5cf6?text=Project+02',
         { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(139,92,246,0.1)' },
-        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+        { zIndex: 2, groupId: 'proj-2', responsiveStyles: { mobile: { height: 140 } } }),
       el('fd-p2-title', 'heading', 520, 1674, 400, 24, 'DevSync CLI',
         { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
-        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+        { headingLevel: 3, zIndex: 2, groupId: 'proj-2', responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
       el('fd-p2-desc', 'paragraph', 520, 1704, 400, 34,
         'Open-source CLI for scaffolding projects with CI/CD templates.',
         { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-2' }),
       el('fd-p2-tech', 'paragraph', 520, 1744, 400, 18,
         'TypeScript · Node.js · npm · GitHub Actions',
         { color: '#a78bfa', fontSize: 10, fontWeight: '500' },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-2' }),
 
-      // Project 3
+      // Project 3 — grouped as card
       el('fd-p3-img', 'image', 940, 1502, 400, 160,
         'https://placehold.co/400x200/0f172a/06b6d4?text=Project+03',
         { borderRadius: 14, objectFit: 'cover', border: '1px solid rgba(6,182,212,0.1)' },
-        { zIndex: 2, responsiveStyles: { mobile: { height: 140 } } }),
+        { zIndex: 2, groupId: 'proj-3', responsiveStyles: { mobile: { height: 140 } } }),
       el('fd-p3-title', 'heading', 940, 1674, 400, 24, 'API Gateway',
         { color: '#f1f5f9', fontSize: 18, fontWeight: '700' },
-        { headingLevel: 3, zIndex: 2, responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
+        { headingLevel: 3, zIndex: 2, groupId: 'proj-3', responsiveStyles: { mobile: { styles: { fontSize: 16 } } } }),
       el('fd-p3-desc', 'paragraph', 940, 1704, 400, 34,
         'High-performance API gateway with rate limiting and caching.',
         { color: '#94a3b8', fontSize: 12, lineHeight: 1.5 },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-3' }),
       el('fd-p3-tech', 'paragraph', 940, 1744, 400, 18,
         'Go · Redis · PostgreSQL · Docker',
         { color: '#22d3ee', fontSize: 10, fontWeight: '500' },
-        { zIndex: 2 }),
+        { zIndex: 2, groupId: 'proj-3' }),
 
       // ── Education Section ───────────────────────────────────────────────────
       el('fd-edu-label', 'paragraph', 100, 1796, 110, 22,
@@ -683,21 +683,21 @@ export const TEMPLATES: StudioTemplate[] = [
       el('fd-edu1', 'paragraph', 100, 1874, 400, 88,
         "B.S. Computer Science\nStanford University · 2014 – 2018\n\nGraduated with honors.",
         { backgroundColor: 'rgba(59,130,246,0.04)', borderRadius: 14, border: '1px solid rgba(59,130,246,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
-        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+        { zIndex: 2, hoverAnimation: 'lift', groupId: 'edu-1', responsiveStyles: {
           mobile: { height: 92, styles: { fontSize: 12 } },
         } }),
 
       el('fd-edu2', 'paragraph', 520, 1874, 400, 88,
         "AWS Solutions Architect\nAmazon Web Services · 2021\n\nProfessional cloud certification.",
         { backgroundColor: 'rgba(139,92,246,0.04)', borderRadius: 14, border: '1px solid rgba(139,92,246,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
-        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+        { zIndex: 2, hoverAnimation: 'lift', groupId: 'edu-2', responsiveStyles: {
           mobile: { height: 88, styles: { fontSize: 12 } },
         } }),
 
       el('fd-edu3', 'paragraph', 940, 1874, 400, 88,
         "Full Stack Bootcamp\nHack Reactor · 2018\n\nIntensive 12-week JS & React program.",
         { backgroundColor: 'rgba(6,182,212,0.04)', borderRadius: 14, border: '1px solid rgba(6,182,212,0.08)', padding: 14, color: '#cbd5e1', fontSize: 12, lineHeight: 1.6 },
-        { zIndex: 2, hoverAnimation: 'lift', responsiveStyles: {
+        { zIndex: 2, hoverAnimation: 'lift', groupId: 'edu-3', responsiveStyles: {
           mobile: { height: 88, styles: { fontSize: 12 } },
         } }),
 
@@ -743,8 +743,8 @@ export const TEMPLATES: StudioTemplate[] = [
           { id: 'fc2', type: 'email', label: 'Email Address', placeholder: 'john@example.com', required: true },
           { id: 'fc3', type: 'textarea', label: 'Message', placeholder: "Tell me about your project...", required: true },
         ], responsiveStyles: {
-          tablet: { height: 300, styles: { padding: 20 } },
-          mobile: { height: 280, styles: { padding: 16, borderRadius: 14 } },
+          tablet: { height: 320, styles: { padding: 20 } },
+          mobile: { height: 340, styles: { padding: 16, borderRadius: 14 } },
         } }),
 
       // Footer

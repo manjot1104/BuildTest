@@ -16,6 +16,10 @@ const SAMPLE_RESUME_DATA = {
   fullName: 'John Doe',
   email: 'john.doe@email.com',
   phone: '+1 (555) 123-4567',
+  location: 'San Francisco, CA',
+  linkedin: 'linkedin.com/in/johndoe',
+  portfolio: 'portfolio.com/johndoe',
+  github: 'github.com/johndoe',
   skills: 'React, TypeScript, Node.js, PostgreSQL, AWS, Docker, Git',
   experience: `Senior Software Engineer | Tech Corp | 2021 - Present
 • Led development of microservices architecture serving 2M+ users
@@ -41,9 +45,440 @@ Task Management App | 2022
 • Open source project with 500+ GitHub stars`,
 }
 
+function extractMandatoryBlock(styleGuide: string | undefined, kind: 'HTML' | 'LaTeX'): string | null {
+  if (!styleGuide) return null
+  const startToken = `MANDATORY STRUCTURE (${kind}):`
+  const startIdx = styleGuide.indexOf(startToken)
+  if (startIdx === -1) return null
+
+  const afterStart = styleGuide.slice(startIdx + startToken.length).trim()
+
+  // Stop at CRITICAL rules or next mandatory block marker
+  const endCandidates = [
+    afterStart.indexOf('CRITICAL FORMATTING RULES:'),
+    afterStart.indexOf('MANDATORY STRUCTURE (HTML):'),
+    afterStart.indexOf('MANDATORY STRUCTURE (LaTeX):'),
+  ].filter((n) => n !== -1 && n > 0)
+
+  const endIdx = endCandidates.length ? Math.min(...endCandidates) : afterStart.length
+  const block = afterStart.slice(0, endIdx).trim()
+  
+  // Remove leading/trailing backticks or code markers if present
+  const cleaned = block.replace(/^```[\w]*\n?/, '').replace(/\n?```$/, '').trim()
+  
+  return cleaned.length ? cleaned : null
+}
+
+// Parse experience data into structured format
+function parseExperience() {
+  const entries = SAMPLE_RESUME_DATA.experience.split('\n\n')
+  return entries.map((entry) => {
+    const lines = entry.split('\n')
+    const header = lines[0] ?? ''
+    const parts = header.split(' | ')
+    const title = parts[0] || 'Software Engineer'
+    const company = parts[1] || 'Tech Company'
+    const dates = parts[2] || '2021 - Present'
+    const bullets = lines
+      .slice(1)
+      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+      .filter((l) => l.length > 0)
+    return { title, company, dates, bullets }
+  })
+}
+
+// Parse education data into structured format
+function parseEducation() {
+  const lines = SAMPLE_RESUME_DATA.education.split('\n')
+  const degree = lines[0] || 'Bachelor of Science'
+  const instLine = lines[1] || 'University | 2015 - 2019'
+  const instParts = instLine.split(' | ')
+  const institution = instParts[0] || 'University'
+  const dates = instParts[1] || '2015 - 2019'
+  const details = lines
+    .slice(2)
+    .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+    .filter((l) => l.length > 0)
+  return { degree, institution, dates, details }
+}
+
+// Parse projects data into structured format
+function parseProjects() {
+  const entries = SAMPLE_RESUME_DATA.projects.split('\n\n')
+  return entries.map((entry) => {
+    const lines = entry.split('\n')
+    const header = lines[0] ?? ''
+    const parts = header.split(' | ')
+    const name = parts[0] || 'Project Name'
+    const year = parts[1] || '2023'
+    const bullets = lines
+      .slice(1)
+      .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+      .filter((l) => l.length > 0)
+    return { name, year, bullets }
+  })
+}
+
+function injectSampleDataIntoHtml(html: string): string {
+  let out = html
+  const expEntries = parseExperience()
+  const eduData = parseEducation()
+  const projEntries = parseProjects()
+
+  // Common placeholders
+  out = out.replace(/\bNAME\b/g, SAMPLE_RESUME_DATA.fullName)
+
+  // Contact line variants
+  out = out.replace(/email\s*\|\s*phone\s*\|\s*location/gi, `${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | ${SAMPLE_RESUME_DATA.location}`)
+  out = out.replace(/email\s*\|\s*phone/gi, `${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}`)
+  out = out.replace(/email\s*—\s*phone/gi, `${SAMPLE_RESUME_DATA.email} — ${SAMPLE_RESUME_DATA.phone}`)
+  out = out.replace(/email\s*-\s*phone/gi, `${SAMPLE_RESUME_DATA.email} - ${SAMPLE_RESUME_DATA.phone}`)
+
+  // Links
+  out = out.replace(/github\.com\/username/gi, SAMPLE_RESUME_DATA.github)
+  out = out.replace(/linkedin(?:\.com\/in\/username)?/gi, SAMPLE_RESUME_DATA.linkedin)
+  out = out.replace(/portfolio(?:\.com)?/gi, SAMPLE_RESUME_DATA.portfolio)
+
+  // Skills injection - handle multiple formats (prevent duplicates)
+  const skillsList = SAMPLE_RESUME_DATA.skills.split(', ')
+  
+  // First, find and replace the Skills section properly to avoid duplicates
+  const skillsPattern = /(<h2[^>]*>Skills<\/h2>[\s\S]*?)(?=<h2|<h3|<div class="card"|<\/div>|<\/section>|<\/body>)/i
+  const skillsMatch = out.match(skillsPattern)
+  
+  if (skillsMatch) {
+    const skillsSection = skillsMatch[0]
+    
+    // Determine format: paragraph, list, or comma-separated
+    if (skillsSection.includes('<p')) {
+      // Paragraph format - replace entire paragraph content
+      out = out.replace(/(<h2[^>]*>Skills<\/h2>[\s\S]*?<p[^>]*>)[\s\S]*?(<\/p>)/i, `$1${SAMPLE_RESUME_DATA.skills}$2`)
+    } else if (skillsSection.includes('<ul>') || skillsSection.includes('<li>')) {
+      // List format - replace entire list content
+      const skillsItems = skillsList.slice(0, 8).map(s => `<li>${s}</li>`).join('\n        ')
+      out = out.replace(/(<h2[^>]*>Skills<\/h2>[\s\S]*?<ul[^>]*>)[\s\S]*?(<\/ul>)/i, `$1\n        ${skillsItems}\n      $2`)
+    } else {
+      // Plain text or other format - replace placeholder text
+      out = out.replace(/\bSkills list\b/gi, SAMPLE_RESUME_DATA.skills)
+      out = out.replace(/\bSkill1, Skill2, Skill3\b/gi, skillsList.slice(0, 3).join(', '))
+      out = out.replace(/Skill1, Skill2, Skill3, Skill4, Skill5/gi, SAMPLE_RESUME_DATA.skills)
+    }
+  } else {
+    // Skills section not found - replace placeholders anywhere
+    out = out.replace(/\bSkills list\b/gi, SAMPLE_RESUME_DATA.skills)
+    out = out.replace(/\bSkill1, Skill2, Skill3\b/gi, skillsList.slice(0, 3).join(', '))
+    out = out.replace(/Skill1, Skill2, Skill3, Skill4, Skill5/gi, SAMPLE_RESUME_DATA.skills)
+  }
+  
+  // Remove duplicate skills entries (if both paragraph and list exist)
+  // This handles cases where template might have both formats
+  const skillsSectionPattern = /(<h2[^>]*>Skills<\/h2>[\s\S]*?)(?=<h2|<h3|<div class="card"|<\/div>|<\/section>|<\/body>)/i
+  const skillsSectionMatch = out.match(skillsSectionPattern)
+  if (skillsSectionMatch) {
+    const section = skillsSectionMatch[0]
+    // If both paragraph and list exist, keep only one (prefer list if available)
+    if (section.includes('<p') && section.includes('<ul>')) {
+      // Remove paragraph, keep list
+      out = out.replace(/(<h2[^>]*>Skills<\/h2>[\s\S]*?<p[^>]*>)[\s\S]*?(<\/p>)/i, '')
+    }
+  }
+
+  // Experience injection - handle multiple formats
+  if (expEntries.length > 0) {
+    // Replace single experience entry placeholders
+    const firstExp = expEntries[0]!
+    out = out.replace(/(<[^>]*class="[^"]*job-title[^"]*"[^>]*>)\s*Job Title\s*(<\/[^>]+>)/gi, `$1${firstExp.title}$2`)
+    out = out.replace(/>\s*Job Title\s*</gi, `>${firstExp.title}<`)
+    out = out.replace(/\bJob Title\b/gi, firstExp.title)
+    
+    out = out.replace(/(<[^>]*class="[^"]*company[^"]*"[^>]*>)\s*Company\s*\|\s*Dates\s*(<\/[^>]+>)/gi, `$1${firstExp.company} | ${firstExp.dates}$2`)
+    out = out.replace(/(<[^>]*class="[^"]*job-meta[^"]*"[^>]*>)\s*Company\s*\|\s*Dates\s*(<\/[^>]+>)/gi, `$1${firstExp.company} | ${firstExp.dates}$2`)
+    out = out.replace(/>\s*Company\s*\|\s*Dates\s*</gi, `>${firstExp.company} | ${firstExp.dates}<`)
+    out = out.replace(/\bCompany\s*\|\s*Dates\b/gi, `${firstExp.company} | ${firstExp.dates}`)
+    
+    // Replace experience section with all entries
+    const expPattern = /(<h2[^>]*>Experience<\/h2>[\s\S]*?)(?=<h2|<h3|<\/div>|<\/section>|<\/body>)/i
+    const expMatch = out.match(expPattern)
+    if (expMatch) {
+      const allExpHtml = expEntries.map(exp => {
+        const bulletsHtml = exp.bullets.map(b => `<li>${b}</li>`).join('\n          ')
+        return `<div class="job-entry" style="margin-bottom: 20px;">
+        <div class="job-title" style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">${exp.title}</div>
+        <div class="job-meta" style="color: #666; font-size: 14px; margin-bottom: 8px;">${exp.company} | ${exp.dates}</div>
+        <ul style="margin-top: 8px; padding-left: 20px; line-height: 1.6;">
+          ${bulletsHtml}
+        </ul>
+      </div>`
+      }).join('\n      ')
+      
+      out = out.replace(expPattern, `$1\n      ${allExpHtml}\n    `)
+    }
+  }
+
+  // Education injection
+  out = out.replace(/(<[^>]*class="[^"]*job-title[^"]*"[^>]*>)\s*Degree\s*(<\/[^>]+>)/gi, `$1${eduData.degree}$2`)
+  out = out.replace(/>\s*Degree\s*</gi, `>${eduData.degree}<`)
+  out = out.replace(/\bDegree\b/gi, eduData.degree)
+  
+  out = out.replace(/(<[^>]*class="[^"]*company[^"]*"[^>]*>)\s*Institution\s*\|\s*Dates\s*(<\/[^>]+>)/gi, `$1${eduData.institution} | ${eduData.dates}$2`)
+  out = out.replace(/(<[^>]*class="[^"]*job-meta[^"]*"[^>]*>)\s*Institution\s*\|\s*Dates\s*(<\/[^>]+>)/gi, `$1${eduData.institution} | ${eduData.dates}$2`)
+  out = out.replace(/>\s*Institution\s*\|\s*Dates\s*</gi, `>${eduData.institution} | ${eduData.dates}<`)
+  out = out.replace(/\bInstitution\b/gi, eduData.institution)
+  
+  // Replace education section - check if already has content to avoid duplication
+  const eduPattern = /(<h2[^>]*>Education<\/h2>)([\s\S]*?)(?=<h2|<h3|<\/div>|<\/section>|<\/body>)/i
+  const eduMatch = out.match(eduPattern)
+  if (eduMatch) {
+    const sectionContent = (eduMatch[2] || '').trim()
+    // Check if section already has real content (not just placeholder text)
+    const hasRealContent = sectionContent && 
+      sectionContent.includes('education-entry') ||
+      (sectionContent.includes('job-title') && !sectionContent.match(/>\s*Degree\s*</i) && !sectionContent.match(/>\s*Date\s*</i))
+    
+    // Only add content if section is empty or has only placeholder text
+    if (!hasRealContent) {
+      const eduDetailsHtml = eduData.details.length > 0 
+        ? `<ul style="margin-top: 8px; padding-left: 20px; line-height: 1.6;">\n          ${eduData.details.map(d => `<li>${d}</li>`).join('\n          ')}\n        </ul>`
+        : ''
+      const eduHtml = `<div class="education-entry" style="margin-bottom: 15px;">
+        <div class="job-title" style="font-weight: 600; font-size: 16px; margin-bottom: 4px;">${eduData.degree}</div>
+        <div class="job-meta" style="color: #666; font-size: 14px; margin-bottom: 8px;">${eduData.institution} | ${eduData.dates}</div>
+        ${eduDetailsHtml}
+      </div>`
+      out = out.replace(eduPattern, `$1\n      ${eduHtml}\n    `)
+    }
+  }
+
+  // Projects injection
+  if (projEntries.length > 0) {
+    // First, replace placeholder text if it exists
+    const firstProj = projEntries[0]!
+    out = out.replace(/(<[^>]*class="[^"]*job-title[^"]*"[^>]*>)\s*Project Name\s*\|\s*Year\s*(<\/[^>]+>)/gi, `$1${firstProj.name} | ${firstProj.year}$2`)
+    out = out.replace(/(<[^>]*class="[^"]*project-title[^"]*"[^>]*>)\s*Project Name\s*\|\s*Year\s*(<\/[^>]+>)/gi, `$1${firstProj.name} | ${firstProj.year}$2`)
+    out = out.replace(/>\s*Project Name\s*\|\s*Year\s*</gi, `>${firstProj.name} | ${firstProj.year}<`)
+    
+    // Replace projects section with all entries - do this to avoid duplicates
+    const projPattern = /(<h2[^>]*>Projects?<\/h2>[\s\S]*?)(?=<h2|<h3|<div class="card"|<\/div>|<\/section>|<\/body>)/i
+    const projMatch = out.match(projPattern)
+    if (projMatch) {
+      // Check if template uses job-title class or project-title class
+      const hasJobTitle = out.includes('class="job-title"')
+      const titleClass = hasJobTitle ? 'job-title' : 'project-title'
+      
+      // Check if template uses job-entry wrapper or direct structure
+      const usesJobEntry = out.includes('class="job-entry"')
+      
+      // Build all project entries matching template structure
+      const allProjHtml = projEntries.map(proj => {
+        const bulletsHtml = proj.bullets.map(b => `<li>${b}</li>`).join('\n          ')
+        
+        if (usesJobEntry) {
+          // Template uses job-entry wrapper (like Modern Gradient might)
+          return `<div class="job-entry">
+        <div class="${titleClass}">${proj.name} | ${proj.year}</div>
+        <ul>
+          ${bulletsHtml}
+        </ul>
+      </div>`
+        } else {
+          // Template uses direct structure
+          return `<div class="project-entry" style="margin-bottom: 20px;">
+        <div class="${titleClass}">${proj.name} | ${proj.year}</div>
+        <ul style="margin-top: 8px; padding-left: 20px; line-height: 1.6;">
+          ${bulletsHtml}
+        </ul>
+      </div>`
+        }
+      }).join('\n      ')
+      
+      // Replace the entire projects section content (but keep the h2 heading)
+      const sectionContent = projMatch[0]
+      // Remove placeholder content but keep the h2
+      const cleanedSection = sectionContent.replace(/(<h2[^>]*>Projects?<\/h2>)[\s\S]*/i, `$1\n      ${allProjHtml}\n    `)
+      out = out.replace(projPattern, cleanedSection)
+    } else {
+      // If Projects section doesn't exist but should be there, add a single heading with all projects before closing tags
+      const beforeClose = out.match(/([\s\S]*)(<\/div>\s*<\/body>)/)
+      if (beforeClose && !out.includes('<h2>Projects')) {
+        const projectEntries = projEntries.map(proj => {
+          const bulletsHtml = proj.bullets.map(b => `<li>${b}</li>`).join('\n          ')
+          return `<div class="project-entry" style="margin-bottom: 20px;">
+    <div class="job-title">${proj.name} | ${proj.year}</div>
+    <ul>
+      ${bulletsHtml}
+    </ul>
+  </div>`
+        }).join('\n  ')
+
+        const sectionHtml = `<h2>Projects</h2>
+  ${projectEntries}`
+
+        out = out.replace(/(<\/div>\s*<\/body>)/, `  ${sectionHtml}\n$1`)
+      }
+    }
+  }
+
+  return out
+}
+
+function injectSampleDataIntoLatex(latex: string): string {
+  let out = latex
+  const expEntries = parseExperience()
+  const eduData = parseEducation()
+  const projEntries = parseProjects()
+
+  out = out.replace(/\bNAME\b/g, SAMPLE_RESUME_DATA.fullName)
+
+  // Common contact formats
+  out = out.replace(/email\s*\|\s*phone\s*\|\s*location/gi, `${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone} | ${SAMPLE_RESUME_DATA.location}`)
+  out = out.replace(/email\s*\|\s*phone/gi, `${SAMPLE_RESUME_DATA.email} | ${SAMPLE_RESUME_DATA.phone}`)
+  out = out.replace(/email\s*—\s*phone/gi, `${SAMPLE_RESUME_DATA.email} — ${SAMPLE_RESUME_DATA.phone}`)
+  out = out.replace(/email\s*-\s*phone/gi, `${SAMPLE_RESUME_DATA.email} - ${SAMPLE_RESUME_DATA.phone}`)
+
+  // Dot separators used in some templates
+  out = out.replace(/email\s*\$\\cdot\$\s*phone\s*\$\\cdot\$\s*location/gi, `${SAMPLE_RESUME_DATA.email} $\\cdot$ ${SAMPLE_RESUME_DATA.phone} $\\cdot$ ${SAMPLE_RESUME_DATA.location}`)
+
+  // Links
+  out = out.replace(/github\.com\/username/gi, SAMPLE_RESUME_DATA.github)
+  out = out.replace(/linkedin\s*\|\s*portfolio/gi, `${SAMPLE_RESUME_DATA.linkedin} | ${SAMPLE_RESUME_DATA.portfolio}`)
+
+  // Skills injection
+  const skillsList = SAMPLE_RESUME_DATA.skills.split(', ')
+  out = out.replace(/Skills list\s*\(comma-separated[^)]*\)/gi, SAMPLE_RESUME_DATA.skills)
+  out = out.replace(/Skill1, Skill2, Skill3/gi, skillsList.slice(0, 3).join(', '))
+  
+  // Replace skills in itemize environments
+  const skillsItems = skillsList.slice(0, 8).map(s => `  \\item ${s}`).join('\n')
+  out = out.replace(/(\\section\*\{Skills\}[\s\S]*?\\begin\{itemize\})[\s\S]*?(\\end\{itemize\})/i, `$1\n${skillsItems}\n$2`)
+  out = out.replace(/(\\textbf\{SKILLS\}[\s\S]*?\\begin\{itemize\})[\s\S]*?(\\end\{itemize\})/i, `$1\n${skillsItems}\n$2`)
+  out = out.replace(/(\\section\{Skills\}[\s\S]*?\\begin\{itemize\})[\s\S]*?(\\end\{itemize\})/i, `$1\n${skillsItems}\n$2`)
+  
+  // Replace skills in paragraph format
+  out = out.replace(/(\\section\*\{Skills\}[\s\S]*?)(?=\\section|\\end\{document\}|\\end\{minipage\})/i, (match) => {
+    if (!match.includes('\\begin{itemize}')) {
+      return match + SAMPLE_RESUME_DATA.skills + '\n'
+    }
+    return match
+  })
+
+  // Experience injection
+  if (expEntries.length > 0) {
+    const firstExp = expEntries[0]!
+    out = out.replace(/\\textbf\{\\textcolor\{[^}]+\}\{Job Title\}\}/gi, `\\textbf{\\textcolor{blue!60!black}{${firstExp.title}}}`)
+    out = out.replace(/\\textbf\{Job Title\}/gi, `\\textbf{${firstExp.title}}`)
+    out = out.replace(/\\textit\{\\textcolor\{[^}]+\}\{Company\s*\|\s*Dates\}\}/gi, `\\textit{\\textcolor{blue!50!black}{${firstExp.company} | ${firstExp.dates}}}`)
+    out = out.replace(/\\textit\{Company\s*\|\s*Dates\}/gi, `\\textit{${firstExp.company} | ${firstExp.dates}}`)
+    out = out.replace(/Company\s*\|\s*Dates/gi, `${firstExp.company} | ${firstExp.dates}`)
+    
+    // Replace experience section with all entries
+    const expPattern = /(\\section\*\{Experience\}[\s\S]*?)(?=\\section|\\end\{document\}|\\end\{minipage\})/i
+    const expMatch = out.match(expPattern)
+    if (expMatch && (expMatch[0].includes('Job Title') || expMatch[0].includes('Description') || expMatch[0].includes('\\item'))) {
+      const allExpLatex = expEntries.map(exp => {
+        const bulletsLatex = exp.bullets.map(b => `  \\item ${b}`).join('\n')
+        return `\\textbf{${exp.title}} \\hfill \\textit{${exp.dates}}\\\\\n\\textit{${exp.company}}\n\\begin{itemize}[leftmargin=*]\n${bulletsLatex}\n\\end{itemize}\n\\vspace{0.2cm}\n`
+      }).join('')
+      
+      out = out.replace(expPattern, `\\section*{Experience}\n${allExpLatex}`)
+    }
+    
+    // Also handle EXPERIENCE (uppercase)
+    const expPatternUpper = /(\\textbf\{EXPERIENCE\}[\s\S]*?)(?=\\section|\\textbf\{|\\end\{document\}|\\end\{minipage\})/i
+    const expMatchUpper = out.match(expPatternUpper)
+    if (expMatchUpper) {
+      const allExpLatex = expEntries.map(exp => {
+        const bulletsLatex = exp.bullets.map(b => `  \\item ${b}`).join('\n')
+        return `\\textbf{${exp.title}} | \\textit{${exp.company}} | \\textit{${exp.dates}}\n\\begin{itemize}[leftmargin=*]\n${bulletsLatex}\n\\end{itemize}\n\\vspace{0.2cm}\n`
+      }).join('')
+      
+      out = out.replace(expPatternUpper, `\\textbf{EXPERIENCE}\n${allExpLatex}`)
+    }
+  }
+
+  // Education injection
+  out = out.replace(/\\textbf\{\\textcolor\{[^}]+\}\{Degree\}\}/gi, `\\textbf{\\textcolor{blue!60!black}{${eduData.degree}}}`)
+  out = out.replace(/\\textbf\{Degree\}/gi, `\\textbf{${eduData.degree}}`)
+  out = out.replace(/Degree\s*—\s*Institution\s*—\s*Dates/gi, `${eduData.degree} — ${eduData.institution} — ${eduData.dates}`)
+  out = out.replace(/Institution\s*\|\s*Dates/gi, `${eduData.institution} | ${eduData.dates}`)
+  out = out.replace(/\\textit\{\\textcolor\{[^}]+\}\{Institution\s*\|\s*Dates\}\}/gi, `\\textit{\\textcolor{blue!50!black}{${eduData.institution} | ${eduData.dates}}}`)
+  out = out.replace(/\\textit\{Institution\s*\|\s*Dates\}/gi, `\\textit{${eduData.institution} | ${eduData.dates}}`)
+  
+  // Replace education section
+  const eduPattern = /(\\section\*\{Education\}[\s\S]*?)(?=\\section|\\end\{document\}|\\end\{minipage\})/i
+  const eduMatch = out.match(eduPattern)
+  if (eduMatch) {
+    const eduDetailsLatex = eduData.details.length > 0 
+      ? `\\begin{itemize}[leftmargin=*]\n${eduData.details.map(d => `  \\item ${d}`).join('\n')}\n\\end{itemize}\n`
+      : ''
+    const eduLatex = `\\section*{Education}\n\\textbf{${eduData.degree}} \\hfill \\textit{${eduData.dates}}\\\\\n\\textit{${eduData.institution}}\n${eduDetailsLatex}`
+    out = out.replace(eduPattern, eduLatex)
+  }
+  
+  // Also handle EDUCATION (uppercase)
+  const eduPatternUpper = /(\\textbf\{EDUCATION\}[\s\S]*?)(?=\\section|\\textbf\{|\\end\{document\}|\\end\{minipage\})/i
+  const eduMatchUpper = out.match(eduPatternUpper)
+  if (eduMatchUpper) {
+    const eduDetailsLatex = eduData.details.length > 0 
+      ? `\\begin{itemize}[leftmargin=*]\n${eduData.details.map(d => `  \\item ${d}`).join('\n')}\n\\end{itemize}\n`
+      : ''
+    const eduLatex = `\\textbf{EDUCATION}\n\\textbf{${eduData.degree}} | \\textit{${eduData.institution}} | \\textit{${eduData.dates}}\n${eduDetailsLatex}`
+    out = out.replace(eduPatternUpper, eduLatex)
+  }
+
+  // Projects injection
+  if (projEntries.length > 0) {
+    const firstProj = projEntries[0]!
+    out = out.replace(/\\textbf\{\\textcolor\{[^}]+\}\{Project Name\s*\|\s*Year\}\}/gi, `\\textbf{\\textcolor{blue!60!black}{${firstProj.name} | ${firstProj.year}}}`)
+    out = out.replace(/\\textbf\{Project Name\s*\|\s*Year\}/gi, `\\textbf{${firstProj.name} | ${firstProj.year}}`)
+    out = out.replace(/Project Name\s*—\s*Technologies\s*—\s*Year/gi, `${firstProj.name} — React, Node.js — ${firstProj.year}`)
+    
+    // Replace projects section with all entries
+    const projPattern = /(\\section\*\{Projects?\}[\s\S]*?)(?=\\section|\\end\{document\}|\\end\{minipage\})/i
+    const projMatch = out.match(projPattern)
+    if (projMatch && (projMatch[0].includes('Project Name') || projMatch[0].includes('Project description') || projMatch[0].includes('\\item'))) {
+      const allProjLatex = projEntries.map(proj => {
+        const bulletsLatex = proj.bullets.map(b => `  \\item ${b}`).join('\n')
+        return `\\textbf{${proj.name}} \\hfill \\textit{${proj.year}}\n\\begin{itemize}[leftmargin=*]\n${bulletsLatex}\n\\end{itemize}\n\\vspace{0.2cm}\n`
+      }).join('')
+      
+      out = out.replace(projPattern, `\\section*{Projects}\n${allProjLatex}`)
+    }
+    
+    // Also handle PROJECTS (uppercase)
+    const projPatternUpper = /(\\textbf\{PROJECTS?\}[\s\S]*?)(?=\\section|\\textbf\{|\\end\{document\}|\\end\{minipage\})/i
+    const projMatchUpper = out.match(projPatternUpper)
+    if (projMatchUpper) {
+      const allProjLatex = projEntries.map(proj => {
+        const bulletsLatex = proj.bullets.map(b => `  \\item ${b}`).join('\n')
+        return `\\textbf{${proj.name} | ${proj.year}}\n\\begin{itemize}[leftmargin=*]\n${bulletsLatex}\n\\end{itemize}\n\\vspace{0.2cm}\n`
+      }).join('')
+      
+      out = out.replace(projPatternUpper, `\\textbf{PROJECTS}\n${allProjLatex}`)
+    }
+  }
+
+  return out
+}
+
 // Generate sample LaTeX preview based on template
 function generateSampleLatex(template: ResumeTemplate): string {
   const { id, styleGuide } = template
+
+  // Prefer using the template's own mandatory LaTeX block so every template has a unique preview
+  const extracted = extractMandatoryBlock(styleGuide, 'LaTeX')
+  if (extracted) {
+    const injected = injectSampleDataIntoLatex(extracted)
+    // Ensure it looks like a full document (some guides may omit document wrapper)
+    if (injected.includes('\\begin{document}')) return injected
+    return `\\documentclass{article}
+\\usepackage[margin=0.75in]{geometry}
+\\usepackage{enumitem}
+\\usepackage{xcolor}
+
+\\begin{document}
+${injected}
+\\end{document}`
+  }
   
   // Template-specific LaTeX generation
   switch (id) {
@@ -935,7 +1370,26 @@ ${SAMPLE_RESUME_DATA.skills.split(', ').map(s => `  \\item ${s}`).join('\n')}
 
 // Generate sample HTML preview based on template
 function generateSampleHtml(template: ResumeTemplate): string {
-  const { id } = template
+  const { id, styleGuide } = template
+
+  // Prefer using the template's own mandatory HTML block so every template has a unique preview
+  const extracted = extractMandatoryBlock(styleGuide, 'HTML')
+  if (extracted) {
+    const injected = injectSampleDataIntoHtml(extracted)
+    // If the block isn't a full HTML doc, wrap it (older templates might only provide a div)
+    if (injected.toLowerCase().includes('<!doctype html')) return injected
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resume Preview - ${template.name}</title>
+</head>
+<body>
+${injected}
+</body>
+</html>`
+  }
   
   // Template-specific HTML generation
   switch (id) {
@@ -1426,6 +1880,7 @@ export function ResumeTemplatePreviewModal({
   useEffect(() => {
     if (!open || !template) return
 
+    let cancelled = false
     const format = template.format || 'both'
     const effectiveFormat = format === 'both' ? currentFormat : format
 
@@ -1433,7 +1888,6 @@ export function ResumeTemplatePreviewModal({
       const latexCode = generateSampleLatex(template)
       setPreviewContent(latexCode)
 
-      let cancelled = false
       setIsCompilingPdf(true)
       fetch('/api/resume/compile-pdf', {
         method: 'POST',
@@ -1455,11 +1909,60 @@ export function ResumeTemplatePreviewModal({
         .finally(() => {
           if (!cancelled) setIsCompilingPdf(false)
         })
-
-      return () => { cancelled = true }
-    } else {
-      setPreviewContent(generateSampleHtml(template))
+    } else if (format === 'html') {
+      const htmlContent = generateSampleHtml(template)
+      // Ensure HTML is valid and complete
+      if (htmlContent && htmlContent.trim()) {
+        setPreviewContent(htmlContent)
+      } else {
+        console.error('Failed to generate HTML preview for template:', template.id)
+        setPreviewContent('')
+      }
       setPdfUrl(null)
+    } else {
+      // For 'both' or undefined, use currentFormat
+      if (currentFormat === 'latex') {
+        const latexCode = generateSampleLatex(template)
+        setPreviewContent(latexCode)
+        
+        // Compile LaTeX to PDF for preview
+        setIsCompilingPdf(true)
+        fetch('/api/resume/compile-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
+        })
+          .then(async (res) => {
+            if (cancelled) return
+            if (res.ok) {
+              const blob = await res.blob()
+              const url = URL.createObjectURL(blob)
+              setPdfUrl(url)
+            } else {
+              setPdfUrl(null)
+            }
+          })
+          .catch(() => {
+            if (!cancelled) setPdfUrl(null)
+          })
+          .finally(() => {
+            if (!cancelled) setIsCompilingPdf(false)
+          })
+      } else {
+        const htmlContent = generateSampleHtml(template)
+        // Ensure HTML is valid and complete
+        if (htmlContent && htmlContent.trim()) {
+          setPreviewContent(htmlContent)
+        } else {
+          console.error('Failed to generate HTML preview for template:', template.id)
+          setPreviewContent('')
+        }
+        setPdfUrl(null)
+      }
+    }
+
+    return () => {
+      cancelled = true
     }
   }, [open, template, currentFormat])
 
@@ -1570,12 +2073,21 @@ export function ResumeTemplatePreviewModal({
           {displayFormat === 'html' ? (
             // HTML Preview - Render in iframe
             <div className="rounded-lg border border-white/10 bg-white shadow-2xl">
+              {previewContent && previewContent.trim() ? (
               <iframe
                 srcDoc={previewContent}
                 className="h-[800px] w-full rounded-lg"
                 style={{ border: 'none' }}
                 title="HTML Resume Preview"
+                  sandbox="allow-same-origin"
               />
+              ) : (
+                <div className="flex h-[800px] items-center justify-center p-6">
+                  <div className="text-center">
+                    <p className="text-sm text-white/60 mb-2">Loading preview...</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             // LaTeX Preview - Show rendered PDF

@@ -324,8 +324,6 @@ const confirmDelete = async () => {
                                                 type="button"
                                                 onClick={(e) => {
                                                     e.stopPropagation()
-                                                    console.log('Chat object:', chat) 
-    console.log('ID being sent:', chat.v0ChatId || chat.id)  
                                                     if (chat.type === 'builder') {
                                                         router.push(`/chat?chatId=${chat.v0ChatId}`)
                                                     } else {

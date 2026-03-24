@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
+import { BarChart3 } from 'lucide-react'
 import {
   Heading1, AlignLeft, Image, MousePointerClick, LayoutTemplate, Box,
   Minus, ArrowUpDown, Share2, Play, Star, Menu, ClipboardList, Code2,
@@ -16,6 +17,14 @@ const ICON_MAP: Record<ElementType, React.FC<{ className?: string }>> = {
   button: MousePointerClick,
   section: LayoutTemplate,
   container: Box,
+
+
+  'testimonial-block': Star,
+'pricing-block': ClipboardList,
+'hero-block': LayoutTemplate,
+'stats-block': BarChart3,
+'feature-card': Box,
+
   divider: Minus,
   spacer: ArrowUpDown,
   'social-links': Share2,
@@ -34,6 +43,13 @@ const LABEL_MAP: Record<ElementType, string> = {
   section: 'Section',
   container: 'Container',
   divider: 'Divider',
+
+'testimonial-block': 'Testimonial',
+'pricing-block': 'Pricing',
+'hero-block': 'Hero Section',
+'stats-block': 'Stats',
+'feature-card': 'Feature Card',
+
   spacer: 'Spacer',
   'social-links': 'Social Links',
   'video-embed': 'Video',
@@ -50,6 +66,12 @@ const TYPE_DOT: Record<ElementType, string> = {
   'code-block': 'bg-violet-500',
   image: 'bg-emerald-500',
   'video-embed': 'bg-rose-500',
+'testimonial-block': 'bg-pink-500',
+'pricing-block': 'bg-green-500',
+'hero-block': 'bg-indigo-500',
+'stats-block': 'bg-yellow-500',
+'feature-card': 'bg-purple-500',
+
   icon: 'bg-amber-500',
   button: 'bg-violet-500',
   navbar: 'bg-indigo-500',

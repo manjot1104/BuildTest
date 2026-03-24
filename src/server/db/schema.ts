@@ -6,6 +6,7 @@ import {
   pgEnum,
   pgTable,
   pgTableCreator,
+  real,
   text,
   timestamp,
   unique,
@@ -18,8 +19,6 @@ export const subscriptionStatusEnum = pgEnum("subscription_status", [
   "expired",
   "pending",
 ]);
-
-
 
 export const paymentStatusEnum = pgEnum("payment_status", [
   "pending",
@@ -63,7 +62,6 @@ export const userRoleEnum = pgEnum("user_role", [
   "manager",
   "team_member",
 ]);
-
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -135,6 +133,7 @@ export const userRelations = relations(user, ({ many, one }) => ({
   creditUsageLogs: many(credit_usage_logs),
   githubRepos: many(github_repos),
   accessibilityTestRuns: many(accessibility_test_runs),
+  testRuns: many(test_runs),
 }));
 
 export const accountRelations = relations(account, ({ one }) => ({
@@ -144,10 +143,7 @@ export const accountRelations = relations(account, ({ one }) => ({
 export const sessionRelations = relations(session, ({ one }) => ({
   user: one(user, { fields: [session.userId], references: [user.id] }),
 }));
-export const chatTypeEnum = pgEnum("chat_type", [
-  "BUILDER",
-  "OPENROUTER",
-]);
+export const chatTypeEnum = pgEnum("chat_type", ["BUILDER", "OPENROUTER"]);
 
 export const messageRoleEnum = pgEnum("message_role", [
   "USER",
@@ -178,9 +174,7 @@ export const conversations = createTable(
       .notNull(),
     title: text("title"),
   }),
-  (t) => [
-    index("conversations_user_id_idx").on(t.user_id),
-  ],
+  (t) => [index("conversations_user_id_idx").on(t.user_id)],
 );
 
 export const conversation_messages = createTable(
@@ -268,9 +262,9 @@ export const user_chats = createTable(
     is_starred: d.boolean("is_starred").default(false).notNull(),
     chat_type: chatTypeEnum("chat_type").notNull().default("BUILDER"),
 
-model_name: d.text("model_name"),
+    model_name: d.text("model_name"),
 
-prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
+    prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
 
 conversation_id: d
   .text("conversation_id")
@@ -322,7 +316,10 @@ export const user_credits = createTable(
       .references(() => user.id, { onDelete: "cascade" })
       .unique(), // One credit record per user
     // Monthly subscription credits (expire with subscription)
-    subscription_credits: d.integer("subscription_credits").notNull().default(0),
+    subscription_credits: d
+      .integer("subscription_credits")
+      .notNull()
+      .default(0),
     // Additional purchased credits (never expire)
     additional_credits: d.integer("additional_credits").notNull().default(0),
     // Timestamps
@@ -348,7 +345,9 @@ export const subscriptions = createTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     // Razorpay subscription details
-    razorpay_subscription_id: d.varchar("razorpay_subscription_id", { length: 255 }),
+    razorpay_subscription_id: d.varchar("razorpay_subscription_id", {
+      length: 255,
+    }),
     razorpay_plan_id: d.varchar("razorpay_plan_id", { length: 255 }),
     // Plan details
     plan_id: d.varchar("plan_id", { length: 50 }).notNull(), // starter, pro, enterprise
@@ -358,8 +357,12 @@ export const subscriptions = createTable(
     // Status
     status: subscriptionStatusEnum("status").notNull().default("pending"),
     // Billing cycle
-    current_period_start: d.timestamp("current_period_start", { withTimezone: true }),
-    current_period_end: d.timestamp("current_period_end", { withTimezone: true }),
+    current_period_start: d.timestamp("current_period_start", {
+      withTimezone: true,
+    }),
+    current_period_end: d.timestamp("current_period_end", {
+      withTimezone: true,
+    }),
     // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -373,7 +376,9 @@ export const subscriptions = createTable(
   }),
   (t) => [
     index("subscriptions_user_id_idx").on(t.user_id),
-    index("subscriptions_razorpay_subscription_id_idx").on(t.razorpay_subscription_id),
+    index("subscriptions_razorpay_subscription_id_idx").on(
+      t.razorpay_subscription_id,
+    ),
     index("subscriptions_status_idx").on(t.status),
   ],
 );
@@ -399,7 +404,9 @@ export const payment_transactions = createTable(
     // Status
     status: paymentStatusEnum("status").notNull().default("pending"),
     // Reference to subscription or credit pack
-    subscription_id: d.text("subscription_id").references(() => subscriptions.id),
+    subscription_id: d
+      .text("subscription_id")
+      .references(() => subscriptions.id),
     credit_pack_id: d.varchar("credit_pack_id", { length: 50 }), // pack_100, pack_200, etc.
     // Metadata
     metadata: d.text("metadata"), // JSON string for additional data
@@ -416,7 +423,9 @@ export const payment_transactions = createTable(
   (t) => [
     index("payment_transactions_user_id_idx").on(t.user_id),
     index("payment_transactions_razorpay_order_id_idx").on(t.razorpay_order_id),
-    index("payment_transactions_razorpay_payment_id_idx").on(t.razorpay_payment_id),
+    index("payment_transactions_razorpay_payment_id_idx").on(
+      t.razorpay_payment_id,
+    ),
     index("payment_transactions_status_idx").on(t.status),
   ],
 );
@@ -436,8 +445,12 @@ export const credit_usage_logs = createTable(
     // Related chat
     chat_id: d.varchar("chat_id", { length: 255 }),
     // Balance after deduction
-    subscription_credits_remaining: d.integer("subscription_credits_remaining").notNull(),
-    additional_credits_remaining: d.integer("additional_credits_remaining").notNull(),
+    subscription_credits_remaining: d
+      .integer("subscription_credits_remaining")
+      .notNull(),
+    additional_credits_remaining: d
+      .integer("additional_credits_remaining")
+      .notNull(),
     // Timestamp
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -532,10 +545,7 @@ export const accessibilityPageResultsRelations = relations(accessibility_page_re
   }),
 }))
 
-export const demoTypeEnum = pgEnum("demo_type", [
-  "featured",
-  "community",
-]);
+export const demoTypeEnum = pgEnum("demo_type", ["featured", "community"]);
 
 export const demo_visits = createTable(
   "demo_visits",
@@ -571,42 +581,54 @@ export const userCreditsRelations = relations(user_credits, ({ one }) => ({
   user: one(user, { fields: [user_credits.user_id], references: [user.id] }),
 }));
 
-export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({
-  user: one(user, { fields: [subscriptions.user_id], references: [user.id] }),
-  transactions: many(payment_transactions),
-}));
-
-export const paymentTransactionsRelations = relations(payment_transactions, ({ one }) => ({
-  user: one(user, { fields: [payment_transactions.user_id], references: [user.id] }),
-  subscription: one(subscriptions, {
-    fields: [payment_transactions.subscription_id],
-    references: [subscriptions.id],
-  }),
-}));
-
-export const creditUsageLogsRelations = relations(credit_usage_logs, ({ one }) => ({
-  user: one(user, { fields: [credit_usage_logs.user_id], references: [user.id] }),
-}));
-
-// Resume Builder Tables
-export const resume_templates = createTable(
-  "resume_templates",
-  (d) => ({
-    id: d.text("id").primaryKey(),
-    name: d.varchar("name", { length: 255 }).notNull(),
-    description: d.text("description"),
-    latex_template: d.text("latex_template").notNull(),
-    is_default: d.boolean("is_default").default(false).notNull(),
-    created_at: d
-      .timestamp("created_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
-    updated_at: d
-      .timestamp("updated_at", { withTimezone: true })
-      .$defaultFn(() => new Date())
-      .notNull(),
+export const subscriptionsRelations = relations(
+  subscriptions,
+  ({ one, many }) => ({
+    user: one(user, { fields: [subscriptions.user_id], references: [user.id] }),
+    transactions: many(payment_transactions),
   }),
 );
+
+export const paymentTransactionsRelations = relations(
+  payment_transactions,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [payment_transactions.user_id],
+      references: [user.id],
+    }),
+    subscription: one(subscriptions, {
+      fields: [payment_transactions.subscription_id],
+      references: [subscriptions.id],
+    }),
+  }),
+);
+
+export const creditUsageLogsRelations = relations(
+  credit_usage_logs,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [credit_usage_logs.user_id],
+      references: [user.id],
+    }),
+  }),
+);
+
+// Resume Builder Tables
+export const resume_templates = createTable("resume_templates", (d) => ({
+  id: d.text("id").primaryKey(),
+  name: d.varchar("name", { length: 255 }).notNull(),
+  description: d.text("description"),
+  latex_template: d.text("latex_template").notNull(),
+  is_default: d.boolean("is_default").default(false).notNull(),
+  created_at: d
+    .timestamp("created_at", { withTimezone: true })
+    .$defaultFn(() => new Date())
+    .notNull(),
+  updated_at: d
+    .timestamp("updated_at", { withTimezone: true })
+    .$defaultFn(() => new Date())
+    .notNull(),
+}));
 
 export const user_resumes = createTable(
   "user_resumes",
@@ -616,9 +638,7 @@ export const user_resumes = createTable(
       .text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    template_id: d
-      .text("template_id")
-      .references(() => resume_templates.id),
+    template_id: d.text("template_id").references(() => resume_templates.id),
     resume_data: d.text("resume_data").notNull(), // JSON string
     latex_content: d.text("latex_content"),
     pdf_url: d.text("pdf_url"),
@@ -645,9 +665,12 @@ export const userResumesRelations = relations(user_resumes, ({ one }) => ({
   }),
 }));
 
-export const resumeTemplatesRelations = relations(resume_templates, ({ many }) => ({
-  resumes: many(user_resumes),
-}));
+export const resumeTemplatesRelations = relations(
+  resume_templates,
+  ({ many }) => ({
+    resumes: many(user_resumes),
+  }),
+);
 
 // GitHub Repos — one row per GitHub repo linked to a chat
 // - One row per GitHub repo (github_repo_id is globally unique)
@@ -701,7 +724,10 @@ export const github_repos = createTable(
 
 export const githubReposRelations = relations(github_repos, ({ one }) => ({
   user: one(user, { fields: [github_repos.user_id], references: [user.id] }),
-  chat: one(user_chats, { fields: [github_repos.chat_id], references: [user_chats.id] }),
+  chat: one(user_chats, {
+    fields: [github_repos.chat_id],
+    references: [user_chats.id],
+  }),
 }));
 
 // Studio Layouts — stores published pages built in Buildify Studio
@@ -787,7 +813,356 @@ export const sandbox_executions = createTable(
       .notNull(),
     completed_at: d.timestamp("completed_at", { withTimezone: true }),
   }),
+  (t) => [index("sandbox_executions_user_id_idx").on(t.user_id)],
+);
+
+// =============================================================================
+// TINYFISH TESTING ENGINE
+// =============================================================================
+
+// -- Enums --------------------------------------------------------------------
+
+export const testRunStatusEnum = pgEnum("test_run_status", [
+  "crawling",
+  "generating",
+  "awaiting_review",  // — pipeline paused for user edits
+  "executing",
+  "reporting",
+  "complete",
+  "failed",
+  "cancelled",  // required by cancel handler + pipeline catch block
+]);
+
+export const testPriorityEnum = pgEnum("test_priority", ["P0", "P1", "P2"]);
+
+export const testResultStatusEnum = pgEnum("test_result_status", [
+  "pending",
+  "running",
+  "passed",
+  "failed",
+  "flaky",   // passes on retry — prevents false positives
+  "skipped",
+]);
+
+export const bugSeverityEnum = pgEnum("bug_severity", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+]);
+
+export const bugStatusEnum = pgEnum("bug_status", ["open", "fixed", "ignored"]);
+
+export const reportFormatEnum = pgEnum("report_format", [
+  "pdf",
+  "json",
+  "html",
+]);
+
+// -- Tables -------------------------------------------------------------------
+
+// Each full test execution
+// Trend chart data is derived by ordering test_runs by started_at for the same user/project.
+export const test_runs = createTable(
+  "test_runs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // null = external URL test, non-null = Buildify-generated app
+    project_id: d.text("project_id"),
+    target_url: d.text("target_url").notNull(),
+    // Pipeline status: crawling → generating → executing → reporting → complete | failed
+    status: testRunStatusEnum("status").notNull().default("crawling"),
+    overall_score: d.integer("overall_score"), // 0-100; drives Score Hero gauge colour
+    total_tests: d.integer("total_tests").default(0),
+    passed: d.integer("passed").default(0),
+    failed: d.integer("failed").default(0),
+    // Skipped count — shown in live counter "X passed / Y failed / Z skipped"
+    skipped: d.integer("skipped").default(0),
+    // Running count — shown in live counter during SSE streaming
+    running: d.integer("running").default(0),
+    started_at: d
+      .timestamp("started_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    completed_at: d.timestamp("completed_at", { withTimezone: true }),
+  }),
   (t) => [
-    index("sandbox_executions_user_id_idx").on(t.user_id),
+    index("test_runs_user_id_idx").on(t.user_id),
+    index("test_runs_status_idx").on(t.status),
+    index("test_runs_started_at_idx").on(t.started_at),
+    index("test_runs_project_id_idx").on(t.project_id),
+    // Composite index for trend chart query (user + time)
+    index("test_runs_user_id_started_at_idx").on(t.user_id, t.started_at),
   ],
+);
+
+// Crawled site map data
+export const crawl_results = createTable(
+  "crawl_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    pages: d.jsonb("pages"),         // all pages found
+    elements: d.jsonb("elements"),   // buttons, inputs, links
+    forms: d.jsonb("forms"),         // all forms found
+    links: d.jsonb("links"),         // all internal/external links
+    screenshots: d.jsonb("screenshots"), // baseline screenshots per page
+    crawl_time_ms: d.integer("crawl_time_ms"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [index("crawl_results_test_run_id_idx").on(t.test_run_id)],
+);
+
+// AI-generated test cases
+export const test_cases = createTable(
+  "test_cases",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    // navigation | forms | visual | performance | a11y | security
+    // Maps 1-to-1 with the 6 Category Ring Charts on the dashboard
+    category: d.varchar("category", { length: 50 }),
+    title: d.text("title"),
+    description: d.text("description"),
+    steps: d.jsonb("steps"),          // array of natural-language step strings
+    expected_result: d.text("expected_result"),
+    priority: testPriorityEnum("priority").default("P1"),
+    tags: d.jsonb("tags"),            // string[]
+    estimated_duration: d.integer("estimated_duration"), // ms
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("test_cases_test_run_id_idx").on(t.test_run_id),
+    index("test_cases_priority_idx").on(t.priority),
+    index("test_cases_category_idx").on(t.category),
+  ],
+);
+
+// Individual test execution outcomes
+export const test_results = createTable(
+  "test_results",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_case_id: d
+      .text("test_case_id")
+      .notNull()
+      .references(() => test_cases.id, { onDelete: "cascade" }),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    status: testResultStatusEnum("status").default("pending"),
+    actual_result: d.text("actual_result"),
+    duration_ms: d.integer("duration_ms"),
+    screenshot_url: d.text("screenshot_url"), // Cloudflare R2 URL
+    error_details: d.text("error_details"),
+    console_logs: d.jsonb("console_logs"),    // captured browser console output
+    // NEW: captured browser network errors/requests (shown in Bug Detail Modal)
+    network_logs: d.jsonb("network_logs"),
+    // retry_count: incremented on each retry; status set to "flaky" if passes on retry ≤ 2
+    retry_count: d.integer("retry_count").default(0),
+    tinyfish_job_id: d.text("tinyfish_job_id"), // TinyFish SSE job reference
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("test_results_test_run_id_idx").on(t.test_run_id),
+    index("test_results_test_case_id_idx").on(t.test_case_id),
+    index("test_results_status_idx").on(t.status),
+  ],
+);
+
+// Found bugs (one per failed test result)
+export const bug_reports = createTable(
+  "bug_reports",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    test_result_id: d
+      .text("test_result_id")
+      .references(() => test_results.id, { onDelete: "set null" }),
+    severity: bugSeverityEnum("severity").default("medium"),
+    // navigation | forms | visual | performance | a11y | security
+    category: d.varchar("category", { length: 50 }),
+    title: d.text("title"),
+    description: d.text("description"),
+    reproduction_steps: d.jsonb("reproduction_steps"), // ordered string[]
+    screenshot_url: d.text("screenshot_url"),
+    // NEW: bounding box for the red annotation overlay in Bug Detail Modal
+    // Shape: { x: number, y: number, width: number, height: number }
+    annotation_box: d.jsonb("annotation_box"),
+    ai_fix_suggestion: d.text("ai_fix_suggestion"), // AI-generated fix with code snippet
+    page_url: d.text("page_url"),
+    status: bugStatusEnum("status").default("open"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("bug_reports_test_run_id_idx").on(t.test_run_id),
+    index("bug_reports_severity_idx").on(t.severity),
+    index("bug_reports_status_idx").on(t.status),
+    // Composite index for bug list table filtered by category
+    index("bug_reports_test_run_id_category_idx").on(
+      t.test_run_id,
+      t.category,
+    ),
+  ],
+);
+
+// Exported reports (PDF / JSON / HTML)
+export const report_exports = createTable(
+  "report_exports",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    format: reportFormatEnum("format").notNull(),
+    file_url: d.text("file_url"),   // Cloudflare R2 URL for the export file
+    ai_summary: d.text("ai_summary"), // Plain-English executive summary
+    // Shareable public report link — /report/[shareable_slug] requires no login
+    shareable_slug: d.varchar("shareable_slug", { length: 100 }).unique(),
+    is_public: d.boolean("is_public").default(false).notNull(),
+    // NEW: opaque token used to render the "Tested by Buildify — Score: N" embed badge
+    embed_badge_token: d.varchar("embed_badge_token", { length: 64 }).unique(),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("report_exports_test_run_id_idx").on(t.test_run_id),
+    index("report_exports_shareable_slug_idx").on(t.shareable_slug),
+    index("report_exports_embed_badge_token_idx").on(t.embed_badge_token),
+  ],
+);
+
+// =============================================================================
+// NEW TABLE: per-page Core Web Vitals
+// Powers the "Performance Gauges" dashboard section (LCP / FID / CLS / TTFB)
+// with green / yellow / red thresholds per page.
+// =============================================================================
+export const performance_metrics = createTable(
+  "performance_metrics",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    test_run_id: d
+      .text("test_run_id")
+      .notNull()
+      .references(() => test_runs.id, { onDelete: "cascade" }),
+    // The specific page this measurement was taken on
+    page_url: d.text("page_url").notNull(),
+    // Core Web Vitals — all in milliseconds except CLS (unitless score)
+    lcp_ms: real("lcp_ms"),   // Largest Contentful Paint  — green <2500, yellow <4000, red ≥4000
+    fid_ms: real("fid_ms"),   // First Input Delay         — green <100,  yellow <300,  red ≥300
+    cls: real("cls"),         // Cumulative Layout Shift   — green <0.1,  yellow <0.25, red ≥0.25
+    ttfb_ms: real("ttfb_ms"), // Time to First Byte        — green <800,  yellow <1800, red ≥1800
+    // Raw Lighthouse / Playwright timing data for future use
+    raw_metrics: d.jsonb("raw_metrics"),
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("performance_metrics_test_run_id_idx").on(t.test_run_id),
+    index("performance_metrics_page_url_idx").on(t.page_url),
+  ],
+);
+
+// -- Relations ----------------------------------------------------------------
+
+export const testRunsRelations = relations(test_runs, ({ one, many }) => ({
+  user: one(user, { fields: [test_runs.user_id], references: [user.id] }),
+  crawlResult: one(crawl_results, {
+    fields: [test_runs.id],
+    references: [crawl_results.test_run_id],
+  }),
+  testCases: many(test_cases),
+  testResults: many(test_results),
+  bugReports: many(bug_reports),
+  reportExports: many(report_exports),
+  performanceMetrics: many(performance_metrics),
+}));
+
+export const crawlResultsRelations = relations(crawl_results, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [crawl_results.test_run_id],
+    references: [test_runs.id],
+  }),
+}));
+
+export const testCasesRelations = relations(test_cases, ({ one, many }) => ({
+  testRun: one(test_runs, {
+    fields: [test_cases.test_run_id],
+    references: [test_runs.id],
+  }),
+  results: many(test_results),
+}));
+
+export const testResultsRelations = relations(test_results, ({ one }) => ({
+  testCase: one(test_cases, {
+    fields: [test_results.test_case_id],
+    references: [test_cases.id],
+  }),
+  testRun: one(test_runs, {
+    fields: [test_results.test_run_id],
+    references: [test_runs.id],
+  }),
+  bugReport: one(bug_reports, {
+    fields: [test_results.id],
+    references: [bug_reports.test_result_id],
+  }),
+}));
+
+export const bugReportsRelations = relations(bug_reports, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [bug_reports.test_run_id],
+    references: [test_runs.id],
+  }),
+  testResult: one(test_results, {
+    fields: [bug_reports.test_result_id],
+    references: [test_results.id],
+  }),
+}));
+
+export const reportExportsRelations = relations(report_exports, ({ one }) => ({
+  testRun: one(test_runs, {
+    fields: [report_exports.test_run_id],
+    references: [test_runs.id],
+  }),
+}));
+
+export const performanceMetricsRelations = relations(
+  performance_metrics,
+  ({ one }) => ({
+    testRun: one(test_runs, {
+      fields: [performance_metrics.test_run_id],
+      references: [test_runs.id],
+    }),
+  }),
 );
