@@ -2819,6 +2819,458 @@ function FlowTestingSection() {
     )
 }
 
+// --- Accessibility Testing + CTA (final flow section) ---
+
+type A11yStep = 'idle' | 'typing' | 'running' | 'log-crawl' | 'log-test' | 'log-done' | 'results' | 'complete' | 'download' | 'downloaded'
+
+const A11Y_LOGS = [
+    { text: 'Initializing accessibility scanner...', type: 'info' },
+    { text: 'Crawling https://ethan.dev', type: 'info' },
+    { text: 'Found 5 pages to test', type: 'success' },
+    { text: 'Testing page 1/5 — /index', type: 'info' },
+    { text: '  Color contrast: passed', type: 'success' },
+    { text: '  ARIA labels: passed', type: 'success' },
+    { text: 'Testing page 2/5 — /work', type: 'info' },
+    { text: '  Heading hierarchy: passed', type: 'success' },
+    { text: '  Keyboard navigation: passed', type: 'success' },
+    { text: 'Testing page 3/5 — /about', type: 'info' },
+    { text: '  Alt text: passed', type: 'success' },
+    { text: 'Testing page 4/5 — /skills', type: 'info' },
+    { text: '  Semantic HTML: passed', type: 'success' },
+    { text: 'Testing page 5/5 — /contact', type: 'info' },
+    { text: '  Form labels: passed', type: 'success' },
+    { text: '  Focus management: passed', type: 'success' },
+    { text: 'All pages tested — 0 violations found', type: 'done' },
+]
+
+function FlowAccessibilityLiveCTA() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-80px' })
+    const [step, setStep] = useState<A11yStep>('idle')
+    const [urlChars, setUrlChars] = useState(0)
+    const [visibleLogs, setVisibleLogs] = useState(0)
+    const [score, setScore] = useState(0)
+    const [pagesCount, setPagesCount] = useState(0)
+    const [violations, setViolations] = useState(0)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+    const logContainerRef = useRef<HTMLDivElement>(null)
+
+    const testUrl = 'https://ethan.dev'
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            timers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(1000)
+            if (cancelled) return
+
+            // Step 1: Type URL
+            setStep('typing')
+            for (let i = 1; i <= testUrl.length; i++) {
+                if (cancelled) return
+                setUrlChars(i)
+                const c = testUrl[i - 1]
+                const extra = c === '/' || c === '.' || c === ':' ? 70 : 0
+                await delay(50 + Math.random() * 35 + extra)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 2: Click run
+            setStep('running')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 3: Log output — line by line
+            setStep('log-crawl')
+            for (let i = 1; i <= A11Y_LOGS.length; i++) {
+                if (cancelled) return
+                setVisibleLogs(i)
+                // Update page counter based on log content
+                const log = A11Y_LOGS[i - 1]!
+                if (log.text.includes('Testing page')) {
+                    const match = log.text.match(/(\d+)\/5/)
+                    if (match) setPagesCount(parseInt(match[1]!))
+                }
+                // Scroll log container
+                if (logContainerRef.current) {
+                    logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+                }
+                // Vary speed: headers slower, sub-items faster
+                const isHeader = log.text.startsWith('Testing page') || log.text.startsWith('Crawling') || log.text.startsWith('Initializing')
+                await delay(isHeader ? 350 + Math.random() * 150 : 200 + Math.random() * 100)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 4: Results
+            setStep('results')
+            setPagesCount(5)
+            setViolations(0)
+            // Animate score from 0 to 98
+            for (let s = 0; s <= 98; s += 2) {
+                if (cancelled) return
+                setScore(Math.min(s, 98))
+                await delay(20)
+            }
+            setScore(98)
+            await delay(1500)
+            if (cancelled) return
+
+            // Step 5: Complete
+            setStep('complete')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 6: Download
+            setStep('download')
+            await delay(1200)
+            if (cancelled) return
+            setStep('downloaded')
+        }
+
+        run()
+        return () => { cancelled = true; timers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    const showResults = step === 'results' || step === 'complete' || step === 'download' || step === 'downloaded'
+    const showComplete = step === 'complete' || step === 'download' || step === 'downloaded'
+
+    return (
+        <>
+            {/* ── Accessibility Testing Section ── */}
+            <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                        {/* Left — Static description (NO animations) */}
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 05
+                            </span>
+
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Accessibility Testing
+                            </h2>
+
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Test your website against WCAG standards and ensure accessibility compliance before going live.
+                            </p>
+
+                            <div className="mt-8 space-y-3">
+                                {[
+                                    { icon: ScanEye, label: 'Automated WCAG audit' },
+                                    { icon: Terminal, label: 'Real-time test logs' },
+                                    { icon: CircleCheck, label: 'Detailed results overview' },
+                                    { icon: FileText, label: 'Downloadable accessibility report' },
+                                ].map((item) => (
+                                    <div key={item.label} className="flex items-center gap-3">
+                                        <div className="size-8 rounded-lg bg-muted/30 text-muted-foreground/40 flex items-center justify-center">
+                                            <item.icon className="size-4" />
+                                        </div>
+                                        <span className="text-sm text-muted-foreground/60">{item.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Right — Single animated card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                            transition={{ duration: 0.8, delay: 0.15 }}
+                        >
+                            <div className="relative">
+                                <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+
+                                <div className="relative rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                                    {/* Card header */}
+                                    <div className="flex items-center gap-2 px-4 py-3 border-b border-border/30 bg-muted/20">
+                                        <div className="flex gap-1.5">
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                        </div>
+                                        <div className="flex items-center gap-1.5 ml-2">
+                                            <ScanEye className="size-3.5 text-primary/50" />
+                                            <span className="text-[11px] font-medium text-muted-foreground/50">Accessibility Tester</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Card body — steps crossfade */}
+                                    <div className="relative min-h-[370px] md:min-h-[410px]">
+
+                                        {/* Step 1: URL Input */}
+                                        {(step === 'idle' || step === 'typing' || step === 'running') && (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="absolute inset-0 p-5 flex flex-col"
+                                            >
+                                                <p className="text-[10px] text-muted-foreground/40 mb-3">Enter a URL to test accessibility</p>
+                                                <div className="flex gap-2 mb-4">
+                                                    <div className={cn(
+                                                        "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
+                                                        step === 'typing' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
+                                                    )}>
+                                                        <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
+                                                        <span className="text-[12px] text-foreground/70 font-mono flex-1">
+                                                            {step !== 'idle' ? testUrl.slice(0, urlChars) : ''}
+                                                            {step === 'typing' && urlChars < testUrl.length && (
+                                                                <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
+                                                            )}
+                                                            {step === 'idle' && <span className="text-muted-foreground/25">https://</span>}
+                                                        </span>
+                                                    </div>
+                                                    <div className={cn(
+                                                        "px-3 py-2.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold transition-all duration-200",
+                                                        step === 'running'
+                                                            ? 'bg-primary/70 text-primary-foreground scale-95'
+                                                            : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                                                    )}>
+                                                        {step === 'running' ? (
+                                                            <Loader2 className="size-3 animate-spin" />
+                                                        ) : (
+                                                            <FlaskConical className="size-3" />
+                                                        )}
+                                                        <span>{step === 'running' ? 'Starting...' : 'Start Test'}</span>
+                                                    </div>
+                                                </div>
+                                                {/* Placeholder illustration */}
+                                                <div className="flex-1 flex items-center justify-center">
+                                                    <div className="flex flex-col items-center gap-2 text-muted-foreground/20">
+                                                        <ScanEye className="size-10" />
+                                                        <span className="text-[10px]">Ready to scan</span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Step 2: Log output */}
+                                        {(step === 'log-crawl' || step === 'log-test' || step === 'log-done') && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="absolute inset-0 bg-[#0d1117] p-4 flex flex-col"
+                                            >
+                                                <div className="flex items-center gap-1.5 mb-3 pb-2 border-b border-white/5">
+                                                    <Terminal className="size-3 text-blue-400/50" />
+                                                    <span className="text-[8px] text-white/40">Test Output</span>
+                                                    <span className="text-[7px] text-white/20 ml-auto font-mono">ethan.dev</span>
+                                                </div>
+                                                <div ref={logContainerRef} className="flex-1 overflow-hidden font-mono space-y-0.5">
+                                                    {A11Y_LOGS.slice(0, visibleLogs).map((log, i) => (
+                                                        <motion.div
+                                                            key={i}
+                                                            initial={{ opacity: 0, x: -4 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            className="flex items-start gap-1.5"
+                                                        >
+                                                            <span className="text-[7px] text-white/15 w-3 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
+                                                            <span className={cn(
+                                                                "text-[8px] leading-relaxed",
+                                                                log.type === 'success' ? 'text-blue-300/60' :
+                                                                log.type === 'done' ? 'text-blue-200/70 font-semibold' :
+                                                                log.text.startsWith('  ') ? 'text-white/30' : 'text-white/45'
+                                                            )}>
+                                                                {log.type === 'success' && !log.text.startsWith('  ') ? '+ ' : ''}
+                                                                {log.type === 'done' ? '✓ ' : ''}
+                                                                {log.text}
+                                                            </span>
+                                                        </motion.div>
+                                                    ))}
+                                                    {visibleLogs < A11Y_LOGS.length && (
+                                                        <div className="flex items-start gap-1.5 mt-0.5">
+                                                            <span className="text-[7px] text-white/15 w-3 text-right flex-shrink-0">{visibleLogs + 1}</span>
+                                                            <span className="inline-block w-[3px] h-[10px] bg-blue-400/60 animate-pulse" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Step 3+: Results overview */}
+                                        {showResults && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ duration: 0.4 }}
+                                                className="absolute inset-0 p-5 flex flex-col"
+                                            >
+                                                {/* Score */}
+                                                <div className="flex items-center justify-center mb-4">
+                                                    <div className="relative size-20">
+                                                        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+                                                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="5" className="text-border/20" />
+                                                            <motion.circle
+                                                                cx="50" cy="50" r="42" fill="none" strokeWidth="5"
+                                                                strokeLinecap="round"
+                                                                className="text-primary/60"
+                                                                style={{ stroke: 'currentColor' }}
+                                                                strokeDasharray={`${2 * Math.PI * 42}`}
+                                                                animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - score / 100) }}
+                                                                transition={{ duration: 0.3, ease: 'easeOut' }}
+                                                            />
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            <span className="text-[18px] font-bold text-foreground/80">{score}</span>
+                                                            <span className="text-[6px] text-muted-foreground/35">/ 100</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Stats grid */}
+                                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                                    {[
+                                                        { label: 'Pages tested', value: pagesCount },
+                                                        { label: 'Violations', value: violations },
+                                                        { label: 'WCAG Level', value: 'AA' },
+                                                    ].map((stat, i) => (
+                                                        <motion.div
+                                                            key={stat.label}
+                                                            initial={{ opacity: 0, y: 6 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            transition={{ delay: 0.1 + i * 0.1, duration: 0.3 }}
+                                                            className="rounded-lg bg-muted/20 border border-border/20 p-2.5 text-center"
+                                                        >
+                                                            <p className="text-[16px] font-bold text-foreground/75">{typeof stat.value === 'number' ? stat.value : stat.value}</p>
+                                                            <p className="text-[8px] text-muted-foreground/40 mt-0.5">{stat.label}</p>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Check summary */}
+                                                <div className="space-y-1 flex-1">
+                                                    {[
+                                                        'Color Contrast',
+                                                        'Keyboard Navigation',
+                                                        'ARIA Labels',
+                                                        'Semantic HTML',
+                                                        'Form Accessibility',
+                                                    ].map((check, i) => (
+                                                        <motion.div
+                                                            key={check}
+                                                            initial={{ opacity: 0, x: -4 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ delay: 0.3 + i * 0.08, duration: 0.25 }}
+                                                            className="flex items-center justify-between py-1"
+                                                        >
+                                                            <span className="text-[10px] text-muted-foreground/50">{check}</span>
+                                                            <span className="text-[9px] font-medium text-primary/55 flex items-center gap-1">
+                                                                <CircleCheck className="size-3" /> Passed
+                                                            </span>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Success banner + download info combined */}
+                                                {showComplete && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 6 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, delay: 0.2 }}
+                                                        className="mt-3 flex items-center justify-between px-3 py-2 rounded-lg bg-primary/[0.05] border border-primary/10"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <motion.div
+                                                                initial={{ scale: 0 }}
+                                                                animate={{ scale: 1 }}
+                                                                transition={{ delay: 0.35, type: 'spring', stiffness: 200 }}
+                                                            >
+                                                                <CircleCheck className="size-3.5 text-primary/60" />
+                                                            </motion.div>
+                                                            <span className="text-[10px] font-medium text-primary/60">Test completed successfully</span>
+                                                        </div>
+                                                        {(step === 'download' || step === 'downloaded') && (
+                                                            <motion.span
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                transition={{ duration: 0.3 }}
+                                                                className="text-[8px] text-muted-foreground/40 flex items-center gap-1"
+                                                            >
+                                                                {step === 'download' ? (
+                                                                    <><Loader2 className="size-2.5 animate-spin text-primary/40" /> Saving report...</>
+                                                                ) : (
+                                                                    <><FileText className="size-2.5 text-primary/40" /> Report saved</>
+                                                                )}
+                                                            </motion.span>
+                                                        )}
+                                                    </motion.div>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Final CTA Section ── */}
+            <section className="relative px-6 py-24 md:py-36 overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.02] to-transparent pointer-events-none" />
+                <div className="max-w-3xl mx-auto text-center relative">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: '-60px' }}
+                        transition={{ duration: 0.7 }}
+                    >
+                        <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/50 mb-6">
+                            From idea to live product
+                        </p>
+                        <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-6">
+                            Start building today
+                        </h2>
+                        <p className="text-base md:text-lg text-muted-foreground/60 leading-relaxed max-w-xl mx-auto mb-10">
+                            Plan, design, build, test, and launch — everything you need in one platform.
+                        </p>
+                    </motion.div>
+
+                    <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        viewport={{ once: true, margin: '-40px' }}
+                        transition={{ duration: 0.5, delay: 0.3 }}
+                        className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                    >
+                        <motion.a
+                            href="/chat"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                            className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] shadow-lg shadow-primary/20 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/30"
+                        >
+                            <motion.div
+                                animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0)', '0 0 20px rgba(59,130,246,0.15)', '0 0 0px rgba(59,130,246,0)'] }}
+                                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                className="absolute inset-0 rounded-xl pointer-events-none"
+                            />
+                            <Zap className="size-4" />
+                            Start Building
+                            <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                        </motion.a>
+                        <a
+                            href="#features"
+                            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-border/50 text-[14px] font-medium text-muted-foreground/70 transition-colors duration-200 hover:bg-muted/30 hover:text-foreground/70"
+                        >
+                            Explore Features
+                        </a>
+                    </motion.div>
+                </div>
+            </section>
+        </>
+    )
+}
+
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
@@ -3773,83 +4225,8 @@ export default function LandingPage() {
             {/* 4. Deploy + Testing (TinyFish) */}
             <FlowTestingSection />
 
-            {/* 5. Accessibility — Text Left, Visual Right */}
-            <div className="section-divider" />
-            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                        {/* Text */}
-                        <div>
-                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
-                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                                Step 05
-                            </span>
-                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
-                                Ensure Accessibility
-                            </h2>
-                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
-                                Automatically detect and fix accessibility issues for an inclusive experience.
-                            </p>
-                            <div className="mt-8 flex items-center gap-3">
-                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                    <ScanEye className="size-[18px] text-primary/60" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground/60">Automated a11y scanning</span>
-                            </div>
-                        </div>
-                        {/* Visual placeholder */}
-                        <div className="relative">
-                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                        <ScanEye className="size-6 text-primary/40" />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground/40">Accessibility report preview</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* 6. Live (Final Output) — Visual Left, Text Right */}
-            <div className="section-divider" />
-            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                        {/* Visual placeholder */}
-                        <div className="relative md:order-1 order-2">
-                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                        <Radio className="size-6 text-primary/40" />
-                                    </div>
-                                    <span className="text-xs text-muted-foreground/40">Live product preview</span>
-                                </div>
-                            </div>
-                        </div>
-                        {/* Text */}
-                        <div className="md:order-2 order-1">
-                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
-                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                                Step 06
-                            </span>
-                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
-                                Go Live
-                            </h2>
-                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
-                                Launch your product and make it available to users instantly.
-                            </p>
-                            <div className="mt-8 flex items-center gap-3">
-                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                    <Radio className="size-[18px] text-primary/60" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground/60">Instant public launch</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            {/* 5. Accessibility + 6. Live + CTA */}
+            <FlowAccessibilityLiveCTA />
 
             {/* ── Capabilities Section ── */}
             <div className="section-divider" />
