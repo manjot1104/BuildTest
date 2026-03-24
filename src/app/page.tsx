@@ -469,6 +469,16 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
         return t
     }, [])
 
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!inView) {
+            timers.current.forEach(clearTimeout)
+            timers.current = []
+            setPhase('idle'); setTypedChars(0); setVisibleLines(0); setSendPulse(false)
+            hasStarted.current = false
+        }
+    }, [inView])
+
     useEffect(() => {
         if (!inView || hasStarted.current) return
         hasStarted.current = true
@@ -930,7 +940,7 @@ type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' 
 
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
     const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
     const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
     const [cursorVisible, setCursorVisible] = useState(false)
@@ -943,6 +953,16 @@ function FlowStudioSection() {
     const [newCards, setNewCards] = useState(0) // 0, 1, 2, 3
     const [previewMode, setPreviewMode] = useState(false)
     const cursorTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            cursorTimers.current.forEach(clearTimeout); cursorTimers.current = []
+            setCursorVisible(false); setCursorAction('idle'); setCursorClicking(false)
+            setHeroEditing(false); setHeroText("Hi, I'm Ethan Carter")
+            setTemplateHighlight(false); setActiveTab(0); setNewSection(false); setNewCards(0); setPreviewMode(false)
+        }
+    }, [isInView])
 
     // Run cursor sequence
     useEffect(() => {
@@ -1942,10 +1962,18 @@ type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pus
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
     const [step, setStep] = useState<BuildStep | 'idle'>('idle')
     const [codeLines, setCodeLines] = useState(0)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            buildTimers.current.forEach(clearTimeout); buildTimers.current = []
+            setStep('idle'); setCodeLines(0)
+        }
+    }, [isInView])
 
     useEffect(() => {
         if (!isInView) return
@@ -2389,7 +2417,7 @@ const ANALYSIS_ITEMS = [
 
 function FlowTestingSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
     const [phase, setPhase] = useState<TestPhase>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [progress, setProgress] = useState(0)
@@ -2403,6 +2431,15 @@ function FlowTestingSection() {
     const testTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
     const testUrl = 'https://ethan.dev'
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            testTimers.current.forEach(clearTimeout); testTimers.current = []
+            setPhase('idle'); setUrlChars(0); setProgress(0); setPages(0); setTests(0)
+            setFishX(10); setExpandSource(false); setAnalysisProgress(-1); setActiveAnalysis(-1)
+        }
+    }, [isInView])
 
     useEffect(() => {
         if (!isInView) return
@@ -2970,7 +3007,7 @@ function FlowTestingToA11yTransition() {
 
 function FlowAccessibilityLiveCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-80px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
     const [step, setStep] = useState<A11yStep>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [visibleLogs, setVisibleLogs] = useState(0)
@@ -2981,6 +3018,14 @@ function FlowAccessibilityLiveCTA() {
     const logContainerRef = useRef<HTMLDivElement>(null)
 
     const testUrl = 'https://ethan.dev'
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            timers.current.forEach(clearTimeout); timers.current = []
+            setStep('idle'); setUrlChars(0); setVisibleLogs(0); setScore(0); setPagesCount(0); setViolations(0)
+        }
+    }, [isInView])
 
     useEffect(() => {
         if (!isInView) return
@@ -3352,10 +3397,18 @@ type LaunchPhase = 'idle' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
 
 function FlowLaunchCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-80px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
     const [phase, setPhase] = useState<LaunchPhase>('idle')
     const [scrollY, setScrollY] = useState(0)
     const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            timers.current.forEach(clearTimeout); timers.current = []
+            setPhase('idle'); setScrollY(0)
+        }
+    }, [isInView])
 
     useEffect(() => {
         if (!isInView) return
@@ -3654,7 +3707,7 @@ function FlowLaunchCTA() {
 
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
 
     return (
         <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
