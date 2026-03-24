@@ -688,19 +688,18 @@ function PRDetailPanel({ chatId, pr, onBack, onMerged }: PRDetailPanelProps) {
             </div>
           </div>
 
-          {/* Merge-blocking explanations */}
+          {/* Merge-blocking explanations — only shown for the 5 blocking states.
+              'mergeable' and 'unknown' are excluded by the outer condition. */}
           {!isLoading && current.mergeableStatus !== 'mergeable' && current.mergeableStatus !== 'unknown' && (
             <InlineAlert
               variant={current.mergeableStatus === 'conflicting' ? 'error' : 'warning'}
-              message={{
+              message={({
                 conflicting: 'This PR has merge conflicts. Resolve them on GitHub before merging.',
                 blocked:     'Blocked by branch protection rules (required reviews or status checks).',
                 behind:      'This branch is behind the base. Update it on GitHub before merging.',
                 unstable:    'CI checks are pending or failing. Wait for them to pass.',
                 draft:       'Draft PRs cannot be merged. Mark as ready for review first.',
-                unknown:     'Mergeability is still being computed…',
-                mergeable:   '',
-              }[current.mergeableStatus]}
+              } as Record<string, string>)[current.mergeableStatus] ?? ''}
               action={{ label: 'Open on GitHub', onClick: () => window.open(current.prUrl, '_blank') }}
             />
           )}

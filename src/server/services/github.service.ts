@@ -41,7 +41,7 @@ export interface GithubFile {
   content: string
 }
 
-// shape of one repo returned by the /user/repos listing endpoint
+// Shape of one repo returned by the /user/repos listing endpoint
 export interface GithubRepoListItem {
   id: number
   name: string
@@ -421,7 +421,6 @@ export async function pushFilesToBranch(
     token,
     `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`,
   )
-  const baseTreeSha = commitData.tree.sha
 
   // Step 3: Create blobs for each file
   const blobs = await Promise.all(
@@ -447,17 +446,14 @@ export async function pushFilesToBranch(
   )
 
   // Step 4: Create a new tree with all the blobs.
-  // base_tree is the seed commit's tree — the .gitkeep will be absent from
-  // the final tree because we're not including it in the blobs list, and
-  // we're not passing base_tree here so only our files end up in the tree.
+  // No base_tree — clean slate, only our files. The .gitkeep from the seed
+  // commit is intentionally excluded so it never appears in the final repo state.
   const newTree = await githubFetch<{ sha: string }>(
     token,
     `/repos/${owner}/${repo}/git/trees`,
     {
       method: 'POST',
-      body: JSON.stringify({
-        tree: blobs, // no base_tree — clean slate, only our files
-      }),
+      body: JSON.stringify({ tree: blobs }),
     },
   )
 
@@ -495,7 +491,6 @@ export async function pushFilesToBranch(
     commitUrl: newCommit.html_url,
   }
 }
-
 
 // ============================================================================
 // Repo listing (for the "connect existing repo" picker)
@@ -551,7 +546,7 @@ export async function getRepoDetails(
 }
 
 // ============================================================================
-// NEW: PR-related types
+// PR types
 // ============================================================================
 
 export type MergeMethod = 'merge' | 'squash' | 'rebase'
@@ -614,7 +609,7 @@ export interface NormalisedPR {
 }
 
 // ============================================================================
-// NEW: Pull Request Helpers
+// PR helpers (internal)
 // ============================================================================
 
 /**
@@ -682,7 +677,7 @@ function normalisePR(pr: GithubPullRequest): NormalisedPR {
 }
 
 // ============================================================================
-// NEW: Pull Request Operations
+// PR operations
 // ============================================================================
 
 /**

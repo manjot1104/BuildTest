@@ -19,7 +19,7 @@ export interface GithubRepoInfo {
   createdAt: string
 }
 
-// NEW: Represents one repo from the user's GitHub account (for the picker)
+// Represents one repo from the user's GitHub account (for the picker)
 export interface GithubRepoListItem {
   id: number
   name: string
@@ -31,7 +31,7 @@ export interface GithubRepoListItem {
   updatedAt: string
 }
 
-// NEW: Response from POST /api/github/connect
+// Response from POST /api/github/connect
 export interface ConnectRepoResponse {
   success: boolean
   repoFullName: string
@@ -187,7 +187,7 @@ export function useGithubRepoForChat(chatId: string | undefined, enabled = true)
 }
 
 /**
- * NEW: Returns all GitHub repos the current user has access to.
+ * Returns all GitHub repos the current user has access to.
  * Only fetches when enabled — triggered when the user opens the "Use existing" tab.
  * Includes own repos, collaborator repos, and org repos (affiliation set server-side).
  */
@@ -311,7 +311,7 @@ export function useDetailedPR(
 // ============================================================================
 
 /**
- * NEW: Mutation hook for Step 1 of the connect-existing-repo flow.
+ * Mutation hook for Step 1 of the connect-existing-repo flow.
  *
  * Validates the repo is accessible, saves it as the active repo for the chat,
  * and invalidates the repo cache. Does NOT push any files.

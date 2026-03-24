@@ -25,7 +25,6 @@ import {
 import {
   getActiveGithubRepo,
   deactivateGithubReposForChat,
-  createGithubRepo,
   replaceActiveGithubRepo,
   getUserChat,
 } from '@/server/db/queries'
@@ -92,7 +91,7 @@ interface GithubRepoListItemResponse {
   updatedAt: string
 }
 
-// response from the connect-existing endpoint
+// Response from the connect-existing endpoint
 interface ConnectRepoResponse {
   success: boolean
   repoFullName: string

@@ -1253,7 +1253,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // NEW: GET /api/github/repos — list user's repos for the "connect existing" picker
+  // GET /api/github/repos — list user's repos for the "connect existing" picker
   // Returns repos the user owns, collaborates on, or is an org member of.
   // Write-permission enforcement happens at push time via the GitHub API.
   .get('/github/repos', async ({ set }) => {
@@ -1264,7 +1264,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return result
   })
 
-  // NEW: POST /api/github/connect — Step 1 of connect-existing-repo flow
+  // POST /api/github/connect — Step 1 of connect-existing-repo flow
   // Validates the repo is accessible, saves it as the active repo for the chat.
   // Does NOT push any files. Push happens separately via /github/push.
   .post(
