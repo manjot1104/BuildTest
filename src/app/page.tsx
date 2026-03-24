@@ -1955,46 +1955,50 @@ function FlowBuilderSection() {
         })
 
         const run = async () => {
-            await delay(800)
+            await delay(1000)
             if (cancelled) return
 
-            // Step 1: Show prompt
+            // Step 1: Show prompt (user sees the input)
             setStep('prompt')
-            await delay(1500)
+            await delay(2000)
             if (cancelled) return
 
-            // Step 2: Generating
+            // Step 2: Generating indicator
             setStep('generating')
-            await delay(800)
+            await delay(1400)
             if (cancelled) return
 
-            // Step 3: Code typing
+            // Step 3: Code typing — slower per line
             setStep('code')
             for (let i = 1; i <= BUILD_CODE.length; i++) {
                 if (cancelled) return
                 setCodeLines(i)
-                await delay(140 + Math.random() * 80)
+                await delay(200 + Math.random() * 100)
             }
-            await delay(800)
-            if (cancelled) return
-
-            // Step 4: Preview
-            setStep('preview')
-            await delay(2000)
-            if (cancelled) return
-
-            // Step 5: Push
-            setStep('pushing')
-            await delay(1500)
-            if (cancelled) return
-            setStep('pushed')
             await delay(1200)
             if (cancelled) return
 
-            // Step 6: Download
-            setStep('downloading')
-            await delay(1000)
+            // Step 4: Preview — let user absorb the UI
+            setStep('preview')
+            await delay(2800)
             if (cancelled) return
+
+            // Step 5: Push to GitHub — loading state
+            setStep('pushing')
+            await delay(2200)
+            if (cancelled) return
+
+            // Step 5b: Push success — hold for readability
+            setStep('pushed')
+            await delay(2400)
+            if (cancelled) return
+
+            // Step 6: Download — loading state
+            setStep('downloading')
+            await delay(1800)
+            if (cancelled) return
+
+            // Step 6b: Download complete — hold for readability
             setStep('downloaded')
         }
 
@@ -2150,18 +2154,97 @@ function FlowBuilderSection() {
                                             </motion.div>
 
                                             {/* Overlay statuses */}
-                                            {(step === 'pushing' || step === 'pushed' || step === 'downloading' || step === 'downloaded') && (
+                                            {(step === 'pushing' || step === 'pushed') && (
                                                 <motion.div
                                                     initial={{ opacity: 0 }}
                                                     animate={{ opacity: 1 }}
-                                                    className="absolute inset-0 bg-[#0f1117]/80 backdrop-blur-[2px] flex items-center justify-center"
+                                                    transition={{ duration: 0.4 }}
+                                                    className="absolute inset-0 bg-[#0f1117]/85 backdrop-blur-[3px] flex items-center justify-center"
                                                 >
-                                                    <div className="flex flex-col items-center gap-2">
-                                                        {step === 'pushing' && <><Loader2 className="size-5 text-primary/50 animate-spin" /><span className="text-[10px] text-white/50">Pushing to GitHub...</span></>}
-                                                        {step === 'pushed' && <><CircleCheck className="size-5 text-primary/60" /><span className="text-[10px] text-primary/60">Pushed to ethan-portfolio/main</span><span className="text-[8px] text-white/25 font-mono">&quot;Initial commit: portfolio site&quot;</span></>}
-                                                        {step === 'downloading' && <><Loader2 className="size-5 text-primary/50 animate-spin" /><span className="text-[10px] text-white/50">Downloading source...</span></>}
-                                                        {step === 'downloaded' && <><CircleCheck className="size-5 text-primary/60" /><span className="text-[10px] text-primary/60">ethan-portfolio.zip ready</span><span className="text-[8px] text-white/25">2.4 MB · 16 files</span></>}
-                                                    </div>
+                                                    <motion.div
+                                                        initial={{ scale: 0.95, opacity: 0, y: 8 }}
+                                                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                        className="flex flex-col items-center gap-3 px-6 py-5 rounded-xl bg-white/[0.04] border border-white/[0.06]"
+                                                    >
+                                                        {step === 'pushing' ? (
+                                                            <>
+                                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                                <span className="text-[11px] font-medium text-white/60">Pushing to GitHub...</span>
+                                                                <div className="w-32 h-1.5 rounded-full bg-white/[0.06] overflow-hidden mt-1">
+                                                                    <motion.div
+                                                                        initial={{ width: '0%' }}
+                                                                        animate={{ width: '100%' }}
+                                                                        transition={{ duration: 2, ease: 'easeInOut' }}
+                                                                        className="h-full bg-primary/40 rounded-full"
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[8px] text-white/20 font-mono">ethan-portfolio/main</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <motion.div
+                                                                    initial={{ scale: 0 }}
+                                                                    animate={{ scale: 1 }}
+                                                                    transition={{ duration: 0.3, type: 'spring', stiffness: 200 }}
+                                                                >
+                                                                    <CircleCheck className="size-7 text-primary/70" />
+                                                                </motion.div>
+                                                                <span className="text-[12px] font-semibold text-primary/70">Pushed successfully</span>
+                                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                                                    <span className="text-[9px] text-white/40">Repository: <span className="text-white/55 font-medium">ethan-portfolio</span></span>
+                                                                    <span className="text-[8px] text-white/25 font-mono">&quot;Initial commit: portfolio site&quot;</span>
+                                                                    <span className="text-[8px] text-white/20">5 files · main branch</span>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </motion.div>
+                                                </motion.div>
+                                            )}
+                                            {(step === 'downloading' || step === 'downloaded') && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    transition={{ duration: 0.4 }}
+                                                    className="absolute inset-0 bg-[#0f1117]/85 backdrop-blur-[3px] flex items-center justify-center"
+                                                >
+                                                    <motion.div
+                                                        initial={{ scale: 0.95, opacity: 0, y: 8 }}
+                                                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                        className="flex flex-col items-center gap-3 px-6 py-5 rounded-xl bg-white/[0.04] border border-white/[0.06]"
+                                                    >
+                                                        {step === 'downloading' ? (
+                                                            <>
+                                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                                <span className="text-[11px] font-medium text-white/60">Preparing download...</span>
+                                                                <div className="w-32 h-1.5 rounded-full bg-white/[0.06] overflow-hidden mt-1">
+                                                                    <motion.div
+                                                                        initial={{ width: '0%' }}
+                                                                        animate={{ width: '100%' }}
+                                                                        transition={{ duration: 1.6, ease: 'easeInOut' }}
+                                                                        className="h-full bg-primary/40 rounded-full"
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[8px] text-white/20">Bundling source files...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <motion.div
+                                                                    initial={{ scale: 0 }}
+                                                                    animate={{ scale: 1 }}
+                                                                    transition={{ duration: 0.3, type: 'spring', stiffness: 200 }}
+                                                                >
+                                                                    <CircleCheck className="size-7 text-primary/70" />
+                                                                </motion.div>
+                                                                <span className="text-[12px] font-semibold text-primary/70">Download ready</span>
+                                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                                                    <span className="text-[9px] text-white/40">ethan-portfolio.zip</span>
+                                                                    <span className="text-[8px] text-white/25">2.4 MB · 16 files</span>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </motion.div>
                                                 </motion.div>
                                             )}
                                         </motion.div>
