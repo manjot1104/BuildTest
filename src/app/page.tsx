@@ -7,6 +7,7 @@ import {
     useMotionValueEvent,
     useInView,
     type Variants,
+    type MotionValue,
 } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
@@ -2843,6 +2844,130 @@ const A11Y_LOGS = [
     { text: 'All pages tested — 0 violations found', type: 'done' },
 ]
 
+// --- Testing → Accessibility transition (scan wave) ---
+
+function RevealedNode({ item, scrollProgress }: { item: { label: string; x: string; progress: number[] }, scrollProgress: MotionValue<number> }) {
+    const opacity = useTransform(scrollProgress, [...item.progress, 0.65, 0.8], [0, 1, 1, 0])
+    const scale = useTransform(scrollProgress, item.progress, [0.6, 1])
+    const y = useTransform(scrollProgress, item.progress, [8, 0])
+    const glow = useTransform(scrollProgress, item.progress, [0, 10])
+
+    return (
+        <motion.div
+            style={{ left: item.x, opacity, scale, y }}
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+        >
+            <div className="flex flex-col items-center gap-1.5">
+                <motion.div
+                    style={{ boxShadow: useTransform(glow, v => `0 0 ${v}px rgba(59,130,246,${v * 0.02})`) }}
+                    className="size-2 rounded-full bg-primary/50"
+                />
+                <span className="text-[8px] font-medium text-primary/40 whitespace-nowrap">{item.label}</span>
+            </div>
+        </motion.div>
+    )
+}
+
+function FlowTestingToA11yTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // Scan beam position — sweeps left to right
+    const scanX = useTransform(scrollYProgress, [0.1, 0.6], ['-10%', '110%'])
+    const scanOpacity = useTransform(scrollYProgress, [0.08, 0.15, 0.55, 0.65], [0, 1, 1, 0])
+
+    // Vertical line
+    const lineHeight = useTransform(scrollYProgress, [0, 0.5], ['0%', '100%'])
+    const lineOpacity = useTransform(scrollYProgress, [0, 0.08, 0.8, 0.95], [0, 0.3, 0.3, 0])
+
+    // Revealed items — appear as scan passes over them
+    const revealItems = [
+        { label: 'Contrast', x: '18%', progress: [0.2, 0.3] },
+        { label: 'Navigation', x: '35%', progress: [0.28, 0.38] },
+        { label: 'ARIA', x: '52%', progress: [0.35, 0.45] },
+        { label: 'Structure', x: '69%', progress: [0.42, 0.52] },
+        { label: 'Score', x: '84%', progress: [0.48, 0.58] },
+    ]
+
+    // Label
+    const labelOpacity = useTransform(scrollYProgress, [0.25, 0.38, 0.55, 0.68], [0, 1, 1, 0])
+
+    // Background pulse
+    const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
+
+    return (
+        <section ref={ref} className="relative py-16 md:py-24 overflow-hidden">
+            {/* Background pulse — origin flash from testing completion */}
+            <motion.div
+                style={{ opacity: pulseOpacity }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent pointer-events-none"
+            />
+
+            {/* Vertical connecting line */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+                <motion.div
+                    style={{ height: lineHeight, opacity: useTransform(lineOpacity, v => v * 0.3) }}
+                    className="absolute left-1/2 -translate-x-1/2 w-4 bg-gradient-to-b from-transparent via-primary/8 to-transparent blur-md origin-top"
+                />
+                <motion.div
+                    style={{ height: lineHeight, opacity: lineOpacity }}
+                    className="absolute left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-primary/10 via-primary/20 to-primary/8 origin-top"
+                />
+            </div>
+
+            {/* Scan beam — horizontal sweep */}
+            <motion.div
+                style={{ left: scanX, opacity: scanOpacity }}
+                className="absolute top-1/2 -translate-y-1/2 z-10 pointer-events-none"
+            >
+                {/* Beam line */}
+                <div className="relative w-px h-24">
+                    <div className="absolute inset-0 w-px bg-gradient-to-b from-transparent via-primary/50 to-transparent" />
+                    {/* Glow around beam */}
+                    <div className="absolute inset-y-0 -left-3 w-6 bg-gradient-to-b from-transparent via-primary/8 to-transparent blur-sm" />
+                    {/* Leading edge glow */}
+                    <div className="absolute top-1/2 -translate-y-1/2 left-0 size-2 rounded-full bg-primary/40 blur-[3px]" />
+                </div>
+            </motion.div>
+
+            <div className="max-w-3xl mx-auto px-6 relative">
+                {/* Scan track line — faint horizontal guide */}
+                <div className="absolute top-1/2 -translate-y-1/2 left-6 right-6 h-px">
+                    <motion.div
+                        style={{ opacity: useTransform(scrollYProgress, [0.1, 0.2, 0.6, 0.7], [0, 0.12, 0.12, 0]) }}
+                        className="w-full h-full bg-gradient-to-r from-primary/10 via-primary/15 to-primary/10"
+                    />
+                </div>
+
+                {/* Revealed insight nodes — appear as scan passes */}
+                <div className="relative py-8 flex items-center justify-center" style={{ minHeight: 100 }}>
+                    {revealItems.map((item) => (
+                        <RevealedNode key={item.label} item={item} scrollProgress={scrollYProgress} />
+                    ))}
+                </div>
+
+                {/* Floating label — "Validating Accessibility..." */}
+                <motion.div
+                    style={{ opacity: labelOpacity }}
+                    className="flex justify-center"
+                >
+                    <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/[0.03] border border-primary/8">
+                        <motion.div
+                            style={{ opacity: useTransform(scrollYProgress, [0.3, 0.4, 0.5, 0.55], [0, 1, 1, 0]) }}
+                        >
+                            <Loader2 className="size-2.5 text-primary/35 animate-spin" />
+                        </motion.div>
+                        <span className="text-[9px] font-medium text-primary/35 tracking-wide">Validating Accessibility...</span>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
 function FlowAccessibilityLiveCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-80px' })
@@ -4225,7 +4350,10 @@ export default function LandingPage() {
             {/* 4. Deploy + Testing (TinyFish) */}
             <FlowTestingSection />
 
-            {/* 5. Accessibility + 6. Live + CTA */}
+            {/* Transition: Testing → Accessibility */}
+            <FlowTestingToA11yTransition />
+
+            {/* 5. Accessibility Testing */}
             <FlowAccessibilityLiveCTA />
 
             {/* ── Capabilities Section ── */}
