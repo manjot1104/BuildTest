@@ -3340,59 +3340,315 @@ function FlowAccessibilityLiveCTA() {
                 </div>
             </section>
 
-            {/* ── Final CTA Section ── */}
-            <section className="relative px-6 py-24 md:py-36 overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.02] to-transparent pointer-events-none" />
-                <div className="max-w-3xl mx-auto text-center relative">
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: '-60px' }}
-                        transition={{ duration: 0.7 }}
-                    >
-                        <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/50 mb-6">
-                            From idea to live product
-                        </p>
-                        <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-6">
-                            Start building today
-                        </h2>
-                        <p className="text-base md:text-lg text-muted-foreground/60 leading-relaxed max-w-xl mx-auto mb-10">
-                            Plan, design, build, test, and launch — everything you need in one platform.
-                        </p>
-                    </motion.div>
-
-                    <motion.div
-                        initial={{ opacity: 0, y: 12 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true, margin: '-40px' }}
-                        transition={{ duration: 0.5, delay: 0.3 }}
-                        className="flex flex-col sm:flex-row items-center justify-center gap-4"
-                    >
-                        <motion.a
-                            href="/chat"
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className="group relative inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] shadow-lg shadow-primary/20 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/30"
-                        >
-                            <motion.div
-                                animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0)', '0 0 20px rgba(59,130,246,0.15)', '0 0 0px rgba(59,130,246,0)'] }}
-                                transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-                                className="absolute inset-0 rounded-xl pointer-events-none"
-                            />
-                            <Zap className="size-4" />
-                            Start Building
-                            <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
-                        </motion.a>
-                        <a
-                            href="#features"
-                            className="inline-flex items-center gap-2 px-6 py-3.5 rounded-xl border border-border/50 text-[14px] font-medium text-muted-foreground/70 transition-colors duration-200 hover:bg-muted/30 hover:text-foreground/70"
-                        >
-                            Explore Features
-                        </a>
-                    </motion.div>
-                </div>
-            </section>
+            {/* ── Launch + Final CTA ── */}
+            <FlowLaunchCTA />
         </>
+    )
+}
+
+// --- Launch + Final CTA ---
+
+type LaunchPhase = 'idle' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
+
+function FlowLaunchCTA() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-80px' })
+    const [phase, setPhase] = useState<LaunchPhase>('idle')
+    const [scrollY, setScrollY] = useState(0)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            timers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(400)
+            if (cancelled) return
+
+            // Step 1: Reveal website
+            setPhase('reveal')
+            await delay(1500)
+            if (cancelled) return
+
+            // Step 2: Auto-scroll through the site
+            setPhase('scrolling')
+            const totalScroll = 520
+            const steps = 80
+            for (let i = 1; i <= steps; i++) {
+                if (cancelled) return
+                setScrollY(Math.round((i / steps) * totalScroll))
+                await delay(45)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 3: Live state
+            setPhase('live')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 4: Exit
+            setPhase('exit')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 5: CTA
+            setPhase('cta')
+        }
+
+        run()
+        return () => { cancelled = true; timers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    const showSite = phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
+    const showCTA = phase === 'cta'
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-24 md:py-36 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.015] to-transparent pointer-events-none" />
+
+            <div className="max-w-5xl mx-auto relative">
+                {/* ── Website Preview ── */}
+                {showSite && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+                        animate={phase === 'exit'
+                            ? { opacity: 0, scale: 0.93, y: -10, filter: 'blur(6px)' }
+                            : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+                        }
+                        transition={{ duration: phase === 'exit' ? 0.7 : 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+                        className="relative"
+                    >
+                        {/* Glow */}
+                        <motion.div
+                            animate={phase === 'live'
+                                ? { opacity: [0.04, 0.08, 0.04] }
+                                : { opacity: 0.03 }
+                            }
+                            transition={phase === 'live' ? { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } : {}}
+                            className="absolute -inset-8 rounded-3xl bg-primary blur-3xl pointer-events-none"
+                        />
+
+                        <div className="relative rounded-xl border border-border/40 bg-card shadow-2xl shadow-black/10 dark:shadow-black/30 overflow-hidden">
+                            {/* Browser chrome */}
+                            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/25 bg-muted/15">
+                                <div className="flex gap-1.5">
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                </div>
+                                <div className="flex-1 flex justify-center">
+                                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-background/60 border border-border/20">
+                                        <div className="size-2.5 rounded-full bg-primary/30" />
+                                        <span className="text-[10px] text-muted-foreground/50 font-mono">ethan.dev</span>
+                                    </div>
+                                </div>
+                                <div className="w-16" />
+                            </div>
+
+                            {/* Scrollable viewport */}
+                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(300px, 38vw, 440px)' }}>
+                                <div style={{ transform: `translateY(-${scrollY}px)`, transition: 'transform 0.08s linear' }}>
+                                    {/* ── Navbar ── */}
+                                    <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 sticky top-0 bg-[#0f1117]/95 backdrop-blur-sm z-10">
+                                        <span className="text-[11px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
+                                        <div className="flex items-center gap-5">
+                                            {['Work', 'About', 'Skills', 'Contact'].map(l => (
+                                                <span key={l} className="text-[9px] text-white/35">{l}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── Hero ── */}
+                                    <div className="flex items-center px-6 py-8 gap-5">
+                                        <div className="flex-1">
+                                            <p className="text-[18px] md:text-[22px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Ethan Carter</p>
+                                            <p className="text-[10px] font-semibold text-blue-400/70 mt-1">Product Designer &amp; Developer</p>
+                                            <p className="text-[8px] text-white/25 mt-2 leading-relaxed max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
+                                            <div className="mt-3.5 flex gap-2">
+                                                <div className="h-6 px-3 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20">
+                                                    <span className="text-[8px] font-semibold text-white">View Work</span>
+                                                </div>
+                                                <div className="h-6 px-3 rounded-md border border-white/12 flex items-center">
+                                                    <span className="text-[8px] text-white/40">About Me</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="w-[30%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
+                                            <div className="flex gap-1 mb-2">
+                                                <div className="size-1.5 rounded-full bg-blue-400/40" />
+                                                <div className="size-1.5 rounded-full bg-blue-300/30" />
+                                                <div className="size-1.5 rounded-full bg-blue-200/25" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[5.5px] font-mono text-blue-400/45">const <span className="text-blue-300/60">ethan</span> = {'{'}</p>
+                                                <p className="text-[5.5px] font-mono pl-2 text-white/25">role: <span className="text-blue-200/45">&quot;Designer&quot;</span></p>
+                                                <p className="text-[5.5px] font-mono pl-2 text-white/25">available: <span className="text-blue-300/50">true</span></p>
+                                                <p className="text-[5.5px] font-mono text-blue-400/45">{'}'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Featured Projects ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2.5">Featured Projects</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { name: 'Design System', desc: 'Component library with tokens', tech: 'Figma · React' },
+                                                { name: 'SaaS Dashboard', desc: 'Real-time analytics UI', tech: 'Next.js · D3' },
+                                                { name: 'E-commerce App', desc: 'Modern storefront', tech: 'React · Stripe' },
+                                            ].map(p => (
+                                                <div key={p.name} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2.5 py-2 hover:bg-white/[0.04] transition-colors duration-200">
+                                                    <p className="text-[7px] font-semibold text-white/55">{p.name}</p>
+                                                    <p className="text-[5.5px] text-white/20 mt-0.5">{p.desc}</p>
+                                                    <p className="text-[5px] text-white/15 mt-1">{p.tech}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── Tech Stack ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2.5">Tech Stack</p>
+                                        <div className="grid grid-cols-4 gap-1.5">
+                                            {[
+                                                { cat: 'Design', items: 'Figma · Framer' },
+                                                { cat: 'Frontend', items: 'React · Next.js' },
+                                                { cat: 'Styling', items: 'Tailwind · CSS' },
+                                                { cat: 'Tools', items: 'Git · VS Code' },
+                                            ].map(s => (
+                                                <div key={s.cat} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                    <p className="text-[6px] font-semibold text-white/45">{s.cat}</p>
+                                                    <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── About ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2">About</p>
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <p className="text-[6.5px] text-white/30 leading-relaxed">
+                                                    I&apos;m a product designer and developer with 5+ years of experience building digital products.
+                                                    Passionate about clean code, beautiful interfaces, and seamless user experiences.
+                                                </p>
+                                                <div className="flex gap-2 mt-2.5">
+                                                    {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
+                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center">
+                                                            <Icon className="size-2.5 text-white/25" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="w-20 h-20 rounded-lg bg-blue-500/[0.04] border border-white/5 flex items-center justify-center flex-shrink-0 hidden md:flex">
+                                                <Globe className="size-6 text-blue-400/15" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Contact ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2">Get in Touch</p>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 h-6 rounded bg-white/[0.03] border border-white/[0.05] px-2.5 flex items-center">
+                                                <span className="text-[7px] text-white/20">Your email</span>
+                                            </div>
+                                            <div className="h-6 px-3 rounded bg-blue-500/60 flex items-center">
+                                                <span className="text-[7px] font-semibold text-white/80">Send</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Footer ── */}
+                                    <div className="px-6 py-3 border-t border-white/5 flex items-center justify-between">
+                                        <span className="text-[6px] text-white/20">2024 Ethan Carter. Built with Buildify.</span>
+                                        <div className="flex gap-3">
+                                            {['GitHub', 'LinkedIn', 'Twitter'].map(l => (
+                                                <span key={l} className="text-[6px] text-white/15">{l}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* "Live" indicator */}
+                        {(phase === 'live' || phase === 'scrolling') && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4 }}
+                                className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-primary/15 shadow-sm"
+                            >
+                                <motion.div
+                                    animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0.3)', '0 0 6px rgba(59,130,246,0.4)', '0 0 0px rgba(59,130,246,0.3)'] }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                                    className="size-1.5 rounded-full bg-primary/60"
+                                />
+                                <span className="text-[9px] font-medium text-primary/50">Live at ethan.dev</span>
+                            </motion.div>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* ── CTA Message ── */}
+                {showCTA && (
+                    <div className="text-center">
+                        <motion.div
+                            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+                        >
+                            <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/45 mb-5">
+                                The complete platform
+                            </p>
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
+                                Build, launch, and scale —<br />
+                                <span className="text-muted-foreground/40">all in one place.</span>
+                            </h2>
+                            <p className="text-base md:text-lg text-muted-foreground/55 leading-relaxed max-w-xl mx-auto mb-10">
+                                Plan, design, build, test, and ship — seamlessly with Buildify.
+                            </p>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.3 }}
+                            className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                        >
+                            <motion.a
+                                href="/chat"
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.97 }}
+                                className="group relative inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] shadow-lg shadow-primary/20 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/30"
+                            >
+                                <motion.div
+                                    animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0)', '0 0 24px rgba(59,130,246,0.15)', '0 0 0px rgba(59,130,246,0)'] }}
+                                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                    className="absolute inset-0 rounded-xl pointer-events-none"
+                                />
+                                <Sparkles className="size-4" />
+                                Start Your Journey
+                                <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            </motion.a>
+                            <a
+                                href="#features"
+                                className="inline-flex items-center gap-2 px-6 py-4 rounded-xl border border-border/40 text-[14px] font-medium text-muted-foreground/60 transition-colors duration-200 hover:bg-muted/20 hover:text-foreground/70"
+                            >
+                                Explore Features
+                            </a>
+                        </motion.div>
+                    </div>
+                )}
+            </div>
+        </section>
     )
 }
 
