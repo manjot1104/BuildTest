@@ -2376,7 +2376,15 @@ function FlowBuilderToTestingTransition() {
 
 // --- Testing Section (TinyFish) ---
 
-type TestPhase = 'idle' | 'typing-url' | 'running' | 'expanding' | 'complete'
+type TestPhase = 'idle' | 'typing-url' | 'running' | 'analyzing' | 'expanding' | 'complete'
+
+// Analysis items with intermediate states
+const ANALYSIS_ITEMS = [
+    { label: 'HTML Structure', pendingStatus: 'Analyzing...', doneStatus: 'Valid' },
+    { label: 'CSS Validation', pendingStatus: 'Checking...', doneStatus: 'Valid' },
+    { label: 'JS Bundle Size', pendingStatus: 'Scanning...', doneStatus: '142 KB' },
+    { label: 'Meta Tags', pendingStatus: 'Reviewing...', doneStatus: 'Complete' },
+]
 
 function FlowTestingSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
@@ -2388,6 +2396,9 @@ function FlowTestingSection() {
     const [tests, setTests] = useState(0)
     const [fishX, setFishX] = useState(10)
     const [expandSource, setExpandSource] = useState(false)
+    // Track which analysis items are done (index), -1 = none started, items.length = all done
+    const [analysisProgress, setAnalysisProgress] = useState(-1)
+    const [activeAnalysis, setActiveAnalysis] = useState(-1) // currently processing item
     const testTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
     const testUrl = 'https://ethan.dev'
@@ -2401,40 +2412,82 @@ function FlowTestingSection() {
         })
 
         const run = async () => {
-            await delay(800)
+            await delay(1000)
             if (cancelled) return
 
-            // 1. Type URL
+            // 1. Type URL — slower, more natural
             setPhase('typing-url')
             for (let i = 1; i <= testUrl.length; i++) {
                 if (cancelled) return
                 setUrlChars(i)
-                await delay(40 + Math.random() * 25)
+                // Pause after "://" and "."
+                const char = testUrl[i - 1]
+                const extra = char === '/' || char === '.' ? 80 : 0
+                await delay(55 + Math.random() * 35 + extra)
             }
-            await delay(500)
+            await delay(700)
             if (cancelled) return
 
-            // 2. Run tests
+            // 2. Run tests — slower progress, synced with analysis
             setPhase('running')
-            const totalSteps = 30
-            for (let s = 1; s <= totalSteps; s++) {
+
+            // Phase A: Progress 0-25% — initial crawl
+            for (let s = 1; s <= 8; s++) {
                 if (cancelled) return
-                setProgress(Math.round((s / totalSteps) * 100))
-                setPages(Math.min(Math.floor(s / 6) + 1, 5))
-                setTests(Math.min(Math.floor(s / 3) + 1, 10))
-                setFishX(10 + (s / totalSteps) * 80)
-                await delay(80 + Math.random() * 40)
+                const p = Math.round((s / 8) * 25)
+                setProgress(p)
+                setPages(Math.min(Math.floor(s / 2) + 1, 3))
+                setTests(Math.min(s, 3))
+                setFishX(10 + (s / 8) * 20)
+                await delay(150 + Math.random() * 60)
             }
             await delay(400)
             if (cancelled) return
 
-            // 3. Expand panels
-            setPhase('expanding')
+            // 3. Expand source panel + start analysis
+            setPhase('analyzing')
             setExpandSource(true)
+            await delay(600)
+            if (cancelled) return
+
+            // Phase B: Progressive analysis — one item at a time
+            for (let i = 0; i < ANALYSIS_ITEMS.length; i++) {
+                if (cancelled) return
+                // Show "processing" state for this item
+                setActiveAnalysis(i)
+                await delay(1000 + Math.random() * 400)
+                if (cancelled) return
+                // Mark as done
+                setAnalysisProgress(i)
+                setActiveAnalysis(-1)
+
+                // Increment progress + counters in sync
+                const newProgress = 25 + Math.round(((i + 1) / ANALYSIS_ITEMS.length) * 65)
+                setProgress(newProgress)
+                setPages(Math.min(3 + Math.floor((i + 1) / 2), 5))
+                setTests(Math.min(3 + (i + 1) * 2, 10))
+                setFishX(30 + ((i + 1) / ANALYSIS_ITEMS.length) * 50)
+
+                // Pause between items
+                await delay(350)
+            }
+            await delay(500)
+            if (cancelled) return
+
+            // Phase C: Final progress push to 100%
+            setProgress(95)
+            await delay(600)
+            if (cancelled) return
+            setProgress(100)
+            await delay(400)
+            if (cancelled) return
+
+            // 4. Expanding / settling
+            setPhase('expanding')
             await delay(1200)
             if (cancelled) return
 
-            // 4. Complete
+            // 5. Complete — with deliberate pause before result
             setPhase('complete')
         }
 
@@ -2533,7 +2586,7 @@ function FlowTestingSection() {
                                     </div>
                                     <button className={cn(
                                         "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
-                                        phase === 'running'
+                                        phase === 'running' || phase === 'analyzing'
                                             ? 'bg-primary/70 text-primary-foreground cursor-wait'
                                             : phase === 'complete' || phase === 'expanding'
                                                 ? 'bg-primary/10 text-primary/70 border border-primary/20'
@@ -2541,6 +2594,8 @@ function FlowTestingSection() {
                                     )}>
                                         {phase === 'running' ? (
                                             <><Loader2 className="size-3.5 animate-spin" /> Running...</>
+                                        ) : phase === 'analyzing' ? (
+                                            <><Loader2 className="size-3.5 animate-spin" /> Analyzing...</>
                                         ) : phase === 'complete' || phase === 'expanding' ? (
                                             <><CircleCheck className="size-3.5" /> Complete</>
                                         ) : (
@@ -2550,20 +2605,20 @@ function FlowTestingSection() {
                                 </div>
 
                                 {/* Progress bar */}
-                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
-                                        transition={{ duration: 0.3 }}
+                                        transition={{ duration: 0.4 }}
                                         className="mt-3"
                                     >
                                         <div className="flex items-center justify-between mb-1.5">
                                             <span className="text-[9px] text-muted-foreground/50">
-                                                {phase === 'complete' ? 'All tests completed' : `Testing in progress... ${progress}%`}
+                                                {phase === 'complete' ? 'All tests completed' : phase === 'expanding' ? 'Finalizing results...' : `Testing in progress... ${progress}%`}
                                             </span>
                                             {/* Fish indicator */}
                                             <motion.div
-                                                animate={{ x: phase === 'running' ? [0, 3, 0] : 0 }}
+                                                animate={{ x: phase !== 'complete' ? [0, 3, 0] : 0 }}
                                                 transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
                                             >
                                                 <Fish className="size-3 text-primary/40" />
@@ -2573,15 +2628,15 @@ function FlowTestingSection() {
                                             <motion.div
                                                 className="h-full bg-primary/50 rounded-full"
                                                 animate={{ width: `${progress}%` }}
-                                                transition={{ duration: 0.2 }}
+                                                transition={{ duration: 0.6, ease: 'easeOut' }}
                                             />
                                         </div>
                                         {/* Scanning fish */}
-                                        {phase === 'running' && (
+                                        {(phase === 'running' || phase === 'analyzing') && (
                                             <div className="relative h-4 mt-1">
                                                 <motion.div
                                                     animate={{ left: `${fishX}%` }}
-                                                    transition={{ duration: 0.3, ease: 'linear' }}
+                                                    transition={{ duration: 0.6, ease: 'easeOut' }}
                                                     className="absolute top-0"
                                                 >
                                                     <Fish className="size-3.5 text-primary/30" style={{ transform: 'scaleX(-1)' }} />
@@ -2595,7 +2650,7 @@ function FlowTestingSection() {
                             {/* Panels area */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border/15" style={{ minHeight: phase === 'idle' || phase === 'typing-url' ? 0 : undefined }}>
                                 {/* Source Code Analysis */}
-                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
@@ -2619,29 +2674,60 @@ function FlowTestingSection() {
                                                 initial={{ opacity: 0, height: 0 }}
                                                 animate={{ opacity: 1, height: 'auto' }}
                                                 transition={{ duration: 0.3 }}
-                                                className="space-y-2 pt-1"
+                                                className="space-y-1 pt-1"
                                             >
-                                                {[
-                                                    { label: 'HTML Structure', status: 'Analyzed', ok: true },
-                                                    { label: 'CSS Validation', status: 'Valid', ok: true },
-                                                    { label: 'JS Bundle Size', status: '142 KB', ok: true },
-                                                    { label: 'Meta Tags', status: 'Complete', ok: true },
-                                                ].map((item) => (
-                                                    <div key={item.label} className="flex items-center justify-between py-1 border-b border-border/10 last:border-0">
-                                                        <span className="text-[9px] text-muted-foreground/50">{item.label}</span>
-                                                        <span className={cn("text-[9px] font-medium", item.ok ? 'text-primary/60' : 'text-muted-foreground/40')}>
-                                                            {item.ok && <CircleCheck className="size-2.5 inline mr-1" />}
-                                                            {item.status}
-                                                        </span>
-                                                    </div>
-                                                ))}
+                                                {ANALYSIS_ITEMS.map((item, i) => {
+                                                    const isDone = i <= analysisProgress
+                                                    const isActive = i === activeAnalysis
+                                                    const isVisible = i <= analysisProgress + 1 || isActive
+
+                                                    if (!isVisible && phase !== 'expanding' && phase !== 'complete') return null
+
+                                                    return (
+                                                        <motion.div
+                                                            key={item.label}
+                                                            initial={{ opacity: 0, x: -6 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ duration: 0.35, delay: phase === 'expanding' || phase === 'complete' ? 0 : 0.1 }}
+                                                            className={cn(
+                                                                "flex items-center justify-between py-1.5 px-2 rounded-md border-b border-border/10 last:border-0 transition-all duration-300",
+                                                                isActive && 'bg-primary/[0.04]'
+                                                            )}
+                                                        >
+                                                            <span className={cn(
+                                                                "text-[9px] transition-colors duration-300",
+                                                                isActive ? 'text-foreground/60 font-medium' : 'text-muted-foreground/50'
+                                                            )}>{item.label}</span>
+                                                            <span className={cn("text-[9px] font-medium flex items-center gap-1 transition-all duration-300")}>
+                                                                {isDone ? (
+                                                                    <motion.span
+                                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                                        animate={{ opacity: 1, scale: 1 }}
+                                                                        transition={{ duration: 0.3 }}
+                                                                        className="flex items-center gap-1 text-primary/60"
+                                                                    >
+                                                                        <CircleCheck className="size-2.5" />
+                                                                        {item.doneStatus}
+                                                                    </motion.span>
+                                                                ) : isActive ? (
+                                                                    <span className="flex items-center gap-1 text-primary/40">
+                                                                        <Loader2 className="size-2.5 animate-spin" />
+                                                                        {item.pendingStatus}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground/25">Pending</span>
+                                                                )}
+                                                            </span>
+                                                        </motion.div>
+                                                    )
+                                                })}
                                             </motion.div>
                                         )}
                                     </motion.div>
                                 )}
 
                                 {/* Test Budget */}
-                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
                                     <motion.div
                                         initial={{ opacity: 0, height: 0 }}
                                         animate={{ opacity: 1, height: 'auto' }}
@@ -2653,22 +2739,30 @@ function FlowTestingSection() {
                                             <span className="text-[11px] font-semibold text-foreground/70">Test Budget</span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <div className="rounded-lg bg-muted/20 border border-border/20 p-3 text-center">
+                                            <div className={cn(
+                                                "rounded-lg bg-muted/20 border p-3 text-center transition-colors duration-500",
+                                                phase === 'complete' ? 'border-primary/20' : 'border-border/20'
+                                            )}>
                                                 <motion.p
                                                     key={pages}
-                                                    initial={{ scale: 1.2, opacity: 0.5 }}
+                                                    initial={{ scale: 1.15, opacity: 0.6 }}
                                                     animate={{ scale: 1, opacity: 1 }}
+                                                    transition={{ duration: 0.4, ease: 'easeOut' }}
                                                     className="text-[20px] font-bold text-foreground/80"
                                                 >
                                                     {pages}
                                                 </motion.p>
                                                 <p className="text-[8px] text-muted-foreground/40 mt-0.5">pages crawled</p>
                                             </div>
-                                            <div className="rounded-lg bg-muted/20 border border-border/20 p-3 text-center">
+                                            <div className={cn(
+                                                "rounded-lg bg-muted/20 border p-3 text-center transition-colors duration-500",
+                                                phase === 'complete' ? 'border-primary/20' : 'border-border/20'
+                                            )}>
                                                 <motion.p
                                                     key={tests}
-                                                    initial={{ scale: 1.2, opacity: 0.5 }}
+                                                    initial={{ scale: 1.15, opacity: 0.6 }}
                                                     animate={{ scale: 1, opacity: 1 }}
+                                                    transition={{ duration: 0.4, ease: 'easeOut' }}
                                                     className="text-[20px] font-bold text-foreground/80"
                                                 >
                                                     {tests}
@@ -2683,17 +2777,37 @@ function FlowTestingSection() {
                             {/* Results footer */}
                             {phase === 'complete' && (
                                 <motion.div
-                                    initial={{ opacity: 0, y: 6 }}
+                                    initial={{ opacity: 0, y: 8 }}
                                     animate={{ opacity: 1, y: 0 }}
-                                    transition={{ duration: 0.4 }}
-                                    className="px-5 py-3 border-t border-border/20 bg-primary/[0.02] flex items-center justify-between"
+                                    transition={{ duration: 0.6, delay: 0.3 }}
+                                    className="px-5 py-4 border-t border-primary/15 bg-primary/[0.03]"
                                 >
-                                    <div className="flex items-center gap-2">
-                                        <CircleCheck className="size-4 text-primary/60" />
-                                        <span className="text-[11px] font-medium text-primary/70">All tests passed — no critical issues found</span>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                        <span className="text-[9px] text-muted-foreground/40">5 pages · 10 tests · 0 failures</span>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ duration: 0.3, delay: 0.5, type: 'spring', stiffness: 200 }}
+                                            >
+                                                <CircleCheck className="size-5 text-primary/70" />
+                                            </motion.div>
+                                            <motion.span
+                                                initial={{ opacity: 0, x: -8 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ duration: 0.4, delay: 0.7 }}
+                                                className="text-[12px] font-semibold text-primary/70"
+                                            >
+                                                All tests passed — no critical issues found
+                                            </motion.span>
+                                        </div>
+                                        <motion.span
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.4, delay: 0.9 }}
+                                            className="text-[9px] text-muted-foreground/40"
+                                        >
+                                            5 pages · 10 tests · 0 failures
+                                        </motion.span>
                                     </div>
                                 </motion.div>
                             )}
