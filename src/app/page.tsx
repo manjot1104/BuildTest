@@ -2337,7 +2337,7 @@ function FlowBuilderSection() {
     )
 }
 
-// --- Builder → Testing transition (URL handoff) ---
+// --- Builder → Testing transition (moving pill) ---
 
 function FlowBuilderToTestingTransition() {
     const ref = useRef<HTMLDivElement>(null)
@@ -2346,59 +2346,94 @@ function FlowBuilderToTestingTransition() {
         offset: ['start end', 'end start'],
     })
 
-    // URL pill position — starts top-center, curves down to center-left (where input will be)
-    const urlY = useTransform(scrollYProgress, [0.1, 0.5, 0.8], ['0%', '50%', '100%'])
-    const urlX = useTransform(scrollYProgress, [0.1, 0.4, 0.8], ['50%', '45%', '30%'])
-    const urlScale = useTransform(scrollYProgress, [0.1, 0.3, 0.6, 0.8], [0.85, 1, 1, 0.9])
-    const urlOpacity = useTransform(scrollYProgress, [0.05, 0.15, 0.7, 0.85], [0, 1, 1, 0])
-    const urlGlow = useTransform(scrollYProgress, [0.15, 0.35, 0.6], [0, 1, 0.3])
+    // Pill travels along a subtle arc from top-center to lower-left
+    const pillY = useTransform(scrollYProgress, [0.08, 0.35, 0.60, 0.85], ['0%', '40%', '65%', '100%'])
+    const pillX = useTransform(scrollYProgress, [0.08, 0.30, 0.60, 0.85], ['50%', '53%', '44%', '35%'])
+    const pillOpacity = useTransform(scrollYProgress, [0.05, 0.14, 0.76, 0.90], [0, 1, 1, 0])
+    // Depth: scale up slightly mid-journey, settle back
+    const pillScale = useTransform(scrollYProgress, [0.08, 0.35, 0.60, 0.85], [0.95, 1.05, 1.03, 0.97])
+    // Soft glow that peaks mid-travel
+    const pillGlow = useTransform(scrollYProgress, [0.12, 0.40, 0.65], [0, 1, 0.15])
 
-    // Connecting line from top
-    const lineOpacity = useTransform(scrollYProgress, [0, 0.1, 0.8, 0.95], [0, 0.4, 0.4, 0])
-    const lineHeight = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+    // Icon + text morph at ~60% progress
+    const morphProgress = useTransform(scrollYProgress, [0.52, 0.68], [0, 1])
 
     // Label
-    const labelOpacity = useTransform(scrollYProgress, [0.25, 0.4, 0.65, 0.8], [0, 1, 1, 0])
+    const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
 
     return (
-        <section ref={ref} className="relative py-12 md:py-16 overflow-hidden">
-            {/* Connecting line */}
-            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+        <section ref={ref} className="relative py-14 md:py-20 overflow-hidden">
+            <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
+
+                {/* Trailing glow — soft, fades quickly */}
                 <motion.div
-                    style={{ height: lineHeight, opacity: lineOpacity }}
-                    className="absolute left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-primary/15 via-primary/25 to-primary/10 origin-top"
+                    style={{
+                        left: pillX,
+                        top: pillY,
+                        opacity: useTransform(pillGlow, v => v * 0.12),
+                        scale: useTransform(pillGlow, v => 0.6 + v * 0.5),
+                        x: '-50%',
+                        y: '-50%',
+                    }}
+                    className="absolute size-20 rounded-full bg-primary blur-xl pointer-events-none"
                 />
+
+                {/* Pill */}
+                <motion.div
+                    style={{
+                        left: pillX,
+                        top: pillY,
+                        scale: pillScale,
+                        opacity: pillOpacity,
+                        x: '-50%',
+                        y: '-50%',
+                        boxShadow: useTransform(pillGlow, v =>
+                            `0 0 ${v * 16}px rgba(59,130,246,${v * 0.12})`
+                        ),
+                    }}
+                    className="absolute z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card/90 border border-primary/20 shadow-lg backdrop-blur-sm"
+                >
+                    {/* Icon crossfade */}
+                    <div className="relative size-3.5">
+                        <motion.div style={{ opacity: useTransform(morphProgress, v => 1 - v) }} className="absolute inset-0">
+                            <Globe className="size-3.5 text-primary/55" />
+                        </motion.div>
+                        <motion.div style={{ opacity: morphProgress }} className="absolute inset-0">
+                            <FlaskConical className="size-3.5 text-primary/55" />
+                        </motion.div>
+                    </div>
+
+                    {/* Text crossfade */}
+                    <div className="relative h-4 overflow-hidden" style={{ width: 72 }}>
+                        <motion.span
+                            style={{
+                                opacity: useTransform(morphProgress, v => 1 - v),
+                                y: useTransform(morphProgress, v => v * -12),
+                            }}
+                            className="absolute inset-0 flex items-center text-[11px] font-mono text-primary/70 whitespace-nowrap"
+                        >
+                            ethan.dev
+                        </motion.span>
+                        <motion.span
+                            style={{
+                                opacity: morphProgress,
+                                y: useTransform(morphProgress, v => (1 - v) * 12),
+                            }}
+                            className="absolute inset-0 flex items-center text-[11px] font-medium text-primary/70 whitespace-nowrap"
+                        >
+                            Run Tests
+                        </motion.span>
+                    </div>
+                </motion.div>
+
+                {/* Label — subtle */}
+                <motion.div
+                    style={{ opacity: labelOpacity }}
+                    className="relative z-10 mt-2"
+                >
+                    <span className="text-[9px] font-medium text-primary/30 tracking-wide">Build complete — ready to test</span>
+                </motion.div>
             </div>
-
-            {/* Floating URL pill */}
-            <motion.div
-                style={{
-                    left: urlX,
-                    top: urlY,
-                    scale: urlScale,
-                    opacity: urlOpacity,
-                    x: '-50%',
-                    y: '-50%',
-                    boxShadow: useTransform(urlGlow, v => `0 0 ${v * 20}px rgba(59,130,246,${v * 0.15})`),
-                }}
-                className="absolute z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-primary/20 shadow-lg backdrop-blur-sm"
-            >
-                <Globe className="size-3.5 text-primary/50 flex-shrink-0" />
-                <span className="text-[11px] font-mono text-primary/70 whitespace-nowrap">ethan.dev</span>
-                <ArrowRight className="size-3 text-primary/30" />
-            </motion.div>
-
-            {/* Center label */}
-            <motion.div
-                style={{ opacity: labelOpacity }}
-                className="relative z-10 flex justify-center py-4"
-            >
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/8">
-                    <Rocket className="size-3.5 text-primary/40" />
-                    <span className="text-[10px] font-medium text-primary/40">Deployed → Testing</span>
-                    <FlaskConical className="size-3.5 text-primary/40" />
-                </div>
-            </motion.div>
         </section>
     )
 }
