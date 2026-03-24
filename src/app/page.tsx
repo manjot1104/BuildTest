@@ -11,7 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -2437,6 +2437,337 @@ function FlowBuilderSection() {
     )
 }
 
+// --- Testing Section (TinyFish) ---
+
+type TestPhase = 'idle' | 'typing-url' | 'running' | 'expanding' | 'complete'
+
+function FlowTestingSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
+    const [phase, setPhase] = useState<TestPhase>('idle')
+    const [urlChars, setUrlChars] = useState(0)
+    const [progress, setProgress] = useState(0)
+    const [pages, setPages] = useState(0)
+    const [tests, setTests] = useState(0)
+    const [fishX, setFishX] = useState(10)
+    const [expandSource, setExpandSource] = useState(false)
+    const testTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    const testUrl = 'https://ethan.dev'
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            testTimers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(800)
+            if (cancelled) return
+
+            // 1. Type URL
+            setPhase('typing-url')
+            for (let i = 1; i <= testUrl.length; i++) {
+                if (cancelled) return
+                setUrlChars(i)
+                await delay(40 + Math.random() * 25)
+            }
+            await delay(500)
+            if (cancelled) return
+
+            // 2. Run tests
+            setPhase('running')
+            const totalSteps = 30
+            for (let s = 1; s <= totalSteps; s++) {
+                if (cancelled) return
+                setProgress(Math.round((s / totalSteps) * 100))
+                setPages(Math.min(Math.floor(s / 6) + 1, 5))
+                setTests(Math.min(Math.floor(s / 3) + 1, 10))
+                setFishX(10 + (s / totalSteps) * 80)
+                await delay(80 + Math.random() * 40)
+            }
+            await delay(400)
+            if (cancelled) return
+
+            // 3. Expand panels
+            setPhase('expanding')
+            setExpandSource(true)
+            await delay(1200)
+            if (cancelled) return
+
+            // 4. Complete
+            setPhase('complete')
+        }
+
+        run()
+        return () => { cancelled = true; testTimers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                {/* Text header */}
+                <div className="max-w-xl mb-12 md:mb-16">
+                    <motion.span
+                        variants={fadeIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0}
+                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                    >
+                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                        Step 04
+                    </motion.span>
+                    <div className="overflow-hidden">
+                        <motion.h2 variants={slideUp} initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'} custom={0.1}
+                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                        >
+                            Ship &amp; Test
+                        </motion.h2>
+                    </div>
+                    <motion.p variants={blurIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0.25}
+                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
+                    >
+                        Deploy seamlessly and test your product with integrated AI-powered testing.
+                    </motion.p>
+                    <motion.div variants={fadeIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0.4}
+                        className="mt-6 flex items-center gap-3"
+                    >
+                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                            <FlaskConical className="size-[18px] text-primary/60" />
+                        </div>
+                        <span className="text-sm font-medium text-muted-foreground/60">AI-powered test automation</span>
+                    </motion.div>
+                </div>
+
+                {/* TinyFish UI */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                    <div className="relative">
+                        <div className="absolute -inset-8 rounded-3xl bg-primary/[0.04] blur-3xl pointer-events-none" />
+
+                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
+                            {/* TinyFish header */}
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                transition={{ duration: 0.5, delay: 0.3 }}
+                                className="px-5 py-4 border-b border-border/30 bg-muted/15"
+                            >
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Fish className="size-5 text-primary/70" />
+                                        <span className="text-[13px] font-bold text-foreground/80">TestFish</span>
+                                        <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary/60 uppercase tracking-wider">Beta</span>
+                                    </div>
+                                    <span className="text-[9px] text-muted-foreground/40">AI-powered &middot; 6 test categories</span>
+                                </div>
+                                <p className="text-[18px] md:text-[22px] font-bold text-foreground/85 leading-tight">
+                                    Test any site. Automatically.
+                                </p>
+                            </motion.div>
+
+                            {/* URL Input + Run Tests */}
+                            <div className="px-5 py-4 border-b border-border/20">
+                                <div className="flex gap-2">
+                                    <div className={cn(
+                                        "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
+                                        phase === 'typing-url' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
+                                    )}>
+                                        <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
+                                        <div className="flex-1 min-h-[18px] flex items-center">
+                                            {phase !== 'idle' ? (
+                                                <span className="text-[12px] text-foreground/70 font-mono">
+                                                    {testUrl.slice(0, urlChars)}
+                                                    {phase === 'typing-url' && urlChars < testUrl.length && (
+                                                        <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[12px] text-muted-foreground/30">Enter URL to test...</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className={cn(
+                                        "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
+                                        phase === 'running'
+                                            ? 'bg-primary/70 text-primary-foreground cursor-wait'
+                                            : phase === 'complete' || phase === 'expanding'
+                                                ? 'bg-primary/10 text-primary/70 border border-primary/20'
+                                                : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                                    )}>
+                                        {phase === 'running' ? (
+                                            <><Loader2 className="size-3.5 animate-spin" /> Running...</>
+                                        ) : phase === 'complete' || phase === 'expanding' ? (
+                                            <><CircleCheck className="size-3.5" /> Complete</>
+                                        ) : (
+                                            <><FlaskConical className="size-3.5" /> Run Tests</>
+                                        )}
+                                    </button>
+                                </div>
+
+                                {/* Progress bar */}
+                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.3 }}
+                                        className="mt-3"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[9px] text-muted-foreground/50">
+                                                {phase === 'complete' ? 'All tests completed' : `Testing in progress... ${progress}%`}
+                                            </span>
+                                            {/* Fish indicator */}
+                                            <motion.div
+                                                animate={{ x: phase === 'running' ? [0, 3, 0] : 0 }}
+                                                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                                            >
+                                                <Fish className="size-3 text-primary/40" />
+                                            </motion.div>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
+                                            <motion.div
+                                                className="h-full bg-primary/50 rounded-full"
+                                                animate={{ width: `${progress}%` }}
+                                                transition={{ duration: 0.2 }}
+                                            />
+                                        </div>
+                                        {/* Scanning fish */}
+                                        {phase === 'running' && (
+                                            <div className="relative h-4 mt-1">
+                                                <motion.div
+                                                    animate={{ left: `${fishX}%` }}
+                                                    transition={{ duration: 0.3, ease: 'linear' }}
+                                                    className="absolute top-0"
+                                                >
+                                                    <Fish className="size-3.5 text-primary/30" style={{ transform: 'scaleX(-1)' }} />
+                                                </motion.div>
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                )}
+                            </div>
+
+                            {/* Panels area */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border/15" style={{ minHeight: phase === 'idle' || phase === 'typing-url' ? 0 : undefined }}>
+                                {/* Source Code Analysis */}
+                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.4, delay: 0.1 }}
+                                        className="bg-card p-4"
+                                    >
+                                        <button
+                                            className="flex items-center justify-between w-full text-left mb-2"
+                                            onClick={() => setExpandSource(!expandSource)}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Code2 className="size-3.5 text-primary/50" />
+                                                <span className="text-[11px] font-semibold text-foreground/70">Source Code Analysis</span>
+                                            </div>
+                                            <motion.div animate={{ rotate: expandSource ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                <ChevronDown className="size-3.5 text-muted-foreground/30" />
+                                            </motion.div>
+                                        </button>
+                                        {expandSource && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                transition={{ duration: 0.3 }}
+                                                className="space-y-2 pt-1"
+                                            >
+                                                {[
+                                                    { label: 'HTML Structure', status: 'Analyzed', ok: true },
+                                                    { label: 'CSS Validation', status: 'Valid', ok: true },
+                                                    { label: 'JS Bundle Size', status: '142 KB', ok: true },
+                                                    { label: 'Meta Tags', status: 'Complete', ok: true },
+                                                ].map((item) => (
+                                                    <div key={item.label} className="flex items-center justify-between py-1 border-b border-border/10 last:border-0">
+                                                        <span className="text-[9px] text-muted-foreground/50">{item.label}</span>
+                                                        <span className={cn("text-[9px] font-medium", item.ok ? 'text-primary/60' : 'text-muted-foreground/40')}>
+                                                            {item.ok && <CircleCheck className="size-2.5 inline mr-1" />}
+                                                            {item.status}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                )}
+
+                                {/* Test Budget */}
+                                {(phase === 'running' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.4, delay: 0.2 }}
+                                        className="bg-card p-4"
+                                    >
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <FlaskConical className="size-3.5 text-primary/50" />
+                                            <span className="text-[11px] font-semibold text-foreground/70">Test Budget</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="rounded-lg bg-muted/20 border border-border/20 p-3 text-center">
+                                                <motion.p
+                                                    key={pages}
+                                                    initial={{ scale: 1.2, opacity: 0.5 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="text-[20px] font-bold text-foreground/80"
+                                                >
+                                                    {pages}
+                                                </motion.p>
+                                                <p className="text-[8px] text-muted-foreground/40 mt-0.5">pages crawled</p>
+                                            </div>
+                                            <div className="rounded-lg bg-muted/20 border border-border/20 p-3 text-center">
+                                                <motion.p
+                                                    key={tests}
+                                                    initial={{ scale: 1.2, opacity: 0.5 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="text-[20px] font-bold text-foreground/80"
+                                                >
+                                                    {tests}
+                                                </motion.p>
+                                                <p className="text-[8px] text-muted-foreground/40 mt-0.5">tests generated</p>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </div>
+
+                            {/* Results footer */}
+                            {phase === 'complete' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.4 }}
+                                    className="px-5 py-3 border-t border-border/20 bg-primary/[0.02] flex items-center justify-between"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <CircleCheck className="size-4 text-primary/60" />
+                                        <span className="text-[11px] font-medium text-primary/70">All tests passed — no critical issues found</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-[9px] text-muted-foreground/40">5 pages · 10 tests · 0 failures</span>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
@@ -3385,49 +3716,9 @@ export default function LandingPage() {
             {/* 3. Builder (Development) */}
             <FlowBuilderSection />
 
-            {/* 4. Deploy + Testing — Visual Left, Text Right */}
+            {/* 4. Deploy + Testing (TinyFish) */}
             <div className="section-divider" />
-            <section className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
-                        {/* Visual placeholder */}
-                        <div className="relative md:order-1 order-2">
-                            <div className="aspect-[4/3] rounded-2xl border border-border/50 bg-card/60 backdrop-blur-sm flex items-center justify-center">
-                                <div className="flex flex-col items-center gap-3">
-                                    <div className="flex gap-3">
-                                        <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                            <Rocket className="size-6 text-primary/40" />
-                                        </div>
-                                        <div className="size-14 rounded-2xl border border-primary/10 bg-primary/5 flex items-center justify-center">
-                                            <FlaskConical className="size-6 text-primary/40" />
-                                        </div>
-                                    </div>
-                                    <span className="text-xs text-muted-foreground/40">Deploy &amp; testing preview</span>
-                                </div>
-                            </div>
-                        </div>
-                        {/* Text */}
-                        <div className="md:order-2 order-1">
-                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
-                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                                Step 04
-                            </span>
-                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
-                                Ship with Confidence
-                            </h2>
-                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
-                                Deploy seamlessly and test your product with integrated tools like TinyFish.
-                            </p>
-                            <div className="mt-8 flex items-center gap-3">
-                                <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                                    <Rocket className="size-[18px] text-primary/60" />
-                                </div>
-                                <span className="text-sm font-medium text-muted-foreground/60">One-click deploy + test suite</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
+            <FlowTestingSection />
 
             {/* 5. Accessibility — Text Left, Visual Right */}
             <div className="section-divider" />
