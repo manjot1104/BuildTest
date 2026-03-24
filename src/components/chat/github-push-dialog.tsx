@@ -513,7 +513,9 @@ function relativeTime(iso: string): string {
 }
 
 // ============================================================================
-// Branch selector — a simple native <select> styled to match the design system
+// Branch selector — custom dropdown styled to match the dialog design system.
+// Uses the same controlled-div pattern as RepoPicker so the dropdown inherits
+// bg-popover, border, and text colours rather than the browser's native grey.
 // ============================================================================
 
 interface BranchSelectProps {
@@ -526,23 +528,77 @@ interface BranchSelectProps {
 }
 
 function BranchSelect({ id, value, onChange, branches, placeholder = 'Select branch', className }: BranchSelectProps) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const selected = branches.find((b) => b.name === value) ?? null
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleSelect = (branchName: string) => {
+    onChange(branchName)
+    setOpen(false)
+  }
+
   return (
-    <div className={cn('relative', className)}>
-      <GitBranch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-      <select
+    <div ref={containerRef} className={cn('relative', className)}>
+      {/* Trigger button */}
+      <button
+        type="button"
         id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none rounded-md border bg-background/50 pl-8 pr-8 py-2 text-sm outline-none focus:ring-2 focus:ring-ring transition-colors"
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          'w-full flex items-center gap-2 rounded-md border bg-background/50 px-3 py-2 text-sm text-left transition-colors',
+          'focus:outline-none focus:ring-2 focus:ring-ring',
+          open && 'ring-2 ring-ring',
+        )}
       >
-        <option value="" disabled>{placeholder}</option>
-        {branches.map((b) => (
-          <option key={b.name} value={b.name}>
-            {b.name}{b.protected ? ' 🔒' : ''}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <GitBranch className="size-3.5 text-muted-foreground shrink-0" />
+        <span className={cn('flex-1 truncate', !selected && 'text-muted-foreground')}>
+          {selected
+            ? <>{selected.name}{selected.protected ? <span className="ml-1 text-xs opacity-60">🔒</span> : null}</>
+            : placeholder}
+        </span>
+        <ChevronDown className={cn('size-4 text-muted-foreground shrink-0 transition-transform', open && 'rotate-180')} />
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg animate-in fade-in-0 zoom-in-95 duration-100 overflow-hidden">
+          <ul className="max-h-48 overflow-y-auto py-1">
+            {branches.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-muted-foreground">No branches found.</li>
+            ) : (
+              branches.map((b) => (
+                <li key={b.name}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => handleSelect(b.name)}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-muted/60 transition-colors',
+                      value === b.name && 'bg-muted',
+                    )}
+                  >
+                    <GitBranch className="size-3.5 text-muted-foreground shrink-0" />
+                    <span className="flex-1 truncate">{b.name}</span>
+                    {b.protected && <span className="text-xs text-muted-foreground shrink-0">🔒</span>}
+                    {value === b.name && <Check className="size-3.5 text-primary shrink-0" />}
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
     </div>
   )
 }
@@ -1067,8 +1123,19 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   const pushMutation = usePushToGithub(chatId)
   const connectMutation = useConnectExistingRepo(chatId)
 
-  const isFirstPush = !existingRepo
-  const isLoading = isLoadingStatus || isLoadingRepo
+  // repoLinked: true when a repo is already saved for this chat (from the query)
+  // OR when one was just connected this session (justConnected flag below).
+  // This is the single source of truth for "does a repo exist" — avoids the
+  // async gap between connectMutation.onSuccess invalidating the query and
+  // useGithubRepoForChat returning the updated data.
+  const [justConnected, setJustConnected] = useState(false)
+  const [connectedRepoFullName, setConnectedRepoFullName] = useState<string | null>(null)
+  const repoLinked = !!existingRepo || justConnected
+  const isFirstPush = !repoLinked
+  // isLoading only blocks the UI on the true initial load — not on background
+  // refetches triggered by query invalidation after connect/push. Once repoLinked
+  // is true we have enough data to render; the refetch updates details silently.
+  const isLoading = isLoadingStatus || (isLoadingRepo && !repoLinked)
 
   // ── Top-level tab (Push / PRs) — only relevant when a repo is linked ──
   const [activeTab, setActiveTab] = useState<DialogTab>('push')
@@ -1104,28 +1171,22 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
     isNewRepo: boolean
   } | null>(null)
 
-  // After connect succeeds, flip to the push step within the same dialog.
-  // connectedRepoInfo holds just enough data to show the repo pill before
-  // the invalidated useGithubRepoForChat query comes back.
-  const [connectStep, setConnectStep] = useState(false)
-  const [connectedRepoInfo, setConnectedRepoInfo] = useState<{
-    repoFullName: string
-    repoUrl: string
-    defaultBranch: string
-    visibility: 'public' | 'private'
-  } | null>(null)
-
   // Fetch PR count for the badge — only when a repo is linked
-  const { data: prs = [] } = usePullRequests(chatId, open && !isFirstPush)
+  const { data: prs = [] } = usePullRequests(chatId, open && repoLinked)
 
   // Refs
   const repoNameRef = useRef<HTMLInputElement>(null)
   const branchNameRef = useRef<HTMLInputElement>(null)
 
   // Derived
-  const showNewRepoForm = (isFirstPush || replaceRepo) && pushMode === 'new-repo' && !connectStep
-  // connectStep=true means connect succeeded; hide the picker and show push form
-  const showConnectExistingForm = (isFirstPush || replaceRepo) && pushMode === 'connect-existing' && !connectStep
+  // inSetupMode is the single source of truth for whether we are in the
+  // "first push / replace" setup flow vs the normal follow-up tabbed UI.
+  // It is driven purely by pushMode so it flips atomically when setPushMode
+  // is called, avoiding the async lag that isFirstPush (derived from repoLinked)
+  // can introduce during the connect transition.
+  const inSetupMode = pushMode !== 'follow-up'
+  const showNewRepoForm = inSetupMode && pushMode === 'new-repo'
+  const showConnectExistingForm = inSetupMode && pushMode === 'connect-existing'
 
   // Fetch repos only when connect-existing mode is active
   const { data: userRepos = [], isLoading: isLoadingRepos } = useGithubRepos(
@@ -1135,11 +1196,13 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
   // Reset everything when dialog opens
   useEffect(() => {
     if (open) {
+      setJustConnected(false)
+      setConnectedRepoFullName(null)
       setActiveTab('push')
-      setPushMode(isFirstPush ? 'new-repo' : 'follow-up')
+      setPushMode(repoLinked ? 'follow-up' : 'new-repo')
       setRepoName('')
       const today = new Date().toISOString().slice(0, 10)
-      setBranchName(isFirstPush ? 'main' : `update-${today}`)
+      setBranchName(repoLinked ? `update-${today}` : 'main')
       setVisibility('public')
       setCommitMessage('')
       setPushError(null)
@@ -1148,12 +1211,11 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       setShowReplaceWarning(false)
       setReplaceRepo(false)
       setSuccessData(null)
-      setConnectStep(false)
-      setConnectedRepoInfo(null)
       setSelectedRepo(null)
       setTypedRepoValue('')
     }
-  }, [open, isFirstPush])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   // Auto-focus the first relevant input after loading
   useEffect(() => {
@@ -1197,18 +1259,18 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
     }
 
     try {
-      const result = await connectMutation.mutateAsync({ chatId, repoFullName })
-      // Pre-fill branch with a dated update branch — same pattern as follow-up pushes.
-      // The repo already has content on its default branch, so we don't push there directly.
+      await connectMutation.mutateAsync({ chatId, repoFullName })
+      // Synchronously mark the repo as linked so the tabbed UI renders
+      // immediately — before useGithubRepoForChat's async refetch resolves.
+      setJustConnected(true)
+      setConnectedRepoFullName(repoFullName)
+      setPushMode('follow-up')
       const today = new Date().toISOString().slice(0, 10)
       setBranchName(`update-${today}`)
-      setConnectedRepoInfo({
-        repoFullName: result.repoFullName,
-        repoUrl: result.repoUrl,
-        defaultBranch: result.defaultBranch,
-        visibility: result.visibility,
-      })
-      setConnectStep(true)
+      setActiveTab('push')
+      setConnectError(null)
+      setSelectedRepo(null)
+      setTypedRepoValue('')
     } catch (error) {
       const raw = error as { message?: string; code?: ErrorCode }
       setConnectError({ message: raw?.message ?? 'Failed to connect repository', code: raw?.code })
@@ -1262,13 +1324,13 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
       // Don't submit from textarea
       if ((e.target as HTMLElement).tagName === 'TEXTAREA') return
       e.preventDefault()
-      if (showConnectExistingForm && !connectStep) {
+      if (showConnectExistingForm) {
         void handleConnect()
       } else {
         void handlePush()
       }
     }
-  }, [handlePush, handleConnect, pushMutation.isPending, connectMutation.isPending, showConnectExistingForm, connectStep])
+  }, [handlePush, handleConnect, pushMutation.isPending, connectMutation.isPending, showConnectExistingForm])
 
   // Block close during push or connect
   const handleOpenChange = useCallback((nextOpen: boolean) => {
@@ -1429,26 +1491,22 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
               ? 'Pull Requests'
               : showConnectExistingForm
                 ? 'Connect Repository'
-                : connectStep
-                  ? 'Push to Connected Repository'
-                  : showNewRepoForm && replaceRepo
-                    ? 'Create New Repository'
-                    : isFirstPush
-                      ? 'Push to GitHub'
-                      : 'Push Update'}
+                : showNewRepoForm && replaceRepo
+                  ? 'Create New Repository'
+                  : inSetupMode
+                    ? 'Push to GitHub'
+                    : 'Push Update'}
           </DialogTitle>
           <DialogDescription>
             {activeTab === 'prs'
               ? `Manage pull requests for ${existingRepo?.repoFullName ?? 'your repository'}.`
               : showConnectExistingForm
                 ? 'Link an existing GitHub repository to this chat. You can push to it afterwards.'
-                : connectStep && connectedRepoInfo
-                  ? `Push your code to ${connectedRepoInfo.repoFullName}.`
-                  : showNewRepoForm && replaceRepo
-                    ? 'Create a new repository and link it to this chat.'
-                    : isFirstPush
-                      ? 'Create a new repository and push your generated code.'
-                      : `Push a new update to ${existingRepo?.repoFullName}`}
+                : showNewRepoForm && replaceRepo
+                  ? 'Create a new repository and link it to this chat.'
+                  : inSetupMode
+                    ? 'Create a new repository and push your generated code.'
+                    : `Push a new update to ${existingRepo?.repoFullName ?? connectedRepoFullName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -1484,9 +1542,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
         ) : (
           <div className="flex flex-col gap-4 pt-1" onKeyDown={handleKeyDown}>
 
-            {/* Top-level tab bar — only visible when a repo is already linked
-                and not in the middle of a replace flow */}
-            {!isFirstPush && !replaceRepo && !connectStep && (
+            {/* Top-level tab bar — only visible when not in setup mode */}
+            {!inSetupMode && (
               <DialogTabBar
                 activeTab={activeTab}
                 onChange={setActiveTab}
@@ -1495,12 +1552,12 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
             )}
 
             {/* ── PR tab content ── */}
-            {activeTab === 'prs' && !isFirstPush && !replaceRepo && (
+            {activeTab === 'prs' && !inSetupMode && (
               <PRTab chatId={chatId} />
             )}
 
             {/* ── Push tab content ── */}
-            {(activeTab === 'push' || isFirstPush || replaceRepo) && (
+            {(activeTab === 'push' || inSetupMode) && (
               <>
                 {/* Connected user indicator */}
                 {githubStatus?.login && (
@@ -1513,8 +1570,8 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                   </div>
                 )}
 
-                {/* Mode tabs — shown on first push or when replacing, but not after connect succeeds */}
-                {(isFirstPush || replaceRepo) && !connectStep && (
+                {/* Mode tabs — shown only in setup mode */}
+                {inSetupMode && (
                   <ModeTabs
                     mode={pushMode}
                     onChange={(m) => {
@@ -1527,50 +1584,36 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                 )}
 
                 {/* Existing repo info (follow-up push) */}
-                {!isFirstPush && !replaceRepo && existingRepo && (
+                {!inSetupMode && (existingRepo || connectedRepoFullName) && (
                   <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 transition-colors">
                     <Github className="size-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium truncate">{existingRepo.repoFullName}</span>
-                    <span className={cn(
-                      'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
-                      existingRepo.visibility === 'public'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-                    )}>
-                      {existingRepo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
-                      {existingRepo.visibility}
+                    <span className="text-sm font-medium truncate">
+                      {existingRepo?.repoFullName ?? connectedRepoFullName}
                     </span>
-                    <a
-                      href={existingRepo.repoUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <ExternalLink className="size-3.5" />
-                    </a>
+                    {existingRepo && (
+                      <>
+                        <span className={cn(
+                          'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
+                          existingRepo.visibility === 'public'
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+                        )}>
+                          {existingRepo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
+                          {existingRepo.visibility}
+                        </span>
+                        <a
+                          href={existingRepo.repoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </>
+                    )}
                   </div>
                 )}
 
-                {/* Repo pill when connect just succeeded (before query invalidation resolves) */}
-                {connectStep && connectedRepoInfo && !existingRepo && (
-                  <div className="flex items-center gap-2.5 rounded-lg border border-emerald-200 bg-emerald-50/60 dark:bg-emerald-950/20 dark:border-emerald-800/50 px-3.5 py-2.5">
-                    <Check className="size-4 text-emerald-500 shrink-0" />
-                    <span className="text-sm font-medium truncate">{connectedRepoInfo.repoFullName}</span>
-                    <span className={cn(
-                      'ml-auto shrink-0 inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full',
-                      connectedRepoInfo.visibility === 'public'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
-                    )}>
-                      {connectedRepoInfo.visibility === 'public' ? <Globe className="size-3" /> : <Lock className="size-3" />}
-                      {connectedRepoInfo.visibility}
-                    </span>
-                    <a href={connectedRepoInfo.repoUrl} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-muted-foreground hover:text-foreground transition-colors">
-                      <ExternalLink className="size-3.5" />
-                    </a>
-                  </div>
-                )}
 
                 {/* ── Connect existing form ── */}
                 {showConnectExistingForm && (
@@ -1842,28 +1885,13 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                     {/* Actions */}
                     {pushError?.code !== 'branch_already_exists' && (
                       <div className="flex gap-2 pt-1">
-                        {/* Back to repo picker when coming from connect-existing flow */}
-                        {connectStep ? (
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => {
-                              setConnectStep(false)
-                              setPushError(null)
-                              setConfirmExistingBranch(false)
-                            }}
-                          >
-                            ← Back
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            className="flex-1"
-                            onClick={() => onOpenChange(false)}
-                          >
-                            Cancel
-                          </Button>
-                        )}
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => onOpenChange(false)}
+                        >
+                          Cancel
+                        </Button>
                         <Button
                           className="flex-1 gap-2"
                           onClick={() => void handlePush()}
@@ -1894,7 +1922,7 @@ export function GithubPushDialog({ open, onOpenChange, chatId }: GithubPushDialo
                     )}
 
                     {/* Use a different repository link */}
-                    {!isFirstPush && !replaceRepo && !connectStep && (
+                    {!inSetupMode && !replaceRepo && (
                       <button
                         type="button"
                         onClick={() => setShowReplaceWarning(true)}
