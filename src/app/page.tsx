@@ -1731,245 +1731,8 @@ function FlowStudioSection() {
     )
 }
 
-// --- Studio → Builder Transition ---
-
-function FlowStudioToBuilderTransition() {
-    const ref = useRef<HTMLDivElement>(null)
-    const { scrollYProgress } = useScroll({
-        target: ref,
-        offset: ['start start', 'end end'],
-    })
-
-    // Canvas zoom
-    const canvasScale = useTransform(scrollYProgress, [0, 0.3, 0.6], [0.92, 1.0, 1.05])
-    // Chrome fades
-    const chromeOpacity = useTransform(scrollYProgress, [0, 0.2], [0.6, 0])
-    // Canvas border dissolves
-    const canvasBorder = useTransform(scrollYProgress, [0.1, 0.35], [1, 0])
-    // Grid fades out
-    const gridOpacity = useTransform(scrollYProgress, [0, 0.25], [0.15, 0])
-
-    // UI sections separate (gap grows)
-    const sectionGap = useTransform(scrollYProgress, [0.2, 0.5], [0, 8])
-    // Section highlights
-    const highlightOpacity = useTransform(scrollYProgress, [0.3, 0.5, 0.7], [0, 1, 0.3])
-    // Component labels
-    const labelsOpacity = useTransform(scrollYProgress, [0.35, 0.55], [0, 1])
-
-    // Code panel slides in
-    const codePanelX = useTransform(scrollYProgress, [0.5, 0.75], [100, 0])
-    const codePanelOpacity = useTransform(scrollYProgress, [0.5, 0.7], [0, 1])
-    // Divider appears
-    const dividerOpacity = useTransform(scrollYProgress, [0.55, 0.7], [0, 1])
-
-    // Overall container morphs
-    const containerBg = useTransform(scrollYProgress, [0.6, 0.85], [0, 1])
-
-    return (
-        <section ref={ref} className="relative" style={{ height: '200vh' }}>
-            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
-                <div className="max-w-6xl mx-auto w-full">
-                    <motion.div
-                        style={{ scale: canvasScale }}
-                        className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden"
-                    >
-                        {/* Fading toolbar ghost */}
-                        <motion.div
-                            style={{ opacity: chromeOpacity }}
-                            className="flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20"
-                        >
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-semibold text-foreground/50">Buildify Studio</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="h-5 w-12 rounded bg-border/15" />
-                                <div className="h-5 w-16 rounded bg-primary/10" />
-                            </div>
-                        </motion.div>
-
-                        {/* Morphing toolbar — Builder appears */}
-                        <motion.div
-                            style={{ opacity: codePanelOpacity }}
-                            className="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20 z-10"
-                        >
-                            <div className="flex items-center gap-2.5">
-                                <span className="text-[10px] font-semibold text-foreground/70">Buildify Builder</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] text-muted-foreground/40">
-                                    <Terminal className="size-3" />
-                                    Ready
-                                </div>
-                                <div className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold">
-                                    <Zap className="size-3" />
-                                    Generate
-                                </div>
-                            </div>
-                        </motion.div>
-
-                        {/* Main area */}
-                        <div className="flex" style={{ height: 'clamp(320px, 40vw, 480px)' }}>
-                            {/* Canvas with deconstructing UI */}
-                            <div className="flex-1 bg-muted/5 relative overflow-hidden">
-                                <motion.div style={{ opacity: gridOpacity }} className="absolute inset-0 dot-grid-bg" />
-
-                                <motion.div
-                                    style={{ opacity: useTransform(canvasBorder, (v) => 0.3 + v * 0.7) }}
-                                    className="absolute inset-3 rounded-lg border border-border/30 bg-[#0f1117] overflow-hidden shadow-lg flex flex-col text-white/90"
-                                >
-                                    {/* Navbar */}
-                                    <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
-                                        <span className="text-[9px] font-bold text-white/85">Ethan.dev</span>
-                                        <div className="flex items-center gap-3">
-                                            {['Work', 'About', 'Contact'].map((l) => (
-                                                <span key={l} className="text-[7px] text-white/35">{l}</span>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Hero — separates + highlights */}
-                                    <motion.div
-                                        style={{
-                                            marginBottom: sectionGap,
-                                            boxShadow: useTransform(highlightOpacity, (v) =>
-                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
-                                            ),
-                                        }}
-                                        className="flex-1 flex items-center px-4 gap-3 relative rounded-sm"
-                                    >
-                                        <motion.div
-                                            style={{ opacity: labelsOpacity }}
-                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
-                                        >
-                                            {'<Hero />'}
-                                        </motion.div>
-                                        <div className="flex-1">
-                                            <p className="text-[14px] md:text-[16px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</p>
-                                            <p className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</p>
-                                            <p className="text-[6px] text-white/25 mt-1.5 max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
-                                            <div className="mt-2.5 flex gap-1.5">
-                                                <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
-                                                <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
-                                            </div>
-                                        </div>
-                                        <div className="w-[28%] aspect-[4/5] rounded-lg bg-blue-500/[0.06] border border-white/5 flex items-center justify-center hidden md:flex">
-                                            <Globe className="size-5 text-blue-400/20" />
-                                        </div>
-                                    </motion.div>
-
-                                    {/* Projects — separates + highlights */}
-                                    <motion.div
-                                        style={{
-                                            marginBottom: sectionGap,
-                                            boxShadow: useTransform(highlightOpacity, (v) =>
-                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
-                                            ),
-                                        }}
-                                        className="px-4 py-2 relative rounded-sm"
-                                    >
-                                        <motion.div
-                                            style={{ opacity: labelsOpacity }}
-                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
-                                        >
-                                            {'<Projects />'}
-                                        </motion.div>
-                                        <p className="text-[7px] font-semibold text-white/40 mb-1.5">Featured Projects</p>
-                                        <div className="grid grid-cols-3 gap-1.5">
-                                            {[{ name: 'Design System', tech: 'Figma · React' }, { name: 'SaaS Dashboard', tech: 'Next.js · D3' }, { name: 'E-commerce', tech: 'React · Stripe' }].map((p, i) => (
-                                                <div key={i} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
-                                                    <p className="text-[6px] font-semibold text-white/55">{p.name}</p>
-                                                    <p className="text-[5px] text-white/20 mt-0.5">{p.tech}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </motion.div>
-
-                                    {/* Contact — separates + highlights */}
-                                    <motion.div
-                                        style={{
-                                            boxShadow: useTransform(highlightOpacity, (v) =>
-                                                `inset 0 0 0 ${v}px rgba(59,130,246,0.25), 0 0 ${v * 20}px rgba(59,130,246,${v * 0.06})`
-                                            ),
-                                        }}
-                                        className="px-4 py-2 border-t border-white/[0.03] relative rounded-sm"
-                                    >
-                                        <motion.div
-                                            style={{ opacity: labelsOpacity }}
-                                            className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/60 bg-blue-400/5 px-1.5 py-0.5 rounded"
-                                        >
-                                            {'<Contact />'}
-                                        </motion.div>
-                                        <p className="text-[7px] font-semibold text-white/40 mb-1.5">Get in Touch</p>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1 h-5 rounded bg-white/[0.03] border border-white/[0.05] px-2 flex items-center"><span className="text-[6px] text-white/20">Your email</span></div>
-                                            <div className="h-5 px-2.5 rounded bg-blue-500/60 flex items-center"><span className="text-[6px] font-semibold text-white/80">Send</span></div>
-                                        </div>
-                                    </motion.div>
-                                </motion.div>
-                            </div>
-
-                            {/* Divider — appears */}
-                            <motion.div style={{ opacity: dividerOpacity }} className="w-px bg-border/30" />
-
-                            {/* Code panel — slides in */}
-                            <motion.div
-                                style={{ x: codePanelX, opacity: codePanelOpacity }}
-                                className="w-[38%] bg-[#0d1117] flex flex-col hidden md:flex"
-                            >
-                                <div className="flex items-center px-3 py-1.5 border-b border-white/5 bg-white/[0.02]">
-                                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-t bg-white/[0.04] border-b border-blue-400/30">
-                                        <Code2 className="size-2.5 text-blue-400/50" />
-                                        <span className="text-[7px] text-white/50">page.tsx</span>
-                                    </div>
-                                </div>
-                                <div className="flex-1 p-3 font-mono">
-                                    <div className="space-y-0.5">
-                                        {BUILD_CODE_LINES.map((line, i) => (
-                                            <motion.div
-                                                key={i}
-                                                style={{
-                                                    opacity: useTransform(scrollYProgress, [0.6 + i * 0.02, 0.65 + i * 0.02], [0, 1]),
-                                                    x: useTransform(scrollYProgress, [0.6 + i * 0.02, 0.65 + i * 0.02], [-6, 0]),
-                                                }}
-                                                className="flex items-start gap-2"
-                                            >
-                                                <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
-                                                <pre className={cn(
-                                                    "text-[6.5px] leading-relaxed whitespace-pre",
-                                                    line.code.includes('import') || line.code.includes('export') || line.code.includes('function') || line.code.includes('return')
-                                                        ? 'text-blue-400/50'
-                                                        : line.code.includes('"')
-                                                            ? 'text-blue-200/45'
-                                                            : line.code.includes('<') || line.code.includes('/>')
-                                                                ? 'text-blue-300/50'
-                                                                : 'text-white/30'
-                                                )}>
-                                                    {line.code || ' '}
-                                                </pre>
-                                            </motion.div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="border-t border-white/5 px-3 py-2 bg-white/[0.01]">
-                                    <div className="flex items-center gap-1.5">
-                                        <Terminal className="size-2.5 text-white/20" />
-                                        <span className="text-[7px] text-white/25">Terminal</span>
-                                    </div>
-                                    <motion.p
-                                        style={{ opacity: useTransform(scrollYProgress, [0.85, 0.95], [0, 1]) }}
-                                        className="text-[6px] font-mono text-white/20 mt-1"
-                                    >
-                                        $ buildify generate --ready
-                                    </motion.p>
-                                </div>
-                            </motion.div>
-                        </div>
-                    </motion.div>
-                </div>
-            </div>
-        </section>
-    )
-}
+// --- Studio → Builder: clean cinematic cut ---
+// No complex animation. Just a section divider that's already in the page.
 
 // --- Builder Section — design to code with GitHub push ---
 
@@ -1992,7 +1755,7 @@ const BUILD_CODE_LINES = [
     { code: '}', highlight: '' },
 ]
 
-type BuildPhase = 'idle' | 'clicking' | 'building' | 'syncing' | 'done' | 'pushing' | 'pushed' | 'complete'
+type BuildPhase = 'idle' | 'clicking' | 'building' | 'syncing' | 'done' | 'pushing' | 'pushed' | 'downloading' | 'downloaded' | 'complete'
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
@@ -2006,6 +1769,7 @@ function FlowBuilderSection() {
     const [cursorClicking, setCursorClicking] = useState(false)
     const [pushProgress, setPushProgress] = useState(0)
     const [commitFiles, setCommitFiles] = useState(0)
+    const [showToast, setShowToast] = useState<string | null>(null)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
     useEffect(() => {
@@ -2023,26 +1787,32 @@ function FlowBuilderSection() {
             if (!cancelled) setCursorClicking(false)
         }
 
+        const toast = async (msg: string) => {
+            setShowToast(msg)
+            await delay(2000)
+            if (!cancelled) setShowToast(null)
+        }
+
         const runSequence = async () => {
             await delay(1000)
             if (cancelled) return
 
-            // 1. Cursor appears, moves to "Generate" button
+            // 1. Cursor → Generate button
             setCursorVisible(true)
-            setCursorPos({ x: 82, y: -4 })
+            setCursorPos({ x: 78, y: 50 })
             await delay(800)
             if (cancelled) return
 
-            // 2. Click generate
+            // 2. Click Generate — button press feedback
             setPhase('clicking')
             await click()
             if (cancelled) return
             await delay(400)
 
-            // 3. Build phase — code types line by line
+            // 3. Code generation
             if (cancelled) return
             setPhase('building')
-            setCursorPos({ x: 75, y: 30 }) // move cursor to code area
+            setCursorPos({ x: 75, y: 35 })
             await delay(300)
 
             for (let i = 0; i < BUILD_CODE_LINES.length; i++) {
@@ -2051,44 +1821,57 @@ function FlowBuilderSection() {
                 setBuildProgress(Math.round(((i + 1) / BUILD_CODE_LINES.length) * 100))
                 const line = BUILD_CODE_LINES[i]!
                 if (line.highlight) setActiveHighlight(line.highlight)
-                await delay(120 + Math.random() * 60) // 120–180ms per line
+                await delay(120 + Math.random() * 60)
             }
 
-            // 4. Syncing
+            // 4. Sync
             if (cancelled) return
             setPhase('syncing')
             setActiveHighlight(null)
-            await delay(600)
+            await delay(500)
 
             // 5. Build done
             if (cancelled) return
             setPhase('done')
             setBuildProgress(100)
-            await delay(1200)
+            await delay(1000)
 
-            // 6. Cursor moves to "Push to GitHub"
+            // 6. Cursor → Push to GitHub
             if (cancelled) return
-            setCursorPos({ x: 92, y: -4 })
-            await delay(700)
+            setCursorPos({ x: 90, y: 50 })
+            await delay(600)
             if (cancelled) return
             setPhase('pushing')
             await click()
-            if (cancelled) return
 
-            // 7. Push animation — files upload
+            // 7. Push files
             for (let f = 1; f <= 5; f++) {
                 if (cancelled) return
                 setCommitFiles(f)
                 setPushProgress(f * 20)
-                await delay(400)
+                await delay(350)
             }
 
             // 8. Push complete
             if (cancelled) return
             setPhase('pushed')
+            toast('Pushed to ethan-portfolio/main')
+            await delay(1200)
+
+            // 9. Cursor → Download
+            if (cancelled) return
+            setCursorPos({ x: 97, y: 50 })
+            await delay(500)
+            if (cancelled) return
+            setPhase('downloading')
+            await click()
+            await delay(600)
+            if (cancelled) return
+            setPhase('downloaded')
+            toast('ethan-portfolio.zip downloaded')
             await delay(1500)
 
-            // 9. Final state
+            // 10. Complete
             if (cancelled) return
             setPhase('complete')
             setCursorVisible(false)
@@ -2240,12 +2023,25 @@ function FlowBuilderSection() {
                                         "h-6 px-2.5 rounded-md border flex items-center gap-1.5 text-[8px] font-medium transition-all duration-200",
                                         phase === 'pushing'
                                             ? 'border-primary/40 text-primary/70 bg-primary/5 scale-95'
-                                            : phase === 'pushed' || phase === 'complete'
+                                            : phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete'
                                                 ? 'border-primary/30 text-primary/60 bg-primary/5'
                                                 : 'border-border/40 text-muted-foreground/50'
                                     )}>
                                         <Globe className="size-3" />
-                                        {phase === 'pushed' || phase === 'complete' ? 'Pushed' : 'Push to GitHub'}
+                                        {phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete' ? 'Pushed' : 'Push to GitHub'}
+                                    </button>
+
+                                    {/* Download button */}
+                                    <button className={cn(
+                                        "h-6 px-2.5 rounded-md border flex items-center gap-1.5 text-[8px] font-medium transition-all duration-200",
+                                        phase === 'downloading'
+                                            ? 'border-primary/40 text-primary/70 bg-primary/5 scale-95'
+                                            : phase === 'downloaded' || phase === 'complete'
+                                                ? 'border-primary/30 text-primary/60 bg-primary/5'
+                                                : 'border-border/40 text-muted-foreground/50'
+                                    )}>
+                                        <ArrowRight className="size-3 rotate-90" />
+                                        {phase === 'downloaded' || phase === 'complete' ? 'Downloaded' : 'Download'}
                                     </button>
                                 </div>
                             </motion.div>
@@ -2254,9 +2050,9 @@ function FlowBuilderSection() {
                             <div className="flex" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
                                 {/* Left — Live UI preview */}
                                 <motion.div
-                                    initial={{ opacity: 0 }}
-                                    animate={isInView ? { opacity: 1 } : {}}
-                                    transition={{ duration: 0.6, delay: 0.35 }}
+                                    initial={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
+                                    animate={isInView ? { opacity: 1, scale: 1, filter: 'blur(0px)' } : {}}
+                                    transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
                                     className="flex-1 bg-muted/5 relative overflow-hidden"
                                 >
                                     <div className="absolute inset-0 dot-grid-bg opacity-10" />
@@ -2333,7 +2129,7 @@ function FlowBuilderSection() {
                                     </div>
 
                                     {/* Build complete glow */}
-                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
                                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="absolute inset-0 pointer-events-none">
                                             <div className="absolute inset-2 md:inset-3 rounded-lg ring-1 ring-primary/20 shadow-[0_0_30px_-5px] shadow-primary/10" />
                                         </motion.div>
@@ -2344,9 +2140,9 @@ function FlowBuilderSection() {
 
                                 {/* Right — Code + Terminal + GitHub */}
                                 <motion.div
-                                    initial={{ opacity: 0, x: 16 }}
+                                    initial={{ opacity: 0, x: 60 }}
                                     animate={isInView ? { opacity: 1, x: 0 } : {}}
-                                    transition={{ duration: 0.5, delay: 0.5 }}
+                                    transition={{ duration: 0.7, delay: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
                                     className="w-[40%] md:w-[38%] bg-[#0d1117] flex flex-col hidden md:flex"
                                 >
                                     {/* Tab bar */}
@@ -2396,7 +2192,7 @@ function FlowBuilderSection() {
                                             )}
                                         </div>
 
-                                        {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                        {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
                                             <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
                                                 className="mt-3 flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5 border border-primary/10"
                                             >
@@ -2419,13 +2215,13 @@ function FlowBuilderSection() {
                                                     {buildProgress > 30 && <p className="text-blue-400/30">✓ Hero component generated</p>}
                                                     {buildProgress > 60 && <p className="text-blue-400/30">✓ Projects component generated</p>}
                                                     {buildProgress > 85 && <p className="text-blue-400/30">✓ Contact component generated</p>}
-                                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
                                                         <p className="text-blue-300/40">✓ Build complete in 1.2s</p>
                                                     )}
                                                 </>
                                             )}
                                             {/* GitHub push output */}
-                                            {(phase === 'pushing' || phase === 'pushed' || phase === 'complete') && (
+                                            {(phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
                                                 <>
                                                     <div className="w-full h-px bg-white/5 my-1" />
                                                     <p className="text-white/20">$ git push origin main</p>
@@ -2434,10 +2230,16 @@ function FlowBuilderSection() {
                                                     {commitFiles >= 3 && <p className="text-blue-400/30">  components/Hero.tsx</p>}
                                                     {commitFiles >= 4 && <p className="text-blue-400/30">  components/Projects.tsx</p>}
                                                     {commitFiles >= 5 && <p className="text-blue-400/30">  components/Contact.tsx</p>}
-                                                    {(phase === 'pushed' || phase === 'complete') && (
+                                                    {(phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
                                                         <>
                                                             <p className="text-blue-300/40 mt-0.5">✓ Pushed to ethan-portfolio/main</p>
                                                             <p className="text-white/15">  &quot;Initial commit: portfolio site&quot;</p>
+                                                        </>
+                                                    )}
+                                                    {(phase === 'downloaded' || phase === 'complete') && (
+                                                        <>
+                                                            <div className="w-full h-px bg-white/5 my-1" />
+                                                            <p className="text-blue-300/40">✓ ethan-portfolio.zip — 2.4 MB</p>
                                                         </>
                                                     )}
                                                     {phase === 'pushing' && (
@@ -2454,6 +2256,20 @@ function FlowBuilderSection() {
                                     </div>
                                 </motion.div>
                             </div>
+
+                            {/* Toast notification */}
+                            {showToast && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, x: '-50%' }}
+                                    animate={{ opacity: 1, y: 0, x: '-50%' }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    transition={{ duration: 0.3 }}
+                                    className="absolute bottom-12 left-1/2 z-50 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 shadow-lg shadow-primary/5 backdrop-blur-sm"
+                                >
+                                    <CircleCheck className="size-3.5 text-primary/70" />
+                                    <span className="text-[9px] font-medium text-primary/80 whitespace-nowrap">{showToast}</span>
+                                </motion.div>
+                            )}
 
                             {/* Bottom status */}
                             <motion.div
@@ -3429,10 +3245,8 @@ export default function LandingPage() {
             {/* 2. Studio (Design) — Visual Left, Text Right */}
             <FlowStudioSection />
 
-            {/* Transition: Studio → Builder */}
-            <FlowStudioToBuilderTransition />
-
             {/* 3. Builder (Development) */}
+            <div className="section-divider" />
             <FlowBuilderSection />
 
             {/* 4. Deploy + Testing — Visual Left, Text Right */}
