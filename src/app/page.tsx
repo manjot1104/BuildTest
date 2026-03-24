@@ -2437,6 +2437,72 @@ function FlowBuilderSection() {
     )
 }
 
+// --- Builder → Testing transition (URL handoff) ---
+
+function FlowBuilderToTestingTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // URL pill position — starts top-center, curves down to center-left (where input will be)
+    const urlY = useTransform(scrollYProgress, [0.1, 0.5, 0.8], ['0%', '50%', '100%'])
+    const urlX = useTransform(scrollYProgress, [0.1, 0.4, 0.8], ['50%', '45%', '30%'])
+    const urlScale = useTransform(scrollYProgress, [0.1, 0.3, 0.6, 0.8], [0.85, 1, 1, 0.9])
+    const urlOpacity = useTransform(scrollYProgress, [0.05, 0.15, 0.7, 0.85], [0, 1, 1, 0])
+    const urlGlow = useTransform(scrollYProgress, [0.15, 0.35, 0.6], [0, 1, 0.3])
+
+    // Connecting line from top
+    const lineOpacity = useTransform(scrollYProgress, [0, 0.1, 0.8, 0.95], [0, 0.4, 0.4, 0])
+    const lineHeight = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+
+    // Label
+    const labelOpacity = useTransform(scrollYProgress, [0.25, 0.4, 0.65, 0.8], [0, 1, 1, 0])
+
+    return (
+        <section ref={ref} className="relative py-12 md:py-16 overflow-hidden">
+            {/* Connecting line */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+                <motion.div
+                    style={{ height: lineHeight, opacity: lineOpacity }}
+                    className="absolute left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-primary/15 via-primary/25 to-primary/10 origin-top"
+                />
+            </div>
+
+            {/* Floating URL pill */}
+            <motion.div
+                style={{
+                    left: urlX,
+                    top: urlY,
+                    scale: urlScale,
+                    opacity: urlOpacity,
+                    x: '-50%',
+                    y: '-50%',
+                    boxShadow: useTransform(urlGlow, v => `0 0 ${v * 20}px rgba(59,130,246,${v * 0.15})`),
+                }}
+                className="absolute z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card border border-primary/20 shadow-lg backdrop-blur-sm"
+            >
+                <Globe className="size-3.5 text-primary/50 flex-shrink-0" />
+                <span className="text-[11px] font-mono text-primary/70 whitespace-nowrap">ethan.dev</span>
+                <ArrowRight className="size-3 text-primary/30" />
+            </motion.div>
+
+            {/* Center label */}
+            <motion.div
+                style={{ opacity: labelOpacity }}
+                className="relative z-10 flex justify-center py-4"
+            >
+                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-primary/5 border border-primary/8">
+                    <Rocket className="size-3.5 text-primary/40" />
+                    <span className="text-[10px] font-medium text-primary/40">Deployed → Testing</span>
+                    <FlaskConical className="size-3.5 text-primary/40" />
+                </div>
+            </motion.div>
+        </section>
+    )
+}
+
 // --- Testing Section (TinyFish) ---
 
 type TestPhase = 'idle' | 'typing-url' | 'running' | 'expanding' | 'complete'
@@ -3716,8 +3782,10 @@ export default function LandingPage() {
             {/* 3. Builder (Development) */}
             <FlowBuilderSection />
 
+            {/* Transition: Builder → Testing (URL handoff) */}
+            <FlowBuilderToTestingTransition />
+
             {/* 4. Deploy + Testing (TinyFish) */}
-            <div className="section-divider" />
             <FlowTestingSection />
 
             {/* 5. Accessibility — Text Left, Visual Right */}
