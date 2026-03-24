@@ -1731,8 +1731,142 @@ function FlowStudioSection() {
     )
 }
 
-// --- Studio → Builder: clean cinematic cut ---
-// No complex animation. Just a section divider that's already in the page.
+// --- Studio → Builder: workspace slide transition ---
+
+// UI fragment definitions for the transition
+const TRANSITION_FRAGMENTS = {
+    left: [
+        { label: 'Hero Section', icon: Type, x: '15%', y: '20%', delay: 0.15 },
+        { label: 'View Work', icon: MousePointerClick, x: '20%', y: '55%', delay: 0.3 },
+        { label: 'Project Card', icon: Layers, x: '10%', y: '75%', delay: 0.45 },
+    ],
+    right: [
+        { label: '<Hero />', icon: Code2, x: '75%', y: '25%', delay: 0.2 },
+        { label: '<Projects />', icon: Code2, x: '80%', y: '50%', delay: 0.35 },
+        { label: '<Contact />', icon: Code2, x: '70%', y: '72%', delay: 0.5 },
+    ],
+}
+
+function FlowStudioToBuilderTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // Flow line
+    const lineHeight = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+    const lineOpacity = useTransform(scrollYProgress, [0, 0.08, 0.85, 1], [0, 0.5, 0.5, 0])
+    const lineWidth = useTransform(scrollYProgress, [0.2, 0.35, 0.5, 0.65], [1, 2, 2, 1])
+    const dotY = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+
+    // Fragments
+    const fragmentsOpacity = useTransform(scrollYProgress, [0.15, 0.3, 0.7, 0.85], [0, 1, 1, 0])
+    // Background grid
+    const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
+
+    return (
+        <section ref={ref} className="relative py-16 md:py-24 overflow-hidden">
+            {/* Subtle background grid — depth layer */}
+            <motion.div
+                style={{ opacity: gridOpacity }}
+                className="absolute inset-0 dot-grid-bg pointer-events-none"
+            />
+
+            {/* Flow line — centered, with glow trail */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+                {/* Glow trail */}
+                <motion.div
+                    style={{ height: lineHeight, opacity: useTransform(lineOpacity, v => v * 0.4) }}
+                    className="absolute left-1/2 -translate-x-1/2 w-6 bg-gradient-to-b from-transparent via-primary/10 to-transparent blur-md origin-top"
+                />
+                {/* Main line with thickness pulse */}
+                <motion.div
+                    style={{ height: lineHeight, opacity: lineOpacity, width: lineWidth }}
+                    className="absolute left-1/2 -translate-x-1/2 bg-gradient-to-b from-primary/15 via-primary/30 to-primary/10 origin-top rounded-full"
+                />
+                {/* Glowing dot at tip */}
+                <motion.div
+                    style={{ top: dotY, opacity: lineOpacity }}
+                    className="absolute left-1/2 -translate-x-1/2"
+                >
+                    <div className="size-3 rounded-full bg-primary/50 blur-[3px]" />
+                    <div className="absolute inset-0 size-3 rounded-full bg-primary/80 blur-[1px] scale-50" />
+                </motion.div>
+
+                {/* Data particles traveling along the line */}
+                {[0.12, 0.28, 0.44, 0.58, 0.72].map((startAt, i) => (
+                    <motion.div
+                        key={`particle-${i}`}
+                        style={{
+                            top: useTransform(scrollYProgress, [startAt, startAt + 0.15], ['0%', '100%']),
+                            opacity: useTransform(scrollYProgress, [startAt, startAt + 0.03, startAt + 0.12, startAt + 0.15], [0, 0.7, 0.7, 0]),
+                        }}
+                        className="absolute left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-primary/60"
+                    />
+                ))}
+            </div>
+
+            <div className="max-w-6xl mx-auto px-6 relative">
+                {/* Left side — UI fragments floating toward positions */}
+                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none">
+                    {TRANSITION_FRAGMENTS.left.map((frag) => (
+                        <motion.div
+                            key={frag.label}
+                            initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                            viewport={{ once: true, margin: '-80px' }}
+                            transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="absolute"
+                            style={{ left: frag.x, top: frag.y }}
+                        >
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/30 shadow-sm backdrop-blur-sm">
+                                <frag.icon className="size-3 text-primary/40" />
+                                <span className="text-[9px] font-medium text-foreground/50">{frag.label}</span>
+                            </div>
+                        </motion.div>
+                    ))}
+
+                    {/* Right side — code fragments */}
+                    {TRANSITION_FRAGMENTS.right.map((frag) => (
+                        <motion.div
+                            key={frag.label}
+                            initial={{ opacity: 0, y: 12, x: 10 }}
+                            whileInView={{ opacity: 1, y: 0, x: 0 }}
+                            viewport={{ once: true, margin: '-80px' }}
+                            transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="absolute"
+                            style={{ left: frag.x, top: frag.y }}
+                        >
+                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0d1117]/80 border border-blue-400/10 shadow-sm backdrop-blur-sm">
+                                <frag.icon className="size-3 text-blue-400/40" />
+                                <span className="text-[9px] font-mono text-blue-300/50">{frag.label}</span>
+                            </div>
+                        </motion.div>
+                    ))}
+                </motion.div>
+
+                {/* Center label */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 0.6 }}
+                    className="relative z-10 flex justify-center py-8"
+                >
+                    <motion.div
+                        style={{ boxShadow: useTransform(scrollYProgress, [0.3, 0.5], ['0 0 0px rgba(59,130,246,0)', '0 0 20px rgba(59,130,246,0.08)']) }}
+                        className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-primary/5 border border-primary/10"
+                    >
+                        <Zap className="size-3.5 text-primary/50" />
+                        <span className="text-[11px] font-medium text-primary/50 tracking-wide">Design → Code</span>
+                        <ArrowRight className="size-3 text-primary/30" />
+                    </motion.div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
 
 // --- Builder Section — design to code with GitHub push ---
 
@@ -3245,8 +3379,10 @@ export default function LandingPage() {
             {/* 2. Studio (Design) — Visual Left, Text Right */}
             <FlowStudioSection />
 
+            {/* Transition: Studio → Builder (continuous scroll) */}
+            <FlowStudioToBuilderTransition />
+
             {/* 3. Builder (Development) */}
-            <div className="section-divider" />
             <FlowBuilderSection />
 
             {/* 4. Deploy + Testing — Visual Left, Text Right */}
