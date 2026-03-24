@@ -1246,10 +1246,14 @@ function FlowStudioSection() {
                                         <Save className="size-3" />
                                         Save
                                     </button>
-                                    <button className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold shadow-sm shadow-primary/20">
+                                    <motion.button
+                                        animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0.15)', '0 0 10px rgba(59,130,246,0.25)', '0 0 0px rgba(59,130,246,0.15)'] }}
+                                        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                                        className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold shadow-sm shadow-primary/20"
+                                    >
                                         <Upload className="size-3" />
                                         Publish
-                                    </button>
+                                    </motion.button>
                                 </div>
                             </motion.div>
 
@@ -1322,8 +1326,14 @@ function FlowStudioSection() {
                                                 {/* Template cards */}
                                                 <motion.div
                                                     initial={{ opacity: 0, y: 6 }}
-                                                    animate={{ opacity: 1, y: 0 }}
-                                                    transition={{ duration: 0.3 }}
+                                                    animate={{
+                                                        opacity: 1,
+                                                        y: templateHighlight || cursorAction === 'hover-template' ? 0 : [0, -2, 0],
+                                                    }}
+                                                    transition={{
+                                                        opacity: { duration: 0.3 },
+                                                        y: { duration: 4.5, repeat: Infinity, ease: 'easeInOut' },
+                                                    }}
                                                     className={cn(
                                                         "rounded-lg border bg-card/60 overflow-hidden transition-all duration-300",
                                                         templateHighlight || cursorAction === 'hover-template'
@@ -1430,8 +1440,14 @@ function FlowStudioSection() {
                                     className="flex-1 bg-muted/5 relative overflow-hidden"
                                 >
                                     <motion.div
-                                        animate={{ opacity: previewMode ? 0 : 0.2 }}
-                                        transition={{ duration: 0.3 }}
+                                        animate={{
+                                            opacity: previewMode ? 0 : 0.2,
+                                            backgroundPosition: ['0px 0px', '10px 10px'],
+                                        }}
+                                        transition={{
+                                            opacity: { duration: 0.3 },
+                                            backgroundPosition: { duration: 20, repeat: Infinity, ease: 'linear' },
+                                        }}
                                         className="absolute inset-0 dot-grid-bg"
                                     />
 
@@ -1474,27 +1490,41 @@ function FlowStudioSection() {
                                                 <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Designing intuitive products and building polished digital experiences.</p>
                                                 <p className="text-[6px] text-white/20 mt-1">Figma · React · TypeScript · Next.js · Tailwind</p>
                                                 <div className="mt-3 flex gap-2">
-                                                    <div className={cn(
-                                                        "h-6 px-2.5 rounded-md flex items-center shadow-sm cursor-default transition-all duration-300",
-                                                        'bg-blue-500/80 shadow-blue-500/20 hover:bg-blue-500/90',
-                                                        cursorAction === 'hover-button' && 'scale-105 shadow-md shadow-blue-500/30'
-                                                    )}>
+                                                    <motion.div
+                                                        animate={{
+                                                            boxShadow: ['0 0 0px rgba(59,130,246,0.2)', '0 0 12px rgba(59,130,246,0.3)', '0 0 0px rgba(59,130,246,0.2)'],
+                                                        }}
+                                                        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                                        className={cn(
+                                                            "h-6 px-2.5 rounded-md flex items-center shadow-sm cursor-default transition-all duration-300",
+                                                            'bg-blue-500/80 shadow-blue-500/20 hover:bg-blue-500/90',
+                                                            cursorAction === 'hover-button' && 'scale-105 shadow-md shadow-blue-500/30'
+                                                        )}
+                                                    >
                                                         <span className="text-[7px] font-semibold text-white">View Work</span>
-                                                    </div>
+                                                    </motion.div>
                                                     <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center cursor-default transition-all duration-200 hover:border-white/25 hover:bg-white/[0.03]">
                                                         <span className="text-[7px] text-white/50">About Me</span>
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-2 mt-3">
                                                     {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
-                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center cursor-default transition-colors duration-200 hover:bg-white/[0.08]">
+                                                        <motion.div
+                                                            key={i}
+                                                            animate={{ y: [0, -2, 0] }}
+                                                            transition={{ duration: 3 + i * 0.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
+                                                            className="size-5 rounded bg-white/[0.04] flex items-center justify-center cursor-default transition-colors duration-200 hover:bg-white/[0.08]"
+                                                        >
                                                             <Icon className="size-3 text-white/25" />
-                                                        </div>
+                                                        </motion.div>
                                                     ))}
                                                 </div>
                                             </div>
                                             {/* Code block */}
-                                            <div className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
+                                            <motion.div
+                                                animate={{ y: [0, -4, 0], rotate: [0, 0.5, 0] }}
+                                                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                                                className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
                                                 <div className="flex gap-1 mb-2.5">
                                                     <div className="size-1.5 rounded-full bg-blue-400/40" />
                                                     <div className="size-1.5 rounded-full bg-blue-300/30" />
@@ -1512,7 +1542,7 @@ function FlowStudioSection() {
                                                     <p className="text-[6px] font-mono text-blue-400/50">{'}'}</p>
                                                     <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-blue-200/40">&quot;designing the future...&quot;</span><span className="text-white/15">)</span></p>
                                                 </div>
-                                            </div>
+                                            </motion.div>
                                         </div>
 
                                         {/* Tech stack */}
@@ -1525,10 +1555,15 @@ function FlowStudioSection() {
                                                     { cat: 'Styling', items: 'Tailwind · CSS · Motion' },
                                                     { cat: 'Tools', items: 'Git · VS Code · Vercel' },
                                                 ].map((s, i) => (
-                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5 cursor-default transition-colors duration-200 hover:bg-white/[0.04] hover:border-white/[0.07]">
+                                                    <motion.div
+                                                        key={i}
+                                                        animate={{ y: [0, -2, 0] }}
+                                                        transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: 'easeInOut', delay: i * 0.5 }}
+                                                        className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5 cursor-default transition-colors duration-200 hover:bg-white/[0.04] hover:border-white/[0.07]"
+                                                    >
                                                         <p className="text-[6px] font-semibold text-white/50">{s.cat}</p>
                                                         <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
-                                                    </div>
+                                                    </motion.div>
                                                 ))}
                                             </div>
                                         </div>
@@ -1542,11 +1577,19 @@ function FlowStudioSection() {
                                                     { name: 'SaaS Dashboard', desc: 'Analytics UI with real-time charts', tech: 'Next.js · D3.js · Tailwind' },
                                                     { name: 'E-commerce App', desc: 'Modern storefront with checkout flow', tech: 'React · Stripe · Framer' },
                                                 ].map((proj, i) => (
-                                                    <div key={i} className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2 cursor-default transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.08] hover:-translate-y-px">
+                                                    <motion.div
+                                                        key={i}
+                                                        animate={{
+                                                            y: [0, -3, 0],
+                                                            rotate: [0, i === 1 ? 0.3 : -0.3, 0],
+                                                        }}
+                                                        transition={{ duration: 5 + i * 0.8, repeat: Infinity, ease: 'easeInOut', delay: i * 0.6 }}
+                                                        className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2 cursor-default transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.08] hover:-translate-y-px"
+                                                    >
                                                         <p className="text-[7px] font-semibold text-white/60">{proj.name}</p>
                                                         <p className="text-[5.5px] text-white/25 mt-0.5">{proj.desc}</p>
                                                         <p className="text-[5px] text-white/15 mt-1.5">{proj.tech}</p>
-                                                    </div>
+                                                    </motion.div>
                                                 ))}
                                             </div>
                                         </div>
@@ -1656,14 +1699,21 @@ function FlowStudioSection() {
                                                     { bg: 'bg-[#0f1117]', id: 'dark', active: false },
                                                     { bg: 'bg-white', id: 'white', active: false },
                                                 ].map((c) => (
-                                                    <div key={c.id} className={cn(
-                                                        'size-5 rounded-md border cursor-default transition-all duration-200 hover:scale-110',
-                                                        c.bg,
-                                                        c.active
-                                                            ? 'border-primary/50 ring-1 ring-primary/20 scale-110'
-                                                            : 'border-border/30',
-                                                        cursorAction === 'click-color' && c.id === 'light' && 'ring-2 ring-primary/30 scale-110'
-                                                    )} />
+                                                    <motion.div
+                                                        key={c.id}
+                                                        animate={c.active ? {
+                                                            boxShadow: ['0 0 0px rgba(59,130,246,0.15)', '0 0 8px rgba(59,130,246,0.3)', '0 0 0px rgba(59,130,246,0.15)'],
+                                                        } : {}}
+                                                        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                                                        className={cn(
+                                                            'size-5 rounded-md border cursor-default transition-all duration-200 hover:scale-110',
+                                                            c.bg,
+                                                            c.active
+                                                                ? 'border-primary/50 ring-1 ring-primary/20 scale-110'
+                                                                : 'border-border/30',
+                                                            cursorAction === 'click-color' && c.id === 'light' && 'ring-2 ring-primary/30 scale-110'
+                                                        )}
+                                                    />
                                                 ))}
                                                 <div className="size-5 rounded-md border border-dashed border-border/30 flex items-center justify-center">
                                                     <Plus className="size-2.5 text-muted-foreground/20" />
@@ -1673,7 +1723,11 @@ function FlowStudioSection() {
                                                 <span className="text-[7px] text-muted-foreground/40">Opacity</span>
                                                 <div className="flex items-center gap-1">
                                                     <div className="w-12 h-1 rounded-full bg-border/30 overflow-hidden">
-                                                        <div className="w-[85%] h-full bg-primary/30 rounded-full" />
+                                                        <motion.div
+                                                            animate={{ opacity: [0.25, 0.5, 0.25] }}
+                                                            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                                            className="w-[85%] h-full bg-primary/30 rounded-full"
+                                                        />
                                                     </div>
                                                     <span className="text-[7px] text-muted-foreground/50 font-mono">85%</span>
                                                 </div>
