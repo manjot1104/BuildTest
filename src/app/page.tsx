@@ -694,6 +694,79 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
     )
 }
 
+// --- Flow connector dots ---
+
+const FLOW_DOTS = [
+    { size: 4, waveAmp: 18, waveFreq: 3, phaseShift: 0, speed: 0.88 },
+    { size: 7, waveAmp: 22, waveFreq: 3, phaseShift: 0.8, speed: 1 },
+    { size: 3, waveAmp: 14, waveFreq: 4, phaseShift: 1.6, speed: 1.08 },
+    { size: 6, waveAmp: 20, waveFreq: 3, phaseShift: 2.4, speed: 0.94 },
+    { size: 3, waveAmp: 16, waveFreq: 4, phaseShift: 3.2, speed: 1.04 },
+]
+
+function FlowDot({ dot, scrollProgress, index }: { dot: typeof FLOW_DOTS[0], scrollProgress: MotionValue<number>, index: number }) {
+    const stagger = index * 0.08
+
+    const y = useTransform(scrollProgress, [0, 1], [`${-5 + stagger * 100}%`, `${95 + stagger * 100}%`])
+    const x = useTransform(scrollProgress, v => {
+        const pos = (v * dot.speed + stagger) * Math.PI * dot.waveFreq + dot.phaseShift
+        return `calc(50% + ${Math.sin(pos) * dot.waveAmp}%)`
+    })
+    const opacity = useTransform(scrollProgress, [0, 0.02, 0.93, 1], [0, 1, 1, 0])
+    const brightness = useTransform(scrollProgress, v => {
+        const dotPos = v * dot.speed + stagger
+        const dist = Math.abs(dotPos - v)
+        return dist < 0.12 ? 1 : 0.4
+    })
+    const glowOpacity = useTransform(brightness, v => v * 0.5)
+
+    return (
+        <motion.div
+            style={{ top: y, left: x, opacity }}
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+        >
+            <motion.div
+                style={{ width: dot.size, height: dot.size, opacity: brightness }}
+                className="rounded-full bg-primary"
+            />
+            <motion.div
+                style={{
+                    width: dot.size * 3,
+                    height: dot.size * 3,
+                    marginLeft: -(dot.size),
+                    marginTop: -(dot.size),
+                    opacity: glowOpacity,
+                }}
+                className="absolute top-0 left-0 rounded-full bg-primary blur-sm"
+            />
+        </motion.div>
+    )
+}
+
+function FlowConnectorWrapper({ children }: { children: React.ReactNode }) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: containerRef,
+        offset: ['start start', 'end end'],
+    })
+
+    return (
+        <div ref={containerRef} className="relative">
+            {/* Flowing dots — behind content */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+                {FLOW_DOTS.map((dot, i) => (
+                    <FlowDot key={i} dot={dot} scrollProgress={scrollYProgress} index={i} />
+                ))}
+            </div>
+
+            {/* Content */}
+            <div className="relative" style={{ zIndex: 1 }}>
+                {children}
+            </div>
+        </div>
+    )
+}
+
 // --- Chat → Studio Unified Transition ---
 
 function FlowChatToStudioTransition() {
@@ -4671,33 +4744,34 @@ export default function LandingPage() {
             </section>
 
             {/* ── Buildify Developer Flow — 6 Full-Screen Sections ── */}
+            <FlowConnectorWrapper>
+                {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
+                <FlowAIChatSection />
 
-            {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
-            <FlowAIChatSection />
+                {/* Transition: AI Chat → Studio (single container transforms) */}
+                <FlowChatToStudioTransition />
 
-            {/* Transition: AI Chat → Studio (single container transforms) */}
-            <FlowChatToStudioTransition />
+                {/* 2. Studio (Design) — Visual Left, Text Right */}
+                <FlowStudioSection />
 
-            {/* 2. Studio (Design) — Visual Left, Text Right */}
-            <FlowStudioSection />
+                {/* Transition: Studio → Builder (continuous scroll) */}
+                <FlowStudioToBuilderTransition />
 
-            {/* Transition: Studio → Builder (continuous scroll) */}
-            <FlowStudioToBuilderTransition />
+                {/* 3. Builder (Development) */}
+                <FlowBuilderSection />
 
-            {/* 3. Builder (Development) */}
-            <FlowBuilderSection />
+                {/* Transition: Builder → Testing (URL handoff) */}
+                <FlowBuilderToTestingTransition />
 
-            {/* Transition: Builder → Testing (URL handoff) */}
-            <FlowBuilderToTestingTransition />
+                {/* 4. Deploy + Testing (TinyFish) */}
+                <FlowTestingSection />
 
-            {/* 4. Deploy + Testing (TinyFish) */}
-            <FlowTestingSection />
+                {/* Transition: Testing → Accessibility */}
+                <FlowTestingToA11yTransition />
 
-            {/* Transition: Testing → Accessibility */}
-            <FlowTestingToA11yTransition />
-
-            {/* 5. Accessibility Testing */}
-            <FlowAccessibilityLiveCTA />
+                {/* 5. Accessibility Testing */}
+                <FlowAccessibilityLiveCTA />
+            </FlowConnectorWrapper>
 
             {/* ── Capabilities Section ── */}
             <div className="section-divider" />
