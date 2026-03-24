@@ -1868,570 +1868,304 @@ function FlowStudioToBuilderTransition() {
     )
 }
 
-// --- Builder Section — design to code with GitHub push ---
+// --- Builder Section — compact sequential card ---
 
-const BUILD_CODE_LINES = [
-    { code: 'import { Hero, Projects, Contact } from "./components"', highlight: '' },
-    { code: '', highlight: '' },
-    { code: 'export default function Portfolio() {', highlight: '' },
-    { code: '  return (', highlight: '' },
-    { code: '    <main className="min-h-screen bg-dark">', highlight: '' },
-    { code: '      <Hero', highlight: 'hero' },
-    { code: '        name="Ethan Carter"', highlight: 'hero' },
-    { code: '        role="Product Designer"', highlight: 'hero' },
-    { code: '      />', highlight: 'hero' },
-    { code: '      <Projects items={3} />', highlight: 'projects' },
-    { code: '      <Contact', highlight: 'contact' },
-    { code: '        email="hello@ethan.dev"', highlight: 'contact' },
-    { code: '      />', highlight: 'contact' },
-    { code: '    </main>', highlight: '' },
-    { code: '  )', highlight: '' },
-    { code: '}', highlight: '' },
+const BUILD_CODE = [
+    'import { Hero, Projects, Contact }',
+    'from "./components"',
+    '',
+    'export default function Portfolio() {',
+    '  return (',
+    '    <Hero name="Ethan Carter" />',
+    '    <Projects items={3} />',
+    '    <Contact />',
+    '  )',
+    '}',
 ]
 
-type BuildPhase = 'idle' | 'clicking' | 'building' | 'syncing' | 'done' | 'pushing' | 'pushed' | 'downloading' | 'downloaded' | 'complete'
+type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pushed' | 'downloading' | 'downloaded'
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
     const isInView = useInView(sectionRef, { once: true, margin: '-100px' })
-    const [phase, setPhase] = useState<BuildPhase>('idle')
-    const [visibleLines, setVisibleLines] = useState(0)
-    const [activeHighlight, setActiveHighlight] = useState<string | null>(null)
-    const [buildProgress, setBuildProgress] = useState(0)
-    const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
-    const [cursorVisible, setCursorVisible] = useState(false)
-    const [cursorClicking, setCursorClicking] = useState(false)
-    const [pushProgress, setPushProgress] = useState(0)
-    const [commitFiles, setCommitFiles] = useState(0)
-    const [showToast, setShowToast] = useState<string | null>(null)
+    const [step, setStep] = useState<BuildStep | 'idle'>('idle')
+    const [codeLines, setCodeLines] = useState(0)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
 
     useEffect(() => {
         if (!isInView) return
         let cancelled = false
-
         const delay = (ms: number) => new Promise<void>(resolve => {
             const t = setTimeout(resolve, ms)
             buildTimers.current.push(t)
         })
 
-        const click = async () => {
-            setCursorClicking(true)
-            await delay(150)
-            if (!cancelled) setCursorClicking(false)
-        }
-
-        const toast = async (msg: string) => {
-            setShowToast(msg)
-            await delay(2000)
-            if (!cancelled) setShowToast(null)
-        }
-
-        const runSequence = async () => {
-            await delay(1000)
-            if (cancelled) return
-
-            // 1. Cursor → Generate button
-            setCursorVisible(true)
-            setCursorPos({ x: 78, y: 50 })
+        const run = async () => {
             await delay(800)
             if (cancelled) return
 
-            // 2. Click Generate — button press feedback
-            setPhase('clicking')
-            await click()
-            if (cancelled) return
-            await delay(400)
-
-            // 3. Code generation
-            if (cancelled) return
-            setPhase('building')
-            setCursorPos({ x: 75, y: 35 })
-            await delay(300)
-
-            for (let i = 0; i < BUILD_CODE_LINES.length; i++) {
-                if (cancelled) return
-                setVisibleLines(i + 1)
-                setBuildProgress(Math.round(((i + 1) / BUILD_CODE_LINES.length) * 100))
-                const line = BUILD_CODE_LINES[i]!
-                if (line.highlight) setActiveHighlight(line.highlight)
-                await delay(120 + Math.random() * 60)
-            }
-
-            // 4. Sync
-            if (cancelled) return
-            setPhase('syncing')
-            setActiveHighlight(null)
-            await delay(500)
-
-            // 5. Build done
-            if (cancelled) return
-            setPhase('done')
-            setBuildProgress(100)
-            await delay(1000)
-
-            // 6. Cursor → Push to GitHub
-            if (cancelled) return
-            setCursorPos({ x: 90, y: 50 })
-            await delay(600)
-            if (cancelled) return
-            setPhase('pushing')
-            await click()
-
-            // 7. Push files
-            for (let f = 1; f <= 5; f++) {
-                if (cancelled) return
-                setCommitFiles(f)
-                setPushProgress(f * 20)
-                await delay(350)
-            }
-
-            // 8. Push complete
-            if (cancelled) return
-            setPhase('pushed')
-            toast('Pushed to ethan-portfolio/main')
-            await delay(1200)
-
-            // 9. Cursor → Download
-            if (cancelled) return
-            setCursorPos({ x: 97, y: 50 })
-            await delay(500)
-            if (cancelled) return
-            setPhase('downloading')
-            await click()
-            await delay(600)
-            if (cancelled) return
-            setPhase('downloaded')
-            toast('ethan-portfolio.zip downloaded')
+            // Step 1: Show prompt
+            setStep('prompt')
             await delay(1500)
-
-            // 10. Complete
             if (cancelled) return
-            setPhase('complete')
-            setCursorVisible(false)
+
+            // Step 2: Generating
+            setStep('generating')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 3: Code typing
+            setStep('code')
+            for (let i = 1; i <= BUILD_CODE.length; i++) {
+                if (cancelled) return
+                setCodeLines(i)
+                await delay(140 + Math.random() * 80)
+            }
+            await delay(800)
+            if (cancelled) return
+
+            // Step 4: Preview
+            setStep('preview')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 5: Push
+            setStep('pushing')
+            await delay(1500)
+            if (cancelled) return
+            setStep('pushed')
+            await delay(1200)
+            if (cancelled) return
+
+            // Step 6: Download
+            setStep('downloading')
+            await delay(1000)
+            if (cancelled) return
+            setStep('downloaded')
         }
 
-        runSequence()
-        return () => {
-            cancelled = true
-            buildTimers.current.forEach(clearTimeout)
-        }
+        run()
+        return () => { cancelled = true; buildTimers.current.forEach(clearTimeout) }
     }, [isInView])
 
+    // Helper to check if step is at or past a certain point
+    const isPast = (s: BuildStep) => {
+        const order: (BuildStep | 'idle')[] = ['idle', 'prompt', 'generating', 'code', 'preview', 'pushing', 'pushed', 'downloading', 'downloaded']
+        return order.indexOf(step) >= order.indexOf(s)
+    }
+
     return (
-        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                {/* Text — top */}
-                <div className="max-w-xl mb-12 md:mb-16">
-                    <motion.span
-                        variants={fadeIn}
-                        initial="hidden"
-                        animate={isInView ? 'visible' : 'hidden'}
-                        custom={0}
-                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
-                    >
-                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                        Step 03
-                    </motion.span>
-
-                    <div className="overflow-hidden">
-                        <motion.h2
-                            variants={slideUp}
-                            initial="hidden"
-                            animate={isInView ? 'visible' : 'hidden'}
-                            custom={0.1}
-                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
-                        >
-                            Build Instantly
-                        </motion.h2>
-                    </div>
-
-                    <motion.p
-                        variants={blurIn}
-                        initial="hidden"
-                        animate={isInView ? 'visible' : 'hidden'}
-                        custom={0.25}
-                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
-                    >
-                        Convert your design into functional components and production-ready code.
-                    </motion.p>
-
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                    {/* Left — Builder card */}
                     <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        animate={isInView ? 'visible' : 'hidden'}
-                        custom={0.4}
-                        className="mt-6 flex items-center gap-3"
+                        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                        animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                        transition={{ duration: 0.8, delay: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
                     >
-                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
-                            <Code2 className="size-[18px] text-primary/60" />
-                        </div>
-                        <span className="text-sm font-medium text-muted-foreground/60">Production-ready code generation</span>
-                    </motion.div>
-                </div>
+                        <div className="relative">
+                            <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
 
-                {/* Builder preview — full width */}
-                <motion.div
-                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
-                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
-                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-                >
-                    <div className="relative">
-                        <motion.div
-                            animate={phase === 'complete' ? { opacity: 0.08 } : { opacity: 0.05 }}
-                            className="absolute -inset-8 rounded-3xl bg-primary blur-3xl pointer-events-none transition-opacity duration-1000"
-                        />
-
-                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
-                            {/* Top bar */}
-                            <motion.div
-                                initial={{ opacity: 0, y: -8 }}
-                                animate={isInView ? { opacity: 1, y: 0 } : {}}
-                                transition={{ duration: 0.5, delay: 0.3 }}
-                                className="flex items-center justify-between px-4 py-2 border-b border-border/30 bg-muted/20 relative"
-                            >
-                                {/* Cursor overlay for toolbar */}
-                                {cursorVisible && (
-                                    <motion.div
-                                        className="absolute z-50 pointer-events-none"
-                                        animate={{ left: `${cursorPos.x}%`, top: `${cursorPos.y < 0 ? 50 : 50}%` }}
-                                        transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
-                                    >
-                                        <motion.div animate={cursorClicking ? { scale: 0.8 } : { scale: 1 }} transition={{ duration: 0.1 }}>
-                                            <svg width="14" height="18" viewBox="0 0 16 20" fill="none" className="drop-shadow-md">
-                                                <path d="M0 0L12.5 12.5H5.5L2.5 19.5L0 0Z" fill="white" stroke="black" strokeWidth="1" strokeLinejoin="round" />
-                                            </svg>
-                                        </motion.div>
-                                        {cursorClicking && (
-                                            <motion.div
-                                                initial={{ scale: 0, opacity: 0.5 }}
-                                                animate={{ scale: 2.5, opacity: 0 }}
-                                                transition={{ duration: 0.4 }}
-                                                className="absolute top-0 left-0 size-3 rounded-full bg-primary/30 -translate-x-1/2 -translate-y-1/2"
-                                            />
-                                        )}
-                                    </motion.div>
-                                )}
-
-                                <div className="flex items-center gap-2.5">
-                                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
-                                        <ChevronLeft className="size-3" />
-                                        <span>Back</span>
+                            <div className="relative rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                                {/* Card header */}
+                                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/30 bg-muted/20">
+                                    <div className="flex gap-1.5">
+                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                        <div className="size-2.5 rounded-full bg-border/60" />
                                     </div>
-                                    <div className="w-px h-3.5 bg-border/30" />
-                                    <span className="text-[10px] font-semibold text-foreground/70">Buildify Builder</span>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50 ml-2">Buildify Builder</span>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    {/* Build status */}
-                                    <div className={cn(
-                                        "flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[8px] transition-all duration-300",
-                                        phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete'
-                                            ? 'bg-primary/10 text-primary/70'
-                                            : phase === 'building' || phase === 'syncing'
-                                                ? 'bg-primary/5 text-primary/50'
-                                                : 'text-muted-foreground/40'
-                                    )}>
-                                        {phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'complete' ? (
-                                            <><CircleCheck className="size-3" /> Built</>
-                                        ) : phase === 'building' || phase === 'syncing' ? (
-                                            <><Loader2 className="size-3 animate-spin" /> Building... {buildProgress}%</>
-                                        ) : (
-                                            <><Terminal className="size-3" /> Ready</>
-                                        )}
-                                    </div>
-
-                                    {/* Generate button */}
-                                    <button className={cn(
-                                        "h-6 px-2.5 rounded-md flex items-center gap-1.5 text-[8px] font-semibold transition-all duration-200",
-                                        phase === 'clicking'
-                                            ? 'bg-primary/80 text-primary-foreground scale-95 shadow-lg shadow-primary/30'
-                                            : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
-                                    )}>
-                                        <Zap className="size-3" />
-                                        Generate
-                                    </button>
-
-                                    {/* Push to GitHub button */}
-                                    <button className={cn(
-                                        "h-6 px-2.5 rounded-md border flex items-center gap-1.5 text-[8px] font-medium transition-all duration-200",
-                                        phase === 'pushing'
-                                            ? 'border-primary/40 text-primary/70 bg-primary/5 scale-95'
-                                            : phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete'
-                                                ? 'border-primary/30 text-primary/60 bg-primary/5'
-                                                : 'border-border/40 text-muted-foreground/50'
-                                    )}>
-                                        <Globe className="size-3" />
-                                        {phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete' ? 'Pushed' : 'Push to GitHub'}
-                                    </button>
-
-                                    {/* Download button */}
-                                    <button className={cn(
-                                        "h-6 px-2.5 rounded-md border flex items-center gap-1.5 text-[8px] font-medium transition-all duration-200",
-                                        phase === 'downloading'
-                                            ? 'border-primary/40 text-primary/70 bg-primary/5 scale-95'
-                                            : phase === 'downloaded' || phase === 'complete'
-                                                ? 'border-primary/30 text-primary/60 bg-primary/5'
-                                                : 'border-border/40 text-muted-foreground/50'
-                                    )}>
-                                        <ArrowRight className="size-3 rotate-90" />
-                                        {phase === 'downloaded' || phase === 'complete' ? 'Downloaded' : 'Download'}
-                                    </button>
-                                </div>
-                            </motion.div>
-
-                            {/* Main split view: UI + Code */}
-                            <div className="flex" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
-                                {/* Left — Live UI preview */}
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.98, filter: 'blur(4px)' }}
-                                    animate={isInView ? { opacity: 1, scale: 1, filter: 'blur(0px)' } : {}}
-                                    transition={{ duration: 0.6, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
-                                    className="flex-1 bg-muted/5 relative overflow-hidden"
-                                >
-                                    <div className="absolute inset-0 dot-grid-bg opacity-10" />
-
-                                    <div className="absolute inset-2 md:inset-3 rounded-lg border border-border/20 bg-[#0f1117] overflow-hidden shadow-lg flex flex-col text-white/90">
-                                        {/* Navbar */}
-                                        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
-                                            <span className="text-[9px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
-                                            <div className="flex items-center gap-3">
-                                                {['Work', 'About', 'Contact'].map((l) => (
-                                                    <span key={l} className="text-[7px] text-white/35">{l}</span>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Hero */}
+                                {/* Card body — content crossfades by step */}
+                                <div className="relative min-h-[320px] md:min-h-[360px]">
+                                    {/* Step 1: Prompt */}
+                                    {(step === 'idle' || step === 'prompt') && (
                                         <motion.div
-                                            animate={{ boxShadow: activeHighlight === 'hero' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
-                                            transition={{ duration: 0.3 }}
-                                            className="flex-1 flex items-center px-4 gap-3 relative"
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: step === 'prompt' ? 1 : 0 }}
+                                            transition={{ duration: 0.4 }}
+                                            className="absolute inset-0 p-5 flex flex-col items-center justify-center"
                                         >
-                                            {activeHighlight === 'hero' && (
-                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Hero />'}</motion.div>
-                                            )}
-                                            <div className="flex-1">
-                                                <p className="text-[14px] md:text-[16px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</p>
-                                                <p className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</p>
-                                                <p className="text-[6px] text-white/25 mt-1.5 max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
-                                                <div className="mt-2.5 flex gap-1.5">
-                                                    <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
-                                                    <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
+                                            <p className="text-[10px] text-muted-foreground/40 mb-4">What would you like to build?</p>
+                                            <div className="w-full max-w-xs flex items-center gap-2 px-3 py-2.5 rounded-xl border border-primary/20 bg-background/80">
+                                                <span className="text-sm text-foreground/70 flex-1">Generate this portfolio</span>
+                                                <div className="size-7 rounded-lg bg-primary flex items-center justify-center shadow-sm shadow-primary/20">
+                                                    <Zap className="size-3.5 text-primary-foreground" />
                                                 </div>
                                             </div>
-                                            <div className="w-[30%] aspect-[4/5] rounded-lg bg-blue-500/[0.06] border border-white/5 flex items-center justify-center hidden md:flex">
-                                                <Globe className="size-6 text-blue-400/20" />
+                                        </motion.div>
+                                    )}
+
+                                    {/* Step 2: Generating */}
+                                    {step === 'generating' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ duration: 0.3 }}
+                                            className="absolute inset-0 flex items-center justify-center"
+                                        >
+                                            <div className="flex flex-col items-center gap-3">
+                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                <span className="text-[11px] text-muted-foreground/50">Generating components...</span>
                                             </div>
                                         </motion.div>
+                                    )}
 
-                                        {/* Projects */}
+                                    {/* Step 3: Code typing */}
+                                    {step === 'code' && (
                                         <motion.div
-                                            animate={{ boxShadow: activeHighlight === 'projects' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
                                             transition={{ duration: 0.3 }}
-                                            className="px-4 py-2.5 relative"
+                                            className="absolute inset-0 bg-[#0d1117] p-4 font-mono"
                                         >
-                                            {activeHighlight === 'projects' && (
-                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Projects />'}</motion.div>
-                                            )}
-                                            <p className="text-[7px] font-semibold text-white/40 mb-1.5">Featured Projects</p>
-                                            <div className="grid grid-cols-3 gap-1.5">
-                                                {[{ name: 'Design System', tech: 'Figma · React' }, { name: 'SaaS Dashboard', tech: 'Next.js · D3' }, { name: 'E-commerce', tech: 'React · Stripe' }].map((p, i) => (
-                                                    <div key={i} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
-                                                        <p className="text-[6px] font-semibold text-white/55">{p.name}</p>
-                                                        <p className="text-[5px] text-white/20 mt-0.5">{p.tech}</p>
+                                            <div className="flex items-center gap-1.5 mb-3 pb-2 border-b border-white/5">
+                                                <Code2 className="size-3 text-blue-400/50" />
+                                                <span className="text-[8px] text-white/40">page.tsx</span>
+                                            </div>
+                                            <div className="space-y-1">
+                                                {BUILD_CODE.map((line, i) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        initial={{ opacity: 0, x: -6 }}
+                                                        animate={i < codeLines ? { opacity: 1, x: 0 } : {}}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="flex items-start gap-2"
+                                                    >
+                                                        <span className="text-[8px] text-white/15 w-4 text-right flex-shrink-0 select-none">{i + 1}</span>
+                                                        <pre className={cn(
+                                                            "text-[9px] leading-relaxed whitespace-pre",
+                                                            line.includes('import') || line.includes('export') || line.includes('function') || line.includes('return')
+                                                                ? 'text-blue-400/60'
+                                                                : line.includes('"') ? 'text-blue-200/50'
+                                                                    : line.includes('<') || line.includes('/>') ? 'text-blue-300/60'
+                                                                        : 'text-white/35'
+                                                        )}>{line || ' '}</pre>
+                                                    </motion.div>
+                                                ))}
+                                                {codeLines < BUILD_CODE.length && (
+                                                    <div className="flex items-start gap-2 mt-0.5">
+                                                        <span className="text-[8px] text-white/15 w-4 text-right flex-shrink-0">{codeLines + 1}</span>
+                                                        <span className="inline-block w-[3px] h-[12px] bg-blue-400/60 animate-pulse" />
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
                                         </motion.div>
+                                    )}
 
-                                        {/* Contact */}
+                                    {/* Step 4: Live preview */}
+                                    {(step === 'preview' || step === 'pushing' || step === 'pushed' || step === 'downloading' || step === 'downloaded') && (
                                         <motion.div
-                                            animate={{ boxShadow: activeHighlight === 'contact' ? 'inset 0 0 0 1px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.08)' : 'inset 0 0 0 0px transparent' }}
-                                            transition={{ duration: 0.3 }}
-                                            className="px-4 py-2 border-t border-white/[0.03] relative"
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ duration: 0.4 }}
+                                            className="absolute inset-0 bg-[#0f1117] flex flex-col text-white/90 overflow-hidden"
                                         >
-                                            {activeHighlight === 'contact' && (
-                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute top-1 right-2 text-[6px] font-mono text-blue-400/50 bg-blue-400/5 px-1.5 py-0.5 rounded">{'<Contact />'}</motion.div>
-                                            )}
-                                            <p className="text-[7px] font-semibold text-white/40 mb-1.5">Get in Touch</p>
-                                            <div className="flex gap-2">
-                                                <div className="flex-1 h-5 rounded bg-white/[0.03] border border-white/[0.05] px-2 flex items-center"><span className="text-[6px] text-white/20">Your email</span></div>
-                                                <div className="h-5 px-2.5 rounded bg-blue-500/60 flex items-center"><span className="text-[6px] font-semibold text-white/80">Send</span></div>
-                                            </div>
-                                        </motion.div>
-                                    </div>
-
-                                    {/* Build complete glow */}
-                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
-                                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5 }} className="absolute inset-0 pointer-events-none">
-                                            <div className="absolute inset-2 md:inset-3 rounded-lg ring-1 ring-primary/20 shadow-[0_0_30px_-5px] shadow-primary/10" />
-                                        </motion.div>
-                                    )}
-                                </motion.div>
-
-                                <div className="w-px bg-border/30" />
-
-                                {/* Right — Code + Terminal + GitHub */}
-                                <motion.div
-                                    initial={{ opacity: 0, x: 60 }}
-                                    animate={isInView ? { opacity: 1, x: 0 } : {}}
-                                    transition={{ duration: 0.7, delay: 0.45, ease: [0.25, 0.1, 0.25, 1] }}
-                                    className="w-[40%] md:w-[38%] bg-[#0d1117] flex flex-col hidden md:flex"
-                                >
-                                    {/* Tab bar */}
-                                    <div className="flex items-center px-3 py-1.5 border-b border-white/5 bg-white/[0.02]">
-                                        <div className="flex items-center gap-1.5 px-2 py-1 rounded-t bg-white/[0.04] border-b border-blue-400/30">
-                                            <Code2 className="size-2.5 text-blue-400/50" />
-                                            <span className="text-[7px] text-white/50">page.tsx</span>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 px-2 py-1 ml-1">
-                                            <span className="text-[7px] text-white/20">styles.css</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Code content */}
-                                    <div className="flex-1 p-3 overflow-hidden font-mono">
-                                        <div className="space-y-0.5">
-                                            {BUILD_CODE_LINES.map((line, i) => (
-                                                <motion.div
-                                                    key={i}
-                                                    initial={{ opacity: 0, x: -8 }}
-                                                    animate={i < visibleLines ? { opacity: 1, x: 0 } : {}}
-                                                    transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-                                                    className="flex items-start gap-2"
-                                                >
-                                                    <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
-                                                    <pre className={cn(
-                                                        "text-[6.5px] leading-relaxed whitespace-pre",
-                                                        line.highlight && activeHighlight === line.highlight
-                                                            ? 'text-blue-300/80 bg-blue-400/[0.06] -mx-1 px-1 rounded'
-                                                            : line.code.includes('import') || line.code.includes('export') || line.code.includes('function') || line.code.includes('return')
-                                                                ? 'text-blue-400/50'
-                                                                : line.code.includes('"')
-                                                                    ? 'text-blue-200/45'
-                                                                    : line.code.includes('<') || line.code.includes('/>')
-                                                                        ? 'text-blue-300/50'
-                                                                        : 'text-white/30'
-                                                    )}>
-                                                        {line.code || ' '}
-                                                    </pre>
-                                                </motion.div>
-                                            ))}
-                                            {phase === 'building' && (
-                                                <div className="flex items-start gap-2 mt-0.5">
-                                                    <span className="text-[6px] text-white/15 w-4 text-right flex-shrink-0">{visibleLines + 1}</span>
-                                                    <span className="inline-block w-[4px] h-[10px] bg-blue-400/60 animate-pulse" />
+                                            {/* Mini portfolio */}
+                                            <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                                                <span className="text-[9px] font-bold text-white/85">Ethan.dev</span>
+                                                <div className="flex gap-3">
+                                                    {['Work', 'About', 'Contact'].map(l => (
+                                                        <span key={l} className="text-[7px] text-white/35">{l}</span>
+                                                    ))}
                                                 </div>
-                                            )}
-                                        </div>
-
-                                        {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
-                                            <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
-                                                className="mt-3 flex items-center gap-2 px-2 py-1.5 rounded bg-primary/5 border border-primary/10"
-                                            >
-                                                <CircleCheck className="size-3 text-primary/60" />
-                                                <span className="text-[7px] text-primary/60">Build complete — ready to deploy</span>
-                                            </motion.div>
-                                        )}
-                                    </div>
-
-                                    {/* Terminal + GitHub push */}
-                                    <div className="border-t border-white/5 px-3 py-2 bg-white/[0.01]">
-                                        <div className="flex items-center gap-1.5 mb-1.5">
-                                            <Terminal className="size-2.5 text-white/20" />
-                                            <span className="text-[7px] text-white/25">Terminal</span>
-                                        </div>
-                                        <div className="space-y-0.5 text-[6px] font-mono">
-                                            {phase !== 'idle' && phase !== 'clicking' && (
-                                                <>
-                                                    <p className="text-white/20">$ buildify generate --components</p>
-                                                    {buildProgress > 30 && <p className="text-blue-400/30">✓ Hero component generated</p>}
-                                                    {buildProgress > 60 && <p className="text-blue-400/30">✓ Projects component generated</p>}
-                                                    {buildProgress > 85 && <p className="text-blue-400/30">✓ Contact component generated</p>}
-                                                    {(phase === 'done' || phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
-                                                        <p className="text-blue-300/40">✓ Build complete in 1.2s</p>
-                                                    )}
-                                                </>
-                                            )}
-                                            {/* GitHub push output */}
-                                            {(phase === 'pushing' || phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
-                                                <>
-                                                    <div className="w-full h-px bg-white/5 my-1" />
-                                                    <p className="text-white/20">$ git push origin main</p>
-                                                    {commitFiles >= 1 && <p className="text-blue-400/30">  page.tsx</p>}
-                                                    {commitFiles >= 2 && <p className="text-blue-400/30">  styles.css</p>}
-                                                    {commitFiles >= 3 && <p className="text-blue-400/30">  components/Hero.tsx</p>}
-                                                    {commitFiles >= 4 && <p className="text-blue-400/30">  components/Projects.tsx</p>}
-                                                    {commitFiles >= 5 && <p className="text-blue-400/30">  components/Contact.tsx</p>}
-                                                    {(phase === 'pushed' || phase === 'downloading' || phase === 'downloaded' || phase === 'complete') && (
-                                                        <>
-                                                            <p className="text-blue-300/40 mt-0.5">✓ Pushed to ethan-portfolio/main</p>
-                                                            <p className="text-white/15">  &quot;Initial commit: portfolio site&quot;</p>
-                                                        </>
-                                                    )}
-                                                    {(phase === 'downloaded' || phase === 'complete') && (
-                                                        <>
-                                                            <div className="w-full h-px bg-white/5 my-1" />
-                                                            <p className="text-blue-300/40">✓ ethan-portfolio.zip — 2.4 MB</p>
-                                                        </>
-                                                    )}
-                                                    {phase === 'pushing' && (
-                                                        <div className="flex items-center gap-1.5 mt-1">
-                                                            <div className="w-20 h-1 rounded-full bg-white/5 overflow-hidden">
-                                                                <motion.div className="h-full bg-blue-400/30 rounded-full" animate={{ width: `${pushProgress}%` }} transition={{ duration: 0.3 }} />
-                                                            </div>
-                                                            <span className="text-white/20">{pushProgress}%</span>
-                                                        </div>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                </motion.div>
-                            </div>
-
-                            {/* Toast notification */}
-                            {showToast && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, x: '-50%' }}
-                                    animate={{ opacity: 1, y: 0, x: '-50%' }}
-                                    exit={{ opacity: 0, y: -10 }}
-                                    transition={{ duration: 0.3 }}
-                                    className="absolute bottom-12 left-1/2 z-50 flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/10 border border-primary/20 shadow-lg shadow-primary/5 backdrop-blur-sm"
-                                >
-                                    <CircleCheck className="size-3.5 text-primary/70" />
-                                    <span className="text-[9px] font-medium text-primary/80 whitespace-nowrap">{showToast}</span>
-                                </motion.div>
-                            )}
-
-                            {/* Bottom status */}
-                            <motion.div
-                                initial={{ opacity: 0 }}
-                                animate={isInView ? { opacity: 1 } : {}}
-                                transition={{ duration: 0.4, delay: 0.6 }}
-                                className="flex items-center justify-between px-4 py-1.5 border-t border-border/30 bg-muted/15"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[8px] text-muted-foreground/35">page.tsx</span>
-                                    <span className="text-[8px] text-muted-foreground/25">·</span>
-                                    <span className="text-[8px] text-muted-foreground/35">{BUILD_CODE_LINES.length} lines</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    {phase !== 'idle' && (
-                                        <div className="flex items-center gap-1.5">
-                                            <div className="w-16 h-1 rounded-full bg-border/30 overflow-hidden">
-                                                <motion.div className="h-full bg-primary/40 rounded-full" animate={{ width: `${buildProgress}%` }} transition={{ duration: 0.3 }} />
                                             </div>
-                                            <span className="text-[8px] text-muted-foreground/40 font-mono">{buildProgress}%</span>
-                                        </div>
+                                            <div className="flex-1 flex items-center px-4 gap-3">
+                                                <div className="flex-1">
+                                                    <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[15px] md:text-[17px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</motion.p>
+                                                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</motion.p>
+                                                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-2.5 flex gap-1.5">
+                                                        <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
+                                                        <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
+                                                    </motion.div>
+                                                </div>
+                                                <div className="w-[25%] aspect-square rounded-lg bg-blue-500/[0.06] border border-white/5 items-center justify-center hidden md:flex">
+                                                    <Globe className="size-5 text-blue-400/20" />
+                                                </div>
+                                            </div>
+                                            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="px-4 py-2.5">
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {['Design System', 'SaaS Dashboard', 'E-commerce'].map((n, i) => (
+                                                        <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 + i * 0.1 }} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                            <p className="text-[6px] font-semibold text-white/55">{n}</p>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+
+                                            {/* Overlay statuses */}
+                                            {(step === 'pushing' || step === 'pushed' || step === 'downloading' || step === 'downloaded') && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    className="absolute inset-0 bg-[#0f1117]/80 backdrop-blur-[2px] flex items-center justify-center"
+                                                >
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        {step === 'pushing' && <><Loader2 className="size-5 text-primary/50 animate-spin" /><span className="text-[10px] text-white/50">Pushing to GitHub...</span></>}
+                                                        {step === 'pushed' && <><CircleCheck className="size-5 text-primary/60" /><span className="text-[10px] text-primary/60">Pushed to ethan-portfolio/main</span><span className="text-[8px] text-white/25 font-mono">&quot;Initial commit: portfolio site&quot;</span></>}
+                                                        {step === 'downloading' && <><Loader2 className="size-5 text-primary/50 animate-spin" /><span className="text-[10px] text-white/50">Downloading source...</span></>}
+                                                        {step === 'downloaded' && <><CircleCheck className="size-5 text-primary/60" /><span className="text-[10px] text-primary/60">ethan-portfolio.zip ready</span><span className="text-[8px] text-white/25">2.4 MB · 16 files</span></>}
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </motion.div>
                                     )}
-                                    <span className="text-[8px] text-muted-foreground/30">TypeScript · React</span>
                                 </div>
-                            </motion.div>
+                            </div>
                         </div>
+                    </motion.div>
+
+                    {/* Right — Text */}
+                    <div>
+                        <motion.span variants={fadeIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0}
+                            className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                        >
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            Step 03
+                        </motion.span>
+
+                        <div className="overflow-hidden">
+                            <motion.h2 variants={slideUp} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.1}
+                                className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                            >
+                                Build Instantly
+                            </motion.h2>
+                        </div>
+
+                        <motion.p variants={blurIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.25}
+                            className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg"
+                        >
+                            Convert your design into functional components and production-ready code.
+                        </motion.p>
+
+                        {/* Step indicators */}
+                        <motion.div variants={fadeIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.4}
+                            className="mt-8 space-y-3"
+                        >
+                            {[
+                                { icon: Zap, label: 'Generate code from design', step: 'code' as const },
+                                { icon: Eye, label: 'See live preview instantly', step: 'preview' as const },
+                                { icon: Globe, label: 'Push to GitHub in one click', step: 'pushed' as const },
+                                { icon: ArrowRight, label: 'Download source code', step: 'downloaded' as const },
+                            ].map((item) => (
+                                <div key={item.label} className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "size-8 rounded-lg flex items-center justify-center transition-all duration-300",
+                                        isPast(item.step) ? 'bg-primary/10 text-primary/60' : 'bg-muted/30 text-muted-foreground/30'
+                                    )}>
+                                        {isPast(item.step) ? <CircleCheck className="size-4" /> : <item.icon className="size-4" />}
+                                    </div>
+                                    <span className={cn(
+                                        "text-sm transition-colors duration-300",
+                                        isPast(item.step) ? 'text-foreground/70 font-medium' : 'text-muted-foreground/40'
+                                    )}>{item.label}</span>
+                                </div>
+                            ))}
+                        </motion.div>
                     </div>
-                </motion.div>
+                </div>
             </div>
         </section>
     )
