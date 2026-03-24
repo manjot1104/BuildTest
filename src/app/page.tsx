@@ -1139,10 +1139,10 @@ function FlowStudioSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text — top */}
-                <div className="max-w-xl mb-12 md:mb-16">
+                <div className="max-w-xl mb-8 md:mb-12">
                     <motion.span
                         variants={fadeIn}
                         initial="hidden"
@@ -1841,7 +1841,7 @@ function FlowStudioToBuilderTransition() {
     const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
 
     return (
-        <section ref={ref} className="relative py-16 md:py-24 overflow-hidden">
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
             {/* Subtle background grid — depth layer */}
             <motion.div
                 style={{ opacity: gridOpacity }}
@@ -2042,9 +2042,9 @@ function FlowBuilderSection() {
     }
 
     return (
-        <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
                     {/* Left — Builder card */}
                     <motion.div
                         initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -2362,7 +2362,7 @@ function FlowBuilderToTestingTransition() {
     const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
 
     return (
-        <section ref={ref} className="relative py-14 md:py-20 overflow-hidden">
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
             <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
 
                 {/* Trailing glow — soft, fades quickly */}
@@ -2569,10 +2569,10 @@ function FlowTestingSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text header */}
-                <div className="max-w-xl mb-12 md:mb-16">
+                <div className="max-w-xl mb-8 md:mb-12">
                     <motion.span
                         variants={fadeIn} initial="hidden"
                         animate={isInView ? 'visible' : 'hidden'} custom={0}
@@ -2971,7 +2971,7 @@ function FlowTestingToA11yTransition() {
     const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
 
     return (
-        <section ref={ref} className="relative py-16 md:py-24 overflow-hidden">
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
             {/* Background pulse — origin flash from testing completion */}
             <motion.div
                 style={{ opacity: pulseOpacity }}
@@ -3149,9 +3149,9 @@ function FlowAccessibilityLiveCTA() {
     return (
         <>
             {/* ── Accessibility Testing Section ── */}
-            <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+            <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
                 <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
                         {/* Left — Static description (NO animations) */}
                         <div>
                             <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
@@ -3496,7 +3496,7 @@ function FlowLaunchCTA() {
     const showCTA = phase === 'cta'
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-24 md:py-36 overflow-hidden">
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.015] to-transparent pointer-events-none" />
 
             <div className="max-w-5xl mx-auto relative">
@@ -3745,9 +3745,9 @@ function FlowAIChatSection() {
     const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
 
     return (
-        <section ref={sectionRef} className="relative min-h-screen flex items-center px-6 py-20 md:py-28 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
                     {/* Text — staggered entrance */}
                     <div>
                         <motion.span
@@ -4612,10 +4612,10 @@ export default function LandingPage() {
 
             {/* ── Developer Flow Pipeline Section ── */}
             <div className="section-divider" />
-            <section className="relative py-20 md:py-28 px-6 overflow-hidden">
+            <section className="relative py-16 md:py-20 px-6 overflow-hidden">
                 <div className="max-w-6xl mx-auto">
                     {/* Header */}
-                    <div className="text-center mb-16">
+                    <div className="text-center mb-10">
                         <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
                             <span className="inline-block size-1.5 rounded-full bg-primary/50" />
                             The Buildify Flow
@@ -4673,7 +4673,6 @@ export default function LandingPage() {
             {/* ── Buildify Developer Flow — 6 Full-Screen Sections ── */}
 
             {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
-            <div className="section-divider" />
             <FlowAIChatSection />
 
             {/* Transition: AI Chat → Studio (single container transforms) */}
