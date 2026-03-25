@@ -4313,6 +4313,68 @@ export default function LandingPage() {
                 </motion.div>
             </motion.section>
 
+            {/* ── Developer Flow Pipeline ── */}
+            <section className="relative py-16 md:py-20 px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto">
+                    <div className="text-center mb-10">
+                        <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            The Buildify Flow
+                        </span>
+                        <h2 className="mt-5 text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                            From idea to live, all in one place
+                        </h2>
+                        <p className="mt-4 text-base md:text-lg text-muted-foreground/60 max-w-2xl mx-auto">
+                            Plan, design, build, test, and launch without switching tools.
+                        </p>
+                    </div>
+
+                    <div className="relative">
+                        <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/60 hidden md:block" />
+                        <div className="absolute top-0 bottom-0 left-6 w-px bg-border/60 md:hidden" />
+
+                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 md:gap-3">
+                            {[
+                                { icon: MessageSquareText, title: 'AI Chat' },
+                                { icon: Palette, title: 'Studio' },
+                                { icon: Code2, title: 'Builder' },
+                                { icon: Rocket, title: 'Deploy' },
+                                { icon: FlaskConical, title: 'Testing' },
+                                { icon: ScanEye, title: 'Accessibility' },
+                                { icon: Radio, title: 'Live' },
+                            ].map((step, index) => (
+                                <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-4 md:gap-0">
+                                    <div className="relative z-10 size-12 rounded-xl border border-border/80 bg-background flex items-center justify-center shrink-0">
+                                        <step.icon className="size-[18px] text-primary/70" />
+                                    </div>
+                                    {index < 6 && (
+                                        <div className="absolute top-6 -right-[calc(50%-6px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                            <ArrowRight className="size-3 text-muted-foreground/30" />
+                                        </div>
+                                    )}
+                                    <span className="md:mt-3 text-sm font-medium text-foreground/80 text-center">
+                                        {step.title}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Developer Flow Sections ── */}
+            <FlowConnectorWrapper>
+                <FlowAIChatSection />
+                <FlowChatToStudioTransition />
+                <FlowStudioSection />
+                <FlowStudioToBuilderTransition />
+                <FlowBuilderSection />
+                <FlowBuilderToTestingTransition />
+                <FlowTestingSection />
+                <FlowTestingToA11yTransition />
+                <FlowAccessibilityLiveCTA />
+            </FlowConnectorWrapper>
+
             {/* ── Stats Bar ── */}
             <section className="relative bg-muted/20 stats-section">
                 <div className="max-w-5xl mx-auto px-6 py-16">
@@ -4555,96 +4617,6 @@ export default function LandingPage() {
                     </div>
                 </div>
             </section>
-
-            {/* ── Developer Flow Pipeline Section ── */}
-            <div className="section-divider" />
-            <section className="relative py-16 md:py-20 px-6 overflow-hidden">
-                <div className="max-w-6xl mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-10">
-                        <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
-                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                            The Buildify Flow
-                        </span>
-                        <h2 className="mt-5 text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
-                            From idea to live &mdash; all in one place
-                        </h2>
-                        <p className="mt-4 text-base md:text-lg text-muted-foreground/60 max-w-2xl mx-auto">
-                            Plan, design, build, test, and launch &mdash; without switching tools.
-                        </p>
-                    </div>
-
-                    {/* Pipeline */}
-                    <div className="relative">
-                        {/* Connecting line (desktop) */}
-                        <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/60 hidden md:block" />
-
-                        {/* Connecting line (mobile) */}
-                        <div className="absolute top-0 bottom-0 left-6 w-px bg-border/60 md:hidden" />
-
-                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 md:gap-3">
-                            {[
-                                { icon: MessageSquareText, title: 'AI Chat' },
-                                { icon: Palette, title: 'Studio' },
-                                { icon: Code2, title: 'Builder' },
-                                { icon: Rocket, title: 'Deploy' },
-                                { icon: FlaskConical, title: 'Testing' },
-                                { icon: ScanEye, title: 'Accessibility' },
-                                { icon: Radio, title: 'Live' },
-                            ].map((step, index) => (
-                                <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-4 md:gap-0">
-                                    {/* Node dot */}
-                                    <div className="relative z-10 size-12 rounded-xl border border-border/80 bg-background flex items-center justify-center shrink-0">
-                                        <step.icon className="size-[18px] text-primary/70" />
-                                    </div>
-
-                                    {/* Arrow between cards (desktop only) */}
-                                    {index < 6 && (
-                                        <div className="absolute top-6 -right-[calc(50%-6px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
-                                            <ArrowRight className="size-3 text-muted-foreground/30" />
-                                        </div>
-                                    )}
-
-                                    {/* Title */}
-                                    <span className="md:mt-3 text-sm font-medium text-foreground/80 text-center">
-                                        {step.title}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Buildify Developer Flow — 6 Full-Screen Sections ── */}
-            <FlowConnectorWrapper>
-                {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
-                <FlowAIChatSection />
-
-                {/* Transition: AI Chat → Studio (single container transforms) */}
-                <FlowChatToStudioTransition />
-
-                {/* 2. Studio (Design) — Visual Left, Text Right */}
-                <FlowStudioSection />
-
-                {/* Transition: Studio → Builder (continuous scroll) */}
-                <FlowStudioToBuilderTransition />
-
-                {/* 3. Builder (Development) */}
-                <FlowBuilderSection />
-
-                {/* Transition: Builder → Testing (URL handoff) */}
-                <FlowBuilderToTestingTransition />
-
-                {/* 4. Deploy + Testing (TinyFish) */}
-                <FlowTestingSection />
-
-                {/* Transition: Testing → Accessibility */}
-                <FlowTestingToA11yTransition />
-
-                {/* 5. Accessibility Testing */}
-                <FlowAccessibilityLiveCTA />
-            </FlowConnectorWrapper>
 
             {/* ── Feature Demos Section ── */}
             <div className="section-divider" />
