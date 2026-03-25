@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import type { ResumeTemplate } from './templates'
@@ -106,12 +106,21 @@ function getModelName(modelId: string): string {
 const resumeSchema = z.object({
   templateType: z.enum(['latex', 'html']),
   fullName: z.string().min(1, 'Full name is required').max(100),
+  title: z.string().max(200).optional(),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
-  skills: z.string().min(1, 'Skills are required'),
-  experience: z.string().min(1, 'Experience is required'),
-  education: z.string().min(1, 'Education is required'),
-  projects: z.string().min(1, 'Projects are required'),
+  location: z.string().max(200).optional(),
+  linkedin: z.string().max(300).optional(),
+  github: z.string().max(300).optional(),
+  portfolio: z.string().max(300).optional(),
+  summary: z.string().optional(),
+  skills: z.string().optional(),
+  experience: z.string().optional(),
+  education: z.string().optional(),
+  projects: z.string().optional(),
+  certifications: z.string().optional(),
+  achievements: z.string().optional(),
+  languagesKnown: z.string().optional(),
   additionalInstructions: z.string().optional(),
 })
 
@@ -141,8 +150,8 @@ export default function AIResumeBuilderPage() {
   const [jdFile, setJdFile] = useState<File | null>(null)
   const [isParsingFiles, setIsParsingFiles] = useState(false)
   const [parsedData, setParsedData] = useState<{
-    resumeData?: any
-    jdRequirements?: any
+    resumeData?: Record<string, string | string[] | undefined>
+    jdRequirements?: Record<string, string | string[] | undefined>
   } | null>(null)
 
   const form = useForm<ResumeFormData>({
@@ -150,12 +159,21 @@ export default function AIResumeBuilderPage() {
     defaultValues: {
       templateType: 'latex',
       fullName: '',
+      title: '',
       email: '',
       phone: '',
+      location: '',
+      linkedin: '',
+      github: '',
+      portfolio: '',
+      summary: '',
       skills: '',
       experience: '',
       education: '',
       projects: '',
+      certifications: '',
+      achievements: '',
+      languagesKnown: '',
       additionalInstructions: '',
     },
   })
@@ -208,7 +226,12 @@ export default function AIResumeBuilderPage() {
         const error = await response.json().catch(() => ({ 
           error: `Server returned error: ${response.status} ${response.statusText}` 
         }))
-        throw new Error(error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`)
+        const message = error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        toast.error(message, {
+          id: 'resume-generate',
+          duration: 7000,
+        })
+        return
       }
 
       const result = await response.json()
@@ -420,6 +443,7 @@ export default function AIResumeBuilderPage() {
     if (!resume && !jd) return
 
     setIsParsingFiles(true)
+    let aiProgressTimer: ReturnType<typeof setTimeout> | null = null
     
     // Show progress updates
     toast.loading('Extracting text from files...', { id: 'parse-files' })
@@ -430,7 +454,7 @@ export default function AIResumeBuilderPage() {
       if (jd) formData.append('jd', jd)
 
       // Update progress
-      setTimeout(() => {
+      aiProgressTimer = setTimeout(() => {
         toast.loading('Analyzing content with AI...', { id: 'parse-files' })
       }, 2000)
 
@@ -439,22 +463,27 @@ export default function AIResumeBuilderPage() {
         response = await fetch('/api/resume/parse-files', {
           method: 'POST',
           body: formData,
-          // Add timeout to prevent hanging
-          signal: AbortSignal.timeout(60000), // 60 seconds
+          // Match server maxDuration (60s) + buffer
+          signal: AbortSignal.timeout(65000), // 65 seconds
         })
       } catch (fetchError) {
-        console.error('[parse-files] Fetch error:', fetchError)
+        console.warn('[parse-files] Fetch error (handled gracefully):', fetchError)
         
+        if (aiProgressTimer) { clearTimeout(aiProgressTimer); aiProgressTimer = null }
+
         if (fetchError instanceof Error) {
           if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
-            throw new Error('Request timed out. The files might be too large. Please try smaller files or fill the form manually.')
+            toast.error('Request timed out. Please try smaller files or fill the form manually.', { id: 'parse-files', duration: 5000 })
+          } else if (fetchError.message === 'Failed to fetch') {
+            toast.error('Unable to connect to server. Please check if the server is running.', { id: 'parse-files', duration: 5000 })
+          } else {
+            toast.error(`Network error: ${fetchError.message}`, { id: 'parse-files', duration: 5000 })
           }
-          if (fetchError.message === 'Failed to fetch') {
-            throw new Error('Unable to connect to server. Please check if the server is running and try again.')
-          }
-          throw fetchError
+        } else {
+          toast.error('Network error occurred. Please check your connection.', { id: 'parse-files', duration: 5000 })
         }
-        throw new Error('Network error occurred. Please check your connection and try again.')
+        setIsParsingFiles(false)
+        return
       }
 
       if (!response.ok) {
@@ -463,6 +492,10 @@ export default function AIResumeBuilderPage() {
         throw new Error(errorMessage)
       }
 
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+        aiProgressTimer = null
+      }
       toast.loading('Processing extracted data...', { id: 'parse-files' })
 
       const result = await response.json()
@@ -472,6 +505,10 @@ export default function AIResumeBuilderPage() {
       
       // Check if extraction failed - but still continue if success is true
       if (result.success === false) {
+        if (aiProgressTimer) {
+          clearTimeout(aiProgressTimer)
+          aiProgressTimer = null
+        }
         toast.warning(
           result.error || 'Could not extract data from files. Please fill the form manually.',
           { 
@@ -486,6 +523,10 @@ export default function AIResumeBuilderPage() {
       
       // If no data extracted, show friendly info message (not error)
       if (!result.extractedResumeData && !result.jdRequirements) {
+        if (aiProgressTimer) {
+          clearTimeout(aiProgressTimer)
+          aiProgressTimer = null
+        }
         // Show as info message - this is normal for image-based PDFs
         toast.info(
           'Files uploaded successfully',
@@ -510,60 +551,43 @@ export default function AIResumeBuilderPage() {
         const data = result.extractedResumeData
         console.log('[parse-files] Auto-filling form with data:', data)
         
-        if (data.fullName) {
-          form.setValue('fullName', data.fullName)
-          fieldsFilled++
-        }
-        if (data.email) {
-          form.setValue('email', data.email)
-          fieldsFilled++
-        }
-        if (data.phone) {
-          form.setValue('phone', data.phone)
-          fieldsFilled++
-        }
-        if (data.skills) {
-          form.setValue('skills', data.skills)
-          fieldsFilled++
-        }
-        if (data.experience) {
-          form.setValue('experience', data.experience)
-          fieldsFilled++
-        }
-        // Education - always set, even if empty (will use fallback from API)
-        if (data.education) {
-          form.setValue('education', data.education)
-          fieldsFilled++
-          console.log('[parse-files] ✅ Education field filled:', data.education.substring(0, 50))
-        } else {
-          console.warn('[parse-files] ⚠️ Education field missing in extracted data')
-          // Set a default value if missing
-          form.setValue('education', 'Not specified')
-        }
+        // Simple string fields — set if present
+        const fieldMap: Array<[keyof ResumeFormData, string | undefined]> = [
+          ['fullName', data.fullName],
+          ['title', data.title],
+          ['email', data.email],
+          ['phone', data.phone],
+          ['location', data.location],
+          ['linkedin', data.linkedin],
+          ['github', data.github],
+          ['portfolio', data.portfolio],
+          ['summary', data.summary],
+          ['skills', data.skills],
+          ['experience', data.experience],
+          ['education', data.education],
+          ['projects', data.projects],
+          ['certifications', data.certifications],
+          ['achievements', data.achievements],
+          ['languagesKnown', data.languagesKnown],
+        ]
         
-        // Projects - always set, even if empty (will use fallback from API)
-        if (data.projects) {
-          form.setValue('projects', data.projects)
-          fieldsFilled++
-          console.log('[parse-files] ✅ Projects field filled:', data.projects.substring(0, 50))
-        } else {
-          console.warn('[parse-files] ⚠️ Projects field missing in extracted data')
-          // Set a default value if missing
-          form.setValue('projects', 'Not specified')
+        for (const [field, value] of fieldMap) {
+          if (value?.trim()) {
+            form.setValue(field, value)
+            fieldsFilled++
+          }
         }
         
         console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
-        console.log('[parse-files] Form values after auto-fill:', {
-          education: form.getValues('education'),
-          projects: form.getValues('projects'),
-        })
       } else {
         console.warn('[parse-files] No extractedResumeData found in response')
       }
 
       // Add JD requirements to additional instructions if JD is provided
       if (result.jdRequirements && jd) {
-        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${result.jdRequirements.requiredSkills?.join(', ') || 'N/A'}\n- Qualifications: ${result.jdRequirements.qualifications || 'N/A'}\n- Key Requirements: ${result.jdRequirements.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
+        const jdReqs = result.jdRequirements as Record<string, string | string[] | undefined>
+        const requiredSkills = Array.isArray(jdReqs.requiredSkills) ? jdReqs.requiredSkills.join(', ') : (jdReqs.requiredSkills || 'N/A')
+        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${requiredSkills}\n- Qualifications: ${jdReqs.qualifications || 'N/A'}\n- Key Requirements: ${jdReqs.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
         const currentInstructions = form.getValues('additionalInstructions') || ''
         form.setValue('additionalInstructions', currentInstructions + jdInstructions)
         console.log('[parse-files] Added JD requirements to instructions')
@@ -577,12 +601,19 @@ export default function AIResumeBuilderPage() {
         toast.success('Files parsed successfully!', { id: 'parse-files' })
       }
     } catch (error) {
-      console.error('Error parsing files:', error)
-      const errorMessage = error instanceof Error && error.message.includes('timeout')
-        ? 'Parsing took too long. Please try with smaller files or check your connection.'
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+        aiProgressTimer = null
+      }
+      console.warn('[parse-files] Handled error:', error)
+      const errorMessage = error instanceof Error
+        ? error.message
         : 'Failed to parse files. Please try again.'
-      toast.error(errorMessage, { id: 'parse-files' })
+      toast.error(errorMessage, { id: 'parse-files', duration: 5000 })
     } finally {
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+      }
       setIsParsingFiles(false)
     }
   }
@@ -664,7 +695,7 @@ export default function AIResumeBuilderPage() {
                 size="sm"
                 onClick={() => {
                   const codeToCopy = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
-                  navigator.clipboard.writeText(codeToCopy)
+                  void navigator.clipboard.writeText(codeToCopy)
                   toast.success(`${templateType === 'latex' ? 'LaTeX' : 'HTML'} copied to clipboard`)
                 }}
                 className="gap-1.5"
@@ -721,7 +752,7 @@ export default function AIResumeBuilderPage() {
                 className="overflow-hidden rounded-xl border border-border/60 bg-card"
               >
                 <div className="max-h-[400px] overflow-auto p-4">
-                  <pre className="text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                  <pre className="text-xs font-mono whitespace-pre-wrap wrap-break-word text-muted-foreground">
                     {rawAIResponse}
                   </pre>
                 </div>
@@ -806,7 +837,7 @@ export default function AIResumeBuilderPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault()
-                      handleFollowUpPrompt()
+                      void handleFollowUpPrompt()
                     }
                   }}
                   disabled={isProcessingFollowUp}
@@ -888,7 +919,7 @@ export default function AIResumeBuilderPage() {
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
-                        if (file) handleFileUpload('resume', file)
+                        if (file) void handleFileUpload('resume', file)
                       }}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={isParsingFiles}
@@ -929,7 +960,7 @@ export default function AIResumeBuilderPage() {
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
-                        if (file) handleFileUpload('jd', file)
+                        if (file) void handleFileUpload('jd', file)
                       }}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={isParsingFiles}
@@ -1145,6 +1176,21 @@ export default function AIResumeBuilderPage() {
                 />
                 <FormField
                   control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Job Title <span className="text-[10px] text-muted-foreground">(Optional)</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="Senior Software Engineer" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -1156,17 +1202,118 @@ export default function AIResumeBuilderPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Phone</FormLabel>
+                      <FormControl>
+                        <Input placeholder="+1 (555) 123-4567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
               <FormField
                 control={form.control}
-                name="phone"
+                name="location"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone</FormLabel>
+                    <FormLabel>Location <span className="text-[10px] text-muted-foreground">(Optional)</span></FormLabel>
                     <FormControl>
-                      <Input placeholder="+1 (555) 123-4567" {...field} />
+                      <Input placeholder="San Francisco, CA" {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Links Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.12, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Link2 className="size-4 text-cyan-500" />
+              <span className="text-sm font-medium text-muted-foreground">Links</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <FormField
+                  control={form.control}
+                  name="linkedin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">LinkedIn</FormLabel>
+                      <FormControl>
+                        <Input placeholder="linkedin.com/in/johndoe" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="github"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">GitHub</FormLabel>
+                      <FormControl>
+                        <Input placeholder="github.com/johndoe" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="portfolio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Portfolio</FormLabel>
+                      <FormControl>
+                        <Input placeholder="johndoe.dev" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Professional Summary Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.13, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <MessageSquare className="size-4 text-indigo-500" />
+              <span className="text-sm font-medium text-muted-foreground">Professional Summary</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="summary"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Results-driven software engineer with 6+ years of experience building scalable applications..."
+                        className="min-h-[80px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      2-3 sentence professional summary highlighting your key strengths and impact.
+                    </FormDescription>
                   </FormItem>
                 )}
               />
@@ -1192,15 +1339,14 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., JavaScript, React, Node.js, Python, SQL, AWS..."
+                        placeholder={"Languages: JavaScript, TypeScript, Python\nFrameworks: React, Next.js, Node.js\nTools: AWS, Docker, Git, PostgreSQL"}
                         className="min-h-[100px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      List your technical skills, programming languages, tools, and technologies.
+                      List skills by category or comma-separated. If left empty, this section won&apos;t appear.
                     </FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -1226,49 +1372,14 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., Software Engineer at Company X (2020-2023) - Developed web applications..."
+                        placeholder={"Senior Software Engineer | Google | 2021 – Present\n• Architected microservices platform reducing deployment time by 60%\n• Led migration serving 5M+ DAU with 99.99% uptime\n\nSoftware Engineer | Stripe | 2019 – 2021\n• Built payment processing pipeline handling $2B+ annual volume"}
                         className="min-h-[150px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Include job titles, companies, dates, and key achievements.
+                      Use &quot;Role | Company | Dates&quot; then bullet points. Separate entries with blank lines. Empty = section hidden.
                     </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </motion.div>
-
-          {/* Education Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden rounded-xl border border-border/60 bg-card"
-          >
-            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
-              <GraduationCap className="size-4 text-violet-500" />
-              <span className="text-sm font-medium">Education</span>
-            </div>
-            <div className="p-4">
-              <FormField
-                control={form.control}
-                name="education"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Textarea
-                        placeholder="e.g., Bachelor of Science in Computer Science, University Name (2016-2020)..."
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Degrees, institutions, and graduation dates.
-                    </FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -1279,7 +1390,7 @@ export default function AIResumeBuilderPage() {
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            transition={{ duration: 0.4, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
             className="overflow-hidden rounded-xl border border-border/60 bg-card"
           >
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
@@ -1294,15 +1405,113 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., E-commerce Platform (2023) - Built a full-stack application using React and Node.js..."
+                        placeholder={"Analytics Dashboard | React, D3.js, WebSocket\n• Streaming analytics processing 50K+ events/sec\n• Reduced decision-making time by 40%\n\nCLI Tool | TypeScript, Node.js\n• Developer productivity tool with 2K+ GitHub stars"}
                         className="min-h-[150px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Notable projects, technologies used, and key features.
+                      Use &quot;Project Name | Tech Stack&quot; then bullet points. Separate entries with blank lines. Empty = section hidden.
                     </FormDescription>
-                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Education Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <GraduationCap className="size-4 text-violet-500" />
+              <span className="text-sm font-medium">Education</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="education"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder={"B.S. Computer Science\nStanford University | 2015 – 2019"}
+                        className="min-h-[80px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Use &quot;Degree&quot; on first line, &quot;College | Year&quot; on second. Empty = section hidden.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Certifications & Achievements Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Award className="size-4 text-orange-500" />
+              <span className="text-sm font-medium text-muted-foreground">Certifications &amp; Achievements</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="space-y-4 p-4">
+              <FormField
+                control={form.control}
+                name="certifications"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Certifications</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="AWS Solutions Architect Associate (2023), Google Cloud Professional Developer (2022)"
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Comma-separated list. If empty, section won&apos;t appear.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="achievements"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Achievements</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Best Innovation Award — Google Hackathon 2023, Speaker — ReactConf 2022"
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Awards, recognitions, notable achievements. Comma-separated.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="languagesKnown"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Languages Spoken</FormLabel>
+                    <FormControl>
+                      <Input placeholder="English (Native), Spanish (Conversational)" {...field} />
+                    </FormControl>
                   </FormItem>
                 )}
               />

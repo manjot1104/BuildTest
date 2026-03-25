@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { followUpHtml } from '@/lib/openrouter'
+import { validateHtmlFollowUpInput } from '@/lib/resume/code-validator'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
-
-const followUpRequestSchema = z.object({
-  currentHtml: z.string().min(1, 'HTML code is required').max(100000),
-  prompt: z.string().min(1, 'Prompt is required').max(2000),
-  model: z.string().max(100).optional(),
-})
 
 /**
  * Process follow-up prompt to modify existing HTML code
@@ -22,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { currentHtml, prompt, model } = followUpRequestSchema.parse(body)
+    const { currentHtml, prompt, model } = validateHtmlFollowUpInput(body)
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
