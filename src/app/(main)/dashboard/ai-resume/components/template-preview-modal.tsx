@@ -124,21 +124,21 @@ export function ResumeTemplatePreviewModal({
             const blob = await res.blob()
             // Verify it's actually a PDF
             if (blob.size > 0 && blob.type.includes('pdf')) {
-              setPdfUrl(URL.createObjectURL(blob))
+            setPdfUrl(URL.createObjectURL(blob))
             }
-          } else {
+      } else {
             // PDF compilation failed — HTML fallback will be shown automatically
-          }
-        })
-        .catch(() => {
+            }
+          })
+          .catch(() => {
           // PDF compilation failed — HTML fallback will be shown automatically
-        })
-        .finally(() => {
-          if (!cancelled) setIsCompilingPdf(false)
-        })
-    } else {
+          })
+          .finally(() => {
+            if (!cancelled) setIsCompilingPdf(false)
+          })
+      } else {
       // HTML format — just use the rendered HTML
-      setPdfUrl(null)
+        setPdfUrl(null)
       setIframeHeight(A4_MIN_HEIGHT)
     }
 
@@ -170,10 +170,10 @@ export function ResumeTemplatePreviewModal({
   const showFormatToggle = templateFormat === 'both' || !template.format
   const displayFormat =
     templateFormat === 'latex'
-      ? 'latex'
-      : templateFormat === 'html'
-        ? 'html'
-        : currentFormat
+    ? 'latex' 
+    : templateFormat === 'html' 
+    ? 'html' 
+    : currentFormat
   const isHtml = displayFormat === 'html'
 
   // Determine what to show in preview area:
@@ -208,7 +208,7 @@ export function ResumeTemplatePreviewModal({
             )}
             <h2 className="text-lg font-semibold text-white">{template.name}</h2>
           </div>
-
+          
           {showFormatToggle && (
             <>
               <div className="h-4 w-px bg-white/10" />
@@ -223,7 +223,7 @@ export function ResumeTemplatePreviewModal({
                   type="button"
                   onClick={() => setCurrentFormat('html')}
                   className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-                  style={{
+                  style={{ 
                     color: currentFormat === 'html' ? '#fff' : 'rgba(255,255,255,0.5)',
                     background:
                       currentFormat === 'html' ? 'rgba(255,255,255,0.12)' : 'transparent',
@@ -236,7 +236,7 @@ export function ResumeTemplatePreviewModal({
                   type="button"
                   onClick={() => setCurrentFormat('latex')}
                   className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-                  style={{
+                  style={{ 
                     color: currentFormat === 'latex' ? '#fff' : 'rgba(255,255,255,0.5)',
                     background:
                       currentFormat === 'latex' ? 'rgba(255,255,255,0.12)' : 'transparent',
@@ -320,13 +320,13 @@ export function ResumeTemplatePreviewModal({
                 <span style={{ fontSize: '12px', color: '#999', fontFamily: 'system-ui' }}>
                   This may take a few seconds
                 </span>
-              </div>
-            )}
+                </div>
+              )}
 
             {/* ── PDF preview (LaTeX compiled successfully) ───────────── */}
             {showPdfPreview && pdfUrl && (
-              <iframe
-                src={pdfUrl}
+                <iframe
+                  src={pdfUrl}
                 style={{
                   width: `${A4_WIDTH}px`,
                   height: `${A4_MIN_HEIGHT}px`,
@@ -354,8 +354,8 @@ export function ResumeTemplatePreviewModal({
                     }}
                     title="Resume Preview"
                     sandbox="allow-same-origin"
-                  />
-                ) : (
+                />
+              ) : (
                   <div
                     style={{
                       display: 'flex',
@@ -373,10 +373,10 @@ export function ResumeTemplatePreviewModal({
                     <span style={{ fontSize: '13px', color: '#888', fontFamily: 'system-ui' }}>
                       Generating preview…
                     </span>
-                  </div>
-                )}
+                </div>
+              )}
               </>
-            )}
+          )}
           </div>
         </div>
       </div>

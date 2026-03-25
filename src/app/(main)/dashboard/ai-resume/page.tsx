@@ -470,7 +470,7 @@ export default function AIResumeBuilderPage() {
         console.warn('[parse-files] Fetch error (handled gracefully):', fetchError)
         
         if (aiProgressTimer) { clearTimeout(aiProgressTimer); aiProgressTimer = null }
-
+        
         if (fetchError instanceof Error) {
           if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
             toast.error('Request timed out. Please try smaller files or fill the form manually.', { id: 'parse-files', duration: 5000 })
@@ -574,8 +574,8 @@ export default function AIResumeBuilderPage() {
         for (const [field, value] of fieldMap) {
           if (value?.trim()) {
             form.setValue(field, value)
-            fieldsFilled++
-          }
+          fieldsFilled++
+        }
         }
         
         console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
@@ -1202,14 +1202,14 @@ export default function AIResumeBuilderPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="phone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+1 (555) 123-4567" {...field} />
+              <FormField
+                control={form.control}
+                name="phone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Phone</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+1 (555) 123-4567" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
