@@ -110,7 +110,7 @@ interface PlanLimits {
 // "free" is the fallback for users with no active subscription.
 // ---------------------------------------------------------------------------
 const DAILY_RUN_LIMITS: Record<string, number> = {
-  free:       2,
+  free:       0,
   starter:    5,
   pro:        15,
   enterprise: 50,
