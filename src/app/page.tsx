@@ -3510,25 +3510,18 @@ function FlowAccessibilityLiveCTA() {
 
 // --- Launch + Final CTA ---
 
-type LaunchPhase = 'idle' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
+type LaunchPhase = 'idle' | 'entering' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
 
 function FlowLaunchCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: true, margin: '-80px', amount: 0.3 })
     const [phase, setPhase] = useState<LaunchPhase>('idle')
     const [scrollY, setScrollY] = useState(0)
+    const hasCompleted = useRef(false)
     const timers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-    // Reset when leaving viewport
     useEffect(() => {
-        if (!isInView) {
-            timers.current.forEach(clearTimeout); timers.current = []
-            setPhase('idle'); setScrollY(0)
-        }
-    }, [isInView])
-
-    useEffect(() => {
-        if (!isInView) return
+        if (!isInView || hasCompleted.current) return
         let cancelled = false
         const delay = (ms: number) => new Promise<void>(resolve => {
             const t = setTimeout(resolve, ms)
@@ -3536,12 +3529,17 @@ function FlowLaunchCTA() {
         })
 
         const run = async () => {
-            await delay(400)
+            await delay(300)
             if (cancelled) return
 
-            // Step 1: Reveal website
+            // Step 0: Begin entry — element starts emerging
+            setPhase('entering')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 1: Fully revealed
             setPhase('reveal')
-            await delay(1500)
+            await delay(1200)
             if (cancelled) return
 
             // Step 2: Auto-scroll through the site
@@ -3566,42 +3564,44 @@ function FlowLaunchCTA() {
             await delay(800)
             if (cancelled) return
 
-            // Step 5: CTA
+            // Step 5: CTA — lock final state
             setPhase('cta')
+            hasCompleted.current = true
         }
 
         run()
         return () => { cancelled = true; timers.current.forEach(clearTimeout) }
     }, [isInView])
 
-    const showSite = phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
+    const showSite = phase === 'entering' || phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
     const showCTA = phase === 'cta'
 
+    // Derive animation target from phase
+    const siteAnimation = (() => {
+        switch (phase) {
+            case 'idle': return { opacity: 0, scale: 0.94, y: 30, filter: 'blur(8px)' }
+            case 'entering': return { opacity: 0.7, scale: 0.97, y: 12, filter: 'blur(2px)' }
+            case 'exit': return { opacity: 0, scale: 0.92, y: -10, filter: 'blur(6px)' }
+            case 'cta': return { opacity: 0, scale: 0.90, y: -20, filter: 'blur(8px)' }
+            default: return { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+        }
+    })()
+
+    // Derive transition timing from phase
+    const siteTiming = phase === 'entering' ? 0.8 : phase === 'exit' ? 0.7 : phase === 'cta' ? 0.5 : 0.6
+
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.015] to-transparent pointer-events-none" />
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden" style={{ minHeight: showCTA ? undefined : '60vh' }}>
 
             <div className="max-w-5xl mx-auto relative">
-                {/* ── Website Preview ── */}
-                {showSite && (
+                {/* ── Website Preview — always rendered, animated via state ── */}
+                {!showCTA && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-                        animate={phase === 'exit'
-                            ? { opacity: 0, scale: 0.93, y: -10, filter: 'blur(6px)' }
-                            : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
-                        }
-                        transition={{ duration: phase === 'exit' ? 0.7 : 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+                        animate={siteAnimation}
+                        transition={{ duration: siteTiming, ease: [0.25, 0.1, 0.25, 1] }}
                         className="relative"
                     >
-                        {/* Glow */}
-                        <motion.div
-                            animate={phase === 'live'
-                                ? { opacity: [0.04, 0.08, 0.04] }
-                                : { opacity: 0.03 }
-                            }
-                            transition={phase === 'live' ? { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } : {}}
-                            className="absolute -inset-8 rounded-3xl bg-primary blur-3xl pointer-events-none"
-                        />
+                        {/* No background glow — clean render */}
 
                         <div className="relative rounded-xl border border-border/40 bg-card shadow-2xl shadow-black/10 dark:shadow-black/30 overflow-hidden">
                             {/* Browser chrome */}
