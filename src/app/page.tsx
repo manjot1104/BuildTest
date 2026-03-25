@@ -774,60 +774,66 @@ function FlowConnectorWrapper({ children }: { children: React.ReactNode }) {
 
 function FlowChatToStudioTransition() {
     const transitionRef = useRef<HTMLDivElement>(null)
+    const [mounted, setMounted] = useState(false)
     const { scrollYProgress } = useScroll({
         target: transitionRef,
-        offset: ['start start', 'end end'],
+        offset: ['start end', 'end start'],
     })
 
-    // Phase 1 (0–0.25): Container moves center + scales up
-    const containerX = useTransform(scrollYProgress, [0, 0.2], ['0%', '0%'])
-    const containerScale = useTransform(scrollYProgress, [0, 0.15, 0.3], [0.85, 1.02, 1])
-    const containerWidth = useTransform(scrollYProgress, [0.1, 0.35], ['100%', '100%'])
+    // Ensure stable measurement after mount
+    useEffect(() => { setMounted(true) }, [])
 
-    // Phase 2 (0.15–0.4): Chat content fades out
-    const chatContentOpacity = useTransform(scrollYProgress, [0.1, 0.3], [1, 0])
-    const chatContentY = useTransform(scrollYProgress, [0.1, 0.3], [0, -20])
+    // Remap: the actual visible range is ~0.2 to ~0.8 of the raw scroll progress
+    // This makes the animation more reliable across environments
+    const progress = useTransform(scrollYProgress, [0.15, 0.85], [0, 1])
 
-    // Phase 2.5 (0.2–0.4): Title bar label morphs
-    const chatLabelOpacity = useTransform(scrollYProgress, [0.2, 0.3], [1, 0])
-    const studioLabelOpacity = useTransform(scrollYProgress, [0.3, 0.4], [0, 1])
+    // Phase 1 (0–0.2): Container scales up
+    const containerScale = useTransform(progress, [0, 0.12, 0.25], [0.85, 1.02, 1])
 
-    // Phase 3 (0.3–0.5): Grid lines appear
-    const gridOpacity = useTransform(scrollYProgress, [0.3, 0.45], [0, 0.5])
+    // Phase 2 (0.1–0.3): Chat content fades out
+    const chatContentOpacity = useTransform(progress, [0.08, 0.25], [1, 0])
+    const chatContentY = useTransform(progress, [0.08, 0.25], [0, -20])
 
-    // Phase 4 (0.4–0.9): UI elements form inside
-    const navbarOpacity = useTransform(scrollYProgress, [0.38, 0.48], [0, 1])
-    const navbarY = useTransform(scrollYProgress, [0.38, 0.48], [-12, 0])
-    const heroOpacity = useTransform(scrollYProgress, [0.46, 0.56], [0, 1])
-    const heroScale = useTransform(scrollYProgress, [0.46, 0.56], [0.95, 1])
-    const cardsOpacity = useTransform(scrollYProgress, [0.56, 0.7], [0, 1])
-    const cardsY = useTransform(scrollYProgress, [0.56, 0.7], [16, 0])
-    const footerOpacity = useTransform(scrollYProgress, [0.7, 0.8], [0, 1])
+    // Phase 2.5 (0.2–0.35): Title bar label morphs
+    const chatLabelOpacity = useTransform(progress, [0.18, 0.28], [1, 0])
+    const studioLabelOpacity = useTransform(progress, [0.28, 0.38], [0, 1])
+
+    // Phase 3 (0.25–0.45): Grid lines appear
+    const gridOpacity = useTransform(progress, [0.25, 0.40], [0, 0.5])
+
+    // Phase 4 (0.35–0.85): UI elements form inside
+    const navbarOpacity = useTransform(progress, [0.33, 0.43], [0, 1])
+    const navbarY = useTransform(progress, [0.33, 0.43], [-12, 0])
+    const heroOpacity = useTransform(progress, [0.42, 0.52], [0, 1])
+    const heroScale = useTransform(progress, [0.42, 0.52], [0.95, 1])
+    const cardsOpacity = useTransform(progress, [0.52, 0.66], [0, 1])
+    const cardsY = useTransform(progress, [0.52, 0.66], [16, 0])
+    const footerOpacity = useTransform(progress, [0.66, 0.78], [0, 1])
 
     // Connection line glow
-    const lineProgress = useTransform(scrollYProgress, [0, 1], [0, 100])
+    const lineProgress = useTransform(progress, [0, 1], [0, 100])
 
     return (
-        <section ref={transitionRef} className="relative" style={{ height: '250vh' }}>
+        <section ref={transitionRef} className="relative" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
             <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
                 {/* Connection line (energy flow) */}
                 <motion.div
                     className="absolute left-1/2 -translate-x-1/2 w-px top-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent pointer-events-none"
                     style={{
                         height: useTransform(lineProgress, (v) => `${Math.min(v * 1.2, 100)}%`),
-                        opacity: useTransform(scrollYProgress, [0, 0.05, 0.9, 1], [0, 0.6, 0.6, 0]),
+                        opacity: useTransform(progress, [0, 0.05, 0.9, 1], [0, 0.6, 0.6, 0]),
                     }}
                 >
                     {/* Glowing dot at tip */}
                     <motion.div
                         className="absolute bottom-0 left-1/2 -translate-x-1/2 size-2 rounded-full bg-primary/40 blur-sm"
-                        style={{ opacity: useTransform(scrollYProgress, [0, 0.05, 0.85, 1], [0, 1, 1, 0]) }}
+                        style={{ opacity: useTransform(progress, [0, 0.05, 0.85, 1], [0, 1, 1, 0]) }}
                     />
                 </motion.div>
 
                 {/* The single transforming container */}
                 <motion.div
-                    style={{ scale: containerScale, x: containerX, width: containerWidth }}
+                    style={{ scale: containerScale }}
                     className="relative w-full max-w-lg md:max-w-xl rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
                 >
                     {/* Title bar — morphing label */}
