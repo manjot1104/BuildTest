@@ -804,18 +804,8 @@ async function runPipelineStages(
               testTitle: tc.title ?? "",
               category,
               steps,
-              actualResult: result.actualResult,
-              errorDetails: result.errorDetails,
               expectedResult: tc.expected_result ?? "",
-              consoleLogs: result.consoleLogs,
-              networkErrors: result.networkLogs
-                .filter((l) => l.status !== null && l.status >= 400)
-                .map((l) => ({
-                  url: l.url,
-                  method: l.method,
-                  status: l.status,
-                  error: l.error,
-                })),
+              tinyfishRaw: result.tinyfishRaw,
             },
           });
 
