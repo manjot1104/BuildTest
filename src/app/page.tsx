@@ -4136,39 +4136,64 @@ export default function LandingPage() {
                     className="relative w-full mt-10 md:mt-14"
                 >
                     <div className="max-w-5xl mx-auto">
-                        <div className="relative">
-                            {/* Flow steps — single row on all sizes */}
-                            <div className="flex items-center justify-center w-full">
+                        {/* Desktop flow — spacious 7-column grid */}
+                        <div className="relative hidden md:block">
+                            <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40" />
+                            <div className="grid grid-cols-7 gap-3">
                                 {[
-                                    { icon: MessageSquareText, title: 'AI Chat', short: 'AI' },
-                                    { icon: Palette, title: 'Studio', short: 'Studio' },
-                                    { icon: Code2, title: 'Builder', short: 'Build' },
-                                    { icon: Rocket, title: 'Deploy', short: 'Deploy' },
-                                    { icon: FlaskConical, title: 'Testing', short: 'Test' },
-                                    { icon: ScanEye, title: 'Accessibility', short: 'Access' },
-                                    { icon: Radio, title: 'Live', short: 'Live' },
+                                    { icon: MessageSquareText, title: 'AI Chat' },
+                                    { icon: Palette, title: 'Studio' },
+                                    { icon: Code2, title: 'Builder' },
+                                    { icon: Rocket, title: 'Deploy' },
+                                    { icon: FlaskConical, title: 'Testing' },
+                                    { icon: ScanEye, title: 'Accessibility' },
+                                    { icon: Radio, title: 'Live' },
                                 ].map((step, index) => (
-                                    <div key={step.title} className="flex items-center">
-                                        {/* Step */}
-                                        <div className="flex flex-col items-center gap-0.5 md:gap-0">
-                                            <div className="relative z-10 size-7 sm:size-8 md:size-10 rounded-md sm:rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-                                                <step.icon className="size-3 sm:size-3.5 md:size-4 text-primary/60" />
-                                            </div>
-                                            <span className="mt-0.5 md:mt-2 text-[7px] sm:text-[8px] md:text-[11px] font-medium text-muted-foreground/60 text-center">
-                                                <span className="md:hidden">{step.short}</span>
-                                                <span className="hidden md:inline">{step.title}</span>
-                                            </span>
+                                    <div key={step.title} className="relative flex flex-col items-center">
+                                        <div className="relative z-10 size-12 rounded-xl border border-border/70 bg-background flex items-center justify-center">
+                                            <step.icon className="size-[18px] text-primary/70" />
                                         </div>
-                                        {/* Connector */}
                                         {index < 6 && (
-                                            <div className="flex items-center mx-0.5 sm:mx-1 md:mx-0 -mt-3 md:mt-0">
-                                                <div className="w-2 sm:w-3 md:w-4 h-px bg-muted-foreground/10" />
-                                                <ArrowRight className="size-2 sm:size-2.5 md:size-3 text-muted-foreground/15 -ml-0.5" />
+                                            <div className="absolute top-6 -right-[calc(50%-6px)] flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                                <ArrowRight className="size-3 text-muted-foreground/20" />
                                             </div>
                                         )}
+                                        <span className="mt-3 text-sm font-medium text-foreground/80 text-center">
+                                            {step.title}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* Mobile flow — compact single row */}
+                        <div className="flex items-center justify-center w-full md:hidden">
+                            {[
+                                { icon: MessageSquareText, short: 'AI' },
+                                { icon: Palette, short: 'Studio' },
+                                { icon: Code2, short: 'Build' },
+                                { icon: Rocket, short: 'Deploy' },
+                                { icon: FlaskConical, short: 'Test' },
+                                { icon: ScanEye, short: 'Access' },
+                                { icon: Radio, short: 'Live' },
+                            ].map((step, index) => (
+                                <div key={step.short} className="flex items-center">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <div className="size-7 sm:size-8 rounded-md border border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                                            <step.icon className="size-3 sm:size-3.5 text-primary/60" />
+                                        </div>
+                                        <span className="mt-0.5 text-[7px] sm:text-[8px] font-medium text-muted-foreground/55 text-center">
+                                            {step.short}
+                                        </span>
+                                    </div>
+                                    {index < 6 && (
+                                        <div className="flex items-center mx-0.5 sm:mx-1 -mt-3">
+                                            <div className="w-1.5 sm:w-2.5 h-px bg-border/30" />
+                                            <ArrowRight className="size-1.5 sm:size-2 text-muted-foreground/15 -ml-px" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </motion.div>
