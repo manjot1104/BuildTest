@@ -200,7 +200,7 @@ function RevealText({ children, delay = 0, className = '' }: {
                 variants={slideUp}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={delay}
             >
                 {children}
@@ -215,7 +215,7 @@ function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; dela
             variants={fadeIn}
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-20px' }}
             custom={delay}
             className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70"
         >
@@ -415,7 +415,7 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
                 variants={maskReveal}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={0.15}
                 className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15] cursor-pointer group/video"
                 onClick={onClick}
@@ -565,7 +565,7 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
                 </div>
 
                 {/* Chat body */}
-                <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
+                <div className="p-5 space-y-4 min-h-[220px] sm:min-h-[280px] md:min-h-[320px]">
                     {/* User message bubble — appears after send */}
                     {showBubble && (
                         <motion.div
@@ -814,8 +814,8 @@ function FlowChatToStudioTransition() {
     const lineProgress = useTransform(progress, [0, 1], [0, 100])
 
     return (
-        <section ref={transitionRef} className="relative" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
-            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
+        <section ref={transitionRef} className="relative hidden sm:block" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
+            <div className="sticky top-0 h-screen flex items-center justify-center px-4 sm:px-6 overflow-hidden">
                 {/* Connection line (energy flow) */}
                 <motion.div
                     className="absolute left-1/2 -translate-x-1/2 w-px top-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent pointer-events-none"
@@ -949,7 +949,7 @@ function FlowChatToStudioTransition() {
                             </motion.div>
 
                             {/* 3 Cards */}
-                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-1.5">
+                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                                 {[
                                     { title: 'Web Design', desc: 'Modern responsive interfaces' },
                                     { title: 'Branding', desc: 'Identity and visual systems' },
@@ -1022,7 +1022,7 @@ type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' 
 
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
     const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
     const [cursorVisible, setCursorVisible] = useState(false)
@@ -1221,7 +1221,7 @@ function FlowStudioSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text — top */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -1361,7 +1361,7 @@ function FlowStudioSection() {
                             </motion.div>
 
                             {/* ── Main Editor Area ── */}
-                            <div className="flex relative" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                            <div className="flex relative" style={{ height: 'clamp(260px, 44vw, 520px)' }}>
                                 {/* Animated cursor */}
                                 {cursorVisible && (
                                     <motion.div
@@ -1923,7 +1923,7 @@ function FlowStudioToBuilderTransition() {
     const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Subtle background grid — depth layer */}
             <motion.div
                 style={{ opacity: gridOpacity }}
@@ -1966,13 +1966,13 @@ function FlowStudioToBuilderTransition() {
 
             <div className="max-w-6xl mx-auto px-6 relative">
                 {/* Left side — UI fragments floating toward positions */}
-                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none">
+                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none hidden sm:block">
                     {[...TRANSITION_FRAGMENTS.left, ...TRANSITION_FRAGMENTS.right].map((frag) => (
                         <motion.div
                             key={frag.label}
                             initial={{ opacity: 0, y: 14, scale: 0.92 }}
                             whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
                             className="absolute"
                             style={{ left: frag.x, top: frag.y }}
@@ -1989,7 +1989,7 @@ function FlowStudioToBuilderTransition() {
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-100px' }}
+                    viewport={{ once: true, margin: '-20px' }}
                     transition={{ duration: 0.6 }}
                     className="relative z-10 flex justify-center py-8"
                 >
@@ -2026,7 +2026,7 @@ type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pus
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [step, setStep] = useState<BuildStep | 'idle'>('idle')
     const [codeLines, setCodeLines] = useState(0)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -2106,9 +2106,9 @@ function FlowBuilderSection() {
     }
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Left — Builder card */}
                     <motion.div
                         initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -2130,7 +2130,7 @@ function FlowBuilderSection() {
                                 </div>
 
                                 {/* Card body — content crossfades by step */}
-                                <div className="relative min-h-[320px] md:min-h-[360px]">
+                                <div className="relative min-h-[260px] sm:min-h-[320px] md:min-h-[360px]">
                                     {/* Step 1: Prompt */}
                                     {(step === 'idle' || step === 'prompt') && (
                                         <motion.div
@@ -2426,7 +2426,7 @@ function FlowBuilderToTestingTransition() {
     const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
 
                 {/* Trailing glow — soft, fades quickly */}
@@ -2516,7 +2516,7 @@ const ANALYSIS_ITEMS = [
 
 function FlowTestingSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [phase, setPhase] = useState<TestPhase>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [progress, setProgress] = useState(0)
@@ -2633,7 +2633,7 @@ function FlowTestingSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text header */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -2702,7 +2702,7 @@ function FlowTestingSection() {
 
                             {/* URL Input + Run Tests */}
                             <div className="px-5 py-4 border-b border-border/20">
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <div className={cn(
                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                         phase === 'typing-url' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
@@ -2710,19 +2710,19 @@ function FlowTestingSection() {
                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
                                         <div className="flex-1 min-h-[18px] flex items-center">
                                             {phase !== 'idle' ? (
-                                                <span className="text-[12px] text-foreground/70 font-mono">
+                                                <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono">
                                                     {testUrl.slice(0, urlChars)}
                                                     {phase === 'typing-url' && urlChars < testUrl.length && (
                                                         <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
                                                     )}
                                                 </span>
                                             ) : (
-                                                <span className="text-[12px] text-muted-foreground/30">Enter URL to test...</span>
+                                                <span className="text-[10px] sm:text-[12px] text-muted-foreground/30">Enter URL to test...</span>
                                             )}
                                         </div>
                                     </div>
                                     <button className={cn(
-                                        "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
+                                        "w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-[11px] font-semibold transition-all duration-200 shrink-0",
                                         phase === 'running' || phase === 'analyzing'
                                             ? 'bg-primary/70 text-primary-foreground cursor-wait'
                                             : phase === 'complete' || phase === 'expanding'
@@ -3035,7 +3035,7 @@ function FlowTestingToA11yTransition() {
     const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Background pulse — origin flash from testing completion */}
             <motion.div
                 style={{ opacity: pulseOpacity }}
@@ -3106,7 +3106,7 @@ function FlowTestingToA11yTransition() {
 
 function FlowAccessibilityLiveCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-30px', amount: 0.1 })
     const [step, setStep] = useState<A11yStep>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [visibleLogs, setVisibleLogs] = useState(0)
@@ -3213,9 +3213,9 @@ function FlowAccessibilityLiveCTA() {
     return (
         <>
             {/* ── Accessibility Testing Section ── */}
-            <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+            <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
                 <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                         {/* Left — Static description (NO animations) */}
                         <div>
                             <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
@@ -3272,7 +3272,7 @@ function FlowAccessibilityLiveCTA() {
                                     </div>
 
                                     {/* Card body — steps crossfade */}
-                                    <div className="relative min-h-[370px] md:min-h-[410px]">
+                                    <div className="relative min-h-[300px] sm:min-h-[370px] md:min-h-[410px]">
 
                                         {/* Step 1: URL Input */}
                                         {(step === 'idle' || step === 'typing' || step === 'running') && (
@@ -3283,13 +3283,13 @@ function FlowAccessibilityLiveCTA() {
                                                 className="absolute inset-0 p-5 flex flex-col"
                                             >
                                                 <p className="text-[10px] text-muted-foreground/40 mb-3">Enter a URL to test accessibility</p>
-                                                <div className="flex gap-2 mb-4">
+                                                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                                                     <div className={cn(
                                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                                         step === 'typing' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
                                                     )}>
                                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
-                                                        <span className="text-[12px] text-foreground/70 font-mono flex-1">
+                                                        <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono flex-1">
                                                             {step !== 'idle' ? testUrl.slice(0, urlChars) : ''}
                                                             {step === 'typing' && urlChars < testUrl.length && (
                                                                 <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
@@ -3298,7 +3298,7 @@ function FlowAccessibilityLiveCTA() {
                                                         </span>
                                                     </div>
                                                     <div className={cn(
-                                                        "px-3 py-2.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold transition-all duration-200",
+                                                        "w-full sm:w-auto px-3 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-semibold transition-all duration-200 shrink-0",
                                                         step === 'running'
                                                             ? 'bg-primary/70 text-primary-foreground scale-95'
                                                             : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
@@ -3496,7 +3496,7 @@ type LaunchPhase = 'idle' | 'entering' | 'reveal' | 'scrolling' | 'live' | 'exit
 
 function FlowLaunchCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: true, margin: '-30px', amount: 0.1 })
     const [phase, setPhase] = useState<LaunchPhase>('idle')
     const [scrollY, setScrollY] = useState(0)
     const hasCompleted = useRef(false)
@@ -3603,7 +3603,7 @@ function FlowLaunchCTA() {
                             </div>
 
                             {/* Scrollable viewport */}
-                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(300px, 38vw, 440px)' }}>
+                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(220px, 38vw, 440px)' }}>
                                 <div style={{ transform: `translateY(-${scrollY}px)`, transition: 'transform 0.08s linear' }}>
                                     {/* ── Navbar ── */}
                                     <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 sticky top-0 bg-[#0f1117]/95 backdrop-blur-sm z-10">
@@ -3760,7 +3760,7 @@ function FlowLaunchCTA() {
                             <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/45 mb-5">
                                 The complete platform
                             </p>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
                                 Build, launch, and scale —<br />
                                 <span className="text-muted-foreground/40">all in one place.</span>
                             </h2>
@@ -3806,12 +3806,12 @@ function FlowLaunchCTA() {
 
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 pt-8 sm:pt-10 md:pt-14 pb-10 sm:pb-14 md:pb-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Text — staggered entrance */}
                     <div>
                         <motion.span
@@ -4010,7 +4010,7 @@ export default function LandingPage() {
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-               className="relative flex flex-col items-center justify-center px-6 pt-28 md:pt-36 pb-4 md:pb-6 overflow-hidden"
+               className="relative flex flex-col items-center justify-center px-4 sm:px-6 pt-20 sm:pt-24 md:pt-36 pb-4 md:pb-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />
@@ -4103,12 +4103,12 @@ export default function LandingPage() {
                     {/* Heading */}
                     <div className="space-y-1 mb-4">
                         <RevealText delay={0.4}>
-                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-shimmer">
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-shimmer">
                                 From idea to live
                             </h1>
                         </RevealText>
                         <RevealText delay={0.5}>
-                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
                                 all in one place.
                             </h1>
                         </RevealText>
@@ -4120,7 +4120,7 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.7}
-                        className="text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-8 leading-[1.7]"
+                        className="text-xs sm:text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-6 sm:mb-8 leading-[1.7] px-2 sm:px-0"
                     >
                         Plan, design, build, test, and launch production-ready apps with AI.
                     </motion.p>
@@ -4137,31 +4137,35 @@ export default function LandingPage() {
                 >
                     <div className="max-w-5xl mx-auto">
                         <div className="relative">
-                            <div className="absolute top-5 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40 hidden md:block" />
-                            <div className="absolute top-0 bottom-0 left-5 w-px bg-border/40 md:hidden" />
-
-                            <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-2">
+                            {/* Flow steps — single row on all sizes */}
+                            <div className="flex items-center justify-center w-full">
                                 {[
-                                    { icon: MessageSquareText, title: 'AI Chat' },
-                                    { icon: Palette, title: 'Studio' },
-                                    { icon: Code2, title: 'Builder' },
-                                    { icon: Rocket, title: 'Deploy' },
-                                    { icon: FlaskConical, title: 'Testing' },
-                                    { icon: ScanEye, title: 'Accessibility' },
-                                    { icon: Radio, title: 'Live' },
+                                    { icon: MessageSquareText, title: 'AI Chat', short: 'AI' },
+                                    { icon: Palette, title: 'Studio', short: 'Studio' },
+                                    { icon: Code2, title: 'Builder', short: 'Build' },
+                                    { icon: Rocket, title: 'Deploy', short: 'Deploy' },
+                                    { icon: FlaskConical, title: 'Testing', short: 'Test' },
+                                    { icon: ScanEye, title: 'Accessibility', short: 'Access' },
+                                    { icon: Radio, title: 'Live', short: 'Live' },
                                 ].map((step, index) => (
-                                    <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-3 md:gap-0">
-                                        <div className="relative z-10 size-10 rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm flex items-center justify-center shrink-0">
-                                            <step.icon className="size-4 text-primary/60" />
+                                    <div key={step.title} className="flex items-center">
+                                        {/* Step */}
+                                        <div className="flex flex-col items-center gap-0.5 md:gap-0">
+                                            <div className="relative z-10 size-7 sm:size-8 md:size-10 rounded-md sm:rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                                                <step.icon className="size-3 sm:size-3.5 md:size-4 text-primary/60" />
+                                            </div>
+                                            <span className="mt-0.5 md:mt-2 text-[7px] sm:text-[8px] md:text-[11px] font-medium text-muted-foreground/60 text-center">
+                                                <span className="md:hidden">{step.short}</span>
+                                                <span className="hidden md:inline">{step.title}</span>
+                                            </span>
                                         </div>
+                                        {/* Connector */}
                                         {index < 6 && (
-                                            <div className="absolute top-5 -right-[calc(50%-5px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
-                                                <ArrowRight className="size-3 text-primary/40" />
+                                            <div className="flex items-center mx-0.5 sm:mx-1 md:mx-0 -mt-3 md:mt-0">
+                                                <div className="w-2 sm:w-3 md:w-4 h-px bg-muted-foreground/10" />
+                                                <ArrowRight className="size-2 sm:size-2.5 md:size-3 text-muted-foreground/15 -ml-0.5" />
                                             </div>
                                         )}
-                                        <span className="md:mt-2 text-[11px] font-medium text-muted-foreground/60 text-center">
-                                            {step.title}
-                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -4175,11 +4179,11 @@ export default function LandingPage() {
                     initial="hidden"
                     animate="visible"
                     custom={1.1}
-                    className="mt-10 md:mt-12 flex justify-center"
+                    className="mt-8 sm:mt-10 md:mt-12 flex justify-center px-4 sm:px-0"
                 >
                     <button
                         onClick={() => router.push('/chat')}
-                        className="relative inline-flex items-center gap-2.5 rounded-xl h-12 px-9 text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
+                        className="relative inline-flex items-center gap-2 sm:gap-2.5 rounded-xl h-11 sm:h-12 px-6 sm:px-9 text-xs sm:text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
                     >
                         Start Building
                         <ArrowRight className="size-4 text-white/70" />
@@ -4216,7 +4220,7 @@ export default function LandingPage() {
                                 variants={blurIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={i * 0.15}
                                 className="text-center"
                             >
@@ -4384,7 +4388,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.2}
                         >
                             <div className="flex items-baseline gap-3">
@@ -4399,7 +4403,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-8"
                             >
@@ -4465,7 +4469,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
@@ -4487,7 +4491,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0}
                                             className="feature-index inline-flex items-center gap-3 text-xs font-mono text-muted-foreground/40 mb-4"
                                         >
@@ -4503,7 +4507,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.15}
                                             className="mt-4 text-[15px] text-muted-foreground leading-[1.7]"
                                         >
@@ -4513,7 +4517,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.25}
                                             className="mt-6 space-y-3"
                                         >
@@ -4536,7 +4540,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.45}
                                             className="mt-8"
                                         >
@@ -4655,7 +4659,7 @@ export default function LandingPage() {
                                         variants={blurIn}
                                         initial="hidden"
                                         whileInView="visible"
-                                        viewport={{ once: true, margin: '-60px' }}
+                                        viewport={{ once: true, margin: '-20px' }}
                                         custom={0.2 + i * 0.15}
                                         className="flex gap-5 group"
                                     >
@@ -4671,7 +4675,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-10"
                             >
@@ -4691,7 +4695,7 @@ export default function LandingPage() {
                             variants={scaleIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-100px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="relative"
                         >
@@ -4758,7 +4762,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
@@ -4770,7 +4774,7 @@ export default function LandingPage() {
                         variants={fadeIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.2}
                     >
                         <CommunityBuildsGrid showHeader={false} />
@@ -4795,7 +4799,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-80px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.3}
                         className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
@@ -4805,7 +4809,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.5}
                         className="mt-10"
                     >
