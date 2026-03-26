@@ -24,13 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import type { ResumeTemplate } from './templates'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
+import { ResumeScorePanel, type ResumeScoreData } from './components/resume-score-panel'
 
 // ─── OpenRouter Models ───────────────────────────────────────────────────────
 
@@ -126,7 +127,7 @@ const resumeSchema = z.object({
 
 type ResumeFormData = z.infer<typeof resumeSchema>
 
-type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling'
+type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling' | 'score'
 
 export default function AIResumeBuilderPage() {
   const [currentStep, setCurrentStep] = useState<Step>('format-selection')
@@ -153,6 +154,13 @@ export default function AIResumeBuilderPage() {
     resumeData?: Record<string, string | string[] | undefined>
     jdRequirements?: Record<string, string | string[] | undefined>
   } | null>(null)
+  const [isScoring, setIsScoring] = useState(false)
+  const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null)
+  const [showScore, setShowScore] = useState(false)
+  const [scoreInput, setScoreInput] = useState('')
+  const [scoreFormat, setScoreFormat] = useState<'html' | 'latex' | 'text'>('text')
+  const [scoreFile, setScoreFile] = useState<File | null>(null)
+  const [isExtractingText, setIsExtractingText] = useState(false)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -406,6 +414,49 @@ export default function AIResumeBuilderPage() {
     }
   }
 
+  // Score resume with AI
+  const handleScoreResume = async (codeOverride?: string, formatOverride?: 'html' | 'latex' | 'text') => {
+    const currentCode = codeOverride || (templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode))
+    const currentFormat = formatOverride || templateType
+    if (!currentCode.trim()) {
+      toast.error('No resume code to score')
+      return
+    }
+
+    setIsScoring(true)
+    toast.loading('Analyzing your resume...', { id: 'resume-score' })
+
+    try {
+      const response = await fetch('/api/resume/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: currentCode,
+          format: currentFormat,
+          model: selectedModel,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to score resume' }))
+        throw new Error((error as { error?: string }).error || 'Failed to score resume')
+      }
+
+      const result = await response.json() as { scoring: ResumeScoreData }
+      setScoreData(result.scoring)
+      setShowScore(true)
+      toast.success(`Resume scored: ${result.scoring.score}/100`, { id: 'resume-score' })
+    } catch (error) {
+      console.error('Error scoring resume:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to score resume. Please try again.',
+        { id: 'resume-score' },
+      )
+    } finally {
+      setIsScoring(false)
+    }
+  }
+
   const handleReset = () => {
     setCurrentStep('format-selection')
     setSelectedTemplate(null)
@@ -422,6 +473,10 @@ export default function AIResumeBuilderPage() {
     setResumeFile(null)
     setJdFile(null)
     setParsedData(null)
+    setScoreData(null)
+    setShowScore(false)
+    setScoreFile(null)
+    setScoreInput('')
     form.reset()
   }
 
@@ -635,7 +690,282 @@ export default function AIResumeBuilderPage() {
   if (currentStep === 'format-selection') {
     return (
       <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-        <TemplateSelection onSelect={handleFormatSelect} />
+        <TemplateSelection onSelect={handleFormatSelect} onScoreResume={() => setCurrentStep('score')} />
+      </div>
+    )
+  }
+
+  // Handle file upload for scoring
+  const handleScoreFileUpload = async (file: File) => {
+    setScoreFile(file)
+    setIsExtractingText(true)
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+
+      // For plain text files, read directly
+      if (ext === 'txt') {
+        const text = await file.text()
+        setScoreInput(text)
+        toast.success('Resume text loaded')
+        setIsExtractingText(false)
+        return
+      }
+
+      // For PDF/DOC/DOCX, use the parse-files API to extract text
+      const formData = new FormData()
+      formData.append('resume', file)
+
+      const response = await fetch('/api/resume/parse-files', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to extract text from file')
+      }
+
+      const result = await response.json() as {
+        extractedResumeData?: Record<string, string | string[] | undefined>
+        resumeText?: string
+      }
+
+      // Build readable resume text from parsed data
+      const parts: string[] = []
+      const rd = result.extractedResumeData
+      if (rd) {
+        if (rd.fullName) parts.push(`Name: ${rd.fullName}`)
+        if (rd.title) parts.push(`Title: ${rd.title}`)
+        if (rd.email) parts.push(`Email: ${rd.email}`)
+        if (rd.phone) parts.push(`Phone: ${rd.phone}`)
+        if (rd.location) parts.push(`Location: ${rd.location}`)
+        if (rd.linkedin) parts.push(`LinkedIn: ${rd.linkedin}`)
+        if (rd.github) parts.push(`GitHub: ${rd.github}`)
+        if (rd.portfolio) parts.push(`Portfolio: ${rd.portfolio}`)
+        if (rd.summary) parts.push(`\nSummary:\n${rd.summary}`)
+        if (rd.skills) parts.push(`\nSkills:\n${rd.skills}`)
+        if (rd.experience) parts.push(`\nExperience:\n${rd.experience}`)
+        if (rd.education) parts.push(`\nEducation:\n${rd.education}`)
+        if (rd.projects) parts.push(`\nProjects:\n${rd.projects}`)
+        if (rd.certifications) {
+          const certs = Array.isArray(rd.certifications) ? rd.certifications.join('\n') : rd.certifications
+          parts.push(`\nCertifications:\n${certs}`)
+        }
+        if (rd.achievements) {
+          const achs = Array.isArray(rd.achievements) ? rd.achievements.join('\n') : rd.achievements
+          parts.push(`\nAchievements:\n${achs}`)
+        }
+      }
+
+      const extractedText = parts.length > 3 ? parts.join('\n') : (result.resumeText || '')
+
+      if (extractedText.trim()) {
+        setScoreInput(extractedText)
+        toast.success('Resume text extracted successfully')
+      } else {
+        toast.error('Could not extract text from file. Try pasting your resume text directly.')
+      }
+    } catch (error) {
+      console.error('Error extracting text:', error)
+      toast.error('Failed to read file. Try pasting your resume text directly.')
+    } finally {
+      setIsExtractingText(false)
+    }
+  }
+
+  // Show score step
+  if (currentStep === 'score') {
+    return (
+      <div className="container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <button
+                onClick={() => { setCurrentStep('format-selection'); setScoreData(null); setShowScore(false); setScoreInput(''); setScoreFile(null) }}
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Score Your Resume</h1>
+                  <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 ring-1 ring-emerald-500/20 dark:text-emerald-400">
+                    AI Review
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Upload your resume or paste text for a FAANG-level AI analysis with detailed scoring.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* AI Model Selection */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <Settings2 className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">AI Model</span>
+              </div>
+              <div className="p-4">
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="h-9 max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESUME_MODELS.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name} <span className="text-muted-foreground">— {model.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <Upload className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Upload Resume</span>
+              </div>
+              <div className="p-4">
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleScoreFileUpload(file)
+                    }}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    disabled={isExtractingText || isScoring}
+                  />
+                  <div className={cn(
+                    "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border/60 bg-muted/10 px-6 py-8 text-center transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5",
+                    isExtractingText && "pointer-events-none opacity-60"
+                  )}>
+                    {isExtractingText ? (
+                      <>
+                        <Loader2 className="size-8 animate-spin text-emerald-500" />
+                        <div>
+                          <p className="text-sm font-medium">Extracting text...</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Reading your resume file</p>
+                        </div>
+                      </>
+                    ) : scoreFile ? (
+                      <>
+                        <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                          <FileCheck className="size-5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{scoreFile.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {(scoreFile.size / 1024).toFixed(1)} KB — Click or drop to replace
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex size-12 items-center justify-center rounded-xl bg-muted ring-1 ring-border/60">
+                          <Upload className="size-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Drop your resume here or click to browse</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Supports PDF, DOC, DOCX, TXT
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border/60" />
+              <span className="text-xs font-medium text-muted-foreground">OR</span>
+              <div className="h-px flex-1 bg-border/60" />
+            </div>
+
+            {/* Text Paste */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Paste Resume Text</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {scoreInput.trim() && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {scoreInput.length.toLocaleString()} chars
+                    </span>
+                  )}
+                  {scoreInput.trim() && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 text-xs text-muted-foreground"
+                      onClick={() => { setScoreInput(''); setScoreFile(null) }}
+                    >
+                      <X className="size-3" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <Textarea
+                value={scoreInput}
+                onChange={(e) => setScoreInput(e.target.value)}
+                className={cn(
+                  "min-h-[200px] text-sm leading-relaxed sm:min-h-[280px]",
+                  "resize-none border-0 rounded-none focus-visible:ring-0"
+                )}
+                placeholder={"Paste your resume content here...\n\nExample:\nJohn Doe\nSoftware Engineer\njohn@email.com | (555) 123-4567\n\nSummary:\nExperienced software engineer with 5+ years...\n\nExperience:\nSenior Engineer at Google (2021-Present)\n• Built scalable microservices...\n• Led team of 8 engineers..."}
+              />
+            </div>
+
+            {/* Score Button */}
+            <div className="flex items-center justify-between gap-4">
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                Analyzed across 6 categories: ATS Compatibility, Content Quality, Impact &amp; Metrics, Keywords, Readability, Experience Strength.
+              </p>
+              <Button
+                onClick={() => void handleScoreResume(scoreInput, scoreFormat)}
+                disabled={isScoring || isExtractingText || !scoreInput.trim()}
+                size="lg"
+                className="gap-2"
+              >
+                {isScoring ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Target className="size-4" />
+                    Score My Resume
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Score Results */}
+            {showScore && scoreData && (
+              <ResumeScorePanel
+                data={scoreData}
+                onClose={() => setShowScore(false)}
+              />
+            )}
+          </div>
+        </motion.div>
       </div>
     )
   }
@@ -702,6 +1032,25 @@ export default function AIResumeBuilderPage() {
               >
                 <Copy className="size-3.5" />
                 <span className="hidden xs:inline">Copy</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleScoreResume()}
+                disabled={isScoring || (templateType === 'latex' ? !editedLatex.trim() : !editedHtml.trim())}
+                className="gap-1.5"
+              >
+                {isScoring ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span className="hidden xs:inline">Scoring...</span>
+                  </>
+                ) : (
+                  <>
+                    <Target className="size-3.5" />
+                    <span className="hidden xs:inline">Score</span>
+                  </>
+                )}
               </Button>
               <Button
                 onClick={onCompilePDF}
@@ -857,6 +1206,14 @@ export default function AIResumeBuilderPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Resume Score Panel */}
+            {showScore && scoreData && (
+              <ResumeScorePanel
+                data={scoreData}
+                onClose={() => setShowScore(false)}
+              />
+            )}
 
             {/* Bottom Actions */}
             <div className="flex flex-col-reverse items-start gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import {
   Dialog,
@@ -20,17 +20,33 @@ interface PublishDialogProps {
   designId?: string
   /** Called before publishing to ensure latest state is saved to DB */
   onBeforePublish?: () => Promise<void>
+  /** Pre-populate slug for already-published designs */
+  initialSlug?: string
+  /** Pre-populate title */
+  initialTitle?: string
+  /** Called after successful publish with the new slug */
+  onPublished?: (slug: string) => void
 }
 
 type PublishState = 'idle' | 'publishing' | 'done' | 'error'
 
-export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }: PublishDialogProps) {
-  const [slug, setSlug] = useState('')
-  const [title, setTitle] = useState('Untitled')
+export function PublishDialog({ open, onOpenChange, designId, onBeforePublish, initialSlug, initialTitle, onPublished }: PublishDialogProps) {
+  const [slug, setSlug] = useState(initialSlug ?? '')
+  const [title, setTitle] = useState(initialTitle ?? 'Untitled')
   const [state, setState] = useState<PublishState>('idle')
   const [publishedUrl, setPublishedUrl] = useState('')
   const [copied, setCopied] = useState(false)
   const [errorMsg, setErrorMsg] = useState('')
+
+  // Sync initial values when dialog opens or props change
+  useEffect(() => {
+    if (open) {
+      if (state === 'idle') {
+        setSlug(initialSlug ?? '')
+        setTitle(initialTitle ?? 'Untitled')
+      }
+    }
+  }, [open, initialSlug, initialTitle, state])
 
   const handlePublish = async () => {
     if (!designId) {
@@ -59,11 +75,15 @@ export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }:
       if (res.status === 409) {
         throw new Error('That slug is already taken. Try another.')
       }
+      if (res.status === 404) {
+        throw new Error('Design not found. Please save your draft first.')
+      }
       if (!res.ok) throw new Error('Failed to publish')
 
       const url = `${window.location.origin}/p/${cleanSlug}`
       setPublishedUrl(url)
       setState('done')
+      onPublished?.(cleanSlug)
     } catch (err) {
       setState('error')
       setErrorMsg(err instanceof Error ? err.message : 'Something went wrong')
@@ -80,7 +100,6 @@ export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }:
     if (state !== 'publishing') {
       onOpenChange(false)
       setState('idle')
-      setSlug('')
       setPublishedUrl('')
       setErrorMsg('')
     }
@@ -90,9 +109,11 @@ export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }:
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Publish Your Design</DialogTitle>
+          <DialogTitle>{initialSlug ? 'Update Published Page' : 'Publish Your Design'}</DialogTitle>
           <DialogDescription>
-            Choose a URL slug for your published page.
+            {initialSlug
+              ? 'Update your published page URL or title.'
+              : 'Choose a URL slug for your published page.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -185,6 +206,8 @@ export function PublishDialog({ open, onOpenChange, designId, onBeforePublish }:
                     <Loader2 className="mr-2 size-4 animate-spin" />
                     Publishing…
                   </>
+                ) : initialSlug ? (
+                  'Update & Publish'
                 ) : (
                   'Publish'
                 )}

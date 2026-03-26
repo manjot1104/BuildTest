@@ -214,6 +214,17 @@ function reducer(state: EditorState, action: EditorAction): EditorState {
       return { ...state, canvasBackground: action.background, isDirty: true }
     case 'SET_GRID':
       return { ...state, grid: action.grid }
+    case 'ADD_ELEMENTS': {
+      const newState = pushToHistory(state)
+      return {
+        ...newState,
+        elements: [...newState.elements, ...action.elements],
+        selectedIds: action.elements.map((el) => el.id),
+        isDirty: true,
+      }
+    }
+    case 'SET_THEME':
+      return { ...state, themeId: action.themeId }
     default:
       return state
   }
@@ -239,6 +250,7 @@ const initialState: EditorState = {
     imageUrl: '',
   },
   grid: { enabled: false, snap: false, size: 16 },
+  themeId: 'dark-indigo',
 }
 
 export function useEditor() {
@@ -251,7 +263,7 @@ export function useEditor() {
 
       type Defaults = Partial<CanvasElement>
 
-      const defaults: Record<CanvasElement['type'], Defaults> = {
+   const defaults: Partial<Record<CanvasElement['type'], Defaults>> = {
         heading: {
           width: 500,
           height: 80,
@@ -375,7 +387,7 @@ export function useEditor() {
         },
       }
 
-      const def = defaults[type]!
+      const def = defaults[type] ?? {}
       let sectionKey: string | undefined
 
 if (type === 'section') {
@@ -411,6 +423,761 @@ if (type === 'section') {
       })
     },
     [state.elements.length],
+  )
+
+  const addTemplateBlock = useCallback(
+    (templateType: 'testimonial' | 'pricing' | 'hero' | 'stats' | 'feature') => {
+      const baseX = 100 + Math.random() * 60
+      const baseY = 80 + Math.random() * 60
+      const maxZ = Math.max(...state.elements.map((e) => e.zIndex), 0)
+
+      type BlockElement = Omit<CanvasElement, 'id' | 'zIndex' | 'link' | 'enterAnimation' | 'hoverAnimation' | 'locked' | 'hidden'>
+
+      // Block template definitions
+      const templates: Record<'testimonial' | 'pricing' | 'hero' | 'stats' | 'feature' | 'faq' | 'alert', BlockElement[]> = {
+        testimonial: [
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 420,
+            height: 280,
+            content: 'testimonials',
+            sectionKey: 'testimonials',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#0f172a',
+              gradientTo: '#1e1b4b',
+              gradientAngle: 145,
+              borderRadius: 20,
+              border: '1px solid rgba(139,92,246,0.25)',
+            },
+          } as BlockElement,
+          // Decorative quote mark
+          {
+  type: 'heading',
+  x: baseX + 24,
+  y: baseY + 24,
+  width: 60,
+  height: 52,
+  content: '\u201c',
+  headingLevel: 1,
+  styles: { fontSize: 64, fontWeight: '700', color: '#6366f1', lineHeight: 1 },
+} as BlockElement,
+         
+          // Quote text
+          {
+            type: 'paragraph',
+            x: baseX + 28,
+        y: baseY + 76,
+            width: 364,
+            height: 80,
+       content: 'This tool completely transformed how I build websites. It made my workflow much faster and more efficient while maintaining great quality.',
+            styles: { fontSize: 15, color: '#e2e8f0', lineHeight: 1.7 },
+          } as BlockElement,
+       // Avatar
+          {
+            type: 'image',
+            x: baseX + 28,
+            y: baseY + 216,
+            width: 36,
+            height: 36,
+            content: 'https://placehold.co/36x36/6366f1/ffffff?text=SA',
+            styles: { borderRadius: 18, objectFit: 'cover' },
+          } as BlockElement,
+          // Name
+          {
+            type: 'heading',
+            x: baseX + 74,
+            y: baseY + 218,
+            width: 180,
+            height: 20,
+            content: 'Sarah Anderson',
+            headingLevel: 3,
+            styles: { fontSize: 13, fontWeight: '600', color: '#f1f5f9' },
+          } as BlockElement,
+          // Role
+          {
+            type: 'paragraph',
+            x: baseX + 74,
+            y: baseY + 238,
+            width: 180,
+            height: 18,
+            content: 'Product Designer, Vercel',
+            styles: { fontSize: 11, color: '#818cf8' },
+          } as BlockElement,
+          // Stars — all inside card width (420), starting from right
+          {
+            type: 'icon',
+            x: baseX + 304,
+            y: baseY + 220,
+            width: 20,
+            height: 20,
+            content: 'star',
+            iconName: 'star',
+            styles: { iconSize: 16, iconColor: '#f59e0b' },
+          } as BlockElement,
+          {
+            type: 'icon',
+            x: baseX + 324,
+            y: baseY + 220,
+            width: 20,
+            height: 20,
+            content: 'star',
+            iconName: 'star',
+            styles: { iconSize: 16, iconColor: '#f59e0b' },
+          } as BlockElement,
+          {
+            type: 'icon',
+            x: baseX + 344,
+            y: baseY + 220,
+            width: 20,
+            height: 20,
+            content: 'star',
+            iconName: 'star',
+            styles: { iconSize: 16, iconColor: '#f59e0b' },
+          } as BlockElement,
+          {
+            type: 'icon',
+            x: baseX + 364,
+            y: baseY + 220,
+            width: 20,
+            height: 20,
+            content: 'star',
+            iconName: 'star',
+            styles: { iconSize: 16, iconColor: '#f59e0b' },
+          } as BlockElement,
+          {
+            type: 'icon',
+            x: baseX + 384,
+            y: baseY + 220,
+            width: 20,
+            height: 20,
+            content: 'star',
+            iconName: 'star',
+            styles: { iconSize: 16, iconColor: '#f59e0b' },
+          } as BlockElement,
+        ],
+
+
+        pricing: [
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 360,
+            height: 420,
+            content: 'pricing',
+            sectionKey: 'pricing',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#0f172a',
+              gradientTo: '#0c0a1e',
+              gradientAngle: 160,
+              borderRadius: 20,
+              border: '1px solid rgba(99,102,241,0.35)',
+            },
+          } as BlockElement,
+          // "Most Popular" badge
+          {
+            type: 'button',
+            x: baseX + 110,
+            y: baseY + 24,
+            width: 140,
+            height: 28,
+            content: '★ Most Popular',
+            styles: {
+              backgroundColor: '#6366f1',
+              color: '#ffffff',
+              fontSize: 11,
+              fontWeight: '700',
+              borderRadius: 20,
+              letterSpacing: 0.5,
+            },
+          } as BlockElement,
+          // Plan name
+          {
+            type: 'heading',
+            x: baseX + 32,
+            y: baseY + 68,
+            width: 296,
+            height: 36,
+            content: 'Pro Plan',
+            headingLevel: 2,
+            styles: { fontSize: 22, fontWeight: '700', color: '#f1f5f9', letterSpacing: -0.3 },
+          } as BlockElement,
+         // Price — big number
+{
+  type: 'heading',
+  x: baseX + 32,
+  y: baseY + 112,
+  width: 160,
+  height: 60,
+  content: '$29',
+  headingLevel: 3,
+  styles: { fontSize: 44, fontWeight: '700', color: '#ffffff', letterSpacing: -1 },
+} as BlockElement,
+// Price suffix — small
+{
+  type: 'paragraph',
+  x: baseX + 110,
+  y: baseY + 132,
+  width: 80,
+  height: 24,
+  content: '/month',
+  styles: { fontSize: 13, color: '#94a3b8', fontWeight: '500' },
+} as BlockElement,
+          // Divider
+          {
+            type: 'divider',
+            x: baseX + 32,
+            y: baseY + 182,
+            width: 296,
+            height: 1,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.08)' },
+          } as BlockElement,
+          // Feature rows
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 202,
+            width: 296,
+            height: 26,
+            content: '✦  Unlimited projects',
+            styles: { fontSize: 14, color: '#cbd5e1' },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 232,
+            width: 296,
+            height: 26,
+            content: '✦  Advanced analytics',
+            styles: { fontSize: 14, color: '#cbd5e1' },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 262,
+            width: 296,
+            height: 26,
+            content: '✦  Priority support 24/7',
+            styles: { fontSize: 14, color: '#cbd5e1' },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 292,
+            width: 296,
+            height: 26,
+            content: '✦  Custom integrations',
+            styles: { fontSize: 14, color: '#cbd5e1' },
+          } as BlockElement,
+          // CTA Button
+          {
+            type: 'button',
+            x: baseX + 32,
+            y: baseY + 348,
+            width: 296,
+            height: 50,
+            content: 'Get Started →',
+            styles: {
+              backgroundColor: '#6366f1',
+              color: '#ffffff',
+              fontSize: 16,
+              fontWeight: '700',
+              borderRadius: 14,
+              letterSpacing: 0.3,
+            },
+          } as BlockElement,
+        ],
+        hero: [
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 600,
+         height: 340,   
+            content: 'hero',  
+  sectionKey: 'hero',  
+            styles: {
+              backgroundColor: '#0f172a',
+              borderRadius: 12,
+              padding: 60,
+            },
+          } as BlockElement,
+          {
+            type: 'heading',
+            x: baseX + 60,
+            y: baseY + 60,
+            width: 480,
+             height: 110, 
+            content: 'Build Amazing Websites',
+            headingLevel: 1,
+            styles: { fontSize: 48, fontWeight: '700', color: '#ffffff' },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 60,
+          y: baseY + 185,
+            width: 480,
+            height: 60,
+            content: 'Create beautiful landing pages and websites without writing a single line of code.',
+            styles: { fontSize: 18, color: '#cbd5e1', lineHeight: 1.6 },
+          } as BlockElement,
+          {
+            type: 'button',
+            x: baseX + 60,
+            y: baseY + 265,   
+            width: 140,
+            height: 48,
+            content: 'Get Started',
+            styles: {
+              backgroundColor: '#3b82f6',
+              color: '#ffffff',
+              fontSize: 16,
+              fontWeight: '600',
+              borderRadius: 8,
+            },
+          } as BlockElement,
+          {
+            type: 'button',
+            x: baseX + 220,
+            y: baseY + 265,
+            width: 140,
+            height: 48,
+            content: 'Learn More',
+            styles: {
+              backgroundColor: 'transparent',
+              color: '#3b82f6',
+              border: '2px solid #3b82f6',
+              fontSize: 16,
+              fontWeight: '600',
+              borderRadius: 8,
+            },
+          } as BlockElement,
+        ],
+        stats: [
+          // Background section — dark with subtle gradient
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 620,
+            height: 180,
+            content: 'stats',
+            sectionKey: 'stats',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#0f172a',
+              gradientTo: '#1e1b4b',
+              gradientAngle: 135,
+              borderRadius: 20,
+              border: '1px solid rgba(99,102,241,0.2)',
+            },
+          } as BlockElement,
+          // Divider line 1
+          {
+            type: 'divider',
+            x: baseX + 206,
+            y: baseY + 40,
+            width: 1,
+            height: 100,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.08)' },
+          } as BlockElement,
+          // Divider line 2
+          {
+            type: 'divider',
+            x: baseX + 413,
+            y: baseY + 40,
+            width: 1,
+            height: 100,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.08)' },
+          } as BlockElement,
+          // Stat 1 number
+          {
+            type: 'heading',
+            x: baseX + 40,
+            y: baseY + 38,
+            width: 126,
+            height: 56,
+            content: '10M+',
+            headingLevel: 3,
+            styles: { fontSize: 38, fontWeight: '700', color: '#a5b4fc', letterSpacing: -1 },
+          } as BlockElement,
+          // Stat 1 label
+          {
+            type: 'paragraph',
+            x: baseX + 40,
+            y: baseY + 102,
+            width: 126,
+            height: 22,
+            content: 'Users worldwide',
+            styles: { fontSize: 13, color: '#64748b', letterSpacing: 0.2 },
+          } as BlockElement,
+          // Stat 2 number
+          {
+            type: 'heading',
+            x: baseX + 247,
+            y: baseY + 38,
+            width: 126,
+            height: 56,
+            content: '99.9%',
+            headingLevel: 3,
+            styles: { fontSize: 38, fontWeight: '700', color: '#a5b4fc', letterSpacing: -1 },
+          } as BlockElement,
+          // Stat 2 label
+          {
+            type: 'paragraph',
+            x: baseX + 247,
+            y: baseY + 102,
+            width: 126,
+            height: 22,
+            content: 'Uptime SLA',
+            styles: { fontSize: 13, color: '#64748b', letterSpacing: 0.2 },
+          } as BlockElement,
+          // Stat 3 number
+          {
+            type: 'heading',
+            x: baseX + 453,
+            y: baseY + 38,
+            width: 126,
+            height: 56,
+            content: '24/7',
+            headingLevel: 3,
+            styles: { fontSize: 38, fontWeight: '700', color: '#a5b4fc', letterSpacing: -1 },
+          } as BlockElement,
+          // Stat 3 label
+          {
+            type: 'paragraph',
+            x: baseX + 453,
+            y: baseY + 102,
+            width: 126,
+            height: 22,
+            content: 'Expert support',
+            styles: { fontSize: 13, color: '#64748b', letterSpacing: 0.2 },
+          } as BlockElement,
+        ],
+        feature: [
+          // Card — dark glass with colored border
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 300,
+            height: 300,
+            content: 'features',
+            sectionKey: 'features',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#0f172a',
+              gradientTo: '#111827',
+              gradientAngle: 145,
+              borderRadius: 20,
+              border: '1px solid rgba(99,102,241,0.25)',
+            },
+          } as BlockElement,
+          // Icon container pill
+          {
+            type: 'button',
+            x: baseX + 24,
+            y: baseY + 28,
+            width: 52,
+            height: 52,
+            content: '⚡',
+            styles: {
+              backgroundColor: 'rgba(99,102,241,0.2)',
+              border: '1px solid rgba(99,102,241,0.4)',
+              borderRadius: 14,
+              fontSize: 24,
+              color: '#a5b4fc',
+            },
+          } as BlockElement,
+          // Category tag
+          {
+            type: 'button',
+            x: baseX + 88,
+            y: baseY + 40,
+            width: 90,
+            height: 22,
+            content: 'Performance',
+            styles: {
+              backgroundColor: 'rgba(99,102,241,0.12)',
+              color: '#818cf8',
+              fontSize: 10,
+              fontWeight: '600',
+              borderRadius: 20,
+              border: '1px solid rgba(99,102,241,0.25)',
+              letterSpacing: 0.5,
+            },
+          } as BlockElement,
+          // Heading
+          {
+            type: 'heading',
+            x: baseX + 24,
+            y: baseY + 100,
+            width: 252,
+            height: 40,
+            content: 'Lightning Fast',
+            headingLevel: 3,
+            styles: { fontSize: 22, fontWeight: '700', color: '#f1f5f9', letterSpacing: -0.3 },
+          } as BlockElement,
+
+          // Description
+          {
+            type: 'paragraph',
+            x: baseX + 24,
+            y: baseY + 150,
+            width: 252,
+            height: 90,
+            content: 'Experience blazing fast load times and smooth interactions. Our platform is built for peak performance.',
+            styles: { fontSize: 14, color: '#64748b', lineHeight: 1.7 },
+          } as BlockElement,
+          // Arrow link
+          {
+            type: 'paragraph',
+            x: baseX + 24,
+            y: baseY + 258,
+            width: 160,
+            height: 22,
+            content: 'Learn more →',
+            styles: { fontSize: 13, color: '#6366f1', fontWeight: '600', letterSpacing: 0.2 },
+          } as BlockElement,
+        ],
+        faq: [
+          // Card background
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 540,
+            height: 430,
+            content: 'faq',
+            sectionKey: 'faq',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#0f172a',
+              gradientTo: '#111827',
+              gradientAngle: 150,
+              borderRadius: 20,
+              border: '1px solid rgba(255,255,255,0.07)',
+            },
+          } as BlockElement,
+          // Section label badge
+          {
+            type: 'button',
+            x: baseX + 32,
+            y: baseY + 28,
+            width: 60,
+            height: 22,
+            content: 'FAQ',
+            styles: {
+              backgroundColor: 'rgba(99,102,241,0.15)',
+              color: '#818cf8',
+              fontSize: 10,
+              fontWeight: '700',
+              borderRadius: 20,
+              border: '1px solid rgba(99,102,241,0.3)',
+              letterSpacing: 1,
+            },
+          } as BlockElement,
+          // Main heading
+          {
+            type: 'heading',
+            x: baseX + 32,
+            y: baseY + 60,
+            width: 476,
+            height: 40,
+            content: 'Frequently Asked Questions',
+            headingLevel: 2,
+            styles: { fontSize: 24, fontWeight: '700', color: '#f1f5f9', letterSpacing: -0.3 },
+          } as BlockElement,
+          // Divider top
+          {
+            type: 'divider',
+            x: baseX + 32,
+            y: baseY + 112,
+            width: 476,
+            height: 1,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.07)' },
+          } as BlockElement,
+          // Q1
+          {
+            type: 'heading',
+            x: baseX + 32,
+            y: baseY + 126,
+            width: 440,
+            height: 28,
+            content: 'What is this product?',
+            headingLevel: 3,
+            styles: { fontSize: 15, fontWeight: '600', color: '#e2e8f0', letterSpacing: 0.1 },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 160,
+            width: 476,
+            height: 40,
+            content: 'A powerful no-code builder designed to help you create stunning websites with ease.',
+            styles: { fontSize: 13, color: '#64748b', lineHeight: 1.65 },
+          } as BlockElement,
+          // Divider
+          {
+            type: 'divider',
+            x: baseX + 32,
+            y: baseY + 210,
+            width: 476,
+            height: 1,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.07)' },
+          } as BlockElement,
+          // Q2
+          {
+            type: 'heading',
+            x: baseX + 32,
+            y: baseY + 224,
+            width: 440,
+            height: 28,
+            content: 'How do I get started?',
+            headingLevel: 3,
+            styles: { fontSize: 15, fontWeight: '600', color: '#e2e8f0', letterSpacing: 0.1 },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 258,
+            width: 476,
+            height: 40,
+            content: 'Sign up, pick a template, and start building. Our intuitive interface guides you through every step.',
+            styles: { fontSize: 13, color: '#64748b', lineHeight: 1.65 },
+          } as BlockElement,
+          // Divider
+          {
+            type: 'divider',
+            x: baseX + 32,
+            y: baseY + 308,
+            width: 476,
+            height: 1,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.07)' },
+          } as BlockElement,
+          // Q3
+          {
+            type: 'heading',
+            x: baseX + 32,
+            y: baseY + 322,
+            width: 440,
+            height: 28,
+            content: 'Is there support available?',
+            headingLevel: 3,
+            styles: { fontSize: 15, fontWeight: '600', color: '#e2e8f0', letterSpacing: 0.1 },
+          } as BlockElement,
+          {
+            type: 'paragraph',
+            x: baseX + 32,
+            y: baseY + 356,
+            width: 476,
+            height: 40,
+            content: 'Yes! We offer 24/7 live chat and email support. Our team typically responds within minutes.',
+            styles: { fontSize: 13, color: '#64748b', lineHeight: 1.65 },
+          } as BlockElement,
+          // Bottom divider
+          {
+            type: 'divider',
+            x: baseX + 32,
+            y: baseY + 406,
+            width: 476,
+            height: 1,
+            content: '',
+            styles: { backgroundColor: 'rgba(255,255,255,0.07)' },
+          } as BlockElement,
+        ],
+        alert: [
+          // Alert background — amber/warning dark style
+          {
+            type: 'section',
+            x: baseX,
+            y: baseY,
+            width: 580,
+            height: 88,
+            content: 'alert',
+            sectionKey: 'alert',
+            styles: {
+              gradientType: 'linear',
+              gradientFrom: '#1c1407',
+              gradientTo: '#1f1a08',
+              gradientAngle: 135,
+              borderRadius: 14,
+              border: '1px solid rgba(245,158,11,0.35)',
+            },
+          } as BlockElement,
+          // Icon badge
+          {
+            type: 'button',
+            x: baseX + 20,
+            y: baseY + 22,
+            width: 42,
+            height: 42,
+            content: '⚠',
+            styles: {
+              backgroundColor: 'rgba(245,158,11,0.15)',
+              border: '1px solid rgba(245,158,11,0.3)',
+              borderRadius: 10,
+              fontSize: 18,
+              color: '#f59e0b',
+            },
+          } as BlockElement,
+          // Title
+          {
+            type: 'heading',
+            x: baseX + 76,
+            y: baseY + 18,
+            width: 480,
+            height: 26,
+            content: 'Important Notice',
+            headingLevel: 3,
+            styles: { fontSize: 15, fontWeight: '700', color: '#fcd34d', letterSpacing: 0.1 },
+          } as BlockElement,
+          // Body
+          {
+            type: 'paragraph',
+            x: baseX + 76,
+            y: baseY + 48,
+            width: 460,
+            height: 24,
+            content: 'This is an important message that requires your immediate attention.',
+            styles: { fontSize: 13, color: '#92400e', letterSpacing: 0.1 },
+          } as BlockElement,
+        ],
+      }
+
+    const blockElements = templates[templateType]
+const templateBlockId = crypto.randomUUID()   
+const elements = blockElements.map((el, idx) => ({
+  ...el,
+  id: crypto.randomUUID(),
+  templateBlockId,                           
+  link: { enabled: false, href: '', target: '_self' as const },
+  enterAnimation: 'none' as const,
+  hoverAnimation: 'none' as const,
+  zIndex: maxZ + idx + 1,
+  locked: false,
+  hidden: false,
+  sectionKey: el.sectionKey,
+}))
+
+      elements.forEach((el) => {
+        dispatch({
+          type: 'ADD_ELEMENT',
+          element: el,
+        })
+      })
+    },
+    [state.elements],
   )
 
   const updateElement = useCallback(
@@ -453,6 +1220,16 @@ if (type === 'section') {
       const el = state.elements.find((e) => e.id === id)
       if (!el) return
 
+      // Content, formFields, socialLinks, iconName are NOT device-specific —
+      // they should always update the base element regardless of device.
+      const baseUpdates: Partial<CanvasElement> = {}
+      if (updates.content !== undefined) baseUpdates.content = updates.content
+      if (updates.formFields !== undefined) baseUpdates.formFields = updates.formFields
+      if (updates.socialLinks !== undefined) baseUpdates.socialLinks = updates.socialLinks
+      if (updates.iconName !== undefined) baseUpdates.iconName = updates.iconName
+      if (updates.headingLevel !== undefined) baseUpdates.headingLevel = updates.headingLevel
+      if (updates.link !== undefined) baseUpdates.link = updates.link
+
       const override: ResponsiveOverride = {}
       if (updates.x !== undefined) override.x = updates.x
       if (updates.y !== undefined) override.y = updates.y
@@ -462,16 +1239,25 @@ if (type === 'section') {
       if (updates.styles) {
         override.styles = { ...(el.responsiveStyles?.[device]?.styles ?? {}), ...updates.styles }
       }
+      // Mark as manually positioned when user explicitly sets position/size
+      if (updates.x !== undefined || updates.y !== undefined || updates.width !== undefined || updates.height !== undefined) {
+        override.manuallyPositioned = true
+      }
 
-      const newResponsive = {
+      // Only add responsive overrides if there are actual responsive changes
+      const hasResponsiveChanges = Object.keys(override).length > 0
+      const newResponsive = hasResponsiveChanges ? {
         ...el.responsiveStyles,
         [device]: { ...(el.responsiveStyles?.[device] ?? {}), ...override },
-      }
+      } : el.responsiveStyles
 
       dispatch({
         type: skipHistory ? 'UPDATE_ELEMENT_NO_HISTORY' : 'UPDATE_ELEMENT',
         id,
-        updates: { responsiveStyles: newResponsive },
+        updates: {
+          ...baseUpdates,
+          ...(hasResponsiveChanges ? { responsiveStyles: newResponsive } : {}),
+        },
       })
     },
     [state.device.preset, state.elements],
@@ -547,6 +1333,44 @@ if (type === 'section') {
     dispatch({ type: 'SET_GRID', grid })
   }, [])
 
+  const setTheme = useCallback((themeId: string) => {
+    dispatch({ type: 'SET_THEME', themeId })
+  }, [])
+
+  const addBlock = useCallback(
+    (blockId: string) => {
+      const { BLOCKS } = require('./blocks') as typeof import('./blocks')
+      const { getThemeById } = require('./themes') as typeof import('./themes')
+
+      const block = BLOCKS.find((b: { id: string }) => b.id === blockId)
+      if (!block) return
+
+      const theme = getThemeById(state.themeId)
+      const maxZ = Math.max(...state.elements.map((e) => e.zIndex), 0)
+
+      // Smart insert: stack below existing content
+      const bottomY = state.elements.length > 0
+        ? Math.max(...state.elements.map((e) => e.y + e.height))
+        : 0
+      const startY = bottomY
+
+      const canvasWidth = state.device.width
+      const elements = block.create(startY, canvasWidth, theme)
+
+      const templateBlockId = crypto.randomUUID()
+      const finalized = elements.map((el: CanvasElement, idx: number) => ({
+        ...el,
+        templateBlockId,
+        zIndex: maxZ + idx + 1,
+        locked: false,
+        hidden: false,
+      }))
+
+      dispatch({ type: 'ADD_ELEMENTS', elements: finalized })
+    },
+    [state.elements, state.device.width, state.themeId],
+  )
+
   const canUndo = state.historyIndex > 0
   const canRedo = state.historyIndex < state.history.length - 1
   const selectedElement =
@@ -566,6 +1390,7 @@ if (type === 'section') {
     updateElement,
     updateElementResponsive,
     deleteElement,
+    addTemplateBlock,
     deleteSelected,
     selectElement,
     selectElements,
@@ -583,6 +1408,8 @@ if (type === 'section') {
     setDevice,
     setCanvasBackground,
     setGrid,
+    setTheme,
+    addBlock,
     dispatch,
   }
 }

@@ -60,13 +60,13 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <div class="header">
 <div class="header-left"><h1>NAME</h1><div class="title">Senior Software Engineer</div></div>
 <div class="header-right">email<br>phone<br>location<br>linkedin.com/in/name</div>
-</div>
+  </div>
 <h2>Summary</h2>
 <p>Engineering leader with 8+ years building and scaling high-impact platforms. Managed teams of 10+ engineers delivering products serving millions of users. Proven track record of driving 40%+ efficiency improvements at FAANG companies.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 engineering teams, implementing automated canary deployments and distributed tracing that improved incident response time from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime, reducing infrastructure costs by 35% through Kafka-based event-driven architecture and gRPC service mesh</li><li>Mentored 8 junior engineers through structured design reviews, resulting in 3 promotions to senior within 18 months and 25% improvement in team velocity</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual transaction volume with idempotent retry mechanisms and distributed coordination achieving 99.99% reliability</li><li>Reduced API response latency by 45% through systematic query optimization, materialized views, and multi-tier caching</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
@@ -118,13 +118,13 @@ ul{padding-left:18px;margin:3px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:32px 40px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+  <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
-<hr>
+  <hr>
 <h2>Summary</h2>
 <p>Backend engineer with 5+ years building high-throughput APIs and data pipelines. Delivered distributed systems processing 100M+ requests daily with 99.99% reliability. Expert in Go, Python, and cloud infrastructure.</p>
-<hr>
-<h2>Experience</h2>
+  <hr>
+  <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Backend Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Datadog, New York, NY</div><ul><li>Designed metric ingestion pipeline processing 100M+ data points per minute with 99.99% data integrity, implementing sharded write-ahead logging and automatic partition rebalancing across 50+ nodes</li><li>Reduced query latency by 55% through custom time-series indexing strategy, enabling sub-second dashboard loads for 20K+ enterprise customers monitoring 500+ services</li><li>Led backend team of 6 engineers delivering core observability features that contributed to 30% increase in enterprise ARR</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Twilio, San Francisco, CA</div><ul><li>Built messaging API handling 10B+ messages monthly with sub-100ms delivery latency, implementing intelligent routing and automatic failover across 3 geographic regions</li><li>Implemented rate limiting and abuse detection system reducing malicious traffic by 80% while maintaining 99.9% legitimate message delivery rate</li></ul></div>
 <hr>
@@ -133,8 +133,8 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <hr>
 <h2>Skills</h2>
 <p class="skills-text">Go, Python, Java, PostgreSQL, Redis, Kafka, gRPC, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
-<hr>
-<h2>Education</h2>
+  <hr>
+  <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">M.S. Computer Science</span><span class="entry-date">2019</span></div><div class="entry-sub">Columbia University</div></div>
 </div></body></html>
 
@@ -195,11 +195,11 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.resume{margin:0;box-shadow:none}aside{background:#f8f4ff !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
 <header>
-<h1>NAME</h1>
+    <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
 </header>
 <aside>
-<h2>Skills</h2>
+    <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
 <h2>Education</h2>
 <div class="entry"><div class="entry-title">B.S. Computer Science</div><div class="entry-sub">Stanford University, 2015 – 2019</div></div>
@@ -212,7 +212,7 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 teams, implementing automated canary deployments and distributed tracing that improved incident response from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime and 35% infrastructure cost reduction using Kafka and gRPC event-driven patterns</li><li>Mentored 8 junior engineers through weekly design reviews, resulting in 3 promotions to senior within 18 months</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual volume with idempotent retry mechanisms achieving 99.99% reliability</li><li>Reduced API response latency by 45% through query optimization and intelligent caching strategies</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li></ul></div>
 </main>
 </div></body></html>
@@ -267,13 +267,13 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.header{background:#1a2744 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.resume{margin:0}}
 </style></head><body><div class="resume">
 <div class="header">
-<h1>NAME</h1>
+  <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
-</div>
+  </div>
 <div class="body">
 <h2>Summary</h2>
 <p>DevOps and platform engineer with 6+ years automating CI/CD pipelines and managing cloud infrastructure at scale. Reduced deployment failures by 90% and infrastructure costs by 40%. Expert in Kubernetes, Terraform, and AWS.</p>
-<h2>Experience</h2>
+  <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Platform Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Netflix, Los Gatos, CA</div><ul><li>Managed Kubernetes clusters serving 230M+ subscribers with 99.99% uptime SLA, implementing automated scaling policies and chaos engineering practices that reduced production incidents by 75%</li><li>Built GitOps deployment pipeline enabling 200+ developers to self-serve infrastructure provisioning, reducing lead time from 2 weeks to 30 minutes with automated compliance checks</li><li>Designed infrastructure-as-code framework managing 2000+ microservices across 3 AWS regions with Terraform modules achieving 100% drift detection</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">DevOps Engineer</span><span class="entry-date">2018 – 2021</span></div><div class="entry-sub">Shopify, Ottawa, ON</div><ul><li>Automated CI/CD pipelines reducing build-to-deploy time from 45 minutes to 8 minutes through parallelized testing, artifact caching, and incremental builds</li><li>Implemented container orchestration supporting 1M+ merchants during Black Friday peak traffic with zero-downtime deployments and automatic rollback</li></ul></div>
 <h2>Projects</h2>
@@ -330,7 +330,7 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+  <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Full-stack engineer with 6+ years building scalable distributed systems. Led platform migration serving 5M+ daily active users. Expert in React, Node.js, and cloud-native architecture with proven track record of reducing latency by 40%.</p>
@@ -341,7 +341,7 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li><li>Implemented role-based access control and exportable reports supporting CSV, PDF, and Slack integrations for 500+ enterprise users</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
-<h2>Education</h2>
+  <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">B.S. Computer Science</span><span class="entry-date">2015 – 2019</span></div><div class="entry-sub">Stanford University</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">AWS Solutions Architect Professional (2023)</div></div>
@@ -395,7 +395,7 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 .projects .entry::before{display:none}
 @media print{.resume{padding:28px 36px;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+    <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Mobile and frontend engineer with 5+ years building cross-platform applications reaching millions of users. Expert in React Native, Swift, and modern JavaScript. Passionate about performance optimization and pixel-perfect UI implementation.</p>
@@ -403,8 +403,8 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <div class="timeline">
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Mobile Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Airbnb, San Francisco, CA</div><ul><li>Led mobile team of 6 rebuilding guest experience app used by 150M+ users globally, implementing offline-first architecture that reduced user-reported errors by 65% and increased session duration by 25%</li><li>Improved app launch time by 40% through lazy module loading, image optimization pipeline, and tree-shaking, achieving sub-2-second cold start on 90th percentile devices</li><li>Implemented A/B testing framework enabling product teams to run 50+ concurrent experiments with real-time metric dashboards</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Mobile Developer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Spotify, Stockholm, Sweden</div><ul><li>Built audio streaming features handling 100M+ daily playback sessions, implementing gapless playback and crossfade with sub-10ms latency transitions</li><li>Reduced crash rate from 2.5% to 0.3% through systematic crash analysis, memory leak detection, and automated regression testing across 200+ device configurations</li></ul></div>
-</div>
-<h2>Projects</h2>
+  </div>
+  <h2>Projects</h2>
 <div class="projects">
 <div class="entry"><div class="entry-header"><span class="entry-title">Cross-Platform UI Kit</span><span class="entry-date">2023</span></div><div class="entry-sub">React Native, TypeScript</div><ul><li>Created open-source component library with 2K+ GitHub stars, 100+ weekly npm downloads, and comprehensive Storybook documentation</li></ul></div>
 </div>
@@ -462,7 +462,7 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <div class="header"><h1>NAME</h1><div class="contact">email | phone | location | portfolio.dev</div></div>
 <h2>Summary</h2>
 <p>Creative technologist with 5+ years designing and building innovative digital experiences. Combines deep engineering expertise with design thinking to deliver products that delight users and drive business growth.</p>
-<h2>Experience</h2>
+  <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Lead Creative Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Apple, Cupertino, CA</div><ul><li>Designed and built interactive product showcase experiences for apple.com receiving 50M+ monthly visits, implementing WebGL animations and scroll-driven storytelling that increased product page engagement by 35%</li><li>Led cross-functional team of 4 engineers and 3 designers delivering spatial computing prototypes for visionOS, from concept to App Store launch in 6 months</li><li>Established creative engineering guild hosting monthly tech talks and workshops, growing community from 10 to 60+ members across 4 offices</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Frontend Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Spotify, New York, NY</div><ul><li>Built Spotify Wrapped 2020 experience reaching 90M+ users in first week, implementing dynamic animation system and personalized data visualization pipeline</li><li>Developed canvas-based playlist cover generator used to create 10M+ custom covers, integrating with Spotify's design system and API</li></ul></div>
 <h2>Projects</h2>
@@ -522,7 +522,7 @@ p{font-size:11px;line-height:1.65;color:#2a2a2a}
 <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Product-minded engineer with 6+ years building user-facing applications at scale. Passionate about clean code, accessibility, and creating delightful user experiences. Led frontend team delivering features used by 10M+ monthly active users.</p>
-<h2>Experience</h2>
+      <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Frontend Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Figma, San Francisco, CA</div><ul><li>Led redesign of core editor experience used by 5M+ designers, implementing virtualized canvas rendering that improved frame rate from 30fps to 60fps on complex documents with 1000+ layers</li><li>Built collaborative editing features using CRDTs enabling real-time co-design sessions with sub-50ms cursor synchronization across 100+ concurrent users</li><li>Established frontend performance monitoring dashboard reducing p95 page load from 3.2s to 1.1s through systematic bundle analysis and lazy loading</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Frontend Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Vercel, Remote</div><ul><li>Developed Next.js deployment dashboard serving 200K+ developers, implementing real-time log streaming and build analytics that reduced debugging time by 50%</li><li>Built accessible component library achieving WCAG 2.1 AA compliance, used across 15 internal applications serving 500K+ monthly users</li></ul></div>
 <h2>Projects</h2>
@@ -2194,13 +2194,13 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.resume{margin:0;box-shadow:none}aside{background:#f5f5f0 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
 <header>
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 </header>
 <aside>
 <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
-<h2>Education</h2>
+  <h2>Education</h2>
 <div class="entry"><div class="entry-title">B.S. Computer Science</div><div class="entry-sub">Stanford University, 2015 – 2019</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">AWS Solutions Architect (2023)</div></div>
@@ -2264,17 +2264,17 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.header{background:#0f172a !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.resume{margin:0}}
 </style></head><body><div class="resume">
-<div class="header">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
-</div>
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
+  </div>
 <div class="body">
 <h2>Summary</h2>
 <p>DevOps and platform engineer with 6+ years automating CI/CD pipelines and managing cloud infrastructure at scale. Reduced deployment failures by 90% and infrastructure costs by 40%. Expert in Kubernetes, Terraform, and AWS.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Platform Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Netflix, Los Gatos, CA</div><ul><li>Managed Kubernetes clusters serving 230M+ subscribers with 99.99% uptime SLA, implementing automated scaling policies and chaos engineering practices that reduced production incidents by 75%</li><li>Built GitOps deployment pipeline enabling 200+ developers to self-serve infrastructure provisioning, reducing lead time from 2 weeks to 30 minutes with automated compliance checks</li><li>Designed infrastructure-as-code framework managing 2000+ microservices across 3 AWS regions with Terraform modules achieving 100% drift detection</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">DevOps Engineer</span><span class="entry-date">2018 – 2021</span></div><div class="entry-sub">Shopify, Ottawa, ON</div><ul><li>Automated CI/CD pipelines reducing build-to-deploy time from 45 minutes to 8 minutes through parallelized testing, artifact caching, and incremental builds</li><li>Implemented container orchestration supporting 1M+ merchants during Black Friday peak traffic with zero-downtime deployments and automatic rollback</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">GitOps Platform</span><span class="entry-date">2023</span></div><div class="entry-sub">ArgoCD, Terraform, Go</div><ul><li>Built internal GitOps platform with declarative infrastructure management, automated PR-based environment provisioning, and real-time deployment status dashboards</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">Kubernetes, Docker, Terraform, AWS, GCP, Jenkins, ArgoCD, Prometheus, Grafana, Python, Go, Bash, Linux, Networking</p>
@@ -2282,7 +2282,7 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <div class="entry"><div class="entry-header"><span class="entry-title">B.S. Computer Engineering</span><span class="entry-date">2014 – 2018</span></div><div class="entry-sub">University of Toronto</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">CKA – Certified Kubernetes Administrator (2021)</div></div>
-</div>
+  </div>
 </div></body></html>
 
 CRITICAL FORMATTING RULES:
@@ -2332,14 +2332,14 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <div class="header"><h1>NAME</h1><div class="contact">email | phone | location | portfolio.dev</div></div>
 <h2>Summary</h2>
 <p>Creative technologist with 5+ years designing and building innovative digital experiences. Combines deep engineering expertise with design thinking to deliver products that delight users and drive business growth.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Lead Creative Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Apple, Cupertino, CA</div><ul><li>Designed and built interactive product showcase experiences for apple.com receiving 50M+ monthly visits, implementing WebGL animations and scroll-driven storytelling that increased product page engagement by 35%</li><li>Led cross-functional team of 4 engineers and 3 designers delivering spatial computing prototypes for visionOS, from concept to App Store launch in 6 months</li><li>Established creative engineering guild hosting monthly tech talks and workshops, growing community from 10 to 60+ members across 4 offices</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Frontend Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Spotify, New York, NY</div><ul><li>Built Spotify Wrapped 2020 experience reaching 90M+ users in first week, implementing dynamic animation system and personalized data visualization pipeline</li><li>Developed canvas-based playlist cover generator used to create 10M+ custom covers, integrating with Spotify's design system and API</li></ul></div>
 <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Generative Art Engine</span><span class="entry-date">2023</span></div><div class="entry-sub">WebGL, GLSL, Three.js</div><ul><li>Created algorithmic art platform generating unique compositions from audio input, exhibited at 3 digital art galleries with 5K+ generated pieces</li></ul></div>
-<h2>Skills</h2>
+    <h2>Skills</h2>
 <p class="skills-text">React, TypeScript, Three.js, WebGL, GLSL, Canvas API, Figma, After Effects, Swift, SwiftUI, Node.js, Python</p>
-<h2>Education</h2>
+    <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">B.F.A. Design & Technology</span><span class="entry-date">2015 – 2019</span></div><div class="entry-sub">Parsons School of Design</div></div>
 </div></body></html>
 
@@ -2388,16 +2388,16 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}}
 </style></head><body><div class="resume">
-<div class="header">
+  <div class="header">
 <div class="header-left"><h1>NAME</h1><div class="title">Senior Software Engineer</div></div>
 <div class="header-right">email<br>phone<br>location<br>linkedin.com/in/name</div>
-</div>
+  </div>
 <h2>Summary</h2>
 <p>Engineering leader with 8+ years building and scaling high-impact platforms. Managed teams of 10+ engineers delivering products serving millions of users. Proven track record of driving 40%+ efficiency improvements at FAANG companies.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 engineering teams, implementing automated canary deployments and distributed tracing that improved incident response time from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime, reducing infrastructure costs by 35% through Kafka-based event-driven architecture and gRPC service mesh</li><li>Mentored 8 junior engineers through structured design reviews, resulting in 3 promotions to senior within 18 months and 25% improvement in team velocity</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual transaction volume with idempotent retry mechanisms and distributed coordination achieving 99.99% reliability</li><li>Reduced API response latency by 45% through systematic query optimization, materialized views, and multi-tier caching</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
@@ -2452,19 +2452,19 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 .projects .entry::before{display:none}
 @media print{.resume{padding:28px 36px;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+    <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Mobile and frontend engineer with 5+ years building cross-platform applications reaching millions of users. Expert in React Native, Swift, and modern JavaScript. Passionate about performance optimization and pixel-perfect UI implementation.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="timeline">
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Mobile Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Airbnb, San Francisco, CA</div><ul><li>Led mobile team of 6 rebuilding guest experience app used by 150M+ users globally, implementing offline-first architecture that reduced user-reported errors by 65% and increased session duration by 25%</li><li>Improved app launch time by 40% through lazy module loading, image optimization pipeline, and tree-shaking, achieving sub-2-second cold start on 90th percentile devices</li><li>Implemented A/B testing framework enabling product teams to run 50+ concurrent experiments with real-time metric dashboards</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Mobile Developer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Spotify, Stockholm, Sweden</div><ul><li>Built audio streaming features handling 100M+ daily playback sessions, implementing gapless playback and crossfade with sub-10ms latency transitions</li><li>Reduced crash rate from 2.5% to 0.3% through systematic crash analysis, memory leak detection, and automated regression testing across 200+ device configurations</li></ul></div>
 </div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="projects">
 <div class="entry"><div class="entry-header"><span class="entry-title">Cross-Platform UI Kit</span><span class="entry-date">2023</span></div><div class="entry-sub">React Native, TypeScript</div><ul><li>Created open-source component library with 2K+ GitHub stars, 100+ weekly npm downloads, and comprehensive Storybook documentation</li></ul></div>
-</div>
+  </div>
 <h2>Skills</h2>
 <p class="skills-text">React Native, Swift, Kotlin, TypeScript, iOS, Android, Firebase, GraphQL, CI/CD, App Store Optimization</p>
 <h2>Education</h2>
@@ -2514,13 +2514,13 @@ ul{padding-left:18px;margin:3px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:32px 40px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+    <h1>NAME</h1>
 <div class="contact">email | phone | location</div>
 <hr>
 <h2>Summary</h2>
 <p>Backend engineer with 5+ years building high-throughput APIs and data pipelines. Delivered distributed systems processing 100M+ requests daily with 99.99% reliability. Expert in Go, Python, and cloud infrastructure.</p>
 <hr>
-<h2>Experience</h2>
+  <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Backend Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Datadog, New York, NY</div><ul><li>Designed metric ingestion pipeline processing 100M+ data points per minute with 99.99% data integrity, implementing sharded write-ahead logging and automatic partition rebalancing across 50+ nodes</li><li>Reduced query latency by 55% through custom time-series indexing strategy, enabling sub-second dashboard loads for 20K+ enterprise customers monitoring 500+ services</li><li>Led backend team of 6 engineers delivering core observability features that contributed to 30% increase in enterprise ARR</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Twilio, San Francisco, CA</div><ul><li>Built messaging API handling 10B+ messages monthly with sub-100ms delivery latency, implementing intelligent routing and automatic failover across 3 geographic regions</li><li>Implemented rate limiting and abuse detection system reducing malicious traffic by 80% while maintaining 99.9% legitimate message delivery rate</li></ul></div>
 <hr>
@@ -2530,7 +2530,7 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <h2>Skills</h2>
 <p class="skills-text">Go, Python, Java, PostgreSQL, Redis, Kafka, gRPC, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
 <hr>
-<h2>Education</h2>
+  <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">M.S. Computer Science</span><span class="entry-date">2019</span></div><div class="entry-sub">Columbia University</div></div>
 </div></body></html>
 
@@ -2577,18 +2577,18 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Full-stack engineer with 6+ years building scalable distributed systems. Led platform migration serving 5M+ daily active users. Expert in React, Node.js, and cloud-native architecture with proven track record of reducing latency by 40%.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 engineering teams, implementing automated canary deployments and distributed tracing that improved incident response from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime, reducing infrastructure costs by 35% through event-driven architecture using Kafka and gRPC</li><li>Mentored 8 junior engineers through structured design reviews and pair programming, resulting in 3 promotions to senior within 18 months and 25% improvement in team velocity</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual transaction volume with idempotent retry mechanisms achieving 99.99% reliability and zero data loss during peak traffic periods</li><li>Reduced API response latency by 45% through systematic query optimization, materialized views, and intelligent caching that improved throughput capacity by 3x</li></ul></div>
 <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li><li>Implemented role-based access control and exportable reports supporting CSV, PDF, and Slack integrations for 500+ enterprise users</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
-<h2>Education</h2>
+    <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">B.S. Computer Science</span><span class="entry-date">2015 – 2019</span></div><div class="entry-sub">Stanford University</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">AWS Solutions Architect Professional (2023)</div></div>
@@ -2637,14 +2637,14 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Data engineer with 5+ years building large-scale data pipelines and analytics platforms. Expert in Spark, Airflow, and cloud data warehouses. Delivered infrastructure processing 10TB+ daily across 500+ data sources.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Data Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Uber, San Francisco, CA</div><ul><li>Designed real-time data pipeline processing 10TB+ daily from 500+ data sources using Spark Streaming and Kafka, enabling sub-minute data freshness for pricing and surge algorithms serving 130M+ monthly riders</li><li>Built data quality framework with automated anomaly detection catching 95% of data issues before downstream consumption, reducing data incident tickets by 70%</li><li>Led migration from on-premise Hadoop to cloud-native architecture on GCP, reducing data processing costs by 45% and improving job completion rates from 92% to 99.5%</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Data Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Airbnb, San Francisco, CA</div><ul><li>Built ETL pipelines processing booking and pricing data for 7M+ listings, implementing incremental processing that reduced daily pipeline runtime from 8 hours to 45 minutes</li><li>Developed self-serve analytics platform enabling 200+ analysts to query data warehouse without SQL knowledge, reducing ad-hoc request backlog by 60%</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Feature Store</span><span class="entry-date">2023</span></div><div class="entry-sub">Python, Redis, Kafka, Kubernetes</div><ul><li>Built feature serving platform with sub-10ms p99 latency supporting 50+ ML models in production with automated feature freshness monitoring</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">Python, Scala, SQL, Spark, Airflow, Kafka, Flink, BigQuery, Snowflake, dbt, AWS, GCP, Docker, Kubernetes, Terraform</p>
@@ -2694,8 +2694,8 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Full-stack engineer with 6+ years building scalable distributed systems. Led platform migration serving 5M+ daily active users. Expert in React, Node.js, and cloud-native architecture with proven track record of reducing latency by 40%.</p>
 <h2>Experience</h2>
@@ -2705,7 +2705,7 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li><li>Implemented role-based access control and exportable reports supporting CSV, PDF, and Slack integrations for 500+ enterprise users</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
-<h2>Education</h2>
+  <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">B.S. Computer Science</span><span class="entry-date">2015 – 2019</span></div><div class="entry-sub">Stanford University</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">AWS Solutions Architect Professional (2023)</div></div>
@@ -2755,18 +2755,18 @@ ul{padding-left:18px;margin:6px 0 0}li{margin-bottom:4px;font-size:11px;line-hei
 p{font-size:11px;line-height:1.65;color:#2a2a2a}
 @media print{.resume{padding:36px 44px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Product-minded engineer with 6+ years building user-facing applications at scale. Passionate about clean code, accessibility, and creating delightful user experiences. Led frontend team delivering features used by 10M+ monthly active users.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Frontend Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Figma, San Francisco, CA</div><ul><li>Led redesign of core editor experience used by 5M+ designers, implementing virtualized canvas rendering that improved frame rate from 30fps to 60fps on complex documents with 1000+ layers</li><li>Built collaborative editing features using CRDTs enabling real-time co-design sessions with sub-50ms cursor synchronization across 100+ concurrent users</li><li>Established frontend performance monitoring dashboard reducing p95 page load from 3.2s to 1.1s through systematic bundle analysis and lazy loading</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Frontend Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Vercel, Remote</div><ul><li>Developed Next.js deployment dashboard serving 200K+ developers, implementing real-time log streaming and build analytics that reduced debugging time by 50%</li><li>Built accessible component library achieving WCAG 2.1 AA compliance, used across 15 internal applications serving 500K+ monthly users</li></ul></div>
 <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Design System Framework</span><span class="entry-date">2023</span></div><div class="entry-sub">React, TypeScript, Storybook</div><ul><li>Created open-source design system with 3K+ GitHub stars, 50+ components, and automated visual regression testing via Chromatic CI pipeline</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">React, TypeScript, Next.js, Vue.js, CSS/SCSS, WebGL, Node.js, GraphQL, Figma, Accessibility, Performance Optimization</p>
-<h2>Education</h2>
+    <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">B.A. Computer Science</span><span class="entry-date">2015 – 2019</span></div><div class="entry-sub">University of California, Berkeley</div></div>
 </div></body></html>
 
@@ -2828,11 +2828,11 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.resume{margin:0;box-shadow:none}aside{background:#eef2f7 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
 <header>
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 </header>
 <aside>
-<h2>Skills</h2>
+    <h2>Skills</h2>
 <p class="skills-text">JavaScript, TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, CI/CD</p>
 <h2>Education</h2>
 <div class="entry"><div class="entry-title">B.S. Computer Science</div><div class="entry-sub">Stanford University, 2015 – 2019</div></div>
@@ -2845,7 +2845,7 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 teams, implementing automated canary deployments and distributed tracing that improved incident response from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime and 35% infrastructure cost reduction using Kafka and gRPC event-driven patterns</li><li>Mentored 8 junior engineers through weekly design reviews, resulting in 3 promotions to senior within 18 months</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual volume with idempotent retry mechanisms achieving 99.99% reliability</li><li>Reduced API response latency by 45% through query optimization and intelligent caching strategies</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li></ul></div>
 </main>
 </div></body></html>
@@ -2896,16 +2896,16 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}}
 </style></head><body><div class="resume">
-<div class="header">
+  <div class="header">
 <div class="header-left"><h1>NAME</h1><div class="title">Senior Software Engineer</div></div>
 <div class="header-right">email<br>phone<br>location<br>linkedin.com/in/name</div>
-</div>
+  </div>
 <h2>Summary</h2>
 <p>Engineering leader with 8+ years building and scaling high-impact platforms. Managed teams of 10+ engineers delivering products serving millions of users. Proven track record of driving 40%+ efficiency improvements at FAANG companies.</p>
 <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Google, Mountain View, CA</div><ul><li>Architected microservices platform reducing deployment time by 60% across 12 engineering teams, implementing automated canary deployments and distributed tracing that improved incident response time from 4 hours to 15 minutes</li><li>Led monolith-to-microservices migration serving 5M+ DAU with 99.99% uptime, reducing infrastructure costs by 35% through Kafka-based event-driven architecture and gRPC service mesh</li><li>Mentored 8 junior engineers through structured design reviews, resulting in 3 promotions to senior within 18 months and 25% improvement in team velocity</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Stripe, San Francisco, CA</div><ul><li>Built payment processing pipeline handling $2B+ annual transaction volume with idempotent retry mechanisms and distributed coordination achieving 99.99% reliability</li><li>Reduced API response latency by 45% through systematic query optimization, materialized views, and multi-tier caching</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Analytics Dashboard</span><span class="entry-date">2023</span></div><div class="entry-sub">React, D3.js, WebSocket, PostgreSQL</div><ul><li>Built streaming analytics platform processing 50K+ events/sec with sub-second visualization, reducing product team decision-making time by 40%</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">TypeScript, React, Node.js, Python, Go, PostgreSQL, Redis, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
@@ -2956,15 +2956,15 @@ ul{padding-left:14px;margin:2px 0 0}li{margin-bottom:1px;font-size:9.5px;line-he
 p{font-size:9.5px;line-height:1.45;color:#1a1a1a}
 @media print{.resume{padding:20px 28px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
+    <h1>NAME</h1>
 <div class="contact">email | phone | location | linkedin.com/in/name | github.com/username</div>
 <h2>Summary</h2>
 <p>Systems engineer with 7+ years building high-throughput distributed systems. Expert in Go, Rust, and cloud-native architectures. Led teams delivering platforms processing 10B+ requests daily.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Staff Systems Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Cloudflare, Austin, TX</div><ul><li>Designed edge caching layer processing 10B+ requests/day with p99 latency under 5ms, implementing consistent hashing and automatic cache invalidation across 300+ global PoPs</li><li>Optimized DNS resolution pipeline reducing lookup times by 40% for 25M+ domains through parallel query processing and intelligent prefetching</li><li>Led on-call rotation for Tier-1 services, achieving 99.999% uptime over 12 months and reducing mean-time-to-resolution by 60%</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Datadog, New York, NY</div><ul><li>Built metric ingestion pipeline handling 2M+ data points/second with zero data loss using write-ahead logging and partition-level replication</li><li>Implemented automated alerting system with ML-based anomaly detection, reducing false positives by 35% and improving alert accuracy to 95%</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2017 – 2019</span></div><div class="entry-sub">MongoDB, New York, NY</div><ul><li>Developed query optimizer improvements for aggregation pipeline, reducing complex query execution time by 50% across 100K+ production clusters</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Distributed Key-Value Store</span><span class="entry-date">2023</span></div><div class="entry-sub">Rust, gRPC, Raft Consensus</div><ul><li>Built fault-tolerant KV store supporting 100K+ ops/second with linearizable consistency and automatic leader election</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">Go, Rust, C++, Python, PostgreSQL, Redis, Kafka, gRPC, Protobuf, Docker, Kubernetes, AWS, Terraform, Linux, Networking</p>
@@ -3018,13 +3018,13 @@ ul{padding-left:18px;margin:3px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 @media print{.resume{padding:32px 40px;margin:0}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <hr>
 <h2>Summary</h2>
 <p>Backend engineer with 5+ years building high-throughput APIs and data pipelines. Delivered distributed systems processing 100M+ requests daily with 99.99% reliability. Expert in Go, Python, and cloud infrastructure.</p>
 <hr>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Backend Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Datadog, New York, NY</div><ul><li>Designed metric ingestion pipeline processing 100M+ data points per minute with 99.99% data integrity, implementing sharded write-ahead logging and automatic partition rebalancing across 50+ nodes</li><li>Reduced query latency by 55% through custom time-series indexing strategy, enabling sub-second dashboard loads for 20K+ enterprise customers monitoring 500+ services</li><li>Led backend team of 6 engineers delivering core observability features that contributed to 30% increase in enterprise ARR</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Software Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Twilio, San Francisco, CA</div><ul><li>Built messaging API handling 10B+ messages monthly with sub-100ms delivery latency, implementing intelligent routing and automatic failover across 3 geographic regions</li><li>Implemented rate limiting and abuse detection system reducing malicious traffic by 80% while maintaining 99.9% legitimate message delivery rate</li></ul></div>
 <hr>
@@ -3034,7 +3034,7 @@ p{font-size:10.5px;line-height:1.6;color:#1a1a1a}
 <h2>Skills</h2>
 <p class="skills-text">Go, Python, Java, PostgreSQL, Redis, Kafka, gRPC, AWS, Docker, Kubernetes, Terraform, CI/CD</p>
 <hr>
-<h2>Education</h2>
+    <h2>Education</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">M.S. Computer Science</span><span class="entry-date">2019</span></div><div class="entry-sub">Columbia University</div></div>
 </div></body></html>
 
@@ -3086,10 +3086,10 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <div class="header"><h1>NAME</h1><div class="contact">email | phone | location | portfolio.dev</div></div>
 <h2>Summary</h2>
 <p>Creative technologist with 5+ years designing and building innovative digital experiences. Combines deep engineering expertise with design thinking to deliver products that delight users and drive business growth.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Lead Creative Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Apple, Cupertino, CA</div><ul><li>Designed and built interactive product showcase experiences for apple.com receiving 50M+ monthly visits, implementing WebGL animations and scroll-driven storytelling that increased product page engagement by 35%</li><li>Led cross-functional team of 4 engineers and 3 designers delivering spatial computing prototypes for visionOS, from concept to App Store launch in 6 months</li><li>Established creative engineering guild hosting monthly tech talks and workshops, growing community from 10 to 60+ members across 4 offices</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Frontend Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Spotify, New York, NY</div><ul><li>Built Spotify Wrapped 2020 experience reaching 90M+ users in first week, implementing dynamic animation system and personalized data visualization pipeline</li><li>Developed canvas-based playlist cover generator used to create 10M+ custom covers, integrating with Spotify's design system and API</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Generative Art Engine</span><span class="entry-date">2023</span></div><div class="entry-sub">WebGL, GLSL, Three.js</div><ul><li>Created algorithmic art platform generating unique compositions from audio input, exhibited at 3 digital art galleries with 5K+ generated pieces</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">React, TypeScript, Three.js, WebGL, GLSL, Canvas API, Figma, After Effects, Swift, SwiftUI, Node.js, Python</p>
@@ -3140,14 +3140,14 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.resume{padding:28px 36px;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head><body><div class="resume">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
 <h2>Summary</h2>
 <p>Data engineer with 5+ years building large-scale data pipelines and analytics platforms. Expert in Spark, Airflow, and cloud data warehouses. Delivered infrastructure processing 10TB+ daily across 500+ data sources.</p>
 <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Data Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Uber, San Francisco, CA</div><ul><li>Designed real-time data pipeline processing 10TB+ daily from 500+ data sources using Spark Streaming and Kafka, enabling sub-minute data freshness for pricing and surge algorithms serving 130M+ monthly riders</li><li>Built data quality framework with automated anomaly detection catching 95% of data issues before downstream consumption, reducing data incident tickets by 70%</li><li>Led migration from on-premise Hadoop to cloud-native architecture on GCP, reducing data processing costs by 45% and improving job completion rates from 92% to 99.5%</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">Data Engineer</span><span class="entry-date">2019 – 2021</span></div><div class="entry-sub">Airbnb, San Francisco, CA</div><ul><li>Built ETL pipelines processing booking and pricing data for 7M+ listings, implementing incremental processing that reduced daily pipeline runtime from 8 hours to 45 minutes</li><li>Developed self-serve analytics platform enabling 200+ analysts to query data warehouse without SQL knowledge, reducing ad-hoc request backlog by 60%</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Real-Time Feature Store</span><span class="entry-date">2023</span></div><div class="entry-sub">Python, Redis, Kafka, Kubernetes</div><ul><li>Built feature serving platform with sub-10ms p99 latency supporting 50+ ML models in production with automated feature freshness monitoring</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">Python, Scala, SQL, Spark, Airflow, Kafka, Flink, BigQuery, Snowflake, dbt, AWS, GCP, Docker, Kubernetes, Terraform</p>
@@ -3202,17 +3202,17 @@ ul{padding-left:18px;margin:4px 0 0}li{margin-bottom:3px;font-size:10.5px;line-h
 p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 @media print{.header{background:#1e3a5f !important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.resume{margin:0}}
 </style></head><body><div class="resume">
-<div class="header">
-<h1>NAME</h1>
-<div class="contact">email | phone | location</div>
-</div>
+  <div class="header">
+    <h1>NAME</h1>
+    <div class="contact">email | phone | location</div>
+  </div>
 <div class="body">
 <h2>Summary</h2>
 <p>DevOps and platform engineer with 6+ years automating CI/CD pipelines and managing cloud infrastructure at scale. Reduced deployment failures by 90% and infrastructure costs by 40%. Expert in Kubernetes, Terraform, and AWS.</p>
-<h2>Experience</h2>
+    <h2>Experience</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">Senior Platform Engineer</span><span class="entry-date">2021 – Present</span></div><div class="entry-sub">Netflix, Los Gatos, CA</div><ul><li>Managed Kubernetes clusters serving 230M+ subscribers with 99.99% uptime SLA, implementing automated scaling policies and chaos engineering practices that reduced production incidents by 75%</li><li>Built GitOps deployment pipeline enabling 200+ developers to self-serve infrastructure provisioning, reducing lead time from 2 weeks to 30 minutes with automated compliance checks</li><li>Designed infrastructure-as-code framework managing 2000+ microservices across 3 AWS regions with Terraform modules achieving 100% drift detection</li></ul></div>
 <div class="entry"><div class="entry-header"><span class="entry-title">DevOps Engineer</span><span class="entry-date">2018 – 2021</span></div><div class="entry-sub">Shopify, Ottawa, ON</div><ul><li>Automated CI/CD pipelines reducing build-to-deploy time from 45 minutes to 8 minutes through parallelized testing, artifact caching, and incremental builds</li><li>Implemented container orchestration supporting 1M+ merchants during Black Friday peak traffic with zero-downtime deployments and automatic rollback</li></ul></div>
-<h2>Projects</h2>
+    <h2>Projects</h2>
 <div class="entry"><div class="entry-header"><span class="entry-title">GitOps Platform</span><span class="entry-date">2023</span></div><div class="entry-sub">ArgoCD, Terraform, Go</div><ul><li>Built internal GitOps platform with declarative infrastructure management, automated PR-based environment provisioning, and real-time deployment status dashboards</li></ul></div>
 <h2>Skills</h2>
 <p class="skills-text">Kubernetes, Docker, Terraform, AWS, GCP, Jenkins, ArgoCD, Prometheus, Grafana, Python, Go, Bash, Linux, Networking</p>
@@ -3220,7 +3220,7 @@ p{font-size:10.5px;line-height:1.55;color:#1a1a1a}
 <div class="entry"><div class="entry-header"><span class="entry-title">B.S. Computer Engineering</span><span class="entry-date">2014 – 2018</span></div><div class="entry-sub">University of Toronto</div></div>
 <h2>Certifications</h2>
 <div class="entry"><div class="entry-title">CKA – Certified Kubernetes Administrator (2021)</div></div>
-</div>
+  </div>
 </div></body></html>
 
 CRITICAL FORMATTING RULES:
@@ -6217,5 +6217,5 @@ CRITICAL FORMATTING RULES:
 - Balanced spacing between sections
 - Each bullet: 2-4 lines, action verb + measurable impact`
   }
- 
+
 ]

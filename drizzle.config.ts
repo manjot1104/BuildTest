@@ -8,5 +8,5 @@ export default {
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },
-  tablesFilter: ["Buildify_*"],
+  tablesFilter: ["pg-drizzle_*", "user", "session", "account", "verification"],
 } satisfies Config;

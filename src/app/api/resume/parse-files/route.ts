@@ -297,7 +297,9 @@ export async function POST(request: NextRequest) {
         extractionPromises.push(Promise.resolve(''))
       }
       
-      const [resumeTextResult, jdTextResult] = await Promise.allSettled(extractionPromises)
+      const settled = await Promise.allSettled(extractionPromises)
+      const resumeTextResult = settled[0]!
+      const jdTextResult = settled[1]!
 
       if (resumeTextResult.status === 'fulfilled') {
         resumeText = resumeTextResult.value || ''

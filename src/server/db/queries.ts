@@ -3,6 +3,16 @@ import { randomUUID } from 'crypto'
 
 import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts, chat_folders } from './schema'
 import { isNull } from 'drizzle-orm'
+import {
+  test_cases,
+  test_runs,
+  test_results,
+  crawl_results,
+  bug_reports,
+  report_exports,
+  performance_metrics,
+} from './schema'
+
 import { db } from './index'
 
 // ============================================================================
@@ -699,8 +709,8 @@ export async function publishStudioLayout(
   userId: string,
   slug: string,
   title?: string,
-): Promise<void> {
-  await db
+): Promise<boolean> {
+  const result = await db
     .update(studio_layouts)
     .set({
       slug,
@@ -710,6 +720,8 @@ export async function publishStudioLayout(
       ...(title ? { title } : {}),
     })
     .where(and(eq(studio_layouts.id, id), eq(studio_layouts.user_id, userId)))
+    .returning({ id: studio_layouts.id })
+  return result.length > 0
 }
 
 export async function unpublishStudioLayout(id: string, userId: string): Promise<void> {
@@ -894,4 +906,344 @@ export async function getUnfiledChatCount(userId: string): Promise<number> {
     .where(and(eq(user_chats.user_id, userId), isNull(user_chats.folder_id)))
 
   return result?.count ?? 0
+}
+
+
+// ============================================================================
+// Testing Engine Queries
+// ============================================================================
+
+export type TestRun = typeof test_runs.$inferSelect
+export type TestCase = typeof test_cases.$inferSelect
+export type TestCaseInsert = typeof test_cases.$inferInsert
+
+// ─── Test Run ─────────────────────────────────────────────────────────────────
+
+/**
+ * Counts test runs started by a user today (UTC calendar day).
+ * Used to enforce per-plan daily run limits in startTestRunHandler and
+ * getTestUsageHandler. Counts all statuses so a failed or in-progress run
+ * still consumes quota — only the DB insert happening counts, regardless of
+ * outcome. This prevents users from repeatedly hammering the endpoint on
+ * transient failures to work around the daily cap.
+ */
+export async function countTestRunsTodayByUserId(userId: string): Promise<number> {
+  // Start of today in UTC (midnight)
+  const todayUtc = new Date()
+  todayUtc.setUTCHours(0, 0, 0, 0)
+
+  const [result] = await db
+    .select({ count: count(test_runs.id) })
+    .from(test_runs)
+    .where(
+      and(
+        eq(test_runs.user_id, userId),
+        gte(test_runs.started_at, todayUtc),
+      ),
+    )
+
+  return result?.count ?? 0
+}
+
+/**
+ * Fetches a single test run by id with optional relations.
+ * Used by getTestRunHandler, streamTestRunHandler, cancelTestRunHandler.
+ */
+export async function getTestRunById(
+  testRunId: string,
+  opts: { withReportExports?: boolean; withBugReports?: boolean } = {},
+): Promise<TestRun & { reportExports?: unknown[]; bugReports?: unknown[] } | undefined> {
+  return db.query.test_runs.findFirst({
+    where: eq(test_runs.id, testRunId),
+    with: {
+      ...(opts.withReportExports && { reportExports: true }),
+      ...(opts.withBugReports && {
+        bugReports: { orderBy: (b, { asc }) => [asc(b.severity)] },
+      }),
+    },
+  }) as Promise<TestRun & { reportExports?: unknown[]; bugReports?: unknown[] } | undefined>
+}
+
+/**
+ * Updates test run status and optional extra fields.
+ * Centralises all status transitions — called throughout the pipeline.
+ */
+export async function updateTestRunStatus(
+  testRunId: string,
+  status: typeof test_runs.$inferInsert.status,
+  extra?: Partial<typeof test_runs.$inferInsert>,
+): Promise<void> {
+  await db
+    .update(test_runs)
+    .set({ status, ...extra })
+    .where(eq(test_runs.id, testRunId))
+}
+
+/**
+ * Updates live execution counters on a test run.
+ * Called after each test settles during the executing phase.
+ */
+export async function updateTestRunCounters(
+  testRunId: string,
+  counters: { passed?: number; failed?: number; running?: number; skipped?: number },
+): Promise<void> {
+  await db
+    .update(test_runs)
+    .set(counters)
+    .where(eq(test_runs.id, testRunId))
+}
+
+/**
+ * Gets all test runs for a user ordered by most recent first.
+ * Used by getTestHistoryHandler.
+ */
+export async function getTestRunsByUserId(userId: string, limit = 50) {
+  return db.query.test_runs.findMany({
+    where: eq(test_runs.user_id, userId),
+    orderBy: [desc(test_runs.started_at)],
+    with: { reportExports: true },
+    limit,
+  })
+}
+
+/**
+ * Gets full test run report with all relations.
+ * Used by getTestReportHandler.
+ */
+export async function getTestRunReport(testRunId: string) {
+  return db.query.test_runs.findFirst({
+    where: eq(test_runs.id, testRunId),
+    with: {
+      testCases: { with: { results: true } },
+      bugReports: true,
+      reportExports: true,
+      crawlResult: true,
+    },
+  })
+}
+
+/**
+ * Gets recent test runs for the same URL for trend chart.
+ */
+export async function getTestRunTrend(targetUrl: string, limit = 10) {
+  return db.query.test_runs.findMany({
+    where: eq(test_runs.target_url, targetUrl),
+    orderBy: [desc(test_runs.started_at)],
+    limit,
+    columns: { id: true, overall_score: true, started_at: true, status: true },
+  })
+}
+
+// ─── Test Cases ───────────────────────────────────────────────────────────────
+
+/**
+ * Gets all test cases for a run ordered by creation time.
+ * Used to populate review UI and seed execution after confirm.
+ */
+export async function getTestCasesByRunId(testRunId: string): Promise<TestCase[]> {
+  return db
+    .select()
+    .from(test_cases)
+    .where(eq(test_cases.test_run_id, testRunId))
+    .orderBy(test_cases.created_at)
+}
+
+/**
+ * Counts test cases for a run.
+ * Called before create (enforce plan max) and before delete (enforce min 1).
+ * Also called in confirmAndExecuteHandler as final gate before execution.
+ */
+export async function countTestCasesByRunId(testRunId: string): Promise<number> {
+  const [result] = await db
+    .select({ count: count(test_cases.id) })
+    .from(test_cases)
+    .where(eq(test_cases.test_run_id, testRunId))
+  return result?.count ?? 0
+}
+
+/**
+ * Inserts multiple AI-generated test cases in one statement.
+ * Used at the end of the generating phase.
+ */
+export async function insertTestCases(
+  records: typeof test_cases.$inferInsert[],
+): Promise<void> {
+  if (records.length === 0) return
+  await db.insert(test_cases).values(records)
+}
+
+/**
+ * Creates a single user-defined test case during the review phase.
+ * Controller must verify status === "awaiting_review" and count < planMax.
+ */
+export async function createTestCase(data: {
+  testRunId: string
+  title: string
+  category: string
+  steps: string[]
+  expectedResult: string
+  priority?: 'P0' | 'P1' | 'P2'
+  description?: string
+  tags?: string[]
+}): Promise<TestCase> {
+  const { randomUUID } = await import('crypto')
+  const [row] = await db
+    .insert(test_cases)
+    .values({
+      id: randomUUID(),
+      test_run_id: data.testRunId,
+      title: data.title,
+      category: data.category,
+      steps: data.steps,
+      expected_result: data.expectedResult,
+      priority: data.priority ?? 'P1',
+      description: data.description ?? null,
+      tags: data.tags ?? [],
+      estimated_duration: 15000,
+    })
+    .returning()
+  return row!
+}
+
+/**
+ * Updates a test case during the review phase.
+ * Scoped to both id AND test_run_id — never update by id alone.
+ * Returns undefined if the case doesn't belong to the given run.
+ */
+export async function updateTestCase(
+  testCaseId: string,
+  testRunId: string,
+  data: {
+    title?: string
+    category?: string
+    steps?: string[]
+    expectedResult?: string
+    priority?: 'P0' | 'P1' | 'P2'
+    description?: string
+  },
+): Promise<TestCase | undefined> {
+  const updates: Partial<TestCaseInsert> = {}
+  if (data.title !== undefined)          updates.title = data.title
+  if (data.category !== undefined)       updates.category = data.category
+  if (data.steps !== undefined)          updates.steps = data.steps
+  if (data.expectedResult !== undefined) updates.expected_result = data.expectedResult
+  if (data.priority !== undefined)       updates.priority = data.priority
+  if (data.description !== undefined)    updates.description = data.description
+
+  const [row] = await db
+    .update(test_cases)
+    .set(updates)
+    .where(
+      and(
+        eq(test_cases.id, testCaseId),
+        eq(test_cases.test_run_id, testRunId),
+      ),
+    )
+    .returning()
+  return row
+}
+
+/**
+ * Hard deletes a test case.
+ * Safe during awaiting_review — no test_results rows reference it yet.
+ */
+export async function deleteTestCase(
+  testCaseId: string,
+  testRunId: string,
+): Promise<void> {
+  await db
+    .delete(test_cases)
+    .where(
+      and(
+        eq(test_cases.id, testCaseId),
+        eq(test_cases.test_run_id, testRunId),
+      ),
+    )
+}
+
+// ─── Crawl Results ────────────────────────────────────────────────────────────
+
+/**
+ * Inserts crawl result data after the crawling phase completes.
+ */
+export async function insertCrawlResult(
+  data: typeof crawl_results.$inferInsert,
+): Promise<void> {
+  await db.insert(crawl_results).values(data)
+}
+
+// ─── Performance Metrics ──────────────────────────────────────────────────────
+
+/**
+ * Inserts per-page performance metrics after stage3 completes.
+ */
+export async function insertPerformanceMetrics(
+  records: typeof performance_metrics.$inferInsert[],
+): Promise<void> {
+  if (records.length === 0) return
+  await db.insert(performance_metrics).values(records)
+}
+
+/**
+ * Gets performance metrics for a test run.
+ * Used by getTestReportHandler.
+ */
+export async function getPerformanceMetricsByRunId(testRunId: string) {
+  return db
+    .select()
+    .from(performance_metrics)
+    .where(eq(performance_metrics.test_run_id, testRunId))
+}
+
+// ─── Test Results ─────────────────────────────────────────────────────────────
+
+/**
+ * Inserts a single test result after a test case executes.
+ */
+export async function insertTestResult(
+  data: typeof test_results.$inferInsert,
+): Promise<void> {
+  await db.insert(test_results).values(data)
+}
+
+// ─── Bug Reports ──────────────────────────────────────────────────────────────
+
+/**
+ * Inserts all bug reports after the executing phase completes.
+ */
+export async function insertBugReports(
+  records: typeof bug_reports.$inferInsert[],
+): Promise<void> {
+  if (records.length === 0) return
+  await db.insert(bug_reports).values(records)
+}
+
+// ─── Report Exports ───────────────────────────────────────────────────────────
+
+/**
+ * Inserts the final report export row.
+ */
+export async function insertReportExport(
+  data: typeof report_exports.$inferInsert,
+): Promise<void> {
+  await db.insert(report_exports).values(data)
+}
+
+/**
+ * Gets a report export by shareable slug.
+ */
+export async function getReportExportBySlug(slug: string) {
+  return db.query.report_exports.findFirst({
+    where: eq(report_exports.shareable_slug, slug),
+  })
+}
+
+/**
+ * Gets a report export by embed badge token, with test run joined.
+ */
+export async function getReportExportByBadgeToken(token: string) {
+  return db.query.report_exports.findFirst({
+    where: eq(report_exports.embed_badge_token, token),
+    with: { testRun: true },
+  })
 }
