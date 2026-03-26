@@ -937,46 +937,25 @@ function buildDiscoveryGoal(
   rootUrl: string,
   allowedHostname: string,
   maxPages: number,
-  // crawlContext is appended to the discovery prompt when present so
-  // TinyFish knows how to handle login screens or interaction barriers.
   crawlContext?: string,
 ): string {
   const safeContext = sanitiseCrawlContext(crawlContext);
-  // Build the optional context block that is injected near the top of
-  // the discovery prompt. When absent the prompt is identical to before.
   const contextBlock = safeContext
     ? `\nUSER-PROVIDED CONTEXT (follow these instructions before doing anything else):\n${safeContext}\n`
     : "";
 
-  return `You are a website URL discoverer. Your ONLY job is to find all unique page URLs on this website.
+  return `You are a website URL sampler, NOT a crawler. Your job is to collect a SMALL LIMITED set of URLs and STOP EARLY. You MUST NOT explore the full site. Hard limit: stop as soon as you have ${maxPages} unique URLs OR after 25 navigation clicks, whichever happens first. Exceeding this limit is a failure.
 
 START URL: ${rootUrl}
 ${contextBlock}
-STEP 1 — Navigate and wait:
-Go to the start URL. Wait for full page load.
-If you see <div id="root">, <div id="app">, or window.React exists — this is a JavaScript SPA. Wait an EXTRA 4 seconds for JS rendering.
+STEP 1: Navigate to the start URL and wait for full load. If <div id="root"> or <div id="app"> or React is detected, wait 4 extra seconds.
 
-STEP 2 — Collect passive links (no clicking):
-- Every <a href="..."> tag — resolve relative URLs to absolute
-- data-href, data-to, data-url attributes on any element
-- Any route paths in window.__NEXT_DATA__ (Next.js) if it exists
-- Any route paths in window.__NUXT__ (Nuxt.js) if it exists
+STEP 2: Collect passive links without clicking: all <a href>, data-href, data-to, data-url, and any routes from window.__NEXT_DATA__ or window.__NUXT__.
 
-STEP 3 — Click navigation items to discover SPA routes:
-Look for navigation elements in <nav>, <header>, role="navigation", or sidebar menus.
-For EACH clickable nav item (links, buttons, divs with cursor:pointer in nav areas):
-  a) Click it
-  b) Wait up to 3 seconds
-  c) Check window.location.href — if it changed AND hostname is still "${allowedHostname}", record the new URL
-  d) Click browser Back button, wait for page to reload
-  e) Continue to next nav item
-Stop when you have collected ${maxPages} URLs OR clicked 25 nav items, whichever comes first.
+STEP 3: Click navigation items ONLY UNTIL LIMIT IS REACHED. For each nav item: click, wait up to 3 seconds, if URL changes and hostname matches "${allowedHostname}" then record it, go back, continue. The MOMENT you reach ${maxPages} URLs OR 25 clicks you MUST STOP ALL ACTIONS immediately. Do NOT continue exploring.
 
-STEP 4 — Return results:
-Return ONLY valid JSON as a single object. No markdown. No explanation. Start with { end with }.
-The "urls" field must be an array of absolute URL strings.
-
-{"urls":["https://${allowedHostname}/","https://${allowedHostname}/about","https://${allowedHostname}/games"]}`;
+STEP 4: Return ONLY JSON with collected URLs — no markdown, no explanation, start with { end with }:
+{"urls":["https://${allowedHostname}/","https://${allowedHostname}/example"]}`;
 }
 
 // ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
