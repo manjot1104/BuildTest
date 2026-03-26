@@ -1771,7 +1771,9 @@ function buildExecuteTestGoal(url: string, steps: string[]): string {
   const stepCount = steps.length;
   const numberedSteps = steps.map((s, i) => `${i + 1} ${s}`).join("\n");
 
-  return `You are a browser test agent. Your task is to execute ALL steps and produce ${stepCount} structured logs. The task is NOT complete until all ${stepCount} logs are produced. Do NOT stop early. Each step must produce a log object with fields: id, status, data. id is the step number. status MUST be PASSED or FAILED. data MUST contain null if no error, otherwise a short error reason. Always continue execution even if a step fails. If element not found set data=Element not found. If login required set data=Page requires login. If previous step failed set data=Previous step failed. STEPS:\n${numberedSteps}`;
+  return `You are a browser test agent. Your task is to execute ALL steps and produce ${stepCount} structured logs. The task is NOT complete until all ${stepCount} logs are produced. Do NOT stop early. Always continue execution even if a step fails. If element not found set data=Element not found. If login required set data=Page requires login. If previous step failed set data=Previous step failed. STEPS:\n${numberedSteps}
+  Return ONLY this exact JSON shape, no other text:
+{"logs":[{"id":1,"status":"PASSED","data":null},{"id":2,"status":"FAILED","data":"Element not found"}]}`;
 }
 
 // parseExecuteTestResult interprets TinyFish's non-deterministic output.
@@ -1804,9 +1806,10 @@ function parseExecuteTestResult(
       // TinyFish's own failure event — not step logs
       const tfError = rj["error"] as string;
       const tfStatus = rj["status"] as string;
+      console.error(`[TestExecution] Browser agent error — status: ${tfStatus}, error: ${tfError}`);
       return {
         passed: false,
-        actualResult: `TinyFish execution failed (status: ${tfStatus})`,
+        actualResult: `Test could not be completed — the browser agent encountered an error`,
         errorDetails: tfError,
         consoleLogs: [],
         networkLogs: [],
@@ -1865,9 +1868,10 @@ function parseExecuteTestResult(
     // resultJson exists but no recognisable step logs — fall through to Case C
     // but include a summary of what was in the result so AI has signal.
     const summary = JSON.stringify(raw).slice(0, 500);
+    console.error(`[TestExecution] Unrecognised result structure:`, JSON.stringify(raw).slice(0, 500));
     return {
       passed: false,
-      actualResult: `TinyFish returned an unrecognised result structure`,
+      actualResult: `Test could not be completed — unexpected response from the browser agent`,
       errorDetails: `Raw result: ${summary}`,
       consoleLogs: [],
       networkLogs: [],
@@ -1875,9 +1879,12 @@ function parseExecuteTestResult(
   }
 
   // ── Case C: Nothing useful returned ──────────────────────────────────────
+  console.error(`[TestExecution] Browser agent failed or timed out:`, result.error);
   return {
     passed: false,
-    actualResult: "TinyFish execution failed or timed out",
+    actualResult: result.error?.includes("timeout")
+      ? `Test timed out — the page or action took too long to complete`
+      : `Test could not be completed — the browser agent did not return a result`,
     errorDetails: result.error,
     consoleLogs: [],
     networkLogs: [],
