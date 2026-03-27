@@ -1795,6 +1795,59 @@ Rules for the JSON:
 - Do not include any field other than id, status, data`;
 }
 
+// buildFallbackExecuteTestGoal is the simpler, more resilient prompt used
+// when TinyFish returns a platform-level error (Case B) on the primary prompt.
+//
+// WHY THIS EXISTS:
+//   TinyFish periodically enters a degraded state where it rejects normal
+//   detailed prompts with its own error response (e.g. { status: "FAILED",
+//   error: "...", help_url: "..." }) before executing any steps. When this
+//   happens the primary buildExecuteTestGoal prompt fails immediately.
+//
+//   During one such outage we discovered a minimal, imperative prompt style
+//   that TinyFish accepted reliably. This function encodes that style as a
+//   dedicated fallback so we can auto-retry with it instead of surfacing a
+//   confusing "browser agent error" to the user.
+//
+//   The key differences vs the primary prompt:
+//     - No preamble paragraphs — opens directly with the task statement
+//     - Explicit "do NOT stop early / always continue" directives
+//     - Inline fallback data values ("Element not found", "Page requires login")
+//     - Minimal JSON example inline rather than after a rules block
+//
+// This prompt is ONLY used on the fallback retry triggered by a TinyFish-own
+// error response. Normal execution always uses buildExecuteTestGoal first.
+function buildFallbackExecuteTestGoal(steps: string[]): string {
+  const stepCount = steps.length;
+  const numberedSteps = steps.map((s, i) => `STEP ${i + 1}: ${s}`).join("\n");
+
+  return `You are a browser test agent. Your task is to execute ALL steps and produce ${stepCount} structured logs. The task is NOT complete until all ${stepCount} logs are produced. Do NOT stop early. Always continue execution even if a step fails. If element not found set data=Element not found. If login required set data=Page requires login. If previous step failed set data=Previous step failed. STEPS:\n${numberedSteps}
+Return ONLY this exact JSON shape, no other text:
+{"logs":[{"id":1,"status":"PASSED","data":null},{"id":2,"status":"FAILED","data":"Element not found"}]}`;
+}
+
+// isTinyFishOwnError returns true when the TinyFishResult represents a
+// platform-level error emitted by TinyFish itself — as opposed to a test
+// step failure or a missing/malformed result.
+//
+// TinyFish-own errors look like:
+//   { status: "FAILED", error: "...", help_url: "...", run_id: "..." }
+// They have an error string and a status field but NO step-log arrays
+// (logs / steps / results). We use this shape to decide whether to retry
+// with the fallback prompt rather than immediately surfacing the failure.
+function isTinyFishOwnError(result: TinyFishResult): boolean {
+  if (!result.resultJson) return false;
+  const rj = result.resultJson as Record<string, unknown>;
+  const hasErrorField =
+    typeof rj["error"] === "string" && (rj["error"] as string).length > 0;
+  const hasStatusField = typeof rj["status"] === "string";
+  const hasStepLogs =
+    Array.isArray(rj["logs"]) ||
+    Array.isArray(rj["steps"]) ||
+    Array.isArray(rj["results"]);
+  return hasErrorField && hasStatusField && !hasStepLogs;
+}
+
 // parseExecuteTestResult interprets TinyFish's non-deterministic output.
 // TinyFish may return:
 //   A) A structured result with step logs — parsed from resultJson or rawText
@@ -1926,6 +1979,16 @@ function parseExecuteTestResult(
 // executeTest now accepts an optional timeouts argument so the
 // controller can pass user-requested timeout overrides into individual test
 // execution calls. When omitted the module-level TIMEOUTS defaults apply.
+//
+// TinyFish-own error fallback retry:
+//   If the primary prompt triggers a TinyFish platform-level error (Case B in
+//   parseExecuteTestResult — isTinyFishOwnError returns true), we automatically
+//   retry ONCE using buildFallbackExecuteTestGoal before giving up. This handles
+//   TinyFish degraded states where the detailed primary prompt is rejected but
+//   the simpler fallback prompt is accepted. The fallback retry always uses
+//   stealth profile since it is already a recovery path, and does not consume
+//   one of the caller's MAX_TEST_RETRIES slots (those are for test-step failures,
+//   not platform errors).
 export async function executeTest(
   url: string,
   goal: string,
@@ -1956,13 +2019,16 @@ export async function executeTest(
   const fullGoal = buildExecuteTestGoal(url, steps);
 
   // Use resolved EXECUTE_TEST_BASE_MS instead of the module constant.
+  const timeoutMs =
+    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
+    attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS;
+
   const result = await withTimeout(
     runTinyFish(
       { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
       ctx,
     ),
-    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
-      attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS,
+    timeoutMs,
     {
       success: false,
       resultJson: null,
@@ -1972,6 +2038,59 @@ export async function executeTest(
     },
     `executeTest(${url}) attempt=${attempt + 1}`,
   );
+
+  // ── TinyFish-own error fallback retry ─────────────────────────────────────
+  // When TinyFish returns a platform-level error (not a test-step failure),
+  // retry once with the simpler fallback prompt before giving up.
+  // This is separate from the MAX_TEST_RETRIES logic in testing.controller.ts,
+  // which retries on test-step failures. This retry is specifically for the case
+  // where TinyFish rejects our prompt entirely with its own error response.
+  if (isTinyFishOwnError(result)) {
+    const tfError = (result.resultJson as Record<string, unknown>)["error"] as string;
+    console.warn(
+      `[TestExecution] TinyFish-own error on primary prompt — retrying with fallback prompt. ` +
+        `url=${url} attempt=${attempt + 1} tfError="${tfError}"`,
+    );
+
+    const fallbackGoal = buildFallbackExecuteTestGoal(steps);
+    const fallbackResult = await withTimeout(
+      runTinyFish(
+        { url, goal: fallbackGoal, browser_profile: "stealth" },
+        ctx,
+      ),
+      timeoutMs,
+      {
+        success: false,
+        resultJson: null,
+        rawText: null,
+        error: "timeout",
+        jobId: null,
+      },
+      `executeTest(${url}) fallback attempt=${attempt + 1}`,
+    );
+
+    const fallbackDurationMs = Date.now() - startTime;
+
+    const fallbackTinyfishRaw = JSON.stringify({
+      success: fallbackResult.success,
+      error: fallbackResult.error,
+      resultJson: fallbackResult.resultJson,
+      rawText: fallbackResult.rawText,
+      // Tag the raw snapshot so we know which prompt path was used —
+      // useful when debugging AI fix suggestions for this result.
+      _promptPath: "fallback",
+    });
+
+    const fallbackParsed = parseExecuteTestResult(fallbackResult, fallbackDurationMs);
+
+    return {
+      ...fallbackParsed,
+      screenshotUrl: null,
+      durationMs: fallbackDurationMs,
+      jobId: fallbackResult.jobId,
+      tinyfishRaw: fallbackTinyfishRaw,
+    };
+  }
 
   const durationMs = Date.now() - startTime;
 
