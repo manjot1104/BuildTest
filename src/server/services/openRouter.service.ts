@@ -370,7 +370,9 @@ CRITICAL RULES FOR WRITING STEPS:
 7. Verify steps MUST say: Verify that <specific observable condition in the browser>
 8. NEVER say vague things like "go to the about page" — say "Click the link with text \\"About\\""
 9. Keep tests to 3–6 steps maximum. Shorter is better.
-10. target_url must be an exact URL from the crawl data.
+10. NEVER use exact placeholder text to identify input fields — use descriptive references like "the email input field" or "the first input field on the page" instead
+11. NEVER add a Navigate step if the target URL is already where the test starts — only add Navigate steps when going to a DIFFERENT page mid-test
+12. NEVER add standalone "Wait for the page to fully load" steps between every action — only add a wait step after a form submission or a navigation that changes the URL
 
 CATEGORIES:
 - navigation (P0): clicking nav links, verifying correct page loads, breadcrumbs, back/forward

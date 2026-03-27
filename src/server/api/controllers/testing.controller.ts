@@ -699,7 +699,7 @@ async function runPipelineStages(
           attempt++
         ) {
           // Pass userTimeouts into retry calls as well.
-          const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
+          const retryResult = await executeTest(testUrl, goal, true , attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
             isFlaky = true;
