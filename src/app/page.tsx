@@ -781,7 +781,7 @@ function TestimonialScroller() {
     useEffect(() => {
         if (isPaused) return
         const interval = setInterval(() => {
-            setOffset(prev => (prev + 1.2) % totalHeight)
+            setOffset(prev => (prev + 0.85) % totalHeight)
         }, 25)
         return () => clearInterval(interval)
     }, [isPaused, totalHeight])
