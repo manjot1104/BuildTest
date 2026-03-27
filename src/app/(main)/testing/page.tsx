@@ -546,6 +546,21 @@ function CrawlContextInput({
   );
 }
 
+// ─── Download CSV ──────────────────────────────────────────────────────────────
+function downloadCSV(filename: string, rows: string[][]): void {
+  const csv = rows
+    .map((r) => r.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
@@ -1337,8 +1352,57 @@ export default function TestingPage() {
               <button
                 onClick={() => { const b = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `testfish-${Date.now()}.json`; a.click(); toast.success("JSON downloaded"); }}
                 className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
-                <FileText className="h-3.5 w-3.5" /> JSON
+                <FileText className="h-3.5 w-3.5" /> Report JSON
               </button>
+              <button
+                onClick={() => {
+                  const rows = [
+                    ["Title", "Category", "Priority", "Status", "Duration (ms)", "Steps", "Expected Result"],
+                    ...(report.testCases ?? []).map((tc) => {
+                      const liveStatus = sseState.testUpdates[tc.id]?.status;
+                      const status = liveStatus ?? tc.results?.[0]?.status ?? "skipped";
+                      const duration = sseState.testUpdates[tc.id]?.durationMs ?? tc.results?.[0]?.duration_ms ?? "";
+                      return [
+                        tc.title ?? "",
+                        tc.category ?? "",
+                        tc.priority ?? "",
+                        status,
+                        String(duration),
+                        (tc.steps ?? []).join(" | "),
+                        tc.expected_result ?? "",
+                     ];
+                    }),
+                  ];
+                  downloadCSV(`testfish-cases-${Date.now()}.csv`, rows);
+                  toast.success("Test cases CSV downloaded");
+                }}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
+                >
+                <FileText className="h-3.5 w-3.5" /> Cases CSV
+              </button>
+
+              <button
+                onClick={() => {
+                  const rows = [
+                    ["Title", "Severity", "Category", "Page URL", "Description", "Steps", "AI Fix Suggestion"],
+                    ...(report.bugs ?? []).map((b) => [
+                      b.title ?? "",
+                      b.severity ?? "",
+                      b.category ?? "",
+                      b.page_url ?? "",
+                      b.description ?? "",
+                      (b.reproduction_steps ?? []).join(" | "),
+                      b.ai_fix_suggestion ?? "",
+                    ]),
+                  ];
+                  downloadCSV(`testfish-bugs-${Date.now()}.csv`, rows);
+                  toast.success("Bug report CSV downloaded");
+                }}
+                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
+                >
+                <Bug className="h-3.5 w-3.5" /> Bugs CSV
+              </button>
+
               {report.shareableSlug && (
                 <button
                   onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`); setCopied(true); toast.success("Link copied!"); setTimeout(() => setCopied(false), 2000); }}
@@ -1347,9 +1411,11 @@ export default function TestingPage() {
                   {copied ? "copied!" : "share"}
                 </button>
               )}
+
               <button onClick={handleReset} className="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground transition-all ml-auto touch-manipulation">
                 <RotateCcw className="h-3.5 w-3.5" /> new test
               </button>
+
             </div>
           </div>
         )}
