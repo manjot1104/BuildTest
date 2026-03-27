@@ -7,15 +7,16 @@ import {
     useMotionValueEvent,
     useInView,
     type Variants,
+    type MotionValue,
 } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
-import { useRef, useState, useEffect, useMemo } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { useTheme } from 'next-themes'
 import { savePromptToStorage, createImageAttachment, type ImageAttachment } from '@/components/ai-elements/prompt-input'
@@ -439,6 +440,3442 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
     )
 }
 
+// --- AI Chat Flow Section ---
+
+const AI_CHAT_PROMPT = 'Plan a portfolio website with dark theme'
+
+const AI_RESPONSE_LINES = [
+    "Here's a plan for your portfolio:",
+    '  Dark theme with subtle gradients',
+    '  Hero section with animated intro',
+    '  Projects grid with hover effects',
+    '  Contact form with validation',
+]
+
+// Phase: typing → sent → bubble → delay → AI response
+type ChatPhase = 'idle' | 'typing' | 'sending' | 'sent' | 'thinking' | 'responding' | 'done'
+
+function FlowAIChatVisual({ inView }: { inView: boolean }) {
+    const [phase, setPhase] = useState<ChatPhase>('idle')
+    const [typedChars, setTypedChars] = useState(0)
+    const [visibleLines, setVisibleLines] = useState(0)
+    const [sendPulse, setSendPulse] = useState(false)
+    const hasStarted = useRef(false)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    const schedule = useCallback((fn: () => void, ms: number) => {
+        const t = setTimeout(fn, ms)
+        timers.current.push(t)
+        return t
+    }, [])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!inView) {
+            timers.current.forEach(clearTimeout)
+            timers.current = []
+            setPhase('idle'); setTypedChars(0); setVisibleLines(0); setSendPulse(false)
+            hasStarted.current = false
+        }
+    }, [inView])
+
+    useEffect(() => {
+        if (!inView || hasStarted.current) return
+        hasStarted.current = true
+
+        // Natural delay per character — pauses after spaces and punctuation
+        const getCharDelay = (index: number) => {
+            const base = 45 + Math.random() * 35 // 45–80ms base
+            if (index === 0) return base
+            const prev = AI_CHAT_PROMPT[index - 1]!
+            if (prev === ' ') return base + 80 + Math.random() * 70 // word pause
+            if (',.:;!?'.includes(prev)) return base + 150 + Math.random() * 100 // punctuation
+            return base
+        }
+
+        const typeNextChar = (index: number) => {
+            if (index >= AI_CHAT_PROMPT.length) {
+                // Pause before sending — cursor blinks for a beat
+                schedule(() => {
+                    setSendPulse(true)
+                    setPhase('sending')
+
+                    schedule(() => {
+                        setSendPulse(false)
+                        setPhase('sent')
+
+                        schedule(() => {
+                            setPhase('thinking')
+
+                            schedule(() => {
+                                setPhase('responding')
+                                let lineIdx = 0
+                                const lineInterval = setInterval(() => {
+                                    lineIdx++
+                                    setVisibleLines(lineIdx)
+                                    if (lineIdx >= AI_RESPONSE_LINES.length) {
+                                        clearInterval(lineInterval)
+                                        schedule(() => setPhase('done'), 300)
+                                    }
+                                }, 200)
+                                timers.current.push(lineInterval as unknown as ReturnType<typeof setTimeout>)
+                            }, 800)
+                        }, 400)
+                    }, 350)
+                }, 300)
+                return
+            }
+            setTypedChars(index + 1)
+            schedule(() => typeNextChar(index + 1), getCharDelay(index + 1))
+        }
+
+        // Start typing after initial delay
+        schedule(() => {
+            setPhase('typing')
+            typeNextChar(0)
+        }, 500)
+
+        return () => { timers.current.forEach(clearTimeout) }
+    }, [inView, schedule])
+
+    const isTypingInInput = phase === 'typing'
+    const showBubble = phase === 'sent' || phase === 'thinking' || phase === 'responding' || phase === 'done'
+    const showThinking = phase === 'thinking'
+    const showAIResponse = phase === 'responding' || phase === 'done'
+
+    return (
+        <div className="relative">
+            {/* Subtle glow behind container */}
+            <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+
+            {/* Chat container */}
+            <motion.div
+                animate={inView ? { y: [0, -4, 0] } : {}}
+                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
+            >
+                {/* Title bar */}
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-muted/30">
+                    <div className="flex gap-1.5">
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                        <div className="size-2.5 rounded-full bg-border/60" />
+                    </div>
+                    <span className="text-[11px] font-medium text-muted-foreground/50 ml-2">Buildify Chat</span>
+                </div>
+
+                {/* Chat body */}
+                <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
+                    {/* User message bubble — appears after send */}
+                    {showBubble && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="flex justify-end"
+                        >
+                            <div className="max-w-[85%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-3">
+                                <p className="text-sm text-foreground/90 leading-relaxed">
+                                    {AI_CHAT_PROMPT}
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* AI thinking indicator */}
+                    {showThinking && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.3 }}
+                            className="flex justify-start"
+                        >
+                            <div className="rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="size-5 rounded-md bg-primary/10 flex items-center justify-center">
+                                        <Sparkles className="size-3 text-primary/60" />
+                                    </div>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50">Buildify AI</span>
+                                </div>
+                                <div className="flex items-center gap-1.5 py-1">
+                                    <span className="size-1.5 rounded-full bg-primary/40 animate-pulse" />
+                                    <span className="size-1.5 rounded-full bg-primary/30 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                    <span className="size-1.5 rounded-full bg-primary/20 animate-pulse" style={{ animationDelay: '300ms' }} />
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+
+                    {/* AI response */}
+                    {showAIResponse && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="flex justify-start"
+                        >
+                            <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-3">
+                                {/* AI avatar */}
+                                <div className="flex items-center gap-2 mb-2.5">
+                                    <div className="size-5 rounded-md bg-primary/10 flex items-center justify-center">
+                                        <Sparkles className="size-3 text-primary/60" />
+                                    </div>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50">Buildify AI</span>
+                                </div>
+                                <div className="space-y-1">
+                                    {AI_RESPONSE_LINES.map((line, i) => (
+                                        <motion.p
+                                            key={i}
+                                            initial={{ opacity: 0, y: 6 }}
+                                            animate={i < visibleLines ? { opacity: 1, y: 0 } : {}}
+                                            transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                                            className={cn(
+                                                'text-sm leading-relaxed',
+                                                line.startsWith('  ')
+                                                    ? 'text-muted-foreground/60 pl-3 border-l border-primary/15'
+                                                    : 'text-foreground/80 font-medium'
+                                            )}
+                                        >
+                                            {line.trim()}
+                                        </motion.p>
+                                    ))}
+                                    {visibleLines < AI_RESPONSE_LINES.length && (
+                                        <div className="flex items-center gap-1.5 pt-1">
+                                            <span className="size-1.5 rounded-full bg-primary/40 animate-pulse" />
+                                            <span className="size-1.5 rounded-full bg-primary/30 animate-pulse" style={{ animationDelay: '150ms' }} />
+                                            <span className="size-1.5 rounded-full bg-primary/20 animate-pulse" style={{ animationDelay: '300ms' }} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </div>
+
+                {/* Input bar — active during typing phase */}
+                <div className="px-4 pb-4">
+                    <div className={cn(
+                        'flex items-center gap-2 rounded-xl border px-3 py-2.5 transition-colors duration-200',
+                        isTypingInInput ? 'border-primary/30 bg-background/80' : 'border-border/40 bg-background/60'
+                    )}>
+                        <div className="flex-1 min-h-[20px] flex items-center">
+                            {isTypingInInput ? (
+                                <p className="text-sm text-foreground/80 leading-relaxed">
+                                    {AI_CHAT_PROMPT.slice(0, typedChars)}
+                                    <span className="inline-block w-[2px] h-[14px] bg-primary/70 ml-0.5 align-middle animate-pulse" />
+                                </p>
+                            ) : (
+                                <span className="text-xs text-muted-foreground/30">
+                                    {showBubble ? 'Type a message...' : 'Type a message...'}
+                                </span>
+                            )}
+                        </div>
+                        <motion.div
+                            animate={sendPulse ? { scale: [1, 0.85, 1.15, 1] } : {}}
+                            transition={{ duration: 0.35, ease: 'easeOut' }}
+                            className={cn(
+                                'size-7 rounded-lg flex items-center justify-center transition-colors duration-200',
+                                isTypingInInput || phase === 'sending'
+                                    ? 'bg-primary shadow-sm shadow-primary/20'
+                                    : 'bg-primary/10'
+                            )}
+                        >
+                            <SendHorizonal className={cn(
+                                'size-3.5 transition-colors duration-200',
+                                isTypingInInput || phase === 'sending'
+                                    ? 'text-primary-foreground'
+                                    : 'text-primary/40'
+                            )} />
+                        </motion.div>
+                    </div>
+                </div>
+            </motion.div>
+        </div>
+    )
+}
+
+// --- Flow connector dots ---
+
+const FLOW_DOTS = [
+    { size: 4, waveAmp: 18, waveFreq: 3, phaseShift: 0, speed: 0.88 },
+    { size: 7, waveAmp: 22, waveFreq: 3, phaseShift: 0.8, speed: 1 },
+    { size: 3, waveAmp: 14, waveFreq: 4, phaseShift: 1.6, speed: 1.08 },
+    { size: 6, waveAmp: 20, waveFreq: 3, phaseShift: 2.4, speed: 0.94 },
+    { size: 3, waveAmp: 16, waveFreq: 4, phaseShift: 3.2, speed: 1.04 },
+]
+
+function FlowDot({ dot, scrollProgress, index }: { dot: typeof FLOW_DOTS[0], scrollProgress: MotionValue<number>, index: number }) {
+    const stagger = index * 0.08
+
+    const y = useTransform(scrollProgress, [0, 1], [`${-5 + stagger * 100}%`, `${95 + stagger * 100}%`])
+    const x = useTransform(scrollProgress, v => {
+        const pos = (v * dot.speed + stagger) * Math.PI * dot.waveFreq + dot.phaseShift
+        return `calc(50% + ${Math.sin(pos) * dot.waveAmp}%)`
+    })
+    const opacity = useTransform(scrollProgress, [0, 0.02, 0.93, 1], [0, 1, 1, 0])
+    const brightness = useTransform(scrollProgress, v => {
+        const dotPos = v * dot.speed + stagger
+        const dist = Math.abs(dotPos - v)
+        return dist < 0.12 ? 1 : 0.4
+    })
+    const glowOpacity = useTransform(brightness, v => v * 0.5)
+
+    return (
+        <motion.div
+            style={{ top: y, left: x, opacity }}
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+        >
+            <motion.div
+                style={{ width: dot.size, height: dot.size, opacity: brightness }}
+                className="rounded-full bg-primary"
+            />
+            <motion.div
+                style={{
+                    width: dot.size * 3,
+                    height: dot.size * 3,
+                    marginLeft: -(dot.size),
+                    marginTop: -(dot.size),
+                    opacity: glowOpacity,
+                }}
+                className="absolute top-0 left-0 rounded-full bg-primary blur-sm"
+            />
+        </motion.div>
+    )
+}
+
+function FlowConnectorWrapper({ children }: { children: React.ReactNode }) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const [mounted, setMounted] = useState(false)
+    const { scrollYProgress } = useScroll({
+        target: containerRef,
+        offset: ['start start', 'end end'],
+    })
+
+    useEffect(() => { setMounted(true) }, [])
+
+    return (
+        <div ref={containerRef} className="relative">
+            {/* Flowing dots — behind content, client-only to avoid hydration mismatch */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex: 0 }}>
+                {mounted && FLOW_DOTS.map((dot, i) => (
+                    <FlowDot key={i} dot={dot} scrollProgress={scrollYProgress} index={i} />
+                ))}
+            </div>
+
+            {/* Content */}
+            <div className="relative" style={{ zIndex: 1 }}>
+                {children}
+            </div>
+        </div>
+    )
+}
+
+// --- Chat → Studio Unified Transition ---
+
+function FlowChatToStudioTransition() {
+    const transitionRef = useRef<HTMLDivElement>(null)
+    const [mounted, setMounted] = useState(false)
+    const { scrollYProgress } = useScroll({
+        target: transitionRef,
+        offset: ['start end', 'end start'],
+    })
+
+    // Ensure stable measurement after mount
+    useEffect(() => { setMounted(true) }, [])
+
+    // Remap: the actual visible range is ~0.2 to ~0.8 of the raw scroll progress
+    // This makes the animation more reliable across environments
+    const progress = useTransform(scrollYProgress, [0.15, 0.85], [0, 1])
+
+    // Phase 1 (0–0.2): Container scales up
+    const containerScale = useTransform(progress, [0, 0.12, 0.25], [0.85, 1.02, 1])
+
+    // Phase 2 (0.1–0.3): Chat content fades out
+    const chatContentOpacity = useTransform(progress, [0.08, 0.25], [1, 0])
+    const chatContentY = useTransform(progress, [0.08, 0.25], [0, -20])
+
+    // Phase 2.5 (0.2–0.35): Title bar label morphs
+    const chatLabelOpacity = useTransform(progress, [0.18, 0.28], [1, 0])
+    const studioLabelOpacity = useTransform(progress, [0.28, 0.38], [0, 1])
+
+    // Phase 3 (0.25–0.45): Grid lines appear
+    const gridOpacity = useTransform(progress, [0.25, 0.40], [0, 0.5])
+
+    // Phase 4 (0.35–0.85): UI elements form inside
+    const navbarOpacity = useTransform(progress, [0.33, 0.43], [0, 1])
+    const navbarY = useTransform(progress, [0.33, 0.43], [-12, 0])
+    const heroOpacity = useTransform(progress, [0.42, 0.52], [0, 1])
+    const heroScale = useTransform(progress, [0.42, 0.52], [0.95, 1])
+    const cardsOpacity = useTransform(progress, [0.52, 0.66], [0, 1])
+    const cardsY = useTransform(progress, [0.52, 0.66], [16, 0])
+    const footerOpacity = useTransform(progress, [0.66, 0.78], [0, 1])
+
+    // Connection line glow
+    const lineProgress = useTransform(progress, [0, 1], [0, 100])
+
+    return (
+        <section ref={transitionRef} className="relative" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
+            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
+                {/* Connection line (energy flow) */}
+                <motion.div
+                    className="absolute left-1/2 -translate-x-1/2 w-px top-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent pointer-events-none"
+                    style={{
+                        height: useTransform(lineProgress, (v) => `${Math.min(v * 1.2, 100)}%`),
+                        opacity: useTransform(progress, [0, 0.05, 0.9, 1], [0, 0.6, 0.6, 0]),
+                    }}
+                >
+                    {/* Glowing dot at tip */}
+                    <motion.div
+                        className="absolute bottom-0 left-1/2 -translate-x-1/2 size-2 rounded-full bg-primary/40 blur-sm"
+                        style={{ opacity: useTransform(progress, [0, 0.05, 0.85, 1], [0, 1, 1, 0]) }}
+                    />
+                </motion.div>
+
+                {/* The single transforming container */}
+                <motion.div
+                    style={{ scale: containerScale }}
+                    className="relative w-full max-w-lg md:max-w-xl rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
+                >
+                    {/* Title bar — morphing label */}
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-border/40 bg-muted/30">
+                        <div className="flex gap-1.5">
+                            <div className="size-2.5 rounded-full bg-border/60" />
+                            <div className="size-2.5 rounded-full bg-border/60" />
+                            <div className="size-2.5 rounded-full bg-border/60" />
+                        </div>
+                        <div className="relative ml-2">
+                            <motion.span style={{ opacity: chatLabelOpacity }} className="text-[11px] font-medium text-muted-foreground/50 absolute whitespace-nowrap">
+                                Buildify Chat
+                            </motion.span>
+                            <motion.span style={{ opacity: studioLabelOpacity }} className="text-[11px] font-medium text-muted-foreground/50 whitespace-nowrap">
+                                Buildify Studio
+                            </motion.span>
+                        </div>
+                        {/* Studio toolbar — fades in */}
+                        <motion.div style={{ opacity: studioLabelOpacity }} className="ml-auto flex items-center gap-2">
+                            <div className="h-5 w-14 rounded-md bg-border/20 flex items-center justify-center">
+                                <Layers className="size-3 text-muted-foreground/30" />
+                            </div>
+                            <div className="h-5 w-10 rounded-md bg-primary/10 flex items-center justify-center">
+                                <Palette className="size-3 text-primary/40" />
+                            </div>
+                        </motion.div>
+                    </div>
+
+                    {/* Body area */}
+                    <div className="relative" style={{ aspectRatio: '16/11' }}>
+                        {/* Chat content — fades out */}
+                        <motion.div
+                            style={{ opacity: chatContentOpacity, y: chatContentY }}
+                            className="absolute inset-0 p-5 space-y-3"
+                        >
+                            <div className="flex justify-end">
+                                <div className="max-w-[80%] rounded-2xl rounded-tr-md bg-primary/10 border border-primary/15 px-4 py-2.5">
+                                    <p className="text-xs text-foreground/70">Plan a portfolio website with dark theme</p>
+                                </div>
+                            </div>
+                            <div className="flex justify-start">
+                                <div className="max-w-[80%] rounded-2xl rounded-tl-md bg-muted/40 border border-border/40 px-4 py-2.5">
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                        <Sparkles className="size-2.5 text-primary/50" />
+                                        <span className="text-[10px] text-muted-foreground/40">Buildify AI</span>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="h-2 w-[90%] rounded bg-muted-foreground/8" />
+                                        <div className="h-2 w-[70%] rounded bg-muted-foreground/6" />
+                                        <div className="h-2 w-[80%] rounded bg-muted-foreground/5" />
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+
+                        {/* Grid lines — appear during morph */}
+                        <motion.div style={{ opacity: gridOpacity }} className="absolute inset-4 pointer-events-none">
+                            {[20, 40, 60, 80].map((pct) => (
+                                <div key={`v-${pct}`} className="absolute top-0 bottom-0 w-px bg-primary/8" style={{ left: `${pct}%` }} />
+                            ))}
+                            {[20, 40, 60, 80].map((pct) => (
+                                <div key={`h-${pct}`} className="absolute left-0 right-0 h-px bg-primary/8" style={{ top: `${pct}%` }} />
+                            ))}
+                        </motion.div>
+
+                        {/* Real UI forming inside — the same container */}
+                        <div className="absolute inset-0 p-3 md:p-4 flex flex-col gap-2">
+                            {/* Navbar */}
+                            <motion.div
+                                style={{ opacity: navbarOpacity, y: navbarY }}
+                                className="flex items-center justify-between px-3 py-2 rounded-lg bg-card/60"
+                            >
+                                <div className="flex items-center gap-1.5">
+                                    <div className="size-4 rounded bg-primary/20 flex items-center justify-center">
+                                        <Sparkles className="size-2.5 text-primary/60" />
+                                    </div>
+                                    <span className="text-[8px] font-bold text-foreground/70 tracking-tight">Portfolio</span>
+                                </div>
+                                <div className="flex items-center gap-2.5">
+                                    <span className="text-[7px] font-medium text-primary/70">Home</span>
+                                    <span className="text-[7px] text-muted-foreground/50">About</span>
+                                    <span className="text-[7px] text-muted-foreground/50">Work</span>
+                                    <div className="h-[18px] px-2 rounded-md bg-primary/15 flex items-center justify-center">
+                                        <span className="text-[6px] font-semibold text-primary/70">Contact</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            {/* Hero section */}
+                            <motion.div
+                                style={{ opacity: heroOpacity, scale: heroScale }}
+                                className="flex-1 flex items-center px-4 rounded-lg bg-gradient-to-br from-primary/[0.03] to-transparent"
+                            >
+                                <div className="flex-1 py-3">
+                                    <p className="text-[6px] font-semibold uppercase tracking-[0.15em] text-primary/50 mb-1">Portfolio</p>
+                                    <p className="text-[11px] md:text-[13px] font-bold text-foreground/80 leading-tight">Design your future</p>
+                                    <p className="text-[10px] md:text-[12px] font-bold text-foreground/50 leading-tight">with Buildify</p>
+                                    <p className="text-[7px] text-muted-foreground/50 mt-1.5 leading-relaxed max-w-[80%]">Crafting digital experiences that inspire and engage your audience.</p>
+                                    <div className="mt-2.5 flex gap-1.5">
+                                        <div className="h-5 px-2.5 rounded-md bg-primary/20 flex items-center justify-center">
+                                            <span className="text-[6px] font-semibold text-primary/80">View Work</span>
+                                        </div>
+                                        <div className="h-5 px-2 rounded-md border border-border/50 flex items-center justify-center">
+                                            <span className="text-[6px] font-medium text-muted-foreground/50">About Me</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="w-[30%] aspect-[4/5] rounded-lg bg-gradient-to-br from-primary/10 via-primary/5 to-transparent border border-primary/8 flex items-center justify-center">
+                                    <div className="size-8 rounded-full bg-primary/8 flex items-center justify-center">
+                                        <Globe className="size-4 text-primary/30" />
+                                    </div>
+                                </div>
+                            </motion.div>
+
+                            {/* 3 Cards */}
+                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-1.5">
+                                {[
+                                    { title: 'Web Design', desc: 'Modern responsive interfaces' },
+                                    { title: 'Branding', desc: 'Identity and visual systems' },
+                                    { title: 'Development', desc: 'Full-stack applications' },
+                                ].map((card, i) => (
+                                    <div key={i} className="rounded-lg border border-border/30 bg-card/40 p-2 group/card cursor-default transition-colors duration-200 hover:bg-primary/[0.04] hover:border-primary/12">
+                                        <div className="aspect-[16/9] rounded bg-gradient-to-br from-primary/8 via-primary/4 to-transparent mb-1.5 flex items-center justify-center">
+                                            <div className="size-5 rounded bg-primary/10 flex items-center justify-center">
+                                                <Code2 className="size-3 text-primary/30" />
+                                            </div>
+                                        </div>
+                                        <p className="text-[7px] font-semibold text-foreground/70 mb-0.5">{card.title}</p>
+                                        <p className="text-[6px] text-muted-foreground/45 leading-relaxed">{card.desc}</p>
+                                    </div>
+                                ))}
+                            </motion.div>
+
+                            {/* Footer */}
+                            <motion.div
+                                style={{ opacity: footerOpacity }}
+                                className="flex items-center justify-between px-3 py-1.5 rounded-lg bg-card/40"
+                            >
+                                <span className="text-[6px] text-muted-foreground/35">&copy; 2026 Portfolio. All rights reserved.</span>
+                                <div className="flex gap-2">
+                                    <span className="text-[6px] text-muted-foreground/30">Twitter</span>
+                                    <span className="text-[6px] text-muted-foreground/30">GitHub</span>
+                                    <span className="text-[6px] text-muted-foreground/30">LinkedIn</span>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </div>
+
+                    {/* Input bar / status bar — morphs */}
+                    <div className="px-4 pb-3 pt-1">
+                        <motion.div
+                            style={{ opacity: chatContentOpacity }}
+                            className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-3 py-2"
+                        >
+                            <span className="text-[10px] text-muted-foreground/25 flex-1">Type a message...</span>
+                            <div className="size-6 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <SendHorizonal className="size-3 text-primary/35" />
+                            </div>
+                        </motion.div>
+                        <motion.div
+                            style={{
+                                opacity: useTransform(scrollYProgress, [0.3, 0.45], [0, 1]),
+                            }}
+                            className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-4 py-2"
+                        >
+                            <span className="text-[9px] text-muted-foreground/30">1440 × 900</span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-muted-foreground/30">100%</span>
+                                <div className="h-1 w-12 rounded-full bg-border/30 overflow-hidden">
+                                    <div className="h-full w-1/2 bg-primary/20 rounded-full" />
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+// --- Studio Section — real Buildify Studio editor interface ---
+
+// --- Studio interaction state ---
+
+type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' | 'editing-text' | 'hover-elements-tab' | 'click-elements-tab' | 'hover-element' | 'click-element' | 'click-color' | 'hover-button' | 'hover-preview' | 'click-preview' | 'preview-mode' | 'click-exit-preview'
+
+function FlowStudioSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
+    const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
+    const [cursorVisible, setCursorVisible] = useState(false)
+    const [cursorClicking, setCursorClicking] = useState(false)
+    const [heroEditing, setHeroEditing] = useState(false)
+    const [heroText, setHeroText] = useState("Hi, I'm Ethan Carter")
+    const [templateHighlight, setTemplateHighlight] = useState(false)
+    const [activeTab, setActiveTab] = useState(0) // 0=Templates, 1=Elements, 2=Layers
+    const [newSection, setNewSection] = useState(false)
+    const [newCards, setNewCards] = useState(0) // 0, 1, 2, 3
+    const [previewMode, setPreviewMode] = useState(false)
+    const cursorTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            cursorTimers.current.forEach(clearTimeout); cursorTimers.current = []
+            setCursorVisible(false); setCursorAction('idle'); setCursorClicking(false)
+            setHeroEditing(false); setHeroText("Hi, I'm Ethan Carter")
+            setTemplateHighlight(false); setActiveTab(0); setNewSection(false); setNewCards(0); setPreviewMode(false)
+        }
+    }, [isInView])
+
+    // Run cursor sequence
+    useEffect(() => {
+        if (!isInView) return
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            cursorTimers.current.push(t)
+        })
+
+        let cancelled = false
+
+        const click = async () => {
+            setCursorClicking(true)
+            await delay(150)
+            if (!cancelled) setCursorClicking(false)
+        }
+
+        const moveTo = async (x: number, y: number, ms = 800) => {
+            setCursorPos({ x, y })
+            await delay(ms)
+        }
+
+        const runSequence = async () => {
+            await delay(1200)
+            if (cancelled) return
+            setCursorVisible(true)
+
+            // 1. Select template
+            setCursorAction('idle')
+            await moveTo(10, 28, 900)
+            if (cancelled) return
+            setCursorAction('hover-template')
+            await delay(400)
+            if (cancelled) return
+            setCursorAction('click-template')
+            await click()
+            if (cancelled) return
+            setTemplateHighlight(true)
+            await delay(300)
+            if (cancelled) return
+            setTemplateHighlight(false)
+            setCursorAction('idle')
+            await delay(600)
+
+            // 2. Switch to Elements tab
+            if (cancelled) return
+            await moveTo(10, 6, 700)
+            if (cancelled) return
+            setCursorAction('hover-elements-tab')
+            await delay(300)
+            if (cancelled) return
+            setCursorAction('click-elements-tab')
+            await click()
+            if (cancelled) return
+            setActiveTab(1)
+            await delay(500)
+
+            // 3. Click "Section" element to add
+            if (cancelled) return
+            await moveTo(10, 22, 600)
+            if (cancelled) return
+            setCursorAction('hover-element')
+            await delay(300)
+            if (cancelled) return
+            setCursorAction('click-element')
+            await click()
+            if (cancelled) return
+            setNewSection(true)
+            setCursorAction('idle')
+            await delay(800)
+
+            // 4. Click to add cards (3 clicks for 3 cards)
+            if (cancelled) return
+            await moveTo(10, 32, 500)
+            if (cancelled) return
+            setCursorAction('hover-element')
+            await delay(200)
+            for (let c = 1; c <= 3; c++) {
+                if (cancelled) return
+                await click()
+                setNewCards(c)
+                await delay(350)
+            }
+            setCursorAction('idle')
+            await delay(500)
+
+            // 5. Switch back to Templates tab
+            if (cancelled) return
+            setActiveTab(0)
+
+            // 6. Edit hero text
+            if (cancelled) return
+            await moveTo(38, 30, 900)
+            if (cancelled) return
+            setCursorAction('click-text')
+            await click()
+            if (cancelled) return
+            setHeroEditing(true)
+            setCursorAction('editing-text')
+
+            // Delete + retype
+            const original = "Hi, I'm Ethan Carter"
+            const edited = "Hey, I'm Ethan"
+            for (let i = original.length; i >= edited.length - 2; i--) {
+                if (cancelled) return
+                setHeroText(original.slice(0, i))
+                await delay(55)
+            }
+            for (let i = 0; i <= edited.length; i++) {
+                if (cancelled) return
+                setHeroText(edited.slice(0, i))
+                await delay(50 + Math.random() * 30)
+            }
+            await delay(400)
+            if (cancelled) return
+            setHeroEditing(false)
+            setCursorAction('idle')
+            await delay(500)
+
+            // 7. Change color
+            if (cancelled) return
+            await moveTo(89, 55, 1000)
+            if (cancelled) return
+            setCursorAction('click-color')
+            await click()
+            // NOTE: removed emerald color change — staying blue only
+            setCursorAction('idle')
+            await delay(600)
+
+            // 8. Preview mode
+            if (cancelled) return
+            await moveTo(62, -4, 800) // toolbar Preview button (above editor area, hence negative y)
+            if (cancelled) return
+            setCursorAction('hover-preview')
+            await delay(400)
+            if (cancelled) return
+            setCursorAction('click-preview')
+            await click()
+            if (cancelled) return
+            setPreviewMode(true)
+            setCursorAction('preview-mode')
+            await delay(2500)
+
+            // 9. Exit preview
+            if (cancelled) return
+            await moveTo(62, -4, 600)
+            setCursorAction('click-exit-preview')
+            await click()
+            if (cancelled) return
+            setPreviewMode(false)
+            setCursorAction('idle')
+            await delay(800)
+
+            // Done — hide cursor
+            if (cancelled) return
+            setCursorVisible(false)
+
+            // Reset after pause
+            await delay(2000)
+            if (cancelled) return
+            setHeroText("Hi, I'm Ethan Carter")
+            setHeroEditing(false)
+            setActiveTab(0)
+            setNewSection(false)
+            setNewCards(0)
+            setPreviewMode(false)
+        }
+
+        runSequence()
+        return () => {
+            cancelled = true
+            cursorTimers.current.forEach(clearTimeout)
+        }
+    }, [isInView])
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                {/* Text — top */}
+                <div className="max-w-xl mb-8 md:mb-12">
+                    <motion.span
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0}
+                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                    >
+                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                        Step 02
+                    </motion.span>
+
+                    <div className="overflow-hidden">
+                        <motion.h2
+                            variants={slideUp}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.1}
+                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                        >
+                            Design Visually
+                        </motion.h2>
+                    </div>
+
+                    <motion.p
+                        variants={blurIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.25}
+                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
+                    >
+                        Structure your ideas with an intuitive visual editor and real-time layout control.
+                    </motion.p>
+
+                    <motion.div
+                        variants={fadeIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.4}
+                        className="mt-6 flex items-center gap-3"
+                    >
+                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                            <Palette className="size-[18px] text-primary/60" />
+                        </div>
+                        <span className="text-sm font-medium text-muted-foreground/60">Drag-and-drop studio</span>
+                    </motion.div>
+                </div>
+
+                {/* Studio preview — full width */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                    <div className="relative">
+                        <div className="absolute -inset-8 rounded-3xl bg-primary/[0.05] blur-3xl pointer-events-none" />
+
+                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
+                            {/* ── Top Toolbar ── */}
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                transition={{ duration: 0.5, delay: 0.3 }}
+                                className="flex items-center justify-between px-3 py-2 border-b border-border/30 bg-muted/20"
+                            >
+                                {/* Left: back + title */}
+                                <div className="flex items-center gap-2.5">
+                                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground/40">
+                                        <ChevronLeft className="size-3" />
+                                        <span>Back</span>
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/30" />
+                                    <span className="text-[10px] font-semibold text-foreground/70">Buildify Studio</span>
+                                </div>
+
+                                {/* Center: tools */}
+                                <div className="flex items-center gap-1">
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        <button className="size-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:bg-muted/40 transition-colors">
+                                            <Undo2 className="size-3" />
+                                        </button>
+                                        <button className="size-6 rounded-md flex items-center justify-center text-muted-foreground/25">
+                                            <Redo2 className="size-3" />
+                                        </button>
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        {[Grid3X3, Palette, MousePointerClick].map((Icon, i) => (
+                                            <button key={i} className={cn(
+                                                'size-6 rounded-md flex items-center justify-center transition-colors',
+                                                i === 0 ? 'bg-primary/10 text-primary/70' : 'text-muted-foreground/40 hover:bg-muted/40'
+                                            )}>
+                                                <Icon className="size-3" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className="flex items-center gap-0.5 px-1">
+                                        {[Monitor, Tablet, Smartphone].map((Icon, i) => (
+                                            <button key={i} className={cn(
+                                                'size-6 rounded-md flex items-center justify-center transition-colors',
+                                                i === 0 ? 'text-foreground/60' : 'text-muted-foreground/30'
+                                            )}>
+                                                <Icon className="size-3" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="w-px h-3.5 bg-border/20" />
+                                    <div className={cn(
+                                        "flex items-center gap-1 px-1.5 py-0.5 rounded-md transition-all duration-200",
+                                        cursorAction === 'hover-preview' || cursorAction === 'click-preview' || previewMode
+                                            ? 'bg-primary/10 text-primary/70'
+                                            : 'text-muted-foreground/40'
+                                    )}>
+                                        <Eye className="size-3" />
+                                        <span className="text-[8px]">{previewMode ? 'Exit Preview' : 'Preview'}</span>
+                                    </div>
+                                </div>
+
+                                {/* Right: actions */}
+                                <div className="flex items-center gap-1.5">
+                                    <button className="h-6 px-2.5 rounded-md border border-border/40 flex items-center gap-1.5 text-[8px] text-muted-foreground/50">
+                                        <Save className="size-3" />
+                                        Save
+                                    </button>
+                                    <motion.button
+                                        animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0.15)', '0 0 10px rgba(59,130,246,0.25)', '0 0 0px rgba(59,130,246,0.15)'] }}
+                                        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                                        className="h-6 px-2.5 rounded-md bg-primary text-primary-foreground flex items-center gap-1.5 text-[8px] font-semibold shadow-sm shadow-primary/20"
+                                    >
+                                        <Upload className="size-3" />
+                                        Publish
+                                    </motion.button>
+                                </div>
+                            </motion.div>
+
+                            {/* ── Main Editor Area ── */}
+                            <div className="flex relative" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                                {/* Animated cursor */}
+                                {cursorVisible && (
+                                    <motion.div
+                                        className="absolute z-50 pointer-events-none"
+                                        animate={{ left: `${cursorPos.x}%`, top: `${cursorPos.y}%` }}
+                                        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+                                    >
+                                        {/* Cursor SVG */}
+                                        <motion.div
+                                            animate={cursorClicking ? { scale: 0.8 } : { scale: 1 }}
+                                            transition={{ duration: 0.1 }}
+                                        >
+                                            <svg width="16" height="20" viewBox="0 0 16 20" fill="none" className="drop-shadow-md">
+                                                <path d="M0 0L12.5 12.5H5.5L2.5 19.5L0 0Z" fill="white" stroke="black" strokeWidth="1" strokeLinejoin="round" />
+                                            </svg>
+                                        </motion.div>
+                                        {/* Click ripple */}
+                                        {cursorClicking && (
+                                            <motion.div
+                                                initial={{ scale: 0, opacity: 0.5 }}
+                                                animate={{ scale: 2.5, opacity: 0 }}
+                                                transition={{ duration: 0.5 }}
+                                                className="absolute top-0 left-0 size-4 rounded-full bg-primary/30 -translate-x-1/2 -translate-y-1/2"
+                                            />
+                                        )}
+                                    </motion.div>
+                                )}
+                                {/* Left Sidebar */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: -12 }}
+                                    animate={isInView
+                                        ? previewMode
+                                            ? { opacity: 0, x: -20, width: 0, borderWidth: 0, padding: 0 }
+                                            : { opacity: 1, x: 0, width: 140, borderWidth: 1, padding: undefined }
+                                        : {}
+                                    }
+                                    transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                    className="border-r border-border/25 bg-muted/8 flex-shrink-0 hidden md:flex flex-col overflow-hidden"
+                                >
+                                    {/* Tabs */}
+                                    <div className="flex border-b border-border/20 px-1">
+                                        {[
+                                            { icon: LayoutTemplate, label: 'Templates' },
+                                            { icon: Type, label: 'Elements' },
+                                            { icon: Layers, label: 'Layers' },
+                                        ].map((tab, i) => (
+                                            <div
+                                                key={i}
+                                                className={cn(
+                                                    'flex-1 flex flex-col items-center gap-0.5 py-2 cursor-default transition-all duration-200',
+                                                    activeTab === i ? 'text-primary/80 border-b-2 border-primary/50' : 'text-muted-foreground/25',
+                                                    (cursorAction === 'hover-elements-tab' && i === 1) && 'text-muted-foreground/50'
+                                                )}
+                                            >
+                                                <tab.icon className="size-3" />
+                                                <span className="text-[6px] font-medium">{tab.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Sidebar content — switches between tabs */}
+                                    <div className="flex-1 overflow-hidden px-2 py-2 space-y-1.5">
+                                        {activeTab === 0 ? (
+                                            <>
+                                                {/* Template cards */}
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 6 }}
+                                                    animate={{
+                                                        opacity: 1,
+                                                        y: templateHighlight || cursorAction === 'hover-template' ? 0 : [0, -2, 0],
+                                                    }}
+                                                    transition={{
+                                                        opacity: { duration: 0.3 },
+                                                        y: { duration: 4.5, repeat: Infinity, ease: 'easeInOut' },
+                                                    }}
+                                                    className={cn(
+                                                        "rounded-lg border bg-card/60 overflow-hidden transition-all duration-300",
+                                                        templateHighlight || cursorAction === 'hover-template'
+                                                            ? 'border-primary/40 shadow-md shadow-primary/10 scale-[1.02]'
+                                                            : 'border-primary/20'
+                                                    )}
+                                                >
+                                                    <div className="h-14 bg-gradient-to-br from-[#1a1a2e] to-[#16213e] p-2 flex flex-col justify-between">
+                                                        <div className="flex justify-between">
+                                                            <div className="h-1 w-8 rounded bg-white/15" />
+                                                            <div className="flex gap-0.5">
+                                                                <div className="h-1 w-3 rounded bg-white/8" />
+                                                                <div className="h-1 w-3 rounded bg-white/8" />
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <div className="h-1.5 w-14 rounded bg-white/25 mb-0.5" />
+                                                            <div className="h-1 w-9 rounded bg-blue-400/30" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2 py-1.5 flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-[7px] font-semibold text-foreground/65">Developer Dark</p>
+                                                            <p className="text-[5.5px] text-muted-foreground/30">Developer</p>
+                                                        </div>
+                                                        <div className="h-4 px-1.5 rounded bg-primary/15 flex items-center gap-0.5">
+                                                            <span className="text-[5.5px] font-medium text-primary/70">Use</span>
+                                                            <ArrowRight className="size-2 text-primary/50" />
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+
+                                                <div className="rounded-lg border border-border/20 bg-card/30 overflow-hidden">
+                                                    <div className="h-14 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] p-2 flex flex-col justify-between">
+                                                        <div className="h-1 w-6 rounded bg-black/8" />
+                                                        <div className="flex gap-1">
+                                                            <div className="size-3.5 rounded bg-blue-500/20" />
+                                                            <div className="size-3.5 rounded bg-blue-500/10" />
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2 py-1.5">
+                                                        <p className="text-[7px] font-semibold text-foreground/55">Designer Clean</p>
+                                                        <p className="text-[5.5px] text-muted-foreground/25">Designer</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="rounded-lg border border-border/12 bg-card/15 overflow-hidden">
+                                                    <div className="h-14 bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] p-2 flex flex-col justify-between">
+                                                        <div className="h-1 w-7 rounded bg-white/6" />
+                                                        <div className="h-1 w-10 rounded bg-white/5" />
+                                                    </div>
+                                                    <div className="px-2 py-1.5">
+                                                        <p className="text-[7px] text-foreground/25">Minimal Pro</p>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                {/* Elements list */}
+                                                <motion.div
+                                                    initial={{ opacity: 0, x: -6 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ duration: 0.25 }}
+                                                    className="space-y-1"
+                                                >
+                                                    {[
+                                                        { icon: Layers, label: 'Section', desc: 'Content block' },
+                                                        { icon: Grid3X3, label: 'Card Grid', desc: '3-column cards' },
+                                                        { icon: Type, label: 'Heading', desc: 'Text element' },
+                                                        { icon: FileText, label: 'Paragraph', desc: 'Body text' },
+                                                        { icon: MousePointerClick, label: 'Button', desc: 'CTA element' },
+                                                    ].map((el, i) => (
+                                                        <div
+                                                            key={el.label}
+                                                            className={cn(
+                                                                "flex items-center gap-2 px-2 py-1.5 rounded-md transition-all duration-200 cursor-default",
+                                                                (cursorAction === 'hover-element' && i === 0) || (cursorAction === 'click-element' && i === 0)
+                                                                    ? 'bg-primary/10 border border-primary/20'
+                                                                    : (cursorAction === 'hover-element' && i === 1)
+                                                                        ? 'bg-primary/10 border border-primary/20'
+                                                                        : 'border border-transparent hover:bg-muted/30'
+                                                            )}
+                                                        >
+                                                            <div className="size-6 rounded bg-muted/30 flex items-center justify-center flex-shrink-0">
+                                                                <el.icon className="size-3 text-muted-foreground/40" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[7px] font-semibold text-foreground/60">{el.label}</p>
+                                                                <p className="text-[5.5px] text-muted-foreground/30">{el.desc}</p>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </motion.div>
+                                            </>
+                                        )}
+                                    </div>
+                                </motion.div>
+
+                                {/* Center Canvas */}
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.97 }}
+                                    animate={isInView ? { opacity: 1, scale: 1 } : {}}
+                                    transition={{ duration: 0.6, delay: 0.3 }}
+                                    className="flex-1 bg-muted/5 relative overflow-hidden"
+                                >
+                                    <motion.div
+                                        animate={{
+                                            opacity: previewMode ? 0 : 0.2,
+                                            backgroundPosition: ['0px 0px', '10px 10px'],
+                                        }}
+                                        transition={{
+                                            opacity: { duration: 0.3 },
+                                            backgroundPosition: { duration: 20, repeat: Infinity, ease: 'linear' },
+                                        }}
+                                        className="absolute inset-0 dot-grid-bg"
+                                    />
+
+                                    {/* Dark dev portfolio */}
+                                    <motion.div
+                                        animate={previewMode
+                                            ? { left: 0, right: 0, top: 0, bottom: 0, borderRadius: 0 }
+                                            : { left: 12, right: 12, top: 10, bottom: 10, borderRadius: 8 }
+                                        }
+                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                        className={cn(
+                                            "absolute border bg-[#0f1117] overflow-hidden shadow-xl flex flex-col text-white/90",
+                                            previewMode ? 'border-transparent' : 'border-border/30'
+                                        )}
+                                    >
+                                        {/* Navbar */}
+                                        <div className="flex items-center justify-between px-5 py-2.5 border-b border-white/5">
+                                            <span className="text-[10px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
+                                            <div className="flex items-center gap-4">
+                                                {['Work', 'About', 'Skills', 'Contact'].map((link) => (
+                                                    <span key={link} className={cn(
+                                                        'text-[8px] cursor-default transition-colors duration-200',
+                                                        link === 'Contact' ? 'text-white/55 hover:text-white/70' : 'text-white/35 hover:text-white/50'
+                                                    )}>{link}</span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Hero */}
+                                        <div className="flex-1 flex items-center px-5 gap-4">
+                                            <div className="flex-1">
+                                                <p className={cn(
+                                                    "text-[16px] md:text-[18px] font-extrabold leading-tight transition-all duration-200",
+                                                    heroEditing ? 'text-white/95 bg-white/[0.04] rounded px-1 -mx-1 ring-1 ring-blue-400/30' : 'text-white/90'
+                                                )}>
+                                                    {heroText}
+                                                    {heroEditing && <span className="inline-block w-[2px] h-[16px] bg-blue-400/80 ml-0.5 align-middle animate-pulse" />}
+                                                </p>
+                                                <p className="text-[9px] font-semibold text-blue-400/80 mt-1">Product Designer &amp; Developer</p>
+                                                <p className="text-[7px] text-white/30 mt-2 leading-relaxed max-w-[90%]">Designing intuitive products and building polished digital experiences.</p>
+                                                <p className="text-[6px] text-white/20 mt-1">Figma · React · TypeScript · Next.js · Tailwind</p>
+                                                <div className="mt-3 flex gap-2">
+                                                    <motion.div
+                                                        animate={{
+                                                            boxShadow: ['0 0 0px rgba(59,130,246,0.2)', '0 0 12px rgba(59,130,246,0.3)', '0 0 0px rgba(59,130,246,0.2)'],
+                                                        }}
+                                                        transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                                        className={cn(
+                                                            "h-6 px-2.5 rounded-md flex items-center shadow-sm cursor-default transition-all duration-300",
+                                                            'bg-blue-500/80 shadow-blue-500/20 hover:bg-blue-500/90',
+                                                            cursorAction === 'hover-button' && 'scale-105 shadow-md shadow-blue-500/30'
+                                                        )}
+                                                    >
+                                                        <span className="text-[7px] font-semibold text-white">View Work</span>
+                                                    </motion.div>
+                                                    <div className="h-6 px-2.5 rounded-md border border-white/15 flex items-center cursor-default transition-all duration-200 hover:border-white/25 hover:bg-white/[0.03]">
+                                                        <span className="text-[7px] text-white/50">About Me</span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2 mt-3">
+                                                    {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
+                                                        <motion.div
+                                                            key={i}
+                                                            animate={{ y: [0, -2, 0] }}
+                                                            transition={{ duration: 3 + i * 0.5, repeat: Infinity, ease: 'easeInOut', delay: i * 0.3 }}
+                                                            className="size-5 rounded bg-white/[0.04] flex items-center justify-center cursor-default transition-colors duration-200 hover:bg-white/[0.08]"
+                                                        >
+                                                            <Icon className="size-3 text-white/25" />
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            {/* Code block */}
+                                            <motion.div
+                                                animate={{ y: [0, -4, 0], rotate: [0, 0.5, 0] }}
+                                                transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
+                                                className="w-[40%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
+                                                <div className="flex gap-1 mb-2.5">
+                                                    <div className="size-1.5 rounded-full bg-blue-400/40" />
+                                                    <div className="size-1.5 rounded-full bg-blue-300/30" />
+                                                    <div className="size-1.5 rounded-full bg-blue-200/25" />
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[6px] font-mono"><span className="text-white/20">{'// '}</span><span className="text-blue-300/50">portfolio.js</span></p>
+                                                    <p className="text-[6px] font-mono text-blue-400/50">const <span className="text-blue-300/70">ethan</span> = {'{'}</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">role: </span><span className="text-blue-200/50">&quot;Product Designer&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">skills: </span>[<span className="text-blue-200/50">&quot;Figma&quot;</span>, <span className="text-blue-200/50">&quot;React&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-4"><span className="text-blue-200/50">&quot;TypeScript&quot;</span>, <span className="text-blue-200/50">&quot;Next.js&quot;</span>],</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">focus: </span><span className="text-blue-300/50">&quot;Design Systems&quot;</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">projects: </span><span className="text-blue-400/60">12</span>,</p>
+                                                    <p className="text-[6px] font-mono pl-2"><span className="text-white/30">available: </span><span className="text-blue-300/60">true</span>,</p>
+                                                    <p className="text-[6px] font-mono text-blue-400/50">{'}'}</p>
+                                                    <p className="text-[6px] font-mono mt-1"><span className="text-white/15">console.log(</span><span className="text-blue-200/40">&quot;designing the future...&quot;</span><span className="text-white/15">)</span></p>
+                                                </div>
+                                            </motion.div>
+                                        </div>
+
+                                        {/* Tech stack */}
+                                        <div className="px-5 py-2 border-t border-white/[0.03]">
+                                            <p className="text-[7px] font-semibold text-white/40 mb-2">Tech Stack</p>
+                                            <div className="grid grid-cols-4 gap-1.5">
+                                                {[
+                                                    { cat: 'Design', items: 'Figma · Framer · Principle' },
+                                                    { cat: 'Frontend', items: 'React · Next.js · TypeScript' },
+                                                    { cat: 'Styling', items: 'Tailwind · CSS · Motion' },
+                                                    { cat: 'Tools', items: 'Git · VS Code · Vercel' },
+                                                ].map((s, i) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        animate={{ y: [0, -2, 0] }}
+                                                        transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: 'easeInOut', delay: i * 0.5 }}
+                                                        className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5 cursor-default transition-colors duration-200 hover:bg-white/[0.04] hover:border-white/[0.07]"
+                                                    >
+                                                        <p className="text-[6px] font-semibold text-white/50">{s.cat}</p>
+                                                        <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Featured projects */}
+                                        <div className="px-5 pb-2">
+                                            <p className="text-[7px] font-semibold text-white/40 mb-2">Featured Projects</p>
+                                            <div className="grid grid-cols-3 gap-1.5">
+                                                {[
+                                                    { name: 'Design System', desc: 'Component library with tokens and docs', tech: 'Figma · React · Storybook' },
+                                                    { name: 'SaaS Dashboard', desc: 'Analytics UI with real-time charts', tech: 'Next.js · D3.js · Tailwind' },
+                                                    { name: 'E-commerce App', desc: 'Modern storefront with checkout flow', tech: 'React · Stripe · Framer' },
+                                                ].map((proj, i) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        animate={{
+                                                            y: [0, -3, 0],
+                                                            rotate: [0, i === 1 ? 0.3 : -0.3, 0],
+                                                        }}
+                                                        transition={{ duration: 5 + i * 0.8, repeat: Infinity, ease: 'easeInOut', delay: i * 0.6 }}
+                                                        className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2.5 py-2 cursor-default transition-all duration-200 hover:bg-white/[0.04] hover:border-white/[0.08] hover:-translate-y-px"
+                                                    >
+                                                        <p className="text-[7px] font-semibold text-white/60">{proj.name}</p>
+                                                        <p className="text-[5.5px] text-white/25 mt-0.5">{proj.desc}</p>
+                                                        <p className="text-[5px] text-white/15 mt-1.5">{proj.tech}</p>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Dynamically added section */}
+                                        {newSection && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                className="px-5 pb-3 overflow-hidden"
+                                            >
+                                                <p className="text-[7px] font-semibold text-white/40 mb-2">Testimonials</p>
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {[
+                                                        { quote: 'Incredible design sense and attention to detail.', name: 'Sarah K.' },
+                                                        { quote: 'Delivered on time with pixel-perfect results.', name: 'James L.' },
+                                                        { quote: 'A true professional. Highly recommended.', name: 'Maria C.' },
+                                                    ].map((card, i) => (
+                                                        i < newCards && (
+                                                            <motion.div
+                                                                key={i}
+                                                                initial={{ opacity: 0, scale: 0.9, y: 6 }}
+                                                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                                                transition={{ duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+                                                                className="rounded-md bg-white/[0.025] border border-white/[0.04] px-2 py-1.5"
+                                                            >
+                                                                <p className="text-[5.5px] text-white/30 italic leading-relaxed">&quot;{card.quote}&quot;</p>
+                                                                <p className="text-[5px] text-white/50 mt-1 font-medium">— {card.name}</p>
+                                                            </motion.div>
+                                                        )
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                </motion.div>
+
+                                {/* Right Sidebar — Properties Panel */}
+                                <motion.div
+                                    initial={{ opacity: 0, x: 14 }}
+                                    animate={isInView
+                                        ? previewMode
+                                            ? { opacity: 0, x: 20, width: 0, borderWidth: 0, padding: 0 }
+                                            : { opacity: 1, x: 0, width: 170, borderWidth: 1, padding: undefined }
+                                        : {}
+                                    }
+                                    transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                    className="border-l border-border/30 bg-muted/10 flex-shrink-0 hidden md:flex flex-col overflow-hidden"
+                                >
+                                    <div className="px-3 py-2 border-b border-border/25">
+                                        <p className="text-[8px] font-semibold text-foreground/55 uppercase tracking-[0.1em]">Properties</p>
+                                    </div>
+                                    <div className="px-3 py-2.5 space-y-3 flex-1 overflow-hidden">
+                                        {/* Position & Size */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Position &amp; Size</p>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                {[
+                                                    { label: 'X', value: '0' },
+                                                    { label: 'Y', value: '0' },
+                                                    { label: 'W', value: '960' },
+                                                    { label: 'H', value: 'auto' },
+                                                ].map((field) => (
+                                                    <div key={field.label} className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5 gap-1 transition-colors duration-200 hover:border-primary/20">
+                                                        <span className="text-[6px] text-muted-foreground/30">{field.label}</span>
+                                                        <span className="text-[7px] text-muted-foreground/50 font-mono">{field.value}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Typography */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Typography</p>
+                                            <div className="space-y-1">
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5 transition-colors duration-200 hover:border-primary/20">
+                                                    <span className="text-[7px] text-muted-foreground/50">Inter</span>
+                                                    <ChevronRight className="size-2.5 text-muted-foreground/25" />
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                        <span className="text-[7px] text-muted-foreground/50 font-mono">18px</span>
+                                                    </div>
+                                                    <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                        <span className="text-[7px] text-muted-foreground/50">ExtraBold</span>
+                                                    </div>
+                                                </div>
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/40">Line Height</span>
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">1.15</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Fill & Colors */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Fill</p>
+                                            <div className="flex items-center gap-1.5 mb-2">
+                                                {[
+                                                    { bg: 'bg-blue-500', id: 'blue', active: true },
+                                                    { bg: 'bg-blue-300', id: 'light', active: false },
+                                                    { bg: 'bg-[#0f1117]', id: 'dark', active: false },
+                                                    { bg: 'bg-white', id: 'white', active: false },
+                                                ].map((c) => (
+                                                    <motion.div
+                                                        key={c.id}
+                                                        animate={c.active ? {
+                                                            boxShadow: ['0 0 0px rgba(59,130,246,0.15)', '0 0 8px rgba(59,130,246,0.3)', '0 0 0px rgba(59,130,246,0.15)'],
+                                                        } : {}}
+                                                        transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
+                                                        className={cn(
+                                                            'size-5 rounded-md border cursor-default transition-all duration-200 hover:scale-110',
+                                                            c.bg,
+                                                            c.active
+                                                                ? 'border-primary/50 ring-1 ring-primary/20 scale-110'
+                                                                : 'border-border/30',
+                                                            cursorAction === 'click-color' && c.id === 'light' && 'ring-2 ring-primary/30 scale-110'
+                                                        )}
+                                                    />
+                                                ))}
+                                                <div className="size-5 rounded-md border border-dashed border-border/30 flex items-center justify-center">
+                                                    <Plus className="size-2.5 text-muted-foreground/20" />
+                                                </div>
+                                            </div>
+                                            <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center justify-between px-1.5">
+                                                <span className="text-[7px] text-muted-foreground/40">Opacity</span>
+                                                <div className="flex items-center gap-1">
+                                                    <div className="w-12 h-1 rounded-full bg-border/30 overflow-hidden">
+                                                        <motion.div
+                                                            animate={{ opacity: [0.25, 0.5, 0.25] }}
+                                                            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                                            className="w-[85%] h-full bg-primary/30 rounded-full"
+                                                        />
+                                                    </div>
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">85%</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="w-full h-px bg-border/20" />
+
+                                        {/* Border */}
+                                        <div>
+                                            <p className="text-[7px] font-medium text-muted-foreground/45 mb-1.5">Border</p>
+                                            <div className="grid grid-cols-2 gap-1">
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/50 font-mono">0px</span>
+                                                </div>
+                                                <div className="h-5 rounded-md bg-background/60 border border-border/25 flex items-center px-1.5">
+                                                    <span className="text-[7px] text-muted-foreground/50">8px rad</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="px-3 py-2 border-t border-border/25">
+                                        <p className="text-[7px] text-muted-foreground/30 text-center">Select an element to edit its properties</p>
+                                    </div>
+                                </motion.div>
+                            </div>
+
+                            {/* ── Bottom Status Bar ── */}
+                            <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={isInView ? { opacity: 1 } : {}}
+                                transition={{ duration: 0.4, delay: 0.6 }}
+                                className="flex items-center justify-between px-3 py-1.5 border-t border-border/30 bg-muted/15"
+                            >
+                                <span className="text-[8px] text-muted-foreground/35">Alt+drag · Ctrl+scroll · Shift+click multi-select</span>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-1">
+                                        <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
+                                            <Plus className="size-2.5" />
+                                        </button>
+                                        <span className="text-[8px] text-muted-foreground/45 font-mono">44%</span>
+                                        <button className="size-4 rounded flex items-center justify-center text-muted-foreground/30 hover:bg-muted/30 transition-colors">
+                                            <X className="size-2.5" />
+                                        </button>
+                                    </div>
+                                    <span className="text-[8px] text-muted-foreground/35">Desktop · 1440×1000 · 44% zoom</span>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+// --- Studio → Builder: workspace slide transition ---
+
+// UI fragment definitions for the transition
+const TRANSITION_FRAGMENTS = {
+    left: [
+        { label: 'Hero Section', icon: Type, x: '15%', y: '20%', delay: 0.15 },
+        { label: 'View Work', icon: MousePointerClick, x: '20%', y: '55%', delay: 0.3 },
+        { label: 'Project Card', icon: Layers, x: '10%', y: '75%', delay: 0.45 },
+    ],
+    right: [
+        { label: '<Hero />', icon: Code2, x: '75%', y: '25%', delay: 0.2 },
+        { label: '<Projects />', icon: Code2, x: '80%', y: '50%', delay: 0.35 },
+        { label: '<Contact />', icon: Code2, x: '70%', y: '72%', delay: 0.5 },
+    ],
+}
+
+function FlowStudioToBuilderTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // Flow line
+    const lineHeight = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+    const lineOpacity = useTransform(scrollYProgress, [0, 0.08, 0.85, 1], [0, 0.5, 0.5, 0])
+    const lineWidth = useTransform(scrollYProgress, [0.2, 0.35, 0.5, 0.65], [1, 2, 2, 1])
+    const dotY = useTransform(scrollYProgress, [0, 0.6], ['0%', '100%'])
+
+    // Fragments
+    const fragmentsOpacity = useTransform(scrollYProgress, [0.15, 0.3, 0.7, 0.85], [0, 1, 1, 0])
+    // Background grid
+    const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
+
+    return (
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+            {/* Subtle background grid — depth layer */}
+            <motion.div
+                style={{ opacity: gridOpacity }}
+                className="absolute inset-0 dot-grid-bg pointer-events-none"
+            />
+
+            {/* Flow line — centered, with glow trail */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+                {/* Glow trail */}
+                <motion.div
+                    style={{ height: lineHeight, opacity: useTransform(lineOpacity, v => v * 0.4) }}
+                    className="absolute left-1/2 -translate-x-1/2 w-6 bg-gradient-to-b from-transparent via-primary/10 to-transparent blur-md origin-top"
+                />
+                {/* Main line with thickness pulse */}
+                <motion.div
+                    style={{ height: lineHeight, opacity: lineOpacity, width: lineWidth }}
+                    className="absolute left-1/2 -translate-x-1/2 bg-gradient-to-b from-primary/15 via-primary/30 to-primary/10 origin-top rounded-full"
+                />
+                {/* Glowing dot at tip */}
+                <motion.div
+                    style={{ top: dotY, opacity: lineOpacity }}
+                    className="absolute left-1/2 -translate-x-1/2"
+                >
+                    <div className="size-3 rounded-full bg-primary/50 blur-[3px]" />
+                    <div className="absolute inset-0 size-3 rounded-full bg-primary/80 blur-[1px] scale-50" />
+                </motion.div>
+
+                {/* Data particles traveling along the line */}
+                {[0.12, 0.28, 0.44, 0.58, 0.72].map((startAt, i) => (
+                    <motion.div
+                        key={`particle-${i}`}
+                        style={{
+                            top: useTransform(scrollYProgress, [startAt, startAt + 0.15], ['0%', '100%']),
+                            opacity: useTransform(scrollYProgress, [startAt, startAt + 0.03, startAt + 0.12, startAt + 0.15], [0, 0.7, 0.7, 0]),
+                        }}
+                        className="absolute left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-primary/60"
+                    />
+                ))}
+            </div>
+
+            <div className="max-w-6xl mx-auto px-6 relative">
+                {/* Left side — UI fragments floating toward positions */}
+                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none">
+                    {[...TRANSITION_FRAGMENTS.left, ...TRANSITION_FRAGMENTS.right].map((frag) => (
+                        <motion.div
+                            key={frag.label}
+                            initial={{ opacity: 0, y: 14, scale: 0.92 }}
+                            whileInView={{ opacity: 1, y: 0, scale: 1 }}
+                            viewport={{ once: true, margin: '-80px' }}
+                            transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
+                            className="absolute"
+                            style={{ left: frag.x, top: frag.y }}
+                        >
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/90 border border-border/40 shadow-sm backdrop-blur-sm">
+                                <frag.icon className="size-3 text-primary/50" />
+                                <span className="text-[9px] font-medium text-foreground/55">{frag.label}</span>
+                            </div>
+                        </motion.div>
+                    ))}
+                </motion.div>
+
+                {/* Center label */}
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-100px' }}
+                    transition={{ duration: 0.6 }}
+                    className="relative z-10 flex justify-center py-8"
+                >
+                    <motion.div
+                        style={{ boxShadow: useTransform(scrollYProgress, [0.3, 0.5], ['0 0 0px rgba(59,130,246,0)', '0 0 20px rgba(59,130,246,0.08)']) }}
+                        className="flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-primary/5 border border-primary/10"
+                    >
+                        <Zap className="size-3.5 text-primary/50" />
+                        <span className="text-[11px] font-medium text-primary/50 tracking-wide">Design → Code</span>
+                        <ArrowRight className="size-3 text-primary/30" />
+                    </motion.div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+// --- Builder Section — compact sequential card ---
+
+const BUILD_CODE = [
+    'import { Hero, Projects, Contact }',
+    'from "./components"',
+    '',
+    'export default function Portfolio() {',
+    '  return (',
+    '    <Hero name="Ethan Carter" />',
+    '    <Projects items={3} />',
+    '    <Contact />',
+    '  )',
+    '}',
+]
+
+type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pushed' | 'downloading' | 'downloaded'
+
+function FlowBuilderSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const [step, setStep] = useState<BuildStep | 'idle'>('idle')
+    const [codeLines, setCodeLines] = useState(0)
+    const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            buildTimers.current.forEach(clearTimeout); buildTimers.current = []
+            setStep('idle'); setCodeLines(0)
+        }
+    }, [isInView])
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            buildTimers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(1000)
+            if (cancelled) return
+
+            // Step 1: Show prompt (user sees the input)
+            setStep('prompt')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 2: Generating indicator
+            setStep('generating')
+            await delay(1400)
+            if (cancelled) return
+
+            // Step 3: Code typing — slower per line
+            setStep('code')
+            for (let i = 1; i <= BUILD_CODE.length; i++) {
+                if (cancelled) return
+                setCodeLines(i)
+                await delay(200 + Math.random() * 100)
+            }
+            await delay(1200)
+            if (cancelled) return
+
+            // Step 4: Preview — let user absorb the UI
+            setStep('preview')
+            await delay(2800)
+            if (cancelled) return
+
+            // Step 5: Push to GitHub — loading state
+            setStep('pushing')
+            await delay(2200)
+            if (cancelled) return
+
+            // Step 5b: Push success — hold for readability
+            setStep('pushed')
+            await delay(2400)
+            if (cancelled) return
+
+            // Step 6: Download — loading state
+            setStep('downloading')
+            await delay(1800)
+            if (cancelled) return
+
+            // Step 6b: Download complete — hold for readability
+            setStep('downloaded')
+        }
+
+        run()
+        return () => { cancelled = true; buildTimers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    // Helper to check if step is at or past a certain point
+    const isPast = (s: BuildStep) => {
+        const order: (BuildStep | 'idle')[] = ['idle', 'prompt', 'generating', 'code', 'preview', 'pushing', 'pushed', 'downloading', 'downloaded']
+        return order.indexOf(step) >= order.indexOf(s)
+    }
+
+    return (
+        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                    {/* Left — Builder card */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                        animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                        transition={{ duration: 0.8, delay: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+                    >
+                        <div className="relative">
+                            <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+
+                            <div className="relative rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                                {/* Card header */}
+                                <div className="flex items-center gap-2 px-4 py-3 border-b border-border/30 bg-muted/20">
+                                    <div className="flex gap-1.5">
+                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                        <div className="size-2.5 rounded-full bg-border/60" />
+                                    </div>
+                                    <span className="text-[11px] font-medium text-muted-foreground/50 ml-2">Buildify Builder</span>
+                                </div>
+
+                                {/* Card body — content crossfades by step */}
+                                <div className="relative min-h-[320px] md:min-h-[360px]">
+                                    {/* Step 1: Prompt */}
+                                    {(step === 'idle' || step === 'prompt') && (
+                                        <motion.div
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: step === 'prompt' ? 1 : 0 }}
+                                            transition={{ duration: 0.4 }}
+                                            className="absolute inset-0 p-5 flex flex-col items-center justify-center"
+                                        >
+                                            <p className="text-[10px] text-muted-foreground/40 mb-4">What would you like to build?</p>
+                                            <div className="w-full max-w-xs flex items-center gap-2 px-3 py-2.5 rounded-xl border border-primary/20 bg-background/80">
+                                                <span className="text-sm text-foreground/70 flex-1">Generate this portfolio</span>
+                                                <div className="size-7 rounded-lg bg-primary flex items-center justify-center shadow-sm shadow-primary/20">
+                                                    <Zap className="size-3.5 text-primary-foreground" />
+                                                </div>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Step 2: Generating */}
+                                    {step === 'generating' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ duration: 0.3 }}
+                                            className="absolute inset-0 flex items-center justify-center"
+                                        >
+                                            <div className="flex flex-col items-center gap-3">
+                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                <span className="text-[11px] text-muted-foreground/50">Generating components...</span>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Step 3: Code typing */}
+                                    {step === 'code' && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ duration: 0.3 }}
+                                            className="absolute inset-0 bg-[#0d1117] p-4 font-mono"
+                                        >
+                                            <div className="flex items-center gap-1.5 mb-3 pb-2 border-b border-white/5">
+                                                <Code2 className="size-3 text-blue-400/50" />
+                                                <span className="text-[8px] text-white/40">page.tsx</span>
+                                            </div>
+                                            <div className="space-y-1">
+                                                {BUILD_CODE.map((line, i) => (
+                                                    <motion.div
+                                                        key={i}
+                                                        initial={{ opacity: 0, x: -6 }}
+                                                        animate={i < codeLines ? { opacity: 1, x: 0 } : {}}
+                                                        transition={{ duration: 0.2 }}
+                                                        className="flex items-start gap-2"
+                                                    >
+                                                        <span className="text-[8px] text-white/15 w-4 text-right flex-shrink-0 select-none">{i + 1}</span>
+                                                        <pre className={cn(
+                                                            "text-[9px] leading-relaxed whitespace-pre",
+                                                            line.includes('import') || line.includes('export') || line.includes('function') || line.includes('return')
+                                                                ? 'text-blue-400/60'
+                                                                : line.includes('"') ? 'text-blue-200/50'
+                                                                    : line.includes('<') || line.includes('/>') ? 'text-blue-300/60'
+                                                                        : 'text-white/35'
+                                                        )}>{line || ' '}</pre>
+                                                    </motion.div>
+                                                ))}
+                                                {codeLines < BUILD_CODE.length && (
+                                                    <div className="flex items-start gap-2 mt-0.5">
+                                                        <span className="text-[8px] text-white/15 w-4 text-right flex-shrink-0">{codeLines + 1}</span>
+                                                        <span className="inline-block w-[3px] h-[12px] bg-blue-400/60 animate-pulse" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Step 4: Live preview */}
+                                    {(step === 'preview' || step === 'pushing' || step === 'pushed' || step === 'downloading' || step === 'downloaded') && (
+                                        <motion.div
+                                            initial={{ opacity: 0, scale: 0.98 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ duration: 0.4 }}
+                                            className="absolute inset-0 bg-[#0f1117] flex flex-col text-white/90 overflow-hidden"
+                                        >
+                                            {/* Mini portfolio */}
+                                            <div className="flex items-center justify-between px-4 py-2 border-b border-white/5">
+                                                <span className="text-[9px] font-bold text-white/85">Ethan.dev</span>
+                                                <div className="flex gap-3">
+                                                    {['Work', 'About', 'Contact'].map(l => (
+                                                        <span key={l} className="text-[7px] text-white/35">{l}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="flex-1 flex items-center px-4 gap-3">
+                                                <div className="flex-1">
+                                                    <motion.p initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-[15px] md:text-[17px] font-extrabold text-white/90 leading-tight">Hey, I&apos;m Ethan</motion.p>
+                                                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} className="text-[8px] font-semibold text-blue-400/70 mt-0.5">Product Designer &amp; Developer</motion.p>
+                                                    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }} className="mt-2.5 flex gap-1.5">
+                                                        <div className="h-5 px-2 rounded-md bg-blue-500/80 flex items-center"><span className="text-[6px] font-semibold text-white">View Work</span></div>
+                                                        <div className="h-5 px-2 rounded-md border border-white/12 flex items-center"><span className="text-[6px] text-white/40">About Me</span></div>
+                                                    </motion.div>
+                                                </div>
+                                                <div className="w-[25%] aspect-square rounded-lg bg-blue-500/[0.06] border border-white/5 items-center justify-center hidden md:flex">
+                                                    <Globe className="size-5 text-blue-400/20" />
+                                                </div>
+                                            </div>
+                                            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="px-4 py-2.5">
+                                                <div className="grid grid-cols-3 gap-1.5">
+                                                    {['Design System', 'SaaS Dashboard', 'E-commerce'].map((n, i) => (
+                                                        <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.5 + i * 0.1 }} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                            <p className="text-[6px] font-semibold text-white/55">{n}</p>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+                                            </motion.div>
+
+                                            {/* Overlay statuses */}
+                                            {(step === 'pushing' || step === 'pushed') && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    transition={{ duration: 0.4 }}
+                                                    className="absolute inset-0 bg-[#0f1117]/85 backdrop-blur-[3px] flex items-center justify-center"
+                                                >
+                                                    <motion.div
+                                                        initial={{ scale: 0.95, opacity: 0, y: 8 }}
+                                                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                        className="flex flex-col items-center gap-3 px-6 py-5 rounded-xl bg-white/[0.04] border border-white/[0.06]"
+                                                    >
+                                                        {step === 'pushing' ? (
+                                                            <>
+                                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                                <span className="text-[11px] font-medium text-white/60">Pushing to GitHub...</span>
+                                                                <div className="w-32 h-1.5 rounded-full bg-white/[0.06] overflow-hidden mt-1">
+                                                                    <motion.div
+                                                                        initial={{ width: '0%' }}
+                                                                        animate={{ width: '100%' }}
+                                                                        transition={{ duration: 2, ease: 'easeInOut' }}
+                                                                        className="h-full bg-primary/40 rounded-full"
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[8px] text-white/20 font-mono">ethan-portfolio/main</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <motion.div
+                                                                    initial={{ scale: 0 }}
+                                                                    animate={{ scale: 1 }}
+                                                                    transition={{ duration: 0.3, type: 'spring', stiffness: 200 }}
+                                                                >
+                                                                    <CircleCheck className="size-7 text-primary/70" />
+                                                                </motion.div>
+                                                                <span className="text-[12px] font-semibold text-primary/70">Pushed successfully</span>
+                                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                                                    <span className="text-[9px] text-white/40">Repository: <span className="text-white/55 font-medium">ethan-portfolio</span></span>
+                                                                    <span className="text-[8px] text-white/25 font-mono">&quot;Initial commit: portfolio site&quot;</span>
+                                                                    <span className="text-[8px] text-white/20">5 files · main branch</span>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </motion.div>
+                                                </motion.div>
+                                            )}
+                                            {(step === 'downloading' || step === 'downloaded') && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    transition={{ duration: 0.4 }}
+                                                    className="absolute inset-0 bg-[#0f1117]/85 backdrop-blur-[3px] flex items-center justify-center"
+                                                >
+                                                    <motion.div
+                                                        initial={{ scale: 0.95, opacity: 0, y: 8 }}
+                                                        animate={{ scale: 1, opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+                                                        className="flex flex-col items-center gap-3 px-6 py-5 rounded-xl bg-white/[0.04] border border-white/[0.06]"
+                                                    >
+                                                        {step === 'downloading' ? (
+                                                            <>
+                                                                <Loader2 className="size-6 text-primary/50 animate-spin" />
+                                                                <span className="text-[11px] font-medium text-white/60">Preparing download...</span>
+                                                                <div className="w-32 h-1.5 rounded-full bg-white/[0.06] overflow-hidden mt-1">
+                                                                    <motion.div
+                                                                        initial={{ width: '0%' }}
+                                                                        animate={{ width: '100%' }}
+                                                                        transition={{ duration: 1.6, ease: 'easeInOut' }}
+                                                                        className="h-full bg-primary/40 rounded-full"
+                                                                    />
+                                                                </div>
+                                                                <span className="text-[8px] text-white/20">Bundling source files...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <motion.div
+                                                                    initial={{ scale: 0 }}
+                                                                    animate={{ scale: 1 }}
+                                                                    transition={{ duration: 0.3, type: 'spring', stiffness: 200 }}
+                                                                >
+                                                                    <CircleCheck className="size-7 text-primary/70" />
+                                                                </motion.div>
+                                                                <span className="text-[12px] font-semibold text-primary/70">Download ready</span>
+                                                                <div className="flex flex-col items-center gap-1 mt-1">
+                                                                    <span className="text-[9px] text-white/40">ethan-portfolio.zip</span>
+                                                                    <span className="text-[8px] text-white/25">2.4 MB · 16 files</span>
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </motion.div>
+                                                </motion.div>
+                                            )}
+                                        </motion.div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+
+                    {/* Right — Text */}
+                    <div>
+                        <motion.span variants={fadeIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0}
+                            className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                        >
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            Step 03
+                        </motion.span>
+
+                        <div className="overflow-hidden">
+                            <motion.h2 variants={slideUp} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.1}
+                                className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                            >
+                                Build Instantly
+                            </motion.h2>
+                        </div>
+
+                        <motion.p variants={blurIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.25}
+                            className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg"
+                        >
+                            Convert your design into functional components and production-ready code.
+                        </motion.p>
+
+                        {/* Step indicators */}
+                        <motion.div variants={fadeIn} initial="hidden" animate={isInView ? 'visible' : 'hidden'} custom={0.4}
+                            className="mt-8 space-y-3"
+                        >
+                            {[
+                                { icon: Zap, label: 'Generate code from design', step: 'code' as const },
+                                { icon: Eye, label: 'See live preview instantly', step: 'preview' as const },
+                                { icon: Globe, label: 'Push to GitHub in one click', step: 'pushed' as const },
+                                { icon: ArrowRight, label: 'Download source code', step: 'downloaded' as const },
+                            ].map((item) => (
+                                <div key={item.label} className="flex items-center gap-3">
+                                    <div className={cn(
+                                        "size-8 rounded-lg flex items-center justify-center transition-all duration-300",
+                                        isPast(item.step) ? 'bg-primary/10 text-primary/60' : 'bg-muted/30 text-muted-foreground/30'
+                                    )}>
+                                        {isPast(item.step) ? <CircleCheck className="size-4" /> : <item.icon className="size-4" />}
+                                    </div>
+                                    <span className={cn(
+                                        "text-sm transition-colors duration-300",
+                                        isPast(item.step) ? 'text-foreground/70 font-medium' : 'text-muted-foreground/40'
+                                    )}>{item.label}</span>
+                                </div>
+                            ))}
+                        </motion.div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    )
+}
+
+// --- Builder → Testing transition (moving pill) ---
+
+function FlowBuilderToTestingTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // Pill travels along a subtle arc from top-center to lower-left
+    const pillY = useTransform(scrollYProgress, [0.08, 0.35, 0.60, 0.85], ['0%', '40%', '65%', '100%'])
+    const pillX = useTransform(scrollYProgress, [0.08, 0.30, 0.60, 0.85], ['50%', '53%', '44%', '35%'])
+    const pillOpacity = useTransform(scrollYProgress, [0.05, 0.14, 0.76, 0.90], [0, 1, 1, 0])
+    // Depth: scale up slightly mid-journey, settle back
+    const pillScale = useTransform(scrollYProgress, [0.08, 0.35, 0.60, 0.85], [0.95, 1.05, 1.03, 0.97])
+    // Soft glow that peaks mid-travel
+    const pillGlow = useTransform(scrollYProgress, [0.12, 0.40, 0.65], [0, 1, 0.15])
+
+    // Icon + text morph at ~60% progress
+    const morphProgress = useTransform(scrollYProgress, [0.52, 0.68], [0, 1])
+
+    // Label
+    const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
+
+    return (
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+            <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
+
+                {/* Trailing glow — soft, fades quickly */}
+                <motion.div
+                    style={{
+                        left: pillX,
+                        top: pillY,
+                        opacity: useTransform(pillGlow, v => v * 0.12),
+                        scale: useTransform(pillGlow, v => 0.6 + v * 0.5),
+                        x: '-50%',
+                        y: '-50%',
+                    }}
+                    className="absolute size-20 rounded-full bg-primary blur-xl pointer-events-none"
+                />
+
+                {/* Pill */}
+                <motion.div
+                    style={{
+                        left: pillX,
+                        top: pillY,
+                        scale: pillScale,
+                        opacity: pillOpacity,
+                        x: '-50%',
+                        y: '-50%',
+                        boxShadow: useTransform(pillGlow, v =>
+                            `0 0 ${v * 16}px rgba(59,130,246,${v * 0.12})`
+                        ),
+                    }}
+                    className="absolute z-10 flex items-center gap-2 px-4 py-2 rounded-full bg-card/90 border border-primary/20 shadow-lg backdrop-blur-sm"
+                >
+                    {/* Icon crossfade */}
+                    <div className="relative size-3.5">
+                        <motion.div style={{ opacity: useTransform(morphProgress, v => 1 - v) }} className="absolute inset-0">
+                            <Globe className="size-3.5 text-primary/55" />
+                        </motion.div>
+                        <motion.div style={{ opacity: morphProgress }} className="absolute inset-0">
+                            <FlaskConical className="size-3.5 text-primary/55" />
+                        </motion.div>
+                    </div>
+
+                    {/* Text crossfade */}
+                    <div className="relative h-4 overflow-hidden" style={{ width: 72 }}>
+                        <motion.span
+                            style={{
+                                opacity: useTransform(morphProgress, v => 1 - v),
+                                y: useTransform(morphProgress, v => v * -12),
+                            }}
+                            className="absolute inset-0 flex items-center text-[11px] font-mono text-primary/70 whitespace-nowrap"
+                        >
+                            ethan.dev
+                        </motion.span>
+                        <motion.span
+                            style={{
+                                opacity: morphProgress,
+                                y: useTransform(morphProgress, v => (1 - v) * 12),
+                            }}
+                            className="absolute inset-0 flex items-center text-[11px] font-medium text-primary/70 whitespace-nowrap"
+                        >
+                            Run Tests
+                        </motion.span>
+                    </div>
+                </motion.div>
+
+                {/* Label — subtle */}
+                <motion.div
+                    style={{ opacity: labelOpacity }}
+                    className="relative z-10 mt-2"
+                >
+                    <span className="text-[9px] font-medium text-primary/30 tracking-wide">Build complete — ready to test</span>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+// --- Testing Section (TinyFish) ---
+
+type TestPhase = 'idle' | 'typing-url' | 'running' | 'analyzing' | 'expanding' | 'complete'
+
+// Analysis items with intermediate states
+const ANALYSIS_ITEMS = [
+    { label: 'HTML Structure', pendingStatus: 'Analyzing...', doneStatus: 'Valid' },
+    { label: 'CSS Validation', pendingStatus: 'Checking...', doneStatus: 'Valid' },
+    { label: 'JS Bundle Size', pendingStatus: 'Scanning...', doneStatus: '142 KB' },
+    { label: 'Meta Tags', pendingStatus: 'Reviewing...', doneStatus: 'Complete' },
+]
+
+function FlowTestingSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const [phase, setPhase] = useState<TestPhase>('idle')
+    const [urlChars, setUrlChars] = useState(0)
+    const [progress, setProgress] = useState(0)
+    const [pages, setPages] = useState(0)
+    const [tests, setTests] = useState(0)
+    const [fishX, setFishX] = useState(10)
+    const [expandSource, setExpandSource] = useState(false)
+    // Track which analysis items are done (index), -1 = none started, items.length = all done
+    const [analysisProgress, setAnalysisProgress] = useState(-1)
+    const [activeAnalysis, setActiveAnalysis] = useState(-1) // currently processing item
+    const testTimers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    const testUrl = 'https://ethan.dev'
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            testTimers.current.forEach(clearTimeout); testTimers.current = []
+            setPhase('idle'); setUrlChars(0); setProgress(0); setPages(0); setTests(0)
+            setFishX(10); setExpandSource(false); setAnalysisProgress(-1); setActiveAnalysis(-1)
+        }
+    }, [isInView])
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            testTimers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(1000)
+            if (cancelled) return
+
+            // 1. Type URL — slower, more natural
+            setPhase('typing-url')
+            for (let i = 1; i <= testUrl.length; i++) {
+                if (cancelled) return
+                setUrlChars(i)
+                // Pause after "://" and "."
+                const char = testUrl[i - 1]
+                const extra = char === '/' || char === '.' ? 80 : 0
+                await delay(55 + Math.random() * 35 + extra)
+            }
+            await delay(700)
+            if (cancelled) return
+
+            // 2. Run tests — slower progress, synced with analysis
+            setPhase('running')
+
+            // Phase A: Progress 0-25% — initial crawl
+            for (let s = 1; s <= 8; s++) {
+                if (cancelled) return
+                const p = Math.round((s / 8) * 25)
+                setProgress(p)
+                setPages(Math.min(Math.floor(s / 2) + 1, 3))
+                setTests(Math.min(s, 3))
+                setFishX(10 + (s / 8) * 20)
+                await delay(150 + Math.random() * 60)
+            }
+            await delay(400)
+            if (cancelled) return
+
+            // 3. Expand source panel + start analysis
+            setPhase('analyzing')
+            setExpandSource(true)
+            await delay(600)
+            if (cancelled) return
+
+            // Phase B: Progressive analysis — one item at a time
+            for (let i = 0; i < ANALYSIS_ITEMS.length; i++) {
+                if (cancelled) return
+                // Show "processing" state for this item
+                setActiveAnalysis(i)
+                await delay(1000 + Math.random() * 400)
+                if (cancelled) return
+                // Mark as done
+                setAnalysisProgress(i)
+                setActiveAnalysis(-1)
+
+                // Increment progress + counters in sync
+                const newProgress = 25 + Math.round(((i + 1) / ANALYSIS_ITEMS.length) * 65)
+                setProgress(newProgress)
+                setPages(Math.min(3 + Math.floor((i + 1) / 2), 5))
+                setTests(Math.min(3 + (i + 1) * 2, 10))
+                setFishX(30 + ((i + 1) / ANALYSIS_ITEMS.length) * 50)
+
+                // Pause between items
+                await delay(350)
+            }
+            await delay(500)
+            if (cancelled) return
+
+            // Phase C: Final progress push to 100%
+            setProgress(95)
+            await delay(600)
+            if (cancelled) return
+            setProgress(100)
+            await delay(400)
+            if (cancelled) return
+
+            // 4. Expanding / settling
+            setPhase('expanding')
+            await delay(1200)
+            if (cancelled) return
+
+            // 5. Complete — with deliberate pause before result
+            setPhase('complete')
+        }
+
+        run()
+        return () => { cancelled = true; testTimers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                {/* Text header */}
+                <div className="max-w-xl mb-8 md:mb-12">
+                    <motion.span
+                        variants={fadeIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0}
+                        className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                    >
+                        <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                        Step 04
+                    </motion.span>
+                    <div className="overflow-hidden">
+                        <motion.h2 variants={slideUp} initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'} custom={0.1}
+                            className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                        >
+                            Ship &amp; Test
+                        </motion.h2>
+                    </div>
+                    <motion.p variants={blurIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0.25}
+                        className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed"
+                    >
+                        Deploy seamlessly and test your product with integrated AI-powered testing.
+                    </motion.p>
+                    <motion.div variants={fadeIn} initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'} custom={0.4}
+                        className="mt-6 flex items-center gap-3"
+                    >
+                        <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                            <FlaskConical className="size-[18px] text-primary/60" />
+                        </div>
+                        <span className="text-sm font-medium text-muted-foreground/60">AI-powered test automation</span>
+                    </motion.div>
+                </div>
+
+                {/* TinyFish UI */}
+                <motion.div
+                    initial={{ opacity: 0, y: 30, scale: 0.97 }}
+                    animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                    transition={{ duration: 0.9, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                    <div className="relative">
+                        <div className="absolute -inset-8 rounded-3xl bg-primary/[0.04] blur-3xl pointer-events-none" />
+
+                        <div className="relative rounded-xl border border-border/50 bg-card shadow-2xl shadow-black/8 dark:shadow-black/25 overflow-hidden">
+                            {/* TinyFish header */}
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={isInView ? { opacity: 1, y: 0 } : {}}
+                                transition={{ duration: 0.5, delay: 0.3 }}
+                                className="px-5 py-4 border-b border-border/30 bg-muted/15"
+                            >
+                                <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <Fish className="size-5 text-primary/70" />
+                                        <span className="text-[13px] font-bold text-foreground/80">TestFish</span>
+                                        <span className="text-[8px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary/60 uppercase tracking-wider">Beta</span>
+                                    </div>
+                                    <span className="text-[9px] text-muted-foreground/40">AI-powered &middot; 6 test categories</span>
+                                </div>
+                                <p className="text-[18px] md:text-[22px] font-bold text-foreground/85 leading-tight">
+                                    Test any site. Automatically.
+                                </p>
+                            </motion.div>
+
+                            {/* URL Input + Run Tests */}
+                            <div className="px-5 py-4 border-b border-border/20">
+                                <div className="flex gap-2">
+                                    <div className={cn(
+                                        "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
+                                        phase === 'typing-url' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
+                                    )}>
+                                        <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
+                                        <div className="flex-1 min-h-[18px] flex items-center">
+                                            {phase !== 'idle' ? (
+                                                <span className="text-[12px] text-foreground/70 font-mono">
+                                                    {testUrl.slice(0, urlChars)}
+                                                    {phase === 'typing-url' && urlChars < testUrl.length && (
+                                                        <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[12px] text-muted-foreground/30">Enter URL to test...</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <button className={cn(
+                                        "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
+                                        phase === 'running' || phase === 'analyzing'
+                                            ? 'bg-primary/70 text-primary-foreground cursor-wait'
+                                            : phase === 'complete' || phase === 'expanding'
+                                                ? 'bg-primary/10 text-primary/70 border border-primary/20'
+                                                : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                                    )}>
+                                        {phase === 'running' ? (
+                                            <><Loader2 className="size-3.5 animate-spin" /> Running...</>
+                                        ) : phase === 'analyzing' ? (
+                                            <><Loader2 className="size-3.5 animate-spin" /> Analyzing...</>
+                                        ) : phase === 'complete' || phase === 'expanding' ? (
+                                            <><CircleCheck className="size-3.5" /> Complete</>
+                                        ) : (
+                                            <><FlaskConical className="size-3.5" /> Run Tests</>
+                                        )}
+                                    </button>
+                                </div>
+
+                                {/* Progress bar */}
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.4 }}
+                                        className="mt-3"
+                                    >
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[9px] text-muted-foreground/50">
+                                                {phase === 'complete' ? 'All tests completed' : phase === 'expanding' ? 'Finalizing results...' : `Testing in progress... ${progress}%`}
+                                            </span>
+                                            {/* Fish indicator */}
+                                            <motion.div
+                                                animate={{ x: phase !== 'complete' ? [0, 3, 0] : 0 }}
+                                                transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                                            >
+                                                <Fish className="size-3 text-primary/40" />
+                                            </motion.div>
+                                        </div>
+                                        <div className="h-1.5 rounded-full bg-border/30 overflow-hidden">
+                                            <motion.div
+                                                className="h-full bg-primary/50 rounded-full"
+                                                animate={{ width: `${progress}%` }}
+                                                transition={{ duration: 0.6, ease: 'easeOut' }}
+                                            />
+                                        </div>
+                                        {/* Scanning fish */}
+                                        {(phase === 'running' || phase === 'analyzing') && (
+                                            <div className="relative h-4 mt-1">
+                                                <motion.div
+                                                    animate={{ left: `${fishX}%` }}
+                                                    transition={{ duration: 0.6, ease: 'easeOut' }}
+                                                    className="absolute top-0"
+                                                >
+                                                    <Fish className="size-3.5 text-primary/30" style={{ transform: 'scaleX(-1)' }} />
+                                                </motion.div>
+                                            </div>
+                                        )}
+                                    </motion.div>
+                                )}
+                            </div>
+
+                            {/* Panels area */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-border/15" style={{ minHeight: phase === 'idle' || phase === 'typing-url' ? 0 : undefined }}>
+                                {/* Source Code Analysis */}
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.4, delay: 0.1 }}
+                                        className="bg-card p-4"
+                                    >
+                                        <button
+                                            className="flex items-center justify-between w-full text-left mb-2"
+                                            onClick={() => setExpandSource(!expandSource)}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <Code2 className="size-3.5 text-primary/50" />
+                                                <span className="text-[11px] font-semibold text-foreground/70">Source Code Analysis</span>
+                                            </div>
+                                            <motion.div animate={{ rotate: expandSource ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                <ChevronDown className="size-3.5 text-muted-foreground/30" />
+                                            </motion.div>
+                                        </button>
+                                        {expandSource && (
+                                            <motion.div
+                                                initial={{ opacity: 0, height: 0 }}
+                                                animate={{ opacity: 1, height: 'auto' }}
+                                                transition={{ duration: 0.3 }}
+                                                className="space-y-1 pt-1"
+                                            >
+                                                {ANALYSIS_ITEMS.map((item, i) => {
+                                                    const isDone = i <= analysisProgress
+                                                    const isActive = i === activeAnalysis
+                                                    const isVisible = i <= analysisProgress + 1 || isActive
+
+                                                    if (!isVisible && phase !== 'expanding' && phase !== 'complete') return null
+
+                                                    return (
+                                                        <motion.div
+                                                            key={item.label}
+                                                            initial={{ opacity: 0, x: -6 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ duration: 0.35, delay: phase === 'expanding' || phase === 'complete' ? 0 : 0.1 }}
+                                                            className={cn(
+                                                                "flex items-center justify-between py-1.5 px-2 rounded-md border-b border-border/10 last:border-0 transition-all duration-300",
+                                                                isActive && 'bg-primary/[0.04]'
+                                                            )}
+                                                        >
+                                                            <span className={cn(
+                                                                "text-[9px] transition-colors duration-300",
+                                                                isActive ? 'text-foreground/60 font-medium' : 'text-muted-foreground/50'
+                                                            )}>{item.label}</span>
+                                                            <span className={cn("text-[9px] font-medium flex items-center gap-1 transition-all duration-300")}>
+                                                                {isDone ? (
+                                                                    <motion.span
+                                                                        initial={{ opacity: 0, scale: 0.8 }}
+                                                                        animate={{ opacity: 1, scale: 1 }}
+                                                                        transition={{ duration: 0.3 }}
+                                                                        className="flex items-center gap-1 text-primary/60"
+                                                                    >
+                                                                        <CircleCheck className="size-2.5" />
+                                                                        {item.doneStatus}
+                                                                    </motion.span>
+                                                                ) : isActive ? (
+                                                                    <span className="flex items-center gap-1 text-primary/40">
+                                                                        <Loader2 className="size-2.5 animate-spin" />
+                                                                        {item.pendingStatus}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="text-muted-foreground/25">Pending</span>
+                                                                )}
+                                                            </span>
+                                                        </motion.div>
+                                                    )
+                                                })}
+                                            </motion.div>
+                                        )}
+                                    </motion.div>
+                                )}
+
+                                {/* Test Budget */}
+                                {(phase === 'running' || phase === 'analyzing' || phase === 'expanding' || phase === 'complete') && (
+                                    <motion.div
+                                        initial={{ opacity: 0, height: 0 }}
+                                        animate={{ opacity: 1, height: 'auto' }}
+                                        transition={{ duration: 0.4, delay: 0.2 }}
+                                        className="bg-card p-4"
+                                    >
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <FlaskConical className="size-3.5 text-primary/50" />
+                                            <span className="text-[11px] font-semibold text-foreground/70">Test Budget</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className={cn(
+                                                "rounded-lg bg-muted/20 border p-3 text-center transition-colors duration-500",
+                                                phase === 'complete' ? 'border-primary/20' : 'border-border/20'
+                                            )}>
+                                                <motion.p
+                                                    key={pages}
+                                                    initial={{ scale: 1.15, opacity: 0.6 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                                                    className="text-[20px] font-bold text-foreground/80"
+                                                >
+                                                    {pages}
+                                                </motion.p>
+                                                <p className="text-[8px] text-muted-foreground/40 mt-0.5">pages crawled</p>
+                                            </div>
+                                            <div className={cn(
+                                                "rounded-lg bg-muted/20 border p-3 text-center transition-colors duration-500",
+                                                phase === 'complete' ? 'border-primary/20' : 'border-border/20'
+                                            )}>
+                                                <motion.p
+                                                    key={tests}
+                                                    initial={{ scale: 1.15, opacity: 0.6 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                                                    className="text-[20px] font-bold text-foreground/80"
+                                                >
+                                                    {tests}
+                                                </motion.p>
+                                                <p className="text-[8px] text-muted-foreground/40 mt-0.5">tests generated</p>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </div>
+
+                            {/* Results footer */}
+                            {phase === 'complete' && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 0.6, delay: 0.3 }}
+                                    className="px-5 py-4 border-t border-primary/15 bg-primary/[0.03]"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <motion.div
+                                                initial={{ scale: 0 }}
+                                                animate={{ scale: 1 }}
+                                                transition={{ duration: 0.3, delay: 0.5, type: 'spring', stiffness: 200 }}
+                                            >
+                                                <CircleCheck className="size-5 text-primary/70" />
+                                            </motion.div>
+                                            <motion.span
+                                                initial={{ opacity: 0, x: -8 }}
+                                                animate={{ opacity: 1, x: 0 }}
+                                                transition={{ duration: 0.4, delay: 0.7 }}
+                                                className="text-[12px] font-semibold text-primary/70"
+                                            >
+                                                All tests passed — no critical issues found
+                                            </motion.span>
+                                        </div>
+                                        <motion.span
+                                            initial={{ opacity: 0 }}
+                                            animate={{ opacity: 1 }}
+                                            transition={{ duration: 0.4, delay: 0.9 }}
+                                            className="text-[9px] text-muted-foreground/40"
+                                        >
+                                            5 pages · 10 tests · 0 failures
+                                        </motion.span>
+                                    </div>
+                                </motion.div>
+                            )}
+                        </div>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+// --- Accessibility Testing + CTA (final flow section) ---
+
+type A11yStep = 'idle' | 'typing' | 'running' | 'log-crawl' | 'log-test' | 'log-done' | 'results' | 'complete' | 'download' | 'downloaded'
+
+const A11Y_LOGS = [
+    { text: 'Initializing accessibility scanner...', type: 'info' },
+    { text: 'Crawling https://ethan.dev', type: 'info' },
+    { text: 'Found 5 pages to test', type: 'success' },
+    { text: 'Testing page 1/5 — /index', type: 'info' },
+    { text: '  Color contrast: passed', type: 'success' },
+    { text: '  ARIA labels: passed', type: 'success' },
+    { text: 'Testing page 2/5 — /work', type: 'info' },
+    { text: '  Heading hierarchy: passed', type: 'success' },
+    { text: '  Keyboard navigation: passed', type: 'success' },
+    { text: 'Testing page 3/5 — /about', type: 'info' },
+    { text: '  Alt text: passed', type: 'success' },
+    { text: 'Testing page 4/5 — /skills', type: 'info' },
+    { text: '  Semantic HTML: passed', type: 'success' },
+    { text: 'Testing page 5/5 — /contact', type: 'info' },
+    { text: '  Form labels: passed', type: 'success' },
+    { text: '  Focus management: passed', type: 'success' },
+    { text: 'All pages tested — 0 violations found', type: 'done' },
+]
+
+// --- Testing → Accessibility transition (scan wave) ---
+
+function RevealedNode({ item, scrollProgress }: { item: { label: string; x: string; progress: number[] }, scrollProgress: MotionValue<number> }) {
+    const opacity = useTransform(scrollProgress, [...item.progress, 0.65, 0.8], [0, 1, 1, 0])
+    const scale = useTransform(scrollProgress, item.progress, [0.6, 1])
+    const y = useTransform(scrollProgress, item.progress, [8, 0])
+    const glow = useTransform(scrollProgress, item.progress, [0, 10])
+
+    return (
+        <motion.div
+            style={{ left: item.x, opacity, scale, y }}
+            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2"
+        >
+            <div className="flex flex-col items-center gap-1.5">
+                <motion.div
+                    style={{ boxShadow: useTransform(glow, v => `0 0 ${v}px rgba(59,130,246,${v * 0.02})`) }}
+                    className="size-2 rounded-full bg-primary/50"
+                />
+                <span className="text-[8px] font-medium text-primary/40 whitespace-nowrap">{item.label}</span>
+            </div>
+        </motion.div>
+    )
+}
+
+function FlowTestingToA11yTransition() {
+    const ref = useRef<HTMLDivElement>(null)
+    const { scrollYProgress } = useScroll({
+        target: ref,
+        offset: ['start end', 'end start'],
+    })
+
+    // Scan beam position — sweeps left to right
+    const scanX = useTransform(scrollYProgress, [0.1, 0.6], ['-10%', '110%'])
+    const scanOpacity = useTransform(scrollYProgress, [0.08, 0.15, 0.55, 0.65], [0, 1, 1, 0])
+
+    // Vertical line
+    const lineHeight = useTransform(scrollYProgress, [0, 0.5], ['0%', '100%'])
+    const lineOpacity = useTransform(scrollYProgress, [0, 0.08, 0.8, 0.95], [0, 0.3, 0.3, 0])
+
+    // Revealed items — appear as scan passes over them
+    const revealItems = [
+        { label: 'Contrast', x: '18%', progress: [0.2, 0.3] },
+        { label: 'Navigation', x: '35%', progress: [0.28, 0.38] },
+        { label: 'ARIA', x: '52%', progress: [0.35, 0.45] },
+        { label: 'Structure', x: '69%', progress: [0.42, 0.52] },
+        { label: 'Score', x: '84%', progress: [0.48, 0.58] },
+    ]
+
+    // Label
+    const labelOpacity = useTransform(scrollYProgress, [0.25, 0.38, 0.55, 0.68], [0, 1, 1, 0])
+
+    // Background pulse
+    const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
+
+    return (
+        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+            {/* Background pulse — origin flash from testing completion */}
+            <motion.div
+                style={{ opacity: pulseOpacity }}
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/10 to-transparent pointer-events-none"
+            />
+
+            {/* Vertical connecting line */}
+            <div className="absolute left-1/2 -translate-x-1/2 top-0 bottom-0">
+                <motion.div
+                    style={{ height: lineHeight, opacity: useTransform(lineOpacity, v => v * 0.3) }}
+                    className="absolute left-1/2 -translate-x-1/2 w-4 bg-gradient-to-b from-transparent via-primary/8 to-transparent blur-md origin-top"
+                />
+                <motion.div
+                    style={{ height: lineHeight, opacity: lineOpacity }}
+                    className="absolute left-1/2 -translate-x-1/2 w-px bg-gradient-to-b from-primary/10 via-primary/20 to-primary/8 origin-top"
+                />
+            </div>
+
+            {/* Scan beam — horizontal sweep */}
+            <motion.div
+                style={{ left: scanX, opacity: scanOpacity }}
+                className="absolute top-1/2 -translate-y-1/2 z-10 pointer-events-none"
+            >
+                {/* Beam line */}
+                <div className="relative w-px h-24">
+                    <div className="absolute inset-0 w-px bg-gradient-to-b from-transparent via-primary/50 to-transparent" />
+                    {/* Glow around beam */}
+                    <div className="absolute inset-y-0 -left-3 w-6 bg-gradient-to-b from-transparent via-primary/8 to-transparent blur-sm" />
+                    {/* Leading edge glow */}
+                    <div className="absolute top-1/2 -translate-y-1/2 left-0 size-2 rounded-full bg-primary/40 blur-[3px]" />
+                </div>
+            </motion.div>
+
+            <div className="max-w-3xl mx-auto px-6 relative">
+                {/* Scan track line — faint horizontal guide */}
+                <div className="absolute top-1/2 -translate-y-1/2 left-6 right-6 h-px">
+                    <motion.div
+                        style={{ opacity: useTransform(scrollYProgress, [0.1, 0.2, 0.6, 0.7], [0, 0.12, 0.12, 0]) }}
+                        className="w-full h-full bg-gradient-to-r from-primary/10 via-primary/15 to-primary/10"
+                    />
+                </div>
+
+                {/* Revealed insight nodes — appear as scan passes */}
+                <div className="relative py-8 flex items-center justify-center" style={{ minHeight: 100 }}>
+                    {revealItems.map((item) => (
+                        <RevealedNode key={item.label} item={item} scrollProgress={scrollYProgress} />
+                    ))}
+                </div>
+
+                {/* Floating label — "Validating Accessibility..." */}
+                <motion.div
+                    style={{ opacity: labelOpacity }}
+                    className="flex justify-center"
+                >
+                    <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/[0.03] border border-primary/8">
+                        <motion.div
+                            style={{ opacity: useTransform(scrollYProgress, [0.3, 0.4, 0.5, 0.55], [0, 1, 1, 0]) }}
+                        >
+                            <Loader2 className="size-2.5 text-primary/35 animate-spin" />
+                        </motion.div>
+                        <span className="text-[9px] font-medium text-primary/35 tracking-wide">Validating Accessibility...</span>
+                    </div>
+                </motion.div>
+            </div>
+        </section>
+    )
+}
+
+function FlowAccessibilityLiveCTA() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const [step, setStep] = useState<A11yStep>('idle')
+    const [urlChars, setUrlChars] = useState(0)
+    const [visibleLogs, setVisibleLogs] = useState(0)
+    const [score, setScore] = useState(0)
+    const [pagesCount, setPagesCount] = useState(0)
+    const [violations, setViolations] = useState(0)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+    const logContainerRef = useRef<HTMLDivElement>(null)
+
+    const testUrl = 'https://ethan.dev'
+
+    // Reset when leaving viewport
+    useEffect(() => {
+        if (!isInView) {
+            timers.current.forEach(clearTimeout); timers.current = []
+            setStep('idle'); setUrlChars(0); setVisibleLogs(0); setScore(0); setPagesCount(0); setViolations(0)
+        }
+    }, [isInView])
+
+    useEffect(() => {
+        if (!isInView) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            timers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(1000)
+            if (cancelled) return
+
+            // Step 1: Type URL
+            setStep('typing')
+            for (let i = 1; i <= testUrl.length; i++) {
+                if (cancelled) return
+                setUrlChars(i)
+                const c = testUrl[i - 1]
+                const extra = c === '/' || c === '.' || c === ':' ? 70 : 0
+                await delay(50 + Math.random() * 35 + extra)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 2: Click run
+            setStep('running')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 3: Log output — line by line
+            setStep('log-crawl')
+            for (let i = 1; i <= A11Y_LOGS.length; i++) {
+                if (cancelled) return
+                setVisibleLogs(i)
+                // Update page counter based on log content
+                const log = A11Y_LOGS[i - 1]!
+                if (log.text.includes('Testing page')) {
+                    const match = log.text.match(/(\d+)\/5/)
+                    if (match) setPagesCount(parseInt(match[1]!))
+                }
+                // Scroll log container
+                if (logContainerRef.current) {
+                    logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight
+                }
+                // Vary speed: headers slower, sub-items faster
+                const isHeader = log.text.startsWith('Testing page') || log.text.startsWith('Crawling') || log.text.startsWith('Initializing')
+                await delay(isHeader ? 350 + Math.random() * 150 : 200 + Math.random() * 100)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 4: Results
+            setStep('results')
+            setPagesCount(5)
+            setViolations(0)
+            // Animate score from 0 to 98
+            for (let s = 0; s <= 98; s += 2) {
+                if (cancelled) return
+                setScore(Math.min(s, 98))
+                await delay(20)
+            }
+            setScore(98)
+            await delay(1500)
+            if (cancelled) return
+
+            // Step 5: Complete
+            setStep('complete')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 6: Download
+            setStep('download')
+            await delay(1200)
+            if (cancelled) return
+            setStep('downloaded')
+        }
+
+        run()
+        return () => { cancelled = true; timers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    const showResults = step === 'results' || step === 'complete' || step === 'download' || step === 'downloaded'
+    const showComplete = step === 'complete' || step === 'download' || step === 'downloaded'
+
+    return (
+        <>
+            {/* ── Accessibility Testing Section ── */}
+            <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+                <div className="max-w-6xl mx-auto w-full">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                        {/* Left — Static description (NO animations) */}
+                        <div>
+                            <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
+                                <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                                Step 05
+                            </span>
+
+                            <h2 className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]">
+                                Accessibility Testing
+                            </h2>
+
+                            <p className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg">
+                                Test your website against WCAG standards and ensure accessibility compliance before going live.
+                            </p>
+
+                            <div className="mt-8 space-y-3">
+                                {[
+                                    { icon: ScanEye, label: 'Automated WCAG audit' },
+                                    { icon: Terminal, label: 'Real-time test logs' },
+                                    { icon: CircleCheck, label: 'Detailed results overview' },
+                                    { icon: FileText, label: 'Downloadable accessibility report' },
+                                ].map((item) => (
+                                    <div key={item.label} className="flex items-center gap-3">
+                                        <div className="size-8 rounded-lg bg-muted/30 text-muted-foreground/40 flex items-center justify-center">
+                                            <item.icon className="size-4" />
+                                        </div>
+                                        <span className="text-sm text-muted-foreground/60">{item.label}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Right — Single animated card */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20, scale: 0.97 }}
+                            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : {}}
+                            transition={{ duration: 0.8, delay: 0.15 }}
+                        >
+                            <div className="relative">
+                                <div className="absolute -inset-4 rounded-3xl bg-primary/[0.04] blur-2xl pointer-events-none" />
+
+                                <div className="relative rounded-2xl border border-border/50 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden">
+                                    {/* Card header */}
+                                    <div className="flex items-center gap-2 px-4 py-3 border-b border-border/30 bg-muted/20">
+                                        <div className="flex gap-1.5">
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                            <div className="size-2.5 rounded-full bg-border/60" />
+                                        </div>
+                                        <div className="flex items-center gap-1.5 ml-2">
+                                            <ScanEye className="size-3.5 text-primary/50" />
+                                            <span className="text-[11px] font-medium text-muted-foreground/50">Accessibility Tester</span>
+                                        </div>
+                                    </div>
+
+                                    {/* Card body — steps crossfade */}
+                                    <div className="relative min-h-[370px] md:min-h-[410px]">
+
+                                        {/* Step 1: URL Input */}
+                                        {(step === 'idle' || step === 'typing' || step === 'running') && (
+                                            <motion.div
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="absolute inset-0 p-5 flex flex-col"
+                                            >
+                                                <p className="text-[10px] text-muted-foreground/40 mb-3">Enter a URL to test accessibility</p>
+                                                <div className="flex gap-2 mb-4">
+                                                    <div className={cn(
+                                                        "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
+                                                        step === 'typing' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
+                                                    )}>
+                                                        <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
+                                                        <span className="text-[12px] text-foreground/70 font-mono flex-1">
+                                                            {step !== 'idle' ? testUrl.slice(0, urlChars) : ''}
+                                                            {step === 'typing' && urlChars < testUrl.length && (
+                                                                <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
+                                                            )}
+                                                            {step === 'idle' && <span className="text-muted-foreground/25">https://</span>}
+                                                        </span>
+                                                    </div>
+                                                    <div className={cn(
+                                                        "px-3 py-2.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold transition-all duration-200",
+                                                        step === 'running'
+                                                            ? 'bg-primary/70 text-primary-foreground scale-95'
+                                                            : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
+                                                    )}>
+                                                        {step === 'running' ? (
+                                                            <Loader2 className="size-3 animate-spin" />
+                                                        ) : (
+                                                            <FlaskConical className="size-3" />
+                                                        )}
+                                                        <span>{step === 'running' ? 'Starting...' : 'Start Test'}</span>
+                                                    </div>
+                                                </div>
+                                                {/* Placeholder illustration */}
+                                                <div className="flex-1 flex items-center justify-center">
+                                                    <div className="flex flex-col items-center gap-2 text-muted-foreground/20">
+                                                        <ScanEye className="size-10" />
+                                                        <span className="text-[10px]">Ready to scan</span>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Step 2: Log output */}
+                                        {(step === 'log-crawl' || step === 'log-test' || step === 'log-done') && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ duration: 0.3 }}
+                                                className="absolute inset-0 bg-[#0d1117] p-4 flex flex-col"
+                                            >
+                                                <div className="flex items-center gap-1.5 mb-3 pb-2 border-b border-white/5">
+                                                    <Terminal className="size-3 text-blue-400/50" />
+                                                    <span className="text-[8px] text-white/40">Test Output</span>
+                                                    <span className="text-[7px] text-white/20 ml-auto font-mono">ethan.dev</span>
+                                                </div>
+                                                <div ref={logContainerRef} className="flex-1 overflow-hidden font-mono space-y-0.5">
+                                                    {A11Y_LOGS.slice(0, visibleLogs).map((log, i) => (
+                                                        <motion.div
+                                                            key={i}
+                                                            initial={{ opacity: 0, x: -4 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            className="flex items-start gap-1.5"
+                                                        >
+                                                            <span className="text-[7px] text-white/15 w-3 text-right flex-shrink-0 select-none pt-px">{i + 1}</span>
+                                                            <span className={cn(
+                                                                "text-[8px] leading-relaxed",
+                                                                log.type === 'success' ? 'text-blue-300/60' :
+                                                                log.type === 'done' ? 'text-blue-200/70 font-semibold' :
+                                                                log.text.startsWith('  ') ? 'text-white/30' : 'text-white/45'
+                                                            )}>
+                                                                {log.type === 'success' && !log.text.startsWith('  ') ? '+ ' : ''}
+                                                                {log.type === 'done' ? '✓ ' : ''}
+                                                                {log.text}
+                                                            </span>
+                                                        </motion.div>
+                                                    ))}
+                                                    {visibleLogs < A11Y_LOGS.length && (
+                                                        <div className="flex items-start gap-1.5 mt-0.5">
+                                                            <span className="text-[7px] text-white/15 w-3 text-right flex-shrink-0">{visibleLogs + 1}</span>
+                                                            <span className="inline-block w-[3px] h-[10px] bg-blue-400/60 animate-pulse" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
+                                        )}
+
+                                        {/* Step 3+: Results overview */}
+                                        {showResults && (
+                                            <motion.div
+                                                initial={{ opacity: 0, scale: 0.98 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                transition={{ duration: 0.4 }}
+                                                className="absolute inset-0 p-5 flex flex-col"
+                                            >
+                                                {/* Score */}
+                                                <div className="flex items-center justify-center mb-4">
+                                                    <div className="relative size-20">
+                                                        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+                                                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="5" className="text-border/20" />
+                                                            <motion.circle
+                                                                cx="50" cy="50" r="42" fill="none" strokeWidth="5"
+                                                                strokeLinecap="round"
+                                                                className="text-primary/60"
+                                                                style={{ stroke: 'currentColor' }}
+                                                                strokeDasharray={`${2 * Math.PI * 42}`}
+                                                                animate={{ strokeDashoffset: (2 * Math.PI * 42) * (1 - score / 100) }}
+                                                                transition={{ duration: 0.3, ease: 'easeOut' }}
+                                                            />
+                                                        </svg>
+                                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                            <span className="text-[18px] font-bold text-foreground/80">{score}</span>
+                                                            <span className="text-[6px] text-muted-foreground/35">/ 100</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Stats grid */}
+                                                <div className="grid grid-cols-3 gap-2 mb-3">
+                                                    {[
+                                                        { label: 'Pages tested', value: pagesCount },
+                                                        { label: 'Violations', value: violations },
+                                                        { label: 'WCAG Level', value: 'AA' },
+                                                    ].map((stat, i) => (
+                                                        <motion.div
+                                                            key={stat.label}
+                                                            initial={{ opacity: 0, y: 6 }}
+                                                            animate={{ opacity: 1, y: 0 }}
+                                                            transition={{ delay: 0.1 + i * 0.1, duration: 0.3 }}
+                                                            className="rounded-lg bg-muted/20 border border-border/20 p-2.5 text-center"
+                                                        >
+                                                            <p className="text-[16px] font-bold text-foreground/75">{typeof stat.value === 'number' ? stat.value : stat.value}</p>
+                                                            <p className="text-[8px] text-muted-foreground/40 mt-0.5">{stat.label}</p>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Check summary */}
+                                                <div className="space-y-1 flex-1">
+                                                    {[
+                                                        'Color Contrast',
+                                                        'Keyboard Navigation',
+                                                        'ARIA Labels',
+                                                        'Semantic HTML',
+                                                        'Form Accessibility',
+                                                    ].map((check, i) => (
+                                                        <motion.div
+                                                            key={check}
+                                                            initial={{ opacity: 0, x: -4 }}
+                                                            animate={{ opacity: 1, x: 0 }}
+                                                            transition={{ delay: 0.3 + i * 0.08, duration: 0.25 }}
+                                                            className="flex items-center justify-between py-1"
+                                                        >
+                                                            <span className="text-[10px] text-muted-foreground/50">{check}</span>
+                                                            <span className="text-[9px] font-medium text-primary/55 flex items-center gap-1">
+                                                                <CircleCheck className="size-3" /> Passed
+                                                            </span>
+                                                        </motion.div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Success banner + download info combined */}
+                                                {showComplete && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: 6 }}
+                                                        animate={{ opacity: 1, y: 0 }}
+                                                        transition={{ duration: 0.4, delay: 0.2 }}
+                                                        className="mt-3 flex items-center justify-between px-3 py-2 rounded-lg bg-primary/[0.05] border border-primary/10"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <motion.div
+                                                                initial={{ scale: 0 }}
+                                                                animate={{ scale: 1 }}
+                                                                transition={{ delay: 0.35, type: 'spring', stiffness: 200 }}
+                                                            >
+                                                                <CircleCheck className="size-3.5 text-primary/60" />
+                                                            </motion.div>
+                                                            <span className="text-[10px] font-medium text-primary/60">Test completed successfully</span>
+                                                        </div>
+                                                        {(step === 'download' || step === 'downloaded') && (
+                                                            <motion.span
+                                                                initial={{ opacity: 0 }}
+                                                                animate={{ opacity: 1 }}
+                                                                transition={{ duration: 0.3 }}
+                                                                className="text-[8px] text-muted-foreground/40 flex items-center gap-1"
+                                                            >
+                                                                {step === 'download' ? (
+                                                                    <><Loader2 className="size-2.5 animate-spin text-primary/40" /> Saving report...</>
+                                                                ) : (
+                                                                    <><FileText className="size-2.5 text-primary/40" /> Report saved</>
+                                                                )}
+                                                            </motion.span>
+                                                        )}
+                                                    </motion.div>
+                                                )}
+                                            </motion.div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Launch + Final CTA ── */}
+            <FlowLaunchCTA />
+        </>
+    )
+}
+
+// --- Launch + Final CTA ---
+
+type LaunchPhase = 'idle' | 'entering' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
+
+function FlowLaunchCTA() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: true, margin: '-80px', amount: 0.3 })
+    const [phase, setPhase] = useState<LaunchPhase>('idle')
+    const [scrollY, setScrollY] = useState(0)
+    const hasCompleted = useRef(false)
+    const timers = useRef<ReturnType<typeof setTimeout>[]>([])
+
+    useEffect(() => {
+        if (!isInView || hasCompleted.current) return
+        let cancelled = false
+        const delay = (ms: number) => new Promise<void>(resolve => {
+            const t = setTimeout(resolve, ms)
+            timers.current.push(t)
+        })
+
+        const run = async () => {
+            await delay(300)
+            if (cancelled) return
+
+            // Step 0: Begin entry — element starts emerging
+            setPhase('entering')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 1: Fully revealed
+            setPhase('reveal')
+            await delay(1200)
+            if (cancelled) return
+
+            // Step 2: Auto-scroll through the site
+            setPhase('scrolling')
+            const totalScroll = 520
+            const steps = 80
+            for (let i = 1; i <= steps; i++) {
+                if (cancelled) return
+                setScrollY(Math.round((i / steps) * totalScroll))
+                await delay(45)
+            }
+            await delay(600)
+            if (cancelled) return
+
+            // Step 3: Live state
+            setPhase('live')
+            await delay(2000)
+            if (cancelled) return
+
+            // Step 4: Exit
+            setPhase('exit')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 5: CTA — lock final state
+            setPhase('cta')
+            hasCompleted.current = true
+        }
+
+        run()
+        return () => { cancelled = true; timers.current.forEach(clearTimeout) }
+    }, [isInView])
+
+    const showSite = phase === 'entering' || phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
+    const showCTA = phase === 'cta'
+
+    // Derive animation target from phase
+    const siteAnimation = (() => {
+        switch (phase) {
+            case 'idle': return { opacity: 0, scale: 0.94, y: 30, filter: 'blur(8px)' }
+            case 'entering': return { opacity: 0.7, scale: 0.97, y: 12, filter: 'blur(2px)' }
+            case 'exit': return { opacity: 0, scale: 0.92, y: -10, filter: 'blur(6px)' }
+            case 'cta': return { opacity: 0, scale: 0.90, y: -20, filter: 'blur(8px)' }
+            default: return { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+        }
+    })()
+
+    // Derive transition timing from phase
+    const siteTiming = phase === 'entering' ? 0.8 : phase === 'exit' ? 0.7 : phase === 'cta' ? 0.5 : 0.6
+
+    return (
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden" style={{ minHeight: showCTA ? undefined : '60vh' }}>
+
+            <div className="max-w-5xl mx-auto relative">
+                {/* ── Website Preview — always rendered, animated via state ── */}
+                {!showCTA && (
+                    <motion.div
+                        animate={siteAnimation}
+                        transition={{ duration: siteTiming, ease: [0.25, 0.1, 0.25, 1] }}
+                        className="relative"
+                    >
+                        {/* No background glow — clean render */}
+
+                        <div className="relative rounded-xl border border-border/40 bg-card shadow-2xl shadow-black/10 dark:shadow-black/30 overflow-hidden">
+                            {/* Browser chrome */}
+                            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-border/25 bg-muted/15">
+                                <div className="flex gap-1.5">
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                    <div className="size-2.5 rounded-full bg-border/50" />
+                                </div>
+                                <div className="flex-1 flex justify-center">
+                                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-background/60 border border-border/20">
+                                        <div className="size-2.5 rounded-full bg-primary/30" />
+                                        <span className="text-[10px] text-muted-foreground/50 font-mono">ethan.dev</span>
+                                    </div>
+                                </div>
+                                <div className="w-16" />
+                            </div>
+
+                            {/* Scrollable viewport */}
+                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(300px, 38vw, 440px)' }}>
+                                <div style={{ transform: `translateY(-${scrollY}px)`, transition: 'transform 0.08s linear' }}>
+                                    {/* ── Navbar ── */}
+                                    <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 sticky top-0 bg-[#0f1117]/95 backdrop-blur-sm z-10">
+                                        <span className="text-[11px] font-bold text-white/85 tracking-tight">Ethan.dev</span>
+                                        <div className="flex items-center gap-5">
+                                            {['Work', 'About', 'Skills', 'Contact'].map(l => (
+                                                <span key={l} className="text-[9px] text-white/35">{l}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── Hero ── */}
+                                    <div className="flex items-center px-6 py-8 gap-5">
+                                        <div className="flex-1">
+                                            <p className="text-[18px] md:text-[22px] font-extrabold text-white/90 leading-tight">Hi, I&apos;m Ethan Carter</p>
+                                            <p className="text-[10px] font-semibold text-blue-400/70 mt-1">Product Designer &amp; Developer</p>
+                                            <p className="text-[8px] text-white/25 mt-2 leading-relaxed max-w-[85%]">Designing intuitive products and building polished digital experiences.</p>
+                                            <div className="mt-3.5 flex gap-2">
+                                                <div className="h-6 px-3 rounded-md bg-blue-500/80 flex items-center shadow-sm shadow-blue-500/20">
+                                                    <span className="text-[8px] font-semibold text-white">View Work</span>
+                                                </div>
+                                                <div className="h-6 px-3 rounded-md border border-white/12 flex items-center">
+                                                    <span className="text-[8px] text-white/40">About Me</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="w-[30%] rounded-lg bg-[#1a1d27] border border-white/5 p-3 hidden md:block">
+                                            <div className="flex gap-1 mb-2">
+                                                <div className="size-1.5 rounded-full bg-blue-400/40" />
+                                                <div className="size-1.5 rounded-full bg-blue-300/30" />
+                                                <div className="size-1.5 rounded-full bg-blue-200/25" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <p className="text-[5.5px] font-mono text-blue-400/45">const <span className="text-blue-300/60">ethan</span> = {'{'}</p>
+                                                <p className="text-[5.5px] font-mono pl-2 text-white/25">role: <span className="text-blue-200/45">&quot;Designer&quot;</span></p>
+                                                <p className="text-[5.5px] font-mono pl-2 text-white/25">available: <span className="text-blue-300/50">true</span></p>
+                                                <p className="text-[5.5px] font-mono text-blue-400/45">{'}'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Featured Projects ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2.5">Featured Projects</p>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { name: 'Design System', desc: 'Component library with tokens', tech: 'Figma · React' },
+                                                { name: 'SaaS Dashboard', desc: 'Real-time analytics UI', tech: 'Next.js · D3' },
+                                                { name: 'E-commerce App', desc: 'Modern storefront', tech: 'React · Stripe' },
+                                            ].map(p => (
+                                                <div key={p.name} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2.5 py-2 hover:bg-white/[0.04] transition-colors duration-200">
+                                                    <p className="text-[7px] font-semibold text-white/55">{p.name}</p>
+                                                    <p className="text-[5.5px] text-white/20 mt-0.5">{p.desc}</p>
+                                                    <p className="text-[5px] text-white/15 mt-1">{p.tech}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── Tech Stack ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2.5">Tech Stack</p>
+                                        <div className="grid grid-cols-4 gap-1.5">
+                                            {[
+                                                { cat: 'Design', items: 'Figma · Framer' },
+                                                { cat: 'Frontend', items: 'React · Next.js' },
+                                                { cat: 'Styling', items: 'Tailwind · CSS' },
+                                                { cat: 'Tools', items: 'Git · VS Code' },
+                                            ].map(s => (
+                                                <div key={s.cat} className="rounded-md bg-white/[0.02] border border-white/[0.04] px-2 py-1.5">
+                                                    <p className="text-[6px] font-semibold text-white/45">{s.cat}</p>
+                                                    <p className="text-[5px] text-white/20 mt-0.5">{s.items}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    {/* ── About ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2">About</p>
+                                        <div className="flex gap-4">
+                                            <div className="flex-1">
+                                                <p className="text-[6.5px] text-white/30 leading-relaxed">
+                                                    I&apos;m a product designer and developer with 5+ years of experience building digital products.
+                                                    Passionate about clean code, beautiful interfaces, and seamless user experiences.
+                                                </p>
+                                                <div className="flex gap-2 mt-2.5">
+                                                    {[Globe, Code2, FileText, MessageSquareText].map((Icon, i) => (
+                                                        <div key={i} className="size-5 rounded bg-white/[0.04] flex items-center justify-center">
+                                                            <Icon className="size-2.5 text-white/25" />
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className="w-20 h-20 rounded-lg bg-blue-500/[0.04] border border-white/5 flex items-center justify-center flex-shrink-0 hidden md:flex">
+                                                <Globe className="size-6 text-blue-400/15" />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Contact ── */}
+                                    <div className="px-6 py-4 border-t border-white/[0.03]">
+                                        <p className="text-[8px] font-semibold text-white/40 mb-2">Get in Touch</p>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1 h-6 rounded bg-white/[0.03] border border-white/[0.05] px-2.5 flex items-center">
+                                                <span className="text-[7px] text-white/20">Your email</span>
+                                            </div>
+                                            <div className="h-6 px-3 rounded bg-blue-500/60 flex items-center">
+                                                <span className="text-[7px] font-semibold text-white/80">Send</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* ── Footer ── */}
+                                    <div className="px-6 py-3 border-t border-white/5 flex items-center justify-between">
+                                        <span className="text-[6px] text-white/20">2024 Ethan Carter. Built with Buildify.</span>
+                                        <div className="flex gap-3">
+                                            {['GitHub', 'LinkedIn', 'Twitter'].map(l => (
+                                                <span key={l} className="text-[6px] text-white/15">{l}</span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* "Live" indicator */}
+                        {(phase === 'live' || phase === 'scrolling') && (
+                            <motion.div
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ duration: 0.4 }}
+                                className="absolute -bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card border border-primary/15 shadow-sm"
+                            >
+                                <motion.div
+                                    animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0.3)', '0 0 6px rgba(59,130,246,0.4)', '0 0 0px rgba(59,130,246,0.3)'] }}
+                                    transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                                    className="size-1.5 rounded-full bg-primary/60"
+                                />
+                                <span className="text-[9px] font-medium text-primary/50">Live at ethan.dev</span>
+                            </motion.div>
+                        )}
+                    </motion.div>
+                )}
+
+                {/* ── CTA Message ── */}
+                {showCTA && (
+                    <div className="text-center">
+                        <motion.div
+                            initial={{ opacity: 0, y: 16, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ duration: 0.7, ease: [0.25, 0.1, 0.25, 1] }}
+                        >
+                            <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/45 mb-5">
+                                The complete platform
+                            </p>
+                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
+                                Build, launch, and scale —<br />
+                                <span className="text-muted-foreground/40">all in one place.</span>
+                            </h2>
+                            <p className="text-base md:text-lg text-muted-foreground/55 leading-relaxed max-w-xl mx-auto mb-10">
+                                Plan, design, build, test, and ship — seamlessly with Buildify.
+                            </p>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, delay: 0.3 }}
+                            className="flex flex-col sm:flex-row items-center justify-center gap-4"
+                        >
+                            <motion.a
+                                href="/chat"
+                                whileHover={{ scale: 1.03 }}
+                                whileTap={{ scale: 0.97 }}
+                                className="group relative inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-primary text-primary-foreground font-semibold text-[15px] shadow-lg shadow-primary/20 transition-shadow duration-300 hover:shadow-xl hover:shadow-primary/30"
+                            >
+                                <motion.div
+                                    animate={{ boxShadow: ['0 0 0px rgba(59,130,246,0)', '0 0 24px rgba(59,130,246,0.15)', '0 0 0px rgba(59,130,246,0)'] }}
+                                    transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                                    className="absolute inset-0 rounded-xl pointer-events-none"
+                                />
+                                <Sparkles className="size-4" />
+                                Start Your Journey
+                                <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+                            </motion.a>
+                            <a
+                                href="#features"
+                                className="inline-flex items-center gap-2 px-6 py-4 rounded-xl border border-border/40 text-[14px] font-medium text-muted-foreground/60 transition-colors duration-200 hover:bg-muted/20 hover:text-foreground/70"
+                            >
+                                Explore Features
+                            </a>
+                        </motion.div>
+                    </div>
+                )}
+            </div>
+        </section>
+    )
+}
+
+function FlowAIChatSection() {
+    const sectionRef = useRef<HTMLDivElement>(null)
+    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
+
+    return (
+        <section ref={sectionRef} className="relative flex items-center px-6 pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden">
+            <div className="max-w-6xl mx-auto w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                    {/* Text — staggered entrance */}
+                    <div>
+                        <motion.span
+                            variants={fadeIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0}
+                            className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5"
+                        >
+                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
+                            Step 01
+                        </motion.span>
+
+                        <div className="overflow-hidden">
+                            <motion.h2
+                                variants={slideUp}
+                                initial="hidden"
+                                animate={isInView ? 'visible' : 'hidden'}
+                                custom={0.1}
+                                className="text-3xl md:text-[2.75rem] font-bold tracking-tight leading-[1.1]"
+                            >
+                                Plan with AI
+                            </motion.h2>
+                        </div>
+
+                        <motion.p
+                            variants={blurIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.25}
+                            className="mt-5 text-base md:text-lg text-muted-foreground/70 leading-relaxed max-w-lg"
+                        >
+                            Describe what you want to build and let AI generate the foundation instantly.
+                        </motion.p>
+
+                        <motion.div
+                            variants={fadeIn}
+                            initial="hidden"
+                            animate={isInView ? 'visible' : 'hidden'}
+                            custom={0.4}
+                            className="mt-8 flex items-center gap-3"
+                        >
+                            <div className="size-10 rounded-xl bg-primary/5 border border-primary/10 flex items-center justify-center">
+                                <MessageSquareText className="size-[18px] text-primary/60" />
+                            </div>
+                            <span className="text-sm font-medium text-muted-foreground/60">AI-powered chat interface</span>
+                        </motion.div>
+                    </div>
+
+                    {/* Visual — chat UI */}
+                    <motion.div
+                        variants={scaleIn}
+                        initial="hidden"
+                        animate={isInView ? 'visible' : 'hidden'}
+                        custom={0.15}
+                    >
+                        <FlowAIChatVisual inView={isInView} />
+                    </motion.div>
+                </div>
+            </div>
+        </section>
+    )
+}
+
 export default function LandingPage() {
     const { session, isPending } = useStateMachine()
     const router = useRouter()
@@ -566,11 +4003,14 @@ export default function LandingPage() {
                 </div>
             </motion.nav>
 
+            {/* ── Hero + Flow unified wrapper ── */}
+            <div className="relative">
+
             {/* ── Hero Section ── */}
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-               className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
+               className="relative flex flex-col items-center justify-center px-6 pt-28 md:pt-36 pb-4 md:pb-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />
@@ -642,6 +4082,9 @@ export default function LandingPage() {
                     }}
                 />
 
+                {/* Bottom fade — blends hero into next section */}
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+
                 <div className="relative z-10 max-w-4xl mx-auto text-center">
                     {/* Pill badge */}
                     <motion.div
@@ -649,7 +4092,7 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.3}
-                        className="mb-8"
+                        className="mb-6"
                     >
                         <span className="pill-shimmer inline-flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground border border-border/60 rounded-full px-4 py-1.5 bg-muted/30 backdrop-blur-sm">
                             <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -658,15 +4101,15 @@ export default function LandingPage() {
                     </motion.div>
 
                     {/* Heading */}
-                    <div className="space-y-1 mb-10">
+                    <div className="space-y-1 mb-4">
                         <RevealText delay={0.4}>
-                            <h1 className="text-[clamp(2.5rem,7.5vw,5.5rem)] font-bold leading-[0.93] tracking-tighter text-shimmer">
-                                Build apps with
+                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-shimmer">
+                                From idea to live
                             </h1>
                         </RevealText>
                         <RevealText delay={0.5}>
-                            <h1 className="text-[clamp(2.5rem,7.5vw,5.5rem)] font-bold leading-[0.93] tracking-tighter text-muted-foreground/35">
-                                a single prompt.
+                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
+                                all in one place.
                             </h1>
                         </RevealText>
                     </div>
@@ -677,192 +4120,87 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.7}
-                        className="text-base md:text-lg text-muted-foreground/80 max-w-xl mx-auto mb-14 leading-[1.7]"
+                        className="text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-8 leading-[1.7]"
                     >
-                        Describe what you want. Buildify generates production&#8209;ready
-                        code — complete with UI, logic, and deployable output.
+                        Plan, design, build, test, and launch production-ready apps with AI.
                     </motion.p>
 
-                    {/* Prompt input */}
-                    <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        animate="visible"
-                        custom={0.9}
-                        className="w-full max-w-2xl mx-auto"
-                    >
-                        {/* Hidden file input */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt"
-                            multiple
-                            className="hidden"
-                            onChange={handleFileChange}
-                        />
-
-                        {/* Main input card */}
-                        <div
-                            className={cn(
-                                "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
-                                inputFocused
-                                    ? "border-primary ring-2 ring-primary/20 shadow-md"
-                                    : "border-border/60 dark:border-border/80 shadow-sm hover:border-border/80 dark:hover:border-border"
-                            )}
-                        >                            {/* Attachment preview strip */}
-                            {attachments.length > 0 && (
-                                <div className="flex flex-wrap gap-2 px-4 pt-4">
-                                    {attachments.map((att) => (
-                                        <AttachmentCard
-                                            key={att.id}
-                                            attachment={att}
-                                            onRemove={() => setAttachments((a) => a.filter((x) => x.id !== att.id))}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Textarea with animated placeholder overlay */}
-                            <div className="relative">
-                                {!prompt && (
-                                    <div className="absolute top-5 left-5 pointer-events-none">
-                                        <DynamicPlaceholder paused={inputFocused} />
-                                    </div>
-                                )}
-                                <textarea
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    onFocus={() => setInputFocused(true)}
-                                    onBlur={() => setInputFocused(false)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                            e.preventDefault()
-                                            handlePromptSubmit(prompt)
-                                        }
-                                    }}
-                                    placeholder=""
-                                    className="w-full resize-none bg-transparent px-5 pt-5 pb-3 text-sm min-h-[96px] leading-relaxed focus:outline-none"
-                                />
-                            </div>
-
-                            {/* Toolbar */}
-                            <div className="flex items-center justify-between px-3 pb-3 pt-0.5">
-                                {/* Left: upload + mic */}
-                                <div className="flex items-center gap-0.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="size-8 rounded-xl flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-all duration-150"
-                                        title="Attach media"
-                                    >
-                                        <Plus className="size-4" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={toggleMic}
-                                        disabled={micState === 'processing'}
-                                        title={
-                                            micState === 'recording'
-                                                ? 'Stop recording'
-                                                : micState === 'processing'
-                                                ? 'Processing…'
-                                                : 'Voice input'
-                                        }
-                                        className={[
-                                            'size-8 rounded-xl flex items-center justify-center transition-all duration-200',
-                                            micState === 'recording'
-                                                ? 'bg-[#3B7EFF] text-white shadow-md'
-                                                : micState === 'processing'
-                                                ? 'text-muted-foreground/50 cursor-wait'
-                                                : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
-                                        ].join(' ')}
-                                    >
-                                        {micState === 'processing' ? (
-                                            <Loader2 className="size-4 animate-spin" />
-                                        ) : (
-                                            <Mic className={['size-4', micState === 'recording' ? 'animate-pulse' : ''].join(' ')} />
-                                        )}
-                                    </button>
-                                </div>
-
-                                {/* Right: Build button */}
-                                <Button
-                                    size="sm"
-                                    onClick={() => handlePromptSubmit(prompt)}
-                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200 shadow-md"
-                                >
-                                    Build
-                                    <SendHorizonal className="size-3.5" />
-                                </Button>
-                            </div>
-
-                        </div>
-
-                        {/* Mic error toast */}
-                        {micError && (
-                            <div className="flex items-center gap-2 mt-3 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/60 dark:border-red-800/40">
-                                <p className="text-xs text-red-600 dark:text-red-400 leading-tight flex-1">{micError}</p>
-                                <button
-                                    type="button"
-                                    onClick={clearMicError}
-                                    className="text-red-400 hover:text-red-600 dark:hover:text-red-300 shrink-0 transition-colors"
-                                >
-                                    <X className="size-3.5" />
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Suggestion chips */}
-                        <div className="flex flex-wrap gap-2.5 mt-5 justify-center">
-                            {[
-                                'A todo app with drag & drop',
-                                'A SaaS dashboard with charts',
-                                'An e-commerce product page',
-                            ].map((example) => (
-                                <button
-                                    key={example}
-                                    onClick={() => handlePromptSubmit(example)}
-                                    className="text-xs text-muted-foreground/55 border border-border/40 rounded-full px-4 py-1.5 hover:border-[rgba(59,126,255,0.35)] hover:text-[#3B7EFF] hover:bg-[rgba(59,126,255,0.05)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-200"
-                                >
-                                    {example}
-                                </button>
-                            ))}
-                        </div>
-
-                        <p className="text-center mt-5">
-                            <button
-                                onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
-                                className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors duration-150"
-                            >
-                                or browse community examples
-                            </button>
-                        </p>
-                    </motion.div>
                 </div>
 
-                {/* Scroll indicator */}
+                {/* ── Flow Pipeline ── */}
                 <motion.div
                     variants={fadeIn}
                     initial="hidden"
                     animate="visible"
-                    custom={1.5}
-                    className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+                    custom={0.9}
+                    className="relative w-full mt-10 md:mt-14"
                 >
-                    <motion.span
-                        className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground/25 font-medium"
-                        animate={{ opacity: [0.15, 0.45, 0.15] }}
-                        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+                    <div className="max-w-5xl mx-auto">
+                        <div className="relative">
+                            <div className="absolute top-5 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40 hidden md:block" />
+                            <div className="absolute top-0 bottom-0 left-5 w-px bg-border/40 md:hidden" />
+
+                            <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-2">
+                                {[
+                                    { icon: MessageSquareText, title: 'AI Chat' },
+                                    { icon: Palette, title: 'Studio' },
+                                    { icon: Code2, title: 'Builder' },
+                                    { icon: Rocket, title: 'Deploy' },
+                                    { icon: FlaskConical, title: 'Testing' },
+                                    { icon: ScanEye, title: 'Accessibility' },
+                                    { icon: Radio, title: 'Live' },
+                                ].map((step, index) => (
+                                    <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-3 md:gap-0">
+                                        <div className="relative z-10 size-10 rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm flex items-center justify-center shrink-0">
+                                            <step.icon className="size-4 text-primary/60" />
+                                        </div>
+                                        {index < 6 && (
+                                            <div className="absolute top-5 -right-[calc(50%-5px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                                <ArrowRight className="size-3 text-primary/40" />
+                                            </div>
+                                        )}
+                                        <span className="md:mt-2 text-[11px] font-medium text-muted-foreground/60 text-center">
+                                            {step.title}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </motion.div>
+
+                {/* ── CTA Button ── */}
+                <motion.div
+                    variants={fadeIn}
+                    initial="hidden"
+                    animate="visible"
+                    custom={1.1}
+                    className="mt-10 md:mt-12 flex justify-center"
+                >
+                    <button
+                        onClick={() => router.push('/chat')}
+                        className="relative inline-flex items-center gap-2.5 rounded-xl h-12 px-9 text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
                     >
-                        Scroll
-                    </motion.span>
-                    <motion.div
-                        className="w-px h-10 bg-gradient-to-b from-primary/30 via-border/40 to-transparent"
-                        animate={{ opacity: [0.2, 0.6, 0.2], scaleY: [0.7, 1, 0.7] }}
-                        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ transformOrigin: 'top' }}
-                    />
+                        Start Building
+                        <ArrowRight className="size-4 text-white/70" />
+                    </button>
                 </motion.div>
             </motion.section>
+
+            {/* ── Developer Flow Sections ── */}
+            <FlowConnectorWrapper>
+                <FlowAIChatSection />
+                <FlowChatToStudioTransition />
+                <FlowStudioSection />
+                <FlowStudioToBuilderTransition />
+                <FlowBuilderSection />
+                <FlowBuilderToTestingTransition />
+                <FlowTestingSection />
+                <FlowTestingToA11yTransition />
+                <FlowAccessibilityLiveCTA />
+            </FlowConnectorWrapper>
+
+            </div>{/* end Hero + Flow unified wrapper */}
 
             {/* ── Stats Bar ── */}
             <section className="relative bg-muted/20 stats-section">
