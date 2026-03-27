@@ -1769,11 +1769,30 @@ export async function measurePagePerformance(
 // The step count is injected so TinyFish knows exactly how many logs to emit.
 function buildExecuteTestGoal(url: string, steps: string[]): string {
   const stepCount = steps.length;
-  const numberedSteps = steps.map((s, i) => `${i + 1} ${s}`).join("\n");
+  const numberedSteps = steps.map((s, i) => `STEP ${i + 1}: ${s}`).join("\n");
 
-  return `You are a browser test agent. Your task is to execute ALL steps and produce ${stepCount} structured logs. The task is NOT complete until all ${stepCount} logs are produced. Do NOT stop early. Always continue execution even if a step fails. If element not found set data=Element not found. If login required set data=Page requires login. If previous step failed set data=Previous step failed. STEPS:\n${numberedSteps}
-  Return ONLY this exact JSON shape, no other text:
-{"logs":[{"id":1,"status":"PASSED","data":null},{"id":2,"status":"FAILED","data":"Element not found"}]}`;
+  return `Go to ${url} and complete these steps in order.
+
+BEFORE starting any step:
+- Wait for the page to fully load
+- If you detect a React/Next.js/Vue SPA (div#root, div#app, __NEXT_DATA__, or __nuxt__), wait an extra 4 seconds for hydration
+- If a cookie/GDPR banner is visible, click its dismiss or accept button ONCE, then wait 1 second
+- Do NOT log in or create accounts unless a step explicitly tells you to
+
+STEPS TO EXECUTE:
+${numberedSteps}
+
+After completing all steps, output ONLY this JSON. No explanation, no markdown, no text before or after:
+{"logs":[{"id":1,"status":"PASSED","data":null}]}
+
+Rules for the JSON:
+- One entry per step, in order, id matches step number
+- status is exactly one of: "PASSED", "FAILED"
+  - PASSED: action was performed and the observable result matched, OR the element was found and behaved correctly
+  - FAILED: element was not found, action could not be completed, or result did not match expectations
+- data: null when PASSED, or a short plain-text reason (max 120 chars) when FAILED
+- The array must have exactly ${stepCount} entries
+- Do not include any field other than id, status, data`;
 }
 
 // parseExecuteTestResult interprets TinyFish's non-deterministic output.
@@ -1790,12 +1809,11 @@ function parseExecuteTestResult(
   result: TinyFishResult,
   durationMs: number,
 ): Pick<TestExecutionResult, "passed" | "actualResult" | "errorDetails" | "consoleLogs" | "networkLogs"> {
-  // ── Case B: TinyFish sent its own error event (no step logs) ──────────────
-  // Detected by the presence of an "error" field alongside a "status" field
-  // at the top level of resultJson (shape: {type, run_id, status, error, ...}).
+
+  // ── Case B: TinyFish-own error event (no step logs) ──────────────────────
   if (result.resultJson) {
     const rj = result.resultJson as Record<string, unknown>;
-    const hasErrorField = typeof rj["error"] === "string" && rj["error"].length > 0;
+    const hasErrorField = typeof rj["error"] === "string" && (rj["error"] as string).length > 0;
     const hasStatusField = typeof rj["status"] === "string";
     const hasStepLogs =
       Array.isArray(rj["logs"]) ||
@@ -1803,13 +1821,12 @@ function parseExecuteTestResult(
       Array.isArray(rj["results"]);
 
     if (hasErrorField && hasStatusField && !hasStepLogs) {
-      // TinyFish's own failure event — not step logs
       const tfError = rj["error"] as string;
       const tfStatus = rj["status"] as string;
-      console.error(`[TestExecution] Browser agent error — status: ${tfStatus}, error: ${tfError}`);
+      console.error(`[TestExecution] TinyFish agent error — status: ${tfStatus}, error: ${tfError}`);
       return {
         passed: false,
-        actualResult: `Test could not be completed — the browser agent encountered an error`,
+        actualResult: `Browser agent encountered an error`,
         errorDetails: tfError,
         consoleLogs: [],
         networkLogs: [],
@@ -1817,11 +1834,12 @@ function parseExecuteTestResult(
     }
   }
 
-  // ── Case A: Try to find step logs in resultJson or rawText ────────────────
+  // ── Case A: structured JSON logs (resultJson or rawText) ──────────────────
   const raw = result.resultJson ?? tryParseRawText(result.rawText);
   if (raw) {
-    // Step logs may be at top level (array) or nested under logs/steps/results
     const rr = raw as Record<string, unknown>;
+
+    // Accept flat array or nested under logs / steps / results
     const logArray: unknown[] = Array.isArray(raw)
       ? raw
       : Array.isArray(rr["logs"])
@@ -1833,7 +1851,6 @@ function parseExecuteTestResult(
             : [];
 
     if (logArray.length > 0) {
-      // Validate that entries look like step log objects {id, status, data}
       const stepLogs = logArray.filter(
         (entry): entry is { id: number | string; status: string; data: unknown } =>
           typeof entry === "object" &&
@@ -1842,18 +1859,32 @@ function parseExecuteTestResult(
       );
 
       if (stepLogs.length > 0) {
-        const failedStep = stepLogs.find(
+        // Any step that is not explicitly PASSED is a failure.
+        // This covers FAILED, SKIPPED, ERROR, or any unknown status —
+        // we never silently pass a test with unattempted or failed steps.
+        const firstNonPassed = stepLogs.find(
           (s) => s.status?.toString().toUpperCase() !== "PASSED",
         );
-        const allPassed = !failedStep;
+        const allPassed = !firstNonPassed;
 
         const actualResult = allPassed
           ? `All ${stepLogs.length} steps passed`
-          : `Step ${failedStep!.id} failed: ${failedStep!.data ?? "no detail"}`;
+          : `Step ${firstNonPassed!.id} ${firstNonPassed!.status.toLowerCase()}: ${
+              firstNonPassed!.data ?? "element not found or action could not be completed"
+            }`;
 
-        const errorDetails = failedStep
-          ? `Step ${failedStep.id} — ${failedStep.data ?? failedStep.status}`
+        const errorDetails = firstNonPassed
+          ? `Step ${firstNonPassed.id} — ${firstNonPassed.data ?? firstNonPassed.status}`
           : null;
+
+        console.log(
+          `[TestExecution] ${allPassed ? "✓ PASSED" : "✗ FAILED"} — ` +
+            `${stepLogs.filter((s) => s.status?.toString().toUpperCase() === "PASSED").length}` +
+            `/${stepLogs.length} steps passed` +
+            (firstNonPassed
+              ? ` — first issue: step ${firstNonPassed.id} (${firstNonPassed.status}): ${firstNonPassed.data ?? "no detail"}`
+              : ""),
+        );
 
         return {
           passed: allPassed,
@@ -1865,27 +1896,28 @@ function parseExecuteTestResult(
       }
     }
 
-    // resultJson exists but no recognisable step logs — fall through to Case C
-    // but include a summary of what was in the result so AI has signal.
+    // resultJson present but no recognisable step logs
     const summary = JSON.stringify(raw).slice(0, 500);
-    console.error(`[TestExecution] Unrecognised result structure:`, JSON.stringify(raw).slice(0, 500));
+    console.error(`[TestExecution] Unrecognised result structure:`, summary);
     return {
       passed: false,
-      actualResult: `Test could not be completed — unexpected response from the browser agent`,
+      actualResult: `Unexpected response from browser agent`,
       errorDetails: `Raw result: ${summary}`,
       consoleLogs: [],
       networkLogs: [],
     };
   }
 
-  // ── Case C: Nothing useful returned ──────────────────────────────────────
-  console.error(`[TestExecution] Browser agent failed or timed out:`, result.error);
+  // ── Case C: nothing returned at all ──────────────────────────────────────
+  console.error(
+    `[TestExecution] TinyFish returned nothing. error=${result.error} success=${result.success}`,
+  );
   return {
     passed: false,
     actualResult: result.error?.includes("timeout")
-      ? `Test timed out — the page or action took too long to complete`
-      : `Test could not be completed — the browser agent did not return a result`,
-    errorDetails: result.error,
+      ? `Test timed out — the page took too long`
+      : `No result returned from the browser agent`,
+    errorDetails: result.error ?? "Empty response",
     consoleLogs: [],
     networkLogs: [],
   };
