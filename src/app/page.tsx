@@ -694,6 +694,295 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
     )
 }
 
+// --- Community showcase with tabs ---
+
+const SHOWCASE_TABS = ['All', 'Resumes', 'Portfolios', 'Testing', 'Accessibility'] as const
+type ShowcaseTab = typeof SHOWCASE_TABS[number]
+
+// Resume preview card
+function ResumePreviewCard({ name, role, skills, prompt, delay }: { name: string, role: string, skills: string[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini resume preview */}
+            <div className="bg-white dark:bg-[#151520] p-4 border-b border-border/20">
+                <div className="flex items-start gap-3">
+                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-primary/60">{name[0]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-foreground/90 dark:text-white/85">{name}</p>
+                        <p className="text-[8px] text-primary/60 font-medium">{role}</p>
+                    </div>
+                </div>
+                <div className="mt-2.5 space-y-1">
+                    <div className="h-1 w-[90%] rounded bg-foreground/[0.06] dark:bg-white/[0.06]" />
+                    <div className="h-1 w-[70%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                    <div className="h-1 w-[80%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                    {skills.map(s => (
+                        <span key={s} className="text-[6px] px-1.5 py-0.5 rounded bg-primary/[0.06] text-primary/50 font-medium">{s}</span>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">PDF ready</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Generated</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Portfolio preview card
+function PortfolioPreviewCard({ title, navItems, heroText, heroSub, prompt, delay, action }: { title: string, navItems: string[], heroText: string, heroSub: string, prompt: string, delay: number, action: string }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => action === 'studio' ? router.push('/buildify-studio/new') : router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini website preview */}
+            <div className="bg-[#0f1117] text-white/90 p-0">
+                {/* Navbar */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5">
+                    <span className="text-[7px] font-bold text-white/70">{title}</span>
+                    <div className="flex gap-2">
+                        {navItems.map(n => <span key={n} className="text-[5px] text-white/30">{n}</span>)}
+                    </div>
+                </div>
+                {/* Hero */}
+                <div className="px-3 py-4">
+                    <p className="text-[10px] font-bold text-white/80">{heroText}</p>
+                    <p className="text-[7px] text-blue-400/60 mt-0.5">{heroSub}</p>
+                    <div className="flex gap-1 mt-2">
+                        <div className="h-3.5 px-2 rounded bg-blue-500/60 flex items-center"><span className="text-[5px] text-white">View Work</span></div>
+                        <div className="h-3.5 px-2 rounded border border-white/10 flex items-center"><span className="text-[5px] text-white/40">About</span></div>
+                    </div>
+                </div>
+                {/* Cards */}
+                <div className="grid grid-cols-3 gap-1 px-3 pb-3">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="rounded bg-white/[0.03] border border-white/[0.04] p-1.5">
+                            <div className="aspect-[16/9] rounded bg-white/[0.03] mb-1" />
+                            <div className="h-0.5 w-[60%] rounded bg-white/10" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Live</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">{action === 'studio' ? 'Studio' : 'Builder'}</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {action === 'studio' ? 'Open Studio' : 'Try this'} <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Testing report card
+function TestReportCard({ title, pages, issues, status, score, prompt, delay }: { title: string, pages: number, issues: number, status: string, score: string, prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <FlaskConical className="size-4 text-primary/45" />
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                    </div>
+                    <span className="text-lg font-bold text-primary/45">{score}</span>
+                </div>
+                {/* Mini progress bars */}
+                <div className="space-y-1.5 mb-3">
+                    {['HTML', 'CSS', 'Performance', 'SEO'].map((label, i) => (
+                        <div key={label} className="flex items-center gap-2">
+                            <span className="text-[7px] text-muted-foreground/35 w-14">{label}</span>
+                            <div className="flex-1 h-1 rounded-full bg-border/20 overflow-hidden">
+                                <div className="h-full bg-primary/30 rounded-full" style={{ width: `${85 + i * 4}%` }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3 text-[8px] text-muted-foreground/40">
+                    <span>{pages} pages</span>
+                    <span>{issues} issues</span>
+                    <span className={cn("font-medium", status === 'Pass' ? 'text-primary/50' : 'text-muted-foreground/40')}>{status}</span>
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Analyzed</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Accessibility report card
+function A11yReportCard({ title, score, checks, prompt, delay }: { title: string, score: number, checks: { label: string, pass: boolean }[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                    {/* Score circle */}
+                    <div className="relative size-12 shrink-0">
+                        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-border/15" />
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" className="text-primary/50"
+                                strokeDasharray={`${2 * Math.PI * 42}`} strokeDashoffset={`${(2 * Math.PI * 42) * (1 - score / 100)}`} />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[11px] font-bold text-foreground/70">{score}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                        <p className="text-[8px] text-primary/45 font-medium">{score >= 95 ? 'Excellent' : 'Good'}</p>
+                    </div>
+                </div>
+                {/* Check items */}
+                <div className="space-y-1">
+                    {checks.map(c => (
+                        <div key={c.label} className="flex items-center justify-between">
+                            <span className="text-[8px] text-muted-foreground/40">{c.label}</span>
+                            <CircleCheck className={cn("size-3", c.pass ? 'text-primary/40' : 'text-muted-foreground/20')} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">WCAG AA</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+function CommunityShowcase() {
+    const [activeTab, setActiveTab] = useState<ShowcaseTab>('All')
+    const [isAutoSwitching, setIsAutoSwitching] = useState(true)
+
+    useEffect(() => {
+        if (!isAutoSwitching) return
+        const interval = setInterval(() => {
+            setActiveTab(prev => {
+                const idx = SHOWCASE_TABS.indexOf(prev)
+                return SHOWCASE_TABS[(idx + 1) % SHOWCASE_TABS.length]!
+            })
+        }, 5000)
+        return () => clearInterval(interval)
+    }, [isAutoSwitching])
+
+    const handleTabClick = (tab: ShowcaseTab) => {
+        setActiveTab(tab)
+        setIsAutoSwitching(false)
+        setTimeout(() => setIsAutoSwitching(true), 15000)
+    }
+
+    return (
+        <div>
+            {/* Tabs */}
+            <div className="flex gap-1.5 mb-6 sm:mb-8 overflow-x-auto scrollbar-hide pb-1">
+                {SHOWCASE_TABS.map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => handleTabClick(tab)}
+                        className={cn(
+                            "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 shrink-0",
+                            activeTab === tab
+                                ? 'bg-primary/10 text-primary/80 border border-primary/20'
+                                : 'text-muted-foreground/50 border border-transparent hover:text-muted-foreground/70 hover:bg-muted/20'
+                        )}
+                    >
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Content */}
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                {(activeTab === 'All' || activeTab === 'Resumes') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Resumes</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <ResumePreviewCard name="Arjun Mehta" role="Senior Frontend Developer" skills={['React', 'Next.js', 'TypeScript', 'Tailwind']} prompt="Create a senior frontend developer resume focused on React, Next.js and TypeScript" delay={0} />
+                            <ResumePreviewCard name="Maya Chen" role="Product Designer" skills={['Figma', 'UX Research', 'Design Systems']} prompt="Create a product designer resume with clean minimal layout highlighting UX skills" delay={0.05} />
+                            <ResumePreviewCard name="Ravi Kumar" role="Full-Stack Engineer" skills={['Node.js', 'React', 'PostgreSQL', 'AWS']} prompt="Create an ATS-optimized full-stack engineer resume" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Portfolios') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Portfolios</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <PortfolioPreviewCard title="Ethan.dev" navItems={['Work', 'About', 'Contact']} heroText="Hi, I'm Ethan Carter" heroSub="Product Designer & Developer" prompt="" delay={0} action="studio" />
+                            <PortfolioPreviewCard title="Pixel Studio" navItems={['Projects', 'Team', 'Blog']} heroText="Creative Agency" heroSub="We build digital experiences" prompt="Build a creative agency landing page with case studies" delay={0.05} action="try" />
+                            <PortfolioPreviewCard title="Sara.design" navItems={['Gallery', 'About', 'Hire']} heroText="Freelance Designer" heroSub="Available for projects" prompt="Create a minimal freelance designer portfolio with contact form" delay={0.1} action="try" />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Testing') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Testing Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <TestReportCard title="E-commerce Store" pages={12} issues={0} status="Pass" score="98%" prompt="Test my e-commerce store for performance issues" delay={0} />
+                            <TestReportCard title="SaaS Dashboard" pages={8} issues={2} status="Pass" score="95%" prompt="Run a test suite on my SaaS dashboard" delay={0.05} />
+                            <TestReportCard title="Blog Platform" pages={15} issues={0} status="Pass" score="100%" prompt="Test my blog for broken links and SEO issues" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Accessibility') && (
+                    <div>
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Accessibility Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <A11yReportCard title="Portfolio Audit" score={98} checks={[{ label: 'Color Contrast', pass: true }, { label: 'ARIA Labels', pass: true }, { label: 'Keyboard Nav', pass: true }, { label: 'Alt Text', pass: true }]} prompt="Run a WCAG accessibility audit on my portfolio" delay={0} />
+                            <A11yReportCard title="Restaurant Menu" score={95} checks={[{ label: 'Contrast', pass: true }, { label: 'Navigation', pass: true }, { label: 'Forms', pass: true }, { label: 'Semantics', pass: false }]} prompt="Check my restaurant menu for accessibility" delay={0.05} />
+                            <A11yReportCard title="Landing Page" score={100} checks={[{ label: 'Headings', pass: true }, { label: 'ARIA', pass: true }, { label: 'Focus', pass: true }, { label: 'Contrast', pass: true }]} prompt="Audit my landing page for accessibility" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    )
+}
+
 // --- Testimonial scroller ---
 
 const TESTIMONIALS = [
@@ -4995,17 +5284,17 @@ export default function LandingPage() {
 
             {/* ── Community Builds Section ── */}
             <div className="section-divider" />
-            <section id="community" className="relative py-20 md:py-28 px-6">
+            <section id="community" className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6">
                 <div className="max-w-6xl mx-auto">
-                    <div className="max-w-xl mb-20">
+                    <div className="max-w-xl mb-12 md:mb-16">
                         <SectionLabel>Community</SectionLabel>
                         <RevealText delay={0.1} className="mt-5">
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
                                 Built by developers,
                             </h2>
                         </RevealText>
                         <RevealText delay={0.2}>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
                                 for developers.
                             </h2>
                         </RevealText>
@@ -5015,21 +5304,13 @@ export default function LandingPage() {
                             whileInView="visible"
                             viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
-                            className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
-                            Explore what others are creating with Buildify. Get inspired, fork a project, and make it your own.
+                            Explore what people are creating with Buildify. Real outputs, real use cases.
                         </motion.p>
                     </div>
 
-                    <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: '-20px' }}
-                        custom={0.2}
-                    >
-                        <CommunityBuildsGrid showHeader={false} />
-                    </motion.div>
+                    <CommunityShowcase />
                 </div>
             </section>
 
