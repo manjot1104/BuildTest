@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown, Star } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -690,6 +690,189 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
                     </div>
                 </div>
             </motion.div>
+        </div>
+    )
+}
+
+// --- Testimonial scroller ---
+
+const TESTIMONIALS = [
+    {
+        quote: '"I just described what I needed… and it worked."',
+        description: 'Built a parent-teacher meeting scheduler without writing a single line of code. Parents get a link, pick a slot, done.',
+        name: 'Priya S.',
+        role: 'Teacher, Kerala',
+        tags: ['No code', 'Shipped'],
+        avatar: 'P',
+        stars: 5,
+    },
+    {
+        quote: '"Menu was live before lunch rush."',
+        description: 'Dragged together a menu page in Studio and hit publish. Twenty minutes, start to finish. Still using it daily.',
+        name: 'Rahul M.',
+        role: 'Restaurant Owner',
+        tags: ['20 min', 'Studio'],
+        avatar: 'R',
+        stars: 4.5,
+    },
+    {
+        quote: '"Four resumes, one interview within a week."',
+        description: 'Created four tailored resumes for different roles, exported as PDFs, and got a callback within days.',
+        name: 'Amit K.',
+        role: 'Job Seeker',
+        tags: ['Builder', '4 resumes'],
+        avatar: 'A',
+        stars: 5,
+    },
+    {
+        quote: '"Two days stuck. Fixed it in one prompt."',
+        description: 'A CORS issue had been blocking deployment. Described the problem in AI Chat, got the fix, applied it immediately.',
+        name: 'Dev R.',
+        role: 'Full-Stack Developer',
+        tags: ['AI Chat', 'Instant'],
+        avatar: 'D',
+        stars: 4.5,
+    },
+    {
+        quote: '"Went from idea to deployed in an afternoon."',
+        description: 'Prototyped a feedback form app, tested it, and pushed it live. The whole workflow felt seamless.',
+        name: 'Sara J.',
+        role: 'Product Manager',
+        tags: ['Live', 'No code'],
+        avatar: 'S',
+        stars: 5,
+    },
+]
+
+function TestimonialStars({ count, active }: { count: number, active: boolean }) {
+    return (
+        <div className="flex gap-0.5 mb-2">
+            {[...Array(5)].map((_, i) => {
+                const filled = i < Math.floor(count)
+                const half = !filled && i < count
+                return (
+                    <div key={i} className="relative">
+                        {/* Empty star */}
+                        <Star className={cn("size-3", active ? 'text-primary/15' : 'text-primary/8')} />
+                        {/* Filled overlay */}
+                        {filled && (
+                            <Star className={cn("size-3 fill-current absolute inset-0", active ? 'text-primary/50' : 'text-primary/20')} />
+                        )}
+                        {/* Half-filled overlay */}
+                        {half && (
+                            <div className="absolute inset-0 overflow-hidden" style={{ width: '50%' }}>
+                                <Star className={cn("size-3 fill-current", active ? 'text-primary/50' : 'text-primary/20')} />
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
+function TestimonialScroller() {
+    const [isPaused, setIsPaused] = useState(false)
+    const [offset, setOffset] = useState(0)
+    const itemHeight = 150
+    const totalItems = TESTIMONIALS.length
+    const totalHeight = totalItems * itemHeight
+
+    useEffect(() => {
+        if (isPaused) return
+        const interval = setInterval(() => {
+            setOffset(prev => (prev + 1.2) % totalHeight)
+        }, 25)
+        return () => clearInterval(interval)
+    }, [isPaused, totalHeight])
+
+    const items = [...TESTIMONIALS, ...TESTIMONIALS]
+
+    return (
+        <div
+            className="relative h-[420px] sm:h-[440px] overflow-hidden"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+        >
+            {/* Top fade */}
+            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background to-transparent z-10 pointer-events-none" />
+            {/* Bottom fade */}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none" />
+
+            <div
+                className="absolute inset-x-0"
+                style={{ transform: `translateY(-${offset}px)` }}
+            >
+                {items.map((t, i) => {
+                    const itemTop = i * itemHeight - offset
+                    const centerY = 420 / 2
+                    const itemCenter = itemTop + itemHeight / 2
+                    const dist = Math.abs(itemCenter - centerY)
+                    // Sharp focus — active within 40% of item height (narrow band)
+                    const isActive = dist < itemHeight * 0.4
+                    const isNear = dist < itemHeight * 1.1
+                    const isFar = !isNear
+
+                    return (
+                        <div
+                            key={`${t.avatar}-${i}`}
+                            className="px-2 sm:px-3"
+                            style={{ height: itemHeight, display: 'flex', alignItems: 'center' }}
+                        >
+                            <div
+                                className={cn(
+                                    "w-full rounded-xl border p-4 sm:p-5 transition-all duration-300",
+                                    isActive
+                                        ? 'border-primary/20 bg-card/80 dark:bg-[#0e0e18]/90 shadow-[0_0_24px_rgba(59,130,246,0.06)] scale-100 opacity-100'
+                                        : isFar
+                                            ? 'border-border/15 bg-card/20 dark:bg-[#0d0d14]/30 scale-[0.93] opacity-25 blur-[1px]'
+                                            : 'border-border/25 bg-card/40 dark:bg-[#0d0d14]/50 scale-[0.97] opacity-55'
+                                )}
+                            >
+                                <TestimonialStars count={t.stars} active={isActive} />
+
+                                {/* Quote */}
+                                <p className={cn(
+                                    "text-[13px] sm:text-sm font-semibold leading-snug mb-1.5 transition-colors duration-500",
+                                    isActive ? 'text-foreground/90' : 'text-foreground/50'
+                                )}>
+                                    {t.quote}
+                                </p>
+
+                                {/* Description */}
+                                <p className={cn(
+                                    "text-[11px] sm:text-xs leading-relaxed mb-3 transition-colors duration-500",
+                                    isActive ? 'text-muted-foreground/55' : 'text-muted-foreground/30'
+                                )}>
+                                    {t.description}
+                                </p>
+
+                                {/* Footer */}
+                                <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                        "size-5 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors duration-500",
+                                        isActive ? 'bg-primary/10 text-primary/50' : 'bg-primary/5 text-primary/25'
+                                    )}>
+                                        {t.avatar}
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-medium text-foreground/50">{t.name}</p>
+                                        <p className="text-[7px] text-muted-foreground/30">{t.role}</p>
+                                    </div>
+                                    <div className="flex gap-1 ml-auto">
+                                        {t.tags.map(tag => (
+                                            <span key={tag} className={cn(
+                                                "text-[7px] px-1.5 py-0.5 rounded-full font-medium transition-colors duration-500",
+                                                isActive ? 'bg-primary/[0.06] text-primary/40' : 'bg-primary/[0.03] text-primary/20'
+                                            )}>{tag}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
         </div>
     )
 }
@@ -4600,6 +4783,49 @@ export default function LandingPage() {
                                 </div>
                             )
                         })}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Testimonials Section ── */}
+            <div className="section-divider" />
+            <section className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                        {/* Left — heading */}
+                        <div>
+                            <SectionLabel>Stories</SectionLabel>
+                            <RevealText delay={0.1} className="mt-5">
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                                    Built by people,
+                                </h2>
+                            </RevealText>
+                            <RevealText delay={0.2}>
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                                    not just prompts.
+                                </h2>
+                            </RevealText>
+                            <motion.p
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-20px' }}
+                                custom={0.3}
+                                className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            >
+                                Real things people are already doing with Buildify.
+                            </motion.p>
+                        </div>
+
+                        {/* Right — auto-scrolling testimonials */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: '-20px' }}
+                            transition={{ duration: 0.6, delay: 0.2 }}
+                        >
+                            <TestimonialScroller />
+                        </motion.div>
                     </div>
                 </div>
             </section>
