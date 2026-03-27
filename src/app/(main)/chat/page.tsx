@@ -104,19 +104,18 @@ const { variables } = useEnvVariables()
     }
     return null
 })
-   useEffect(() => {
-  if (chatMode === "AI_CHAT") {
+useEffect(() => {
+  if (chatMode === "AI_CHAT" && !showChatInterface) {
     setShowChatInterface(true)
-    setUrlChatId(null)
   }
 }, [chatMode])
 
-    useEffect(() => {
-        if (urlChatId) {
-            setChatMode("BUILDER");
-            setShowChatInterface(true);
-        }
-    }, [urlChatId]);
+   useEffect(() => {
+  if (urlChatId && chatMode !== "BUILDER") {
+    setChatMode("BUILDER")
+    setShowChatInterface(true)
+  }
+}, [urlChatId])
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
