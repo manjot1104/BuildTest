@@ -24,6 +24,7 @@ import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import Lenis from 'lenis'
 
 // --- Animation Variants ---
 
@@ -4369,6 +4370,34 @@ export default function LandingPage() {
         const t = setTimeout(clearMicError, 5000)
         return () => clearTimeout(t)
     }, [micError, clearMicError])
+
+    // Lenis smooth scroll — homepage only.
+    // Lenis intercepts wheel/touch events and animates scrollTop on the root,
+    // which fires real native scroll events so Framer Motion's useScroll and
+    // IntersectionObserver-based useInView both continue to work without changes.
+    useEffect(() => {
+        const lenis = new Lenis({
+            // lerp controls the smoothing factor (0 = instant, 1 = never arrives).
+            // 0.1 is snappy enough to not feel laggy while still ironing out chop.
+            lerp: 0.1,
+            // Don't smooth touch/trackpad on mobile — native momentum already feels
+            // good and double-smoothing causes perceptible lag on low-end devices.
+            smoothWheel: true,
+            touchMultiplier: 1.5,
+        })
+
+        let rafId: number
+        const raf = (time: number) => {
+            lenis.raf(time)
+            rafId = requestAnimationFrame(raf)
+        }
+        rafId = requestAnimationFrame(raf)
+
+        return () => {
+            cancelAnimationFrame(rafId)
+            lenis.destroy()
+        }
+    }, [])
 
     const { scrollYProgress } = useScroll({
         target: heroRef,
