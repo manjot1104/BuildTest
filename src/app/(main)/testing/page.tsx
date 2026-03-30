@@ -24,10 +24,11 @@ import {
   BudgetStepper, TimeoutStepper, CrawlProgressPanel,
   ScoreGauge, CategoryDonut, PerfGaugeRow, TrendSparkline,
   LiveTestCaseCard, TestCaseCard, ReviewPhase,
-  BugDetailModal, BugCard, HistoryPanel,
+  BugDetailModal, BugCard,
   PipelineStepsRow, ExecutionCounters, StopButton,
   fmtMs, SEVERITY_CONFIG, TIMEOUT_MIN_MS, TIMEOUT_MAX_MS,
 } from "@/components/testing/testing-components";
+import { HistoryPanel } from "@/components/testing/history-panel";
 import {
   GithubSourcePanel,
   type GithubSourceValue,
@@ -730,7 +731,7 @@ export default function TestingPage() {
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
       {showHistory && (
         <HistoryPanel
-          onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }}
+          onSelect={(id : string , status :  string) => { setTestRunId(id); setActiveTab("tests"); }}
           onClose={() => setShowHistory(false)}
         />
       )}
