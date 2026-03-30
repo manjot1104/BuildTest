@@ -482,7 +482,7 @@ export function ScoreGauge({ score, size = 80 }: { score: number; size?: number 
   const circ   = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
   // Use Buildify blue palette: primary blue for good, yellow for medium, red for poor
-  const color  = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
+  const color  = score >= 90 ? "hsl(215 100% 58%)" : score >= 70 ? "#eab308" : "#ef4444";
   const label  = score >= 90 ? "excellent" : score >= 70 ? "good" : "needs work";
 
   return (
@@ -519,7 +519,7 @@ export function CategoryDonut({ passed, total, category, onClick, active }: {
   const r    = 17;
   const circ = 2 * Math.PI * r;
   // Blue-palette scoring colors
-  const col  = pct >= 0.8 ? "hsl(215 80% 60%)" : pct >= 0.5 ? "#eab308" : "#ef4444";
+  const col  = pct >= 0.8 ? "oklch(0.6907 0.1300 248.5133)" : pct >= 0.5 ? "#eab308" : "#ef4444";
   const Icon = CATEGORY_ICONS[category] ?? Bug;
 
   return (
@@ -601,7 +601,7 @@ export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
   const area = `${path} L${pts[pts.length - 1]!.x},${h} L${pts[0]!.x},${h} Z`;
   const score = pts[pts.length - 1]!.d.score ?? 0;
   // Buildify blue for the sparkline
-  const color = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
+  const color = score >= 90 ? "oklch(0.6907 0.1300 248.5133)" : score >= 70 ? "#eab308" : "#ef4444";
 
   return (
     <div>
@@ -1399,7 +1399,7 @@ export function HistoryPanel({ onSelect, onClose }: {
           )}
           {history?.map((item: TestHistoryItem) => {
             const sc        = (item.overallScore ?? 0) >= 90
-              ? "hsl(215 80% 60%)"
+              ? "oklch(0.6907 0.1300 248.5133)"
               : (item.overallScore ?? 0) >= 70 ? "#eab308" : "#ef4444";
             const cancelled = item.status === "cancelled";
             return (
