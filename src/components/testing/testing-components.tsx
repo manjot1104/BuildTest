@@ -768,9 +768,9 @@ export function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { 
             <div className={`rounded-lg border p-3 ${cfg.bg}`}>
               <p className={`text-[9px] font-mono mb-1 uppercase tracking-widest ${cfg.color}`}>actual</p>
               <p className="text-xs font-mono text-foreground">{result.actual_result}</p>
-              {result.error_details && (
+              {/* {result.error_details && (
                 <p className="mt-1.5 text-[10px] font-mono text-red-500">{result.error_details}</p>
-              )}
+              )} actual result and error detail has same output so one is commented out */} 
             </div>
           )}
           {result?.console_logs && result.console_logs.length > 0 && (
