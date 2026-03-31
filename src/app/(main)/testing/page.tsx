@@ -752,6 +752,7 @@ export default function TestingPage() {
           onClose={() => setShowHistory(false)}
           maxTests={planLimits.maxTests}
           onRunCases={handleRunFromCases}
+          onUpgrade={() => setShowUpgradeModal(true)}
         />
       )}
       <SubscriptionModal

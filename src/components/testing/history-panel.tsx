@@ -11,14 +11,15 @@
 //     onClose={() => setShowHistory(false)}
 //     maxTests={planLimits.maxTests}
 //     onRunCases={({ targetUrl, cases }) => handleRunFromCases(targetUrl, cases)}
+//     onUpgrade={() => setShowUpgradeModal(true)}
 //   />
 
 import { useState, useEffect } from "react";
 import {
   History, Loader2, FlaskConical, XCircle, X, ArrowRight, StopCircle,
-  CheckSquare, Square, Play, ChevronDown, ChevronRight,
+  CheckSquare, Square, Play, ChevronDown, ChevronRight, Lock,
 } from "lucide-react";
-import { useTestHistory, type TestHistoryItem } from "@/client-api/query-hooks/use-testing-hooks";
+import { useTestHistory, useTestUsage, type TestHistoryItem } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,53 @@ function scoreColor(score: number | null): string {
   if (score >= 90) return "text-primary";
   if (score >= 70) return "text-yellow-500";
   return "text-red-500";
+}
+
+// ─── Usage Pill ────────────────────────────────────────────────────────────────
+
+function UsagePill({
+  runsToday, dailyLimit, planId, onUpgrade,
+}: {
+  runsToday: number; dailyLimit: number; planId: string; onUpgrade?: () => void;
+}) {
+  const remaining = dailyLimit - runsToday;
+  const pct = runsToday / dailyLimit;
+  const isAtLimit   = runsToday >= dailyLimit;
+  const isNearLimit = pct >= 0.8 && !isAtLimit;
+
+  const barColor    = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-primary";
+  const textColor   = isAtLimit ? "text-red-400" : isNearLimit ? "text-yellow-400" : "text-muted-foreground/60";
+  const borderColor = isAtLimit ? "border-red-500/25" : isNearLimit ? "border-yellow-500/20" : "border-border";
+
+  return (
+    <div
+      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-lg border ${borderColor} bg-muted/30`}
+      title={`${runsToday} of ${dailyLimit} daily runs used (${planId} plan). Resets at midnight UTC.`}
+      role="meter" aria-valuenow={runsToday} aria-valuemin={0} aria-valuemax={dailyLimit}
+    >
+      <div className="w-14 h-1.5 rounded-full bg-border overflow-hidden shrink-0">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+          style={{ width: `${Math.min(100, pct * 100)}%` }}
+        />
+      </div>
+      <span className={`text-[10px] font-mono tabular-nums ${textColor}`}>
+        {isAtLimit
+          ? <span className="text-red-400 font-semibold">limit reached</span>
+          : <>{remaining} run{remaining !== 1 ? "s" : ""} left today</>
+        }
+      </span>
+      {(isAtLimit || isNearLimit) && onUpgrade && (
+        <button
+          type="button"
+          className="text-[10px] font-mono text-primary hover:text-primary/80 font-semibold underline underline-offset-2 shrink-0 transition-colors"
+          onClick={(e) => { e.stopPropagation(); onUpgrade(); }}
+        >
+          upgrade ↗
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─── RunRow (runs tab) ────────────────────────────────────────────────────────
@@ -359,10 +407,14 @@ function TestCasePicker({
   history,
   maxTests,
   onRunCases,
+  usageData,
+  onUpgrade,
 }: {
   history: TestHistoryItem[];
   maxTests: number;
   onRunCases: (payload: { targetUrl: string; cases: SelectedCase[] }) => void;
+  usageData?: { runsToday: number; dailyLimit: number; planId: string } | null;
+  onUpgrade?: () => void;
 }) {
   // Selection key: "runId::caseId"
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -402,6 +454,8 @@ function TestCasePicker({
   // Determine target URL: all selected must share same URL
   const urls = new Set(Array.from(selectedData.values()).map(v => v.targetUrl));
   const targetUrl = urls.size === 1 ? Array.from(urls)[0]! : null;
+
+  const isAtDailyLimit = usageData ? usageData.runsToday >= usageData.dailyLimit : false;
 
   const handleRun = () => {
     if (totalSelected === 0 || !targetUrl) return;
@@ -489,7 +543,7 @@ function TestCasePicker({
 
       {/* Sticky footer CTA */}
       {totalSelected > 0 && (
-        <div className="shrink-0 border-t border-border px-4 py-4 bg-background">
+        <div className="shrink-0 border-t border-border px-4 py-4 bg-background space-y-3">
           {urls.size > 1 ? (
             <p className="text-[10px] font-mono text-yellow-500 text-center">
               All selected cases must be from the same site to run together.
@@ -502,12 +556,25 @@ function TestCasePicker({
               <button
                 type="button"
                 onClick={handleRun}
-                className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-sans font-bold hover:bg-primary/90 active:scale-[0.98] transition-all touch-manipulation"
+                disabled={isAtDailyLimit}
+                title={isAtDailyLimit ? `Daily limit reached. Upgrade to run more tests today.` : undefined}
+                className="w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg bg-primary text-primary-foreground text-sm font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation"
               >
-                <Play className="h-4 w-4" />
-                Run {totalSelected} selected case{totalSelected !== 1 ? "s" : ""}
+                {isAtDailyLimit
+                  ? <><Lock className="h-4 w-4" /> Daily limit reached</>
+                  : <><Play className="h-4 w-4" /> Run {totalSelected} selected case{totalSelected !== 1 ? "s" : ""}</>
+                }
               </button>
             </div>
+          )}
+          {/* Usage pill — mirrors the one on the main testing page */}
+          {usageData && (
+            <UsagePill
+              runsToday={usageData.runsToday}
+              dailyLimit={usageData.dailyLimit}
+              planId={usageData.planId}
+              onUpgrade={onUpgrade}
+            />
           )}
         </div>
       )}
@@ -522,13 +589,16 @@ export function HistoryPanel({
   onClose,
   maxTests = 10,
   onRunCases,
+  onUpgrade,
 }: {
   onSelect: (id: string, status: string) => void;
   onClose: () => void;
   maxTests?: number;
   onRunCases?: (payload: { targetUrl: string; cases: SelectedCase[] }) => void;
+  onUpgrade?: () => void;
 }) {
   const { data: history, isLoading } = useTestHistory();
+  const { data: usageData } = useTestUsage();
   const [activeTab, setActiveTab] = useState<"runs" | "cases">("runs");
 
   useEffect(() => {
@@ -614,6 +684,8 @@ export function HistoryPanel({
               <TestCasePicker
                 history={history ?? []}
                 maxTests={maxTests}
+                usageData={usageData}
+                onUpgrade={onUpgrade}
                 onRunCases={(payload) => {
                   onRunCases?.(payload);
                   onClose();
