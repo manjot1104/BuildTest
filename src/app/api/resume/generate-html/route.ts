@@ -9,6 +9,7 @@ import { getSession } from '@/server/better-auth/server'
 
 // Configure runtime for longer operations
 export const maxDuration = 120 // 2 minutes for AI generation
+const AI_PROVIDER_TIMEOUT_MS = 70000
 
 /**
  * Generate HTML code only (without compiling to PDF)
@@ -32,7 +33,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await generateHtmlResume(validatedData)
+    const result = await Promise.race([
+      generateHtmlResume(validatedData),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI_PROVIDER_TIMEOUT')), AI_PROVIDER_TIMEOUT_MS)
+      ),
+    ])
 
     if (!result?.cleaned?.trim()) {
       return NextResponse.json(
@@ -64,9 +70,10 @@ export async function POST(request: NextRequest) {
       const lower = message.toLowerCase()
       const isRateLimit = lower.includes('rate limit') || lower.includes('429')
       const isProviderPolicy = lower.includes('no endpoints available') || lower.includes('guardrail')
+      const isProviderTimeout = message.includes('AI_PROVIDER_TIMEOUT') || lower.includes('timed out')
 
       // Local fallback so users can still generate a resume even when OpenRouter is unavailable.
-      if ((isRateLimit || isProviderPolicy) && validatedData) {
+      if ((isRateLimit || isProviderPolicy || isProviderTimeout) && validatedData) {
         const html = pruneGeneratedSections(
           generateHtmlTemplateFallback(validatedData),
           'html',
@@ -77,7 +84,9 @@ export async function POST(request: NextRequest) {
           model: 'local-template-fallback',
           isFallback: true,
           success: true,
-          warning: isRateLimit
+          warning: isProviderTimeout
+            ? 'AI provider timed out. Generated with local template fallback.'
+            : isRateLimit
             ? 'OpenRouter rate limit reached. Generated with local template fallback.'
             : 'OpenRouter endpoint policy blocked. Generated with local template fallback.',
         })
