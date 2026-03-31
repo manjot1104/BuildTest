@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  useStartTestRun, useTestRunStatus, useTestReport,
+  useStartTestRun, useRunFromCases, useTestRunStatus, useTestReport,
   useTestRunSSE, useCancelTestRun, useExportReportPdf,
   useTestUsage,
   type Bug as BugType, type PerformanceGauge, type TrendDataPoint,
@@ -24,10 +24,12 @@ import {
   BudgetStepper, TimeoutStepper, CrawlProgressPanel,
   ScoreGauge, CategoryDonut, PerfGaugeRow, TrendSparkline,
   LiveTestCaseCard, TestCaseCard, ReviewPhase,
-  BugDetailModal, BugCard, HistoryPanel,
+  BugDetailModal, BugCard,
   PipelineStepsRow, ExecutionCounters, StopButton,
   fmtMs, SEVERITY_CONFIG, TIMEOUT_MIN_MS, TIMEOUT_MAX_MS,
 } from "@/components/testing/testing-components";
+import { HistoryPanel } from "@/components/testing/history-panel";
+import type { SelectedCase } from "@/components/testing/history-panel";
 import {
   GithubSourcePanel,
   type GithubSourceValue,
@@ -615,6 +617,7 @@ export default function TestingPage() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const { mutate: startTest, isPending: isStarting } = useStartTestRun();
+  const { mutate: runFromCases, isPending: isRunningFromCases } = useRunFromCases();
   const { mutate: cancelTest, isPending: isCancelling } = useCancelTestRun();
   const { mutate: exportPdf, isPending: isExportingPdf } = useExportReportPdf();
   const { data: run } = useTestRunStatus(testRunId);
@@ -717,6 +720,21 @@ export default function TestingPage() {
     });
   };
 
+  const handleRunFromCases = ({ targetUrl, cases }: { targetUrl: string; cases: SelectedCase[] }) => {
+    runFromCases(
+      { targetUrl, cases },
+      {
+        onSuccess: (d) => {
+          setUrl(targetUrl);
+          setTestRunId(d.testRunId);
+          setActiveTab("tests");
+          toast.success("Test run started from previous cases!");
+        },
+        onError: (e) => toast.error(e.message ?? "Failed to start run"),
+      }
+    );
+  };
+
   const handleReset = () => {
     setUrl(""); setTestRunId(null); setGithubSource(null); setCrawlContext("");
     setFilterSeverity("all"); setFilterCategory("all");
@@ -730,8 +748,11 @@ export default function TestingPage() {
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
       {showHistory && (
         <HistoryPanel
-          onSelect={(id) => { setTestRunId(id); setActiveTab("tests"); }}
+          onSelect={(id: string, status: string) => { setTestRunId(id); setActiveTab("tests"); }}
           onClose={() => setShowHistory(false)}
+          maxTests={planLimits.maxTests}
+          onRunCases={handleRunFromCases}
+          onUpgrade={() => setShowUpgradeModal(true)}
         />
       )}
       <SubscriptionModal

@@ -91,6 +91,7 @@ import {
 } from "@/server/api/controllers/studio.controller";
 import {
   startTestRunHandler,
+  runFromCasesHandler,
   cancelTestRunHandler,
   getTestHistoryHandler,
   getTestRunHandler,
@@ -1706,6 +1707,39 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
         // Optional free-text hint the user can provide about login credentials
         // or site context so the AI can generate more targeted test cases.
         crawlContext: t.Optional(t.String({ maxLength: 500 })),
+      }),
+    },
+  )
+
+  // POST /api/test/run/from-cases — start a new run pre-seeded with previous test cases.
+  // Skips crawling and AI generation; goes straight to awaiting_review.
+  // The target URL is locked to the one supplied in the body.
+  // IMPORTANT: must be declared BEFORE /test/run/:id routes to avoid Elysia
+  // matching "from-cases" as the :id param on other routes.
+  .post(
+    "/test/run/from-cases",
+    async ({ body, set }) => {
+      const result = await runFromCasesHandler({ body });
+      if (isApiError(result))
+        set.status = (result as ApiErrorResponse).status ?? 500;
+      return result;
+    },
+    {
+      body: t.Object({
+        targetUrl: t.String(),
+        cases: t.Array(
+          t.Object({
+            title: t.String(),
+            category: t.String(),
+            steps: t.Array(t.String()),
+            expected_result: t.String(),
+            priority: t.Union([t.Literal("P0"), t.Literal("P1"), t.Literal("P2")]),
+            description: t.Optional(t.Nullable(t.String())),
+            tags: t.Optional(t.Nullable(t.Array(t.String()))),
+            estimated_duration: t.Optional(t.Nullable(t.Number())),
+          }),
+          { minItems: 1 },
+        ),
       }),
     },
   )

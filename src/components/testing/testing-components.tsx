@@ -482,7 +482,7 @@ export function ScoreGauge({ score, size = 80 }: { score: number; size?: number 
   const circ   = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
   // Use Buildify blue palette: primary blue for good, yellow for medium, red for poor
-  const color  = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
+  const color  = score >= 90 ? "hsl(215 100% 58%)" : score >= 70 ? "#eab308" : "#ef4444";
   const label  = score >= 90 ? "excellent" : score >= 70 ? "good" : "needs work";
 
   return (
@@ -519,7 +519,7 @@ export function CategoryDonut({ passed, total, category, onClick, active }: {
   const r    = 17;
   const circ = 2 * Math.PI * r;
   // Blue-palette scoring colors
-  const col  = pct >= 0.8 ? "hsl(215 80% 60%)" : pct >= 0.5 ? "#eab308" : "#ef4444";
+  const col  = pct >= 0.8 ? "oklch(0.6907 0.1300 248.5133)" : pct >= 0.5 ? "#eab308" : "#ef4444";
   const Icon = CATEGORY_ICONS[category] ?? Bug;
 
   return (
@@ -601,7 +601,7 @@ export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
   const area = `${path} L${pts[pts.length - 1]!.x},${h} L${pts[0]!.x},${h} Z`;
   const score = pts[pts.length - 1]!.d.score ?? 0;
   // Buildify blue for the sparkline
-  const color = score >= 90 ? "hsl(215 80% 60%)" : score >= 70 ? "#eab308" : "#ef4444";
+  const color = score >= 90 ? "oklch(0.6907 0.1300 248.5133)" : score >= 70 ? "#eab308" : "#ef4444";
 
   return (
     <div>
@@ -768,9 +768,9 @@ export function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { 
             <div className={`rounded-lg border p-3 ${cfg.bg}`}>
               <p className={`text-[9px] font-mono mb-1 uppercase tracking-widest ${cfg.color}`}>actual</p>
               <p className="text-xs font-mono text-foreground">{result.actual_result}</p>
-              {result.error_details && (
+              {/* {result.error_details && (
                 <p className="mt-1.5 text-[10px] font-mono text-red-500">{result.error_details}</p>
-              )}
+              )} actual result and error detail has same output so one is commented out */} 
             </div>
           )}
           {result?.console_logs && result.console_logs.length > 0 && (
@@ -1345,108 +1345,5 @@ export function BugCard({ bug, onClick }: { bug: BugType; onClick: () => void })
       )}
       <ChevronRight className="h-4 w-4 text-muted-foreground/20 shrink-0 mt-0.5 group-hover:text-muted-foreground transition-colors" />
     </button>
-  );
-}
-
-// ─── History Panel ─────────────────────────────────────────────────────────────
-
-export function HistoryPanel({ onSelect, onClose }: {
-  onSelect: (id: string, status: string) => void; onClose: () => void;
-}) {
-  const { data: history, isLoading } = useTestHistory();
-
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-stretch sm:items-center justify-end"
-      role="dialog" aria-modal="true"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
-      <div
-        className="relative z-10 w-full sm:max-w-sm h-full bg-background border-l border-border flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
-          <div className="flex items-center gap-2">
-            <History className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-sm font-mono font-medium text-foreground">history</h2>
-          </div>
-          <button
-            onClick={onClose} aria-label="Close"
-            className="p-2 rounded-lg hover:bg-muted text-muted-foreground touch-manipulation"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {isLoading && (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            </div>
-          )}
-          {!isLoading && (!history || history.length === 0) && (
-            <div className="text-center py-12">
-              <FlaskConical className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-xs font-mono text-muted-foreground">no previous runs</p>
-            </div>
-          )}
-          {history?.map((item: TestHistoryItem) => {
-            const sc        = (item.overallScore ?? 0) >= 90
-              ? "hsl(215 80% 60%)"
-              : (item.overallScore ?? 0) >= 70 ? "#eab308" : "#ef4444";
-            const cancelled = item.status === "cancelled";
-            return (
-              <button
-                key={item.id}
-                onClick={() => { onSelect(item.id, item.status); onClose(); }}
-                className={`w-full text-left p-3.5 rounded-xl border hover:bg-muted/50 transition-all group touch-manipulation ${
-                  cancelled ? "border-border/30 opacity-60" : "border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-mono text-muted-foreground truncate">{item.targetUrl}</p>
-                    <p className="text-[9px] font-mono text-muted-foreground/40 mt-0.5">
-                      {new Date(item.startedAt).toLocaleDateString()} · {new Date(item.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  </div>
-                  <div className="shrink-0">
-                    {item.status === "complete" && item.overallScore !== null
-                      ? <span className="text-lg font-mono font-bold" style={{ color: sc }}>{item.overallScore}</span>
-                      : item.status === "cancelled"
-                      ? <StopCircle className="h-4 w-4 text-muted-foreground" />
-                      : item.status === "failed"
-                      ? <XCircle className="h-4 w-4 text-red-500" />
-                      : <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    }
-                  </div>
-                </div>
-                {item.status === "complete" && (
-                  <div className="flex gap-3 mt-1.5 text-[10px] font-mono">
-                    <span className="text-primary">{item.passed ?? 0}✓</span>
-                    <span className="text-red-500">{item.failed ?? 0}✗</span>
-                    <span className="text-muted-foreground/40">{item.skipped ?? 0} skip</span>
-                  </div>
-                )}
-                {cancelled && (
-                  <p className="mt-1 text-[9px] font-mono text-muted-foreground/40 italic">stopped by user</p>
-                )}
-                <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <ArrowRight className="h-3 w-3 text-muted-foreground/40" />
-                  <span className="text-[9px] font-mono text-muted-foreground/40">view details</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
   );
 }
