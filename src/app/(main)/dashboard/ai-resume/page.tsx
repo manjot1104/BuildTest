@@ -27,7 +27,7 @@ import {
 import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
-import type { ResumeTemplate } from './templates'
+import { RESUME_TEMPLATES, type ResumeTemplate } from './templates'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
@@ -211,6 +211,7 @@ export default function AIResumeBuilderPage() {
             ...data, 
             model: selectedModel,
             templateId: selectedTemplate?.id,
+            // Keep generation format-specific to avoid mixed HTML/LaTeX outputs.
             templateStyleGuide: selectedTemplate?.styleGuide,
           }),
           signal: controller.signal,
@@ -303,7 +304,8 @@ export default function AIResumeBuilderPage() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }))
-        throw new Error(error.error || 'Failed to generate PDF')
+        toast.error(error.error || 'Failed to generate PDF', { id: 'resume-compile' })
+        return
       }
 
       const blob = await response.blob()
@@ -318,7 +320,7 @@ export default function AIResumeBuilderPage() {
 
       toast.success('PDF generated successfully!', { id: 'resume-compile' })
     } catch (error) {
-      console.error('Error generating PDF:', error)
+      console.warn('Error generating PDF:', error)
       toast.error(
         error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
         { id: 'resume-compile' }

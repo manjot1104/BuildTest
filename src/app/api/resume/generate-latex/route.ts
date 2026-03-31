@@ -9,6 +9,10 @@ import { getSession } from '@/server/better-auth/server'
 
 // Configure runtime for longer operations
 export const maxDuration = 120 // 2 minutes for AI generation
+const AI_PROVIDER_TIMEOUT_MS = 70000
+const FORCE_DETERMINISTIC_TEMPLATE_IDS = new Set([
+  'latex-blue-magenta-financial',
+])
 
 /**
  * Generate LaTeX code only (without compiling to PDF)
@@ -25,6 +29,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     validatedData = normalizeResumeInput(body)
 
+    // Some highly visual templates are better rendered deterministically to avoid AI dummy/sample leakage.
+    if (validatedData.templateId && FORCE_DETERMINISTIC_TEMPLATE_IDS.has(validatedData.templateId)) {
+      const latex = pruneGeneratedSections(
+        generateLatexTemplateFallback(validatedData),
+        'latex',
+        validatedData
+      )
+      return NextResponse.json({
+        latex,
+        model: 'local-template-fallback',
+        isFallback: true,
+        success: true,
+        warning: 'Deterministic rendering enabled for this template to ensure only user input is used.',
+      })
+    }
+
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
         { error: 'Resume generation service is not configured.' },
@@ -32,7 +52,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await generateLaTeXResume(validatedData)
+    const result = await Promise.race([
+      generateLaTeXResume(validatedData),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('AI_PROVIDER_TIMEOUT')), AI_PROVIDER_TIMEOUT_MS)
+      ),
+    ])
 
     if (!result?.cleaned?.trim()) {
       return NextResponse.json(
@@ -64,9 +89,10 @@ export async function POST(request: NextRequest) {
       const lower = message.toLowerCase()
       const isRateLimit = lower.includes('rate limit') || lower.includes('429')
       const isProviderPolicy = lower.includes('no endpoints available') || lower.includes('guardrail')
+      const isProviderTimeout = message.includes('AI_PROVIDER_TIMEOUT') || lower.includes('timed out')
 
       // Local fallback so users can still generate a resume even when OpenRouter is unavailable.
-      if ((isRateLimit || isProviderPolicy) && validatedData) {
+      if ((isRateLimit || isProviderPolicy || isProviderTimeout) && validatedData) {
         const latex = pruneGeneratedSections(
           generateLatexTemplateFallback(validatedData),
           'latex',
@@ -77,7 +103,9 @@ export async function POST(request: NextRequest) {
           model: 'local-template-fallback',
           isFallback: true,
           success: true,
-          warning: isRateLimit
+          warning: isProviderTimeout
+            ? 'AI provider timed out. Generated with local template fallback.'
+            : isRateLimit
             ? 'OpenRouter rate limit reached. Generated with local template fallback.'
             : 'OpenRouter endpoint policy blocked. Generated with local template fallback.',
         })

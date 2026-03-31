@@ -1,9 +1,10 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { X, FileText, Code, Monitor, Loader2 } from 'lucide-react'
-import type { ResumeTemplate } from '../templates'
+import { X, Code, Loader2 } from 'lucide-react'
+import { RESUME_TEMPLATES, type ResumeTemplate } from '../templates'
 import { renderTemplate, DUMMY_RESUME_DATA } from '@/lib/resume/template-renderer'
+import { resolveHtmlPreviewTemplate } from '../template-structure'
 
 // ── A4 Page Dimensions at 96 DPI ──────────────────────────────────────────────
 const A4_WIDTH = 794
@@ -39,9 +40,8 @@ export function ResumeTemplatePreviewModal({
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const [previewHtml, setPreviewHtml] = useState<string>('')
-  const [pdfUrl, setPdfUrl] = useState<string | null>(null)
-  const [isCompilingPdf, setIsCompilingPdf] = useState(false)
-  const [currentFormat, setCurrentFormat] = useState<'latex' | 'html'>(defaultFormat)
+  const [previewPdfUrl, setPreviewPdfUrl] = useState<string>('')
+  const [previewError, setPreviewError] = useState<string>('')
   const [scale, setScale] = useState(1)
   const [iframeHeight, setIframeHeight] = useState(A4_MIN_HEIGHT)
 
@@ -56,17 +56,12 @@ export function ResumeTemplatePreviewModal({
   // ── Reset state when template changes ────────────────────────────────────
   useEffect(() => {
     if (!open || !template) return
-    const format = template.format || 'both'
-    const newFormat =
-      format === 'latex' ? 'latex' : format === 'html' ? 'html' : defaultFormat
-    setCurrentFormat(newFormat)
-    setPdfUrl(null)
     setIframeHeight(A4_MIN_HEIGHT)
     // Calculate scale after modal opens and DOM is ready
     requestAnimationFrame(() => {
       requestAnimationFrame(updateScale)
     })
-  }, [open, template, defaultFormat, updateScale])
+  }, [open, template, updateScale])
 
   // ── Recalculate scale on window resize ────────────────────────────────────
   useEffect(() => {
@@ -92,67 +87,73 @@ export function ResumeTemplatePreviewModal({
     }
   }, [])
 
-  // ── Generate preview content using the SAME renderer as final output ──────
+  // ── Generate preview content (LaTeX -> compiled PDF, HTML -> iframe HTML) ──
   useEffect(() => {
     if (!open || !template) return
     let cancelled = false
-    const format = template.format || 'both'
-    const effectiveFormat = format === 'both' ? currentFormat : format
+    let createdPdfUrl: string | null = null
+    setPreviewError('')
+    setPreviewHtml('')
+    setPreviewPdfUrl('')
 
-    // Always generate HTML preview (used as fallback for LaTeX too)
-    const htmlContent = renderTemplate(template.styleGuide, 'html', DUMMY_RESUME_DATA)
-    if (!cancelled) {
-      setPreviewHtml(htmlContent || '')
-    }
+    const isLatexPreview = defaultFormat === 'latex' || template.format === 'latex'
 
-    if (effectiveFormat === 'latex') {
-      // Generate LaTeX code for compilation
-      const latexCode = renderTemplate(template.styleGuide, 'latex', DUMMY_RESUME_DATA)
+    const htmlPreviewTemplate = resolveHtmlPreviewTemplate(template, RESUME_TEMPLATES)
+    console.log('[ResumePreview] selected templateId:', template.id)
+    console.log('[ResumePreview] rendering template:', htmlPreviewTemplate?.id ?? null)
+    console.log('[ResumePreview] mode:', isLatexPreview ? 'latex-pdf' : 'html')
 
-      // Attempt PDF compilation
-      setIsCompilingPdf(true)
-      setPdfUrl(null)
-
-      fetch('/api/resume/compile-pdf', {
+    const run = async () => {
+      if (isLatexPreview) {
+        try {
+          const latexContent = renderTemplate(template.styleGuide, 'latex', DUMMY_RESUME_DATA)
+          const response = await fetch('/api/resume/compile-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latex: latexCode, fileName: 'Preview' }),
-      })
-        .then(async (res) => {
-          if (cancelled) return
-          if (res.ok) {
-            const blob = await res.blob()
-            // Verify it's actually a PDF
-            if (blob.size > 0 && blob.type.includes('pdf')) {
-            setPdfUrl(URL.createObjectURL(blob))
-            }
-      } else {
-            // PDF compilation failed — HTML fallback will be shown automatically
-            }
+            body: JSON.stringify({ latex: latexContent, fileName: 'Template_Preview' }),
           })
-          .catch(() => {
-          // PDF compilation failed — HTML fallback will be shown automatically
-          })
-          .finally(() => {
-            if (!cancelled) setIsCompilingPdf(false)
-          })
-      } else {
-      // HTML format — just use the rendered HTML
-        setPdfUrl(null)
-      setIframeHeight(A4_MIN_HEIGHT)
+
+          if (!response.ok) throw new Error('LaTeX preview compile failed')
+
+          const blob = await response.blob()
+          const url = URL.createObjectURL(blob)
+          createdPdfUrl = url
+          if (!cancelled) {
+            setPreviewPdfUrl(url)
+            setIframeHeight(A4_MIN_HEIGHT)
+          } else {
+            URL.revokeObjectURL(url)
+          }
+          return
+        } catch (err) {
+          console.warn('[ResumePreview] LaTeX preview compile failed, using HTML fallback:', err)
+          // Fallback to mapped HTML preview so users can still inspect structure.
+        }
+      }
+
+      if (!htmlPreviewTemplate) {
+        if (!cancelled) {
+          setPreviewError(`Preview mapping missing for template: ${template.id}`)
+        }
+        return
+      }
+
+      const htmlContent = renderTemplate(htmlPreviewTemplate.styleGuide, 'html', DUMMY_RESUME_DATA)
+      if (!cancelled) {
+        setPreviewHtml(htmlContent || '')
+        setIframeHeight(A4_MIN_HEIGHT)
+      }
     }
+
+    void run()
 
     return () => {
       cancelled = true
+      if (createdPdfUrl) {
+        URL.revokeObjectURL(createdPdfUrl)
+      }
     }
-  }, [open, template, currentFormat])
-
-  // ── Cleanup PDF URL on unmount ────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl)
-    }
-  }, [pdfUrl])
+  }, [open, template, defaultFormat])
 
   // ── Escape key to close ───────────────────────────────────────────────────
   useEffect(() => {
@@ -166,30 +167,17 @@ export function ResumeTemplatePreviewModal({
 
   if (!open || !template) return null
 
-  const templateFormat = template.format || 'both'
-  const showFormatToggle = templateFormat === 'both' || !template.format
-  const displayFormat =
-    templateFormat === 'latex'
-    ? 'latex' 
-    : templateFormat === 'html' 
-    ? 'html' 
-    : currentFormat
-  const isHtml = displayFormat === 'html'
-
-  // Determine what to show in preview area:
-  // - HTML templates → always show HTML iframe
-  // - LaTeX templates → show PDF if compiled, else show HTML fallback
-  const showPdfPreview = !isHtml && pdfUrl && !isCompilingPdf
-  const showHtmlFallback = !isHtml && !pdfUrl && !isCompilingPdf
-  const showCompiling = !isHtml && isCompilingPdf
-  const showHtmlDirect = isHtml
+  const isHtml = true
+  const showHtmlContent = !!previewHtml.trim()
+  const showPdfContent = !!previewPdfUrl
+  const isPreviewLoading = !showPdfContent && !showHtmlContent && !previewError
 
   // The HTML content to render — always available for both formats
   const iframeHtml = previewHtml
 
   // Scaled container dimensions
   const scaledWidth = A4_WIDTH * scale
-  const currentHeight = showPdfPreview ? A4_MIN_HEIGHT : iframeHeight
+  const currentHeight = iframeHeight
   const scaledHeight = currentHeight * scale
 
   return (
@@ -201,63 +189,9 @@ export function ResumeTemplatePreviewModal({
       >
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            {isHtml ? (
               <Code className="size-5 text-violet-400" />
-            ) : (
-              <FileText className="size-5 text-blue-400" />
-            )}
             <h2 className="text-lg font-semibold text-white">{template.name}</h2>
           </div>
-          
-          {showFormatToggle && (
-            <>
-              <div className="h-4 w-px bg-white/10" />
-              <div
-                className="flex items-center gap-1 rounded-lg p-0.5"
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => setCurrentFormat('html')}
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-                  style={{ 
-                    color: currentFormat === 'html' ? '#fff' : 'rgba(255,255,255,0.5)',
-                    background:
-                      currentFormat === 'html' ? 'rgba(255,255,255,0.12)' : 'transparent',
-                  }}
-                >
-                  <Monitor className="size-3.5" />
-                  HTML
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCurrentFormat('latex')}
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-colors"
-                  style={{ 
-                    color: currentFormat === 'latex' ? '#fff' : 'rgba(255,255,255,0.5)',
-                    background:
-                      currentFormat === 'latex' ? 'rgba(255,255,255,0.12)' : 'transparent',
-                  }}
-                >
-                  <FileText className="size-3.5" />
-                  LaTeX
-                </button>
-              </div>
-            </>
-          )}
-
-          {/* Show notice when using HTML fallback for LaTeX */}
-          {showHtmlFallback && (
-            <>
-              <div className="h-4 w-px bg-white/10" />
-              <span className="rounded-md bg-amber-500/10 px-2.5 py-1 text-[11px] text-amber-400">
-                Showing HTML preview (PDF compilation pending)
-              </span>
-            </>
-          )}
         </div>
 
         <button
@@ -298,50 +232,27 @@ export function ResumeTemplatePreviewModal({
               position: 'relative',
             }}
           >
-            {/* ── Compiling state ──────────────────────────────────────── */}
-            {showCompiling && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: `${A4_MIN_HEIGHT}px`,
-                  gap: '16px',
-                }}
-              >
-                <Loader2
-                  className="animate-spin"
-                  style={{ width: '36px', height: '36px', color: '#6366f1' }}
-                />
-                <span style={{ fontSize: '14px', color: '#555', fontFamily: 'system-ui' }}>
-                  Compiling LaTeX to PDF…
-                </span>
-                <span style={{ fontSize: '12px', color: '#999', fontFamily: 'system-ui' }}>
-                  This may take a few seconds
-                </span>
-                </div>
-              )}
-
-            {/* ── PDF preview (LaTeX compiled successfully) ───────────── */}
-            {showPdfPreview && pdfUrl && (
-                <iframe
-                  src={pdfUrl}
+            {/* ── PDF preview for LaTeX templates (compiled from same source) ─── */}
+            {showPdfContent && (
+              <iframe
+                ref={iframeRef}
+                src={previewPdfUrl}
                 style={{
                   width: `${A4_WIDTH}px`,
                   height: `${A4_MIN_HEIGHT}px`,
                   border: 'none',
                   display: 'block',
+                  background: '#ffffff',
                 }}
-                title="LaTeX Resume Preview (PDF)"
+                title="Resume Preview PDF"
               />
             )}
 
-            {/* ── HTML preview (direct or fallback for LaTeX) ────────── */}
-            {(showHtmlDirect || showHtmlFallback) && (
+            {/* ── HTML preview fallback ───────────────────────────────────── */}
+            {showHtmlContent && (
               <>
                 {iframeHtml?.trim() ? (
-                  <iframe
+              <iframe
                     ref={iframeRef}
                     srcDoc={iframeHtml}
                     onLoad={handleIframeLoad}
@@ -353,8 +264,8 @@ export function ResumeTemplatePreviewModal({
                       background: '#ffffff',
                     }}
                     title="Resume Preview"
-                    sandbox="allow-same-origin"
-                />
+                  sandbox="allow-same-origin"
+              />
               ) : (
                   <div
                     style={{
@@ -376,7 +287,72 @@ export function ResumeTemplatePreviewModal({
                 </div>
               )}
               </>
+            )}
+
+            {isPreviewLoading && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: `${A4_MIN_HEIGHT}px`,
+                  gap: '18px',
+                  background: 'linear-gradient(180deg, #ffffff 0%, #fcfcff 100%)',
+                }}
+              >
+                <div
+                  style={{
+                    width: '110px',
+                    height: '110px',
+                    borderRadius: '999px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'radial-gradient(circle at center, rgba(124,58,237,0.16), rgba(124,58,237,0.06) 55%, transparent 70%)',
+                  }}
+                >
+                  <Loader2
+                    className="animate-spin"
+                    style={{ width: '40px', height: '40px', color: '#7c3aed' }}
+                  />
+            </div>
+
+                <div style={{ width: '300px', display: 'grid', gap: '8px' }}>
+                  <div className="h-2 w-full animate-pulse rounded bg-violet-200/80" />
+                  <div className="h-2 w-[92%] animate-pulse rounded bg-violet-100/90" />
+                  <div className="h-2 w-[78%] animate-pulse rounded bg-violet-100/80" />
+                  </div>
+
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#4c1d95' }}>
+                    Preparing LaTeX preview
+                </div>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                    Compiling layout... this may take a few seconds.
+                  </div>
+                  </div>
+                </div>
+              )}
+
+            {!showPdfContent && !showHtmlContent && previewError && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  height: `${A4_MIN_HEIGHT}px`,
+                  gap: '10px',
+                  padding: '24px',
+                }}
+              >
+                <span style={{ fontSize: '13px', color: '#666', fontFamily: 'system-ui', textAlign: 'center' }}>
+                  {previewError}
+                </span>
+            </div>
           )}
+
           </div>
         </div>
       </div>
@@ -388,9 +364,7 @@ export function ResumeTemplatePreviewModal({
       >
         <div className="flex items-center gap-4">
           <span className="text-xs text-white/40">
-            {showHtmlFallback
-              ? 'Showing HTML layout preview. Final LaTeX PDF may differ slightly in typography.'
-              : 'Preview with sample data. Your resume will use the same layout with your information.'}
+            Preview with sample data. Your resume will use the same layout with your information.
           </span>
         </div>
         <div className="flex items-center gap-2">
