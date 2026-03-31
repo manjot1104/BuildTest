@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { followUpLaTeX } from '@/lib/openrouter'
+import { validateLatexFollowUpInput } from '@/lib/resume/code-validator'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
-
-const followUpRequestSchema = z.object({
-  currentLatex: z.string().min(1, 'LaTeX code is required').max(100000),
-  prompt: z.string().min(1, 'Prompt is required').max(2000),
-  model: z.string().max(100).optional(),
-})
 
 /**
  * Process follow-up prompt to modify existing LaTeX code
@@ -22,7 +17,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { currentLatex, prompt, model } = followUpRequestSchema.parse(body)
+    const { currentLatex, prompt, model } = validateLatexFollowUpInput(body)
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(

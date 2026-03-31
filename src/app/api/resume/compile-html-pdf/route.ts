@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { generatePDFFromHtml } from '@/lib/html-to-pdf'
+import { validateCompileHtmlInput } from '@/lib/resume/code-validator'
 import { getSession } from '@/server/better-auth/server'
-
-const compileRequestSchema = z.object({
-  html: z.string().min(1, 'HTML code is required').max(200000),
-  fileName: z.string().max(100).optional().default('Resume'),
-})
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._\- ]/g, '').replace(/\s+/g, '_').slice(0, 50) || 'Resume'
@@ -24,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { html, fileName } = compileRequestSchema.parse(body)
+    const { html, fileName } = validateCompileHtmlInput(body)
 
     if (!html.trim()) {
       return NextResponse.json(
