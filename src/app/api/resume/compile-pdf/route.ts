@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { compileLaTeXToPDF } from '@/lib/latex-to-pdf'
+import { validateCompileLatexInput } from '@/lib/resume/code-validator'
 import { getSession } from '@/server/better-auth/server'
-
-const compileRequestSchema = z.object({
-  latex: z.string().min(1, 'LaTeX code is required').max(200000),
-  fileName: z.string().max(100).optional().default('Resume'),
-})
 
 function sanitizeFilename(name: string): string {
   return name.replace(/[^a-zA-Z0-9._\- ]/g, '').replace(/\s+/g, '_').slice(0, 50) || 'Resume'
@@ -24,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { latex, fileName } = compileRequestSchema.parse(body)
+    const { latex, fileName } = validateCompileLatexInput(body)
 
     if (!latex.trim()) {
       return NextResponse.json(

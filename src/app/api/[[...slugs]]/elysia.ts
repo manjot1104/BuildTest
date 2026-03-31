@@ -70,7 +70,14 @@ import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
-  validateGithubSourceHandler, // [GITHUB] new validate endpoint for test run form
+  validateGithubSourceHandler, // validate endpoint for test run form
+  getGithubReposHandler,
+  connectExistingRepoHandler,
+  listRepoBranchesHandler,
+  listPullRequestsHandler,
+  getPullRequestHandler,
+  createPullRequestHandler,
+  mergePullRequestHandler,
 } from "@/server/api/controllers/github.controller";
 import {
   createDesignHandler,
@@ -1272,6 +1279,56 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return result
   })
 
+  // POST /api/github/push — push generated files to GitHub
+  .post(
+    "/github/push",
+    async ({ body, set }) => {
+      const result = await pushToGithubHandler({ body })
+      if (result && "status" in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:                 t.String(),
+        branchName:             t.String(),
+        commitMessage:          t.Optional(t.String()),
+        confirmExistingBranch:  t.Optional(t.Boolean()),
+        repoName:               t.Optional(t.String()),
+        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
+        replaceRepo:            t.Optional(t.Boolean()),
+      }),
+    },
+  )
+
+  // GET /api/github/repos — list user's repos for the "connect existing" picker
+  // Returns repos the user owns, collaborates on, or is an org member of.
+  // Write-permission enforcement happens at push time via the GitHub API.
+  .get('/github/repos', async ({ set }) => {
+    const result = await getGithubReposHandler()
+    if (!Array.isArray(result) && 'status' in result && result.status) {
+      set.status = result.status
+    }
+    return result
+  })
+
+  // POST /api/github/connect — Step 1 of connect-existing-repo flow
+  // Validates the repo is accessible, saves it as the active repo for the chat.
+  // Does NOT push any files. Push happens separately via /github/push.
+  .post(
+    '/github/connect',
+    async ({ body, set }) => {
+      const result = await connectExistingRepoHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:       t.String(),
+        repoFullName: t.String(), // format: "owner/repo-name"
+      }),
+    },
+  )
+
   // GET /api/github/validate — live-validates a repo+branch for source code analysis.
   // [GITHUB] Used by the debounced input in the test run form. Requires auth +
   // a GitHub token; returns no_github_account for email-only users.
@@ -1292,6 +1349,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
+  // GET /api/github/repo/:chatId — active repo info for a chat
   .get(
     "/github/repo/:chatId",
     async ({ params, set }) => {
@@ -1305,23 +1363,98 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // POST /api/github/push — push generated files to GitHub
+  // ── Pull Request Endpoints ──────────────────────────────────────────────
+
+  // GET /api/github/branches/:chatId — list branches for the active repo
+  // Used to populate head/base branch selectors in the PR creation form
+  .get(
+    '/github/branches/:chatId',
+    async ({ params, set }) => {
+      const result = await listRepoBranchesHandler({ params })
+      if (!Array.isArray(result) && 'status' in result && result.status) {
+        set.status = result.status
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // GET /api/github/prs/:chatId — list all open PRs for the active repo
+  // Fast path: all PRs returned with mergeableStatus: 'unknown'
+  // Use GET /api/github/pr/:chatId/:prNumber for real mergeability
+  .get(
+    '/github/prs/:chatId',
+    async ({ params, set }) => {
+      const result = await listPullRequestsHandler({ params })
+      if (!Array.isArray(result) && 'status' in result && result.status) {
+        set.status = result.status
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // GET /api/github/pr/:chatId/:prNumber — single PR with real mergeability
+  // Called lazily when the user expands a PR card in the UI
+  .get(
+    '/github/pr/:chatId/:prNumber',
+    async ({ params, set }) => {
+      const result = await getPullRequestHandler({ params })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      params: t.Object({
+        chatId:   t.String(),
+        prNumber: t.String(), // parsed to int inside the handler
+      }),
+    },
+  )
+
+  // POST /api/github/pr/create — create a new pull request
+  // IMPORTANT: must come before /github/pr/:chatId/:prNumber to avoid
+  // Elysia treating "create" as a prNumber param
   .post(
-    "/github/push",
+    '/github/pr/create',
     async ({ body, set }) => {
-      const result = await pushToGithubHandler({ body })
-      if (result && "status" in result && result.status) set.status = result.status
+      const result = await createPullRequestHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
       return result
     },
     {
       body: t.Object({
-        chatId:                 t.String(),
-        branchName:             t.String(),
-        commitMessage:          t.Optional(t.String()),
-        confirmExistingBranch:  t.Optional(t.Boolean()),
-        repoName:               t.Optional(t.String()),
-        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
-        replaceRepo:            t.Optional(t.Boolean()),
+        chatId: t.String(),
+        title:  t.String(),
+        head:   t.String(), // source branch
+        base:   t.String(), // target branch
+        body:   t.Optional(t.String()), // PR description
+      }),
+    },
+  )
+
+  // POST /api/github/pr/merge — merge a pull request
+  // Only succeeds if the PR is currently mergeable (verified server-side)
+  .post(
+    '/github/pr/merge',
+    async ({ body, set }) => {
+      const result = await mergePullRequestHandler({ body })
+      if (result && 'status' in result && result.status) set.status = result.status
+      return result
+    },
+    {
+      body: t.Object({
+        chatId:      t.String(),
+        prNumber:    t.Number(),
+        mergeMethod: t.Union([
+          t.Literal('merge'),
+          t.Literal('squash'),
+          t.Literal('rebase'),
+        ]),
+        commitTitle: t.Optional(t.String()),
       }),
     },
   )

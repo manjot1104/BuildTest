@@ -8,6 +8,25 @@ declare const require: (id: string) => any
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
 
+type ParsedResumeData = {
+  fullName: string
+  title?: string
+  email: string
+  phone: string
+  location?: string
+  linkedin?: string
+  github?: string
+  portfolio?: string
+  summary?: string
+  skills: string
+  experience: string
+  education: string
+  projects: string
+  certifications?: string
+  achievements?: string
+  languagesKnown?: string
+}
+
 // Test endpoint to verify route is working
 export async function GET() {
   return NextResponse.json({ 
@@ -117,6 +136,85 @@ async function extractTextFromPDF(file: File): Promise<string> {
     const errorStack = error instanceof Error ? error.stack : undefined
     console.error('[parse-files] Error stack:', errorStack)
     throw new Error(`Failed to extract text from PDF file: ${errorMessage}`)
+  }
+}
+
+function buildFallbackResumeData(rawText: string): ParsedResumeData {
+  const text = rawText.replace(/\r/g, '')
+  const lines = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
+  const phoneMatch = text.match(/(\+?\d[\d\s\-()]{7,}\d)/)
+  const linkedinMatch = text.match(/linkedin\.com\/in\/[\w-]+/i)
+  const githubMatch = text.match(/github\.com\/[\w-]+/i)
+  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+\.(?:dev|io|com|me|xyz|tech))\b/i)
+
+  let fullName = ''
+  for (const line of lines.slice(0, 12)) {
+    if (line.length > 2 && line.length < 60 && /^[A-Za-z][A-Za-z\s.'-]+$/.test(line)) {
+      const words = line.split(/\s+/).filter(Boolean)
+      if (words.length >= 2 && words.length <= 4) {
+        fullName = line
+        break
+      }
+    }
+  }
+
+  const skillKeywords = [
+    'react', 'next.js', 'node.js', 'typescript', 'javascript', 'python', 'java', 'sql',
+    'mongodb', 'postgresql', 'aws', 'docker', 'kubernetes', 'html', 'css', 'tailwind',
+    'communication', 'leadership', 'problem solving', 'go', 'rust', 'c++', 'flutter',
+  ]
+  const lowerText = text.toLowerCase()
+  const foundSkills = skillKeywords.filter((s) => lowerText.includes(s)).slice(0, 15)
+  const skills = foundSkills.length > 0 ? foundSkills.join(', ') : ''
+
+  const sectionText = (markers: string[]): string => {
+    const lowerLines = lines.map((l) => l.toLowerCase())
+    const startIdx = lowerLines.findIndex((l) => markers.some((m) => l.includes(m)))
+    if (startIdx === -1) return ''
+    const out: string[] = []
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      const cur = lowerLines[i]!
+      if (
+        ['experience', 'education', 'project', 'skills', 'summary', 'certification', 'achievement', 'language', 'award'].some(
+          (h) => cur.startsWith(h)
+        ) && out.length > 0
+      ) {
+        break
+      }
+      out.push(lines[i]!)
+      if (out.join('\n').length > 1200) break
+    }
+    return out.length > 0 ? out.join('\n') : ''
+  }
+
+  const experience = sectionText(['experience', 'work history', 'employment'])
+  const education = sectionText(['education', 'academic'])
+  const projects = sectionText(['projects', 'project'])
+  const summary = sectionText(['summary', 'objective', 'profile'])
+  const certifications = sectionText(['certification', 'certificate'])
+  const achievements = sectionText(['achievement', 'award', 'accomplishment', 'honor'])
+  const languagesKnown = sectionText(['language'])
+
+  return {
+    fullName,
+    email: emailMatch?.[0] || '',
+    phone: phoneMatch?.[0] || '',
+    linkedin: linkedinMatch?.[0] || '',
+    github: githubMatch?.[0] || '',
+    portfolio: portfolioMatch?.[0] || '',
+    summary,
+    skills,
+    experience,
+    education,
+    projects,
+    certifications,
+    achievements,
+    languagesKnown,
   }
 }
 
@@ -307,7 +405,7 @@ export async function POST(request: NextRequest) {
     // Use AI to extract structured data - process in parallel for faster results
     // Only process if we have text
     console.log('[parse-files] Starting AI parsing...')
-    const [extractedResumeData, jdRequirements] = await Promise.all([
+    const [aiExtractedResumeData, jdRequirements] = await Promise.all([
       resumeText && resumeText.trim().length > 0
         ? (async () => {
             try {
@@ -328,15 +426,24 @@ export async function POST(request: NextRequest) {
                     {
                       role: 'user',
                       content: `Extract structured data from this resume text. Return ONLY valid JSON with these exact fields:
-- fullName: string
-- email: string  
+- fullName: string (full name)
+- title: string (current job title / professional headline, e.g. "Senior Software Engineer")
+- email: string
 - phone: string
-- skills: comma-separated string (e.g., "React, Node.js, Python")
-- experience: formatted string with all work experience
-- education: formatted string with all degrees, institutions, and graduation dates (REQUIRED - if not found, use "Not specified")
-- projects: formatted string with all projects, technologies used, and key features (REQUIRED - if not found, use "Not specified")
+- location: string (city, state/country)
+- linkedin: string (LinkedIn URL or username if found)
+- github: string (GitHub URL or username if found)
+- portfolio: string (personal website/portfolio URL if found)
+- summary: string (professional summary / objective if present)
+- skills: comma-separated string (e.g. "React, Node.js, Python")
+- experience: formatted string with all work experience (use "Role | Company | Dates" format, then bullet points)
+- education: formatted string with all degrees, institutions, and graduation dates
+- projects: formatted string with all projects, technologies used, and key features
+- certifications: comma-separated string of certifications
+- achievements: comma-separated string of awards / achievements
+- languagesKnown: comma-separated string of spoken languages
 
-IMPORTANT: Always include education and projects fields. If not found in resume, set them to "Not specified" but DO NOT omit them.
+IMPORTANT: Include ALL fields. If a field is not found, use empty string "".
 
 Return ONLY valid JSON, no markdown, no explanations, no code blocks.
 
@@ -465,6 +572,8 @@ Resume text:\n${resumeText.substring(0, 6000)}`,
     ])
 
     console.log('[parse-files] AI parsing complete')
+    const extractedResumeData =
+      aiExtractedResumeData || (resumeText && resumeText.trim().length > 0 ? buildFallbackResumeData(resumeText) : null)
     console.log('[parse-files] Extracted resume data:', extractedResumeData)
     console.log('[parse-files] JD requirements:', jdRequirements)
     

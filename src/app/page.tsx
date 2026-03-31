@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown, Star } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -24,6 +24,7 @@ import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import Lenis from 'lenis'
 
 // --- Animation Variants ---
 
@@ -200,7 +201,7 @@ function RevealText({ children, delay = 0, className = '' }: {
                 variants={slideUp}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={delay}
             >
                 {children}
@@ -215,7 +216,7 @@ function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; dela
             variants={fadeIn}
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-20px' }}
             custom={delay}
             className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70"
         >
@@ -415,7 +416,7 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
                 variants={maskReveal}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={0.15}
                 className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15] cursor-pointer group/video"
                 onClick={onClick}
@@ -565,7 +566,7 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
                 </div>
 
                 {/* Chat body */}
-                <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
+                <div className="p-5 space-y-4 min-h-[220px] sm:min-h-[280px] md:min-h-[320px]">
                     {/* User message bubble — appears after send */}
                     {showBubble && (
                         <motion.div
@@ -694,6 +695,478 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
     )
 }
 
+// --- Community showcase with tabs ---
+
+const SHOWCASE_TABS = ['All', 'Resumes', 'Portfolios', 'Testing', 'Accessibility'] as const
+type ShowcaseTab = typeof SHOWCASE_TABS[number]
+
+// Resume preview card
+function ResumePreviewCard({ name, role, skills, prompt, delay }: { name: string, role: string, skills: string[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini resume preview */}
+            <div className="bg-white dark:bg-[#151520] p-4 border-b border-border/20">
+                <div className="flex items-start gap-3">
+                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-primary/60">{name[0]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-foreground/90 dark:text-white/85">{name}</p>
+                        <p className="text-[8px] text-primary/60 font-medium">{role}</p>
+                    </div>
+                </div>
+                <div className="mt-2.5 space-y-1">
+                    <div className="h-1 w-[90%] rounded bg-foreground/[0.06] dark:bg-white/[0.06]" />
+                    <div className="h-1 w-[70%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                    <div className="h-1 w-[80%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                    {skills.map(s => (
+                        <span key={s} className="text-[6px] px-1.5 py-0.5 rounded bg-primary/[0.06] text-primary/50 font-medium">{s}</span>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">PDF ready</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Generated</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Portfolio preview card
+function PortfolioPreviewCard({ title, navItems, heroText, heroSub, prompt, delay, action }: { title: string, navItems: string[], heroText: string, heroSub: string, prompt: string, delay: number, action: string }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => action === 'studio' ? router.push('/buildify-studio/new') : router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini website preview */}
+            <div className="bg-[#0f1117] text-white/90 p-0">
+                {/* Navbar */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5">
+                    <span className="text-[7px] font-bold text-white/70">{title}</span>
+                    <div className="flex gap-2">
+                        {navItems.map(n => <span key={n} className="text-[5px] text-white/30">{n}</span>)}
+                    </div>
+                </div>
+                {/* Hero */}
+                <div className="px-3 py-4">
+                    <p className="text-[10px] font-bold text-white/80">{heroText}</p>
+                    <p className="text-[7px] text-blue-400/60 mt-0.5">{heroSub}</p>
+                    <div className="flex gap-1 mt-2">
+                        <div className="h-3.5 px-2 rounded bg-blue-500/60 flex items-center"><span className="text-[5px] text-white">View Work</span></div>
+                        <div className="h-3.5 px-2 rounded border border-white/10 flex items-center"><span className="text-[5px] text-white/40">About</span></div>
+                    </div>
+                </div>
+                {/* Cards */}
+                <div className="grid grid-cols-3 gap-1 px-3 pb-3">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="rounded bg-white/[0.03] border border-white/[0.04] p-1.5">
+                            <div className="aspect-[16/9] rounded bg-white/[0.03] mb-1" />
+                            <div className="h-0.5 w-[60%] rounded bg-white/10" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Live</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">{action === 'studio' ? 'Studio' : 'Builder'}</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {action === 'studio' ? 'Open Studio' : 'Try this'} <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Testing report card
+function TestReportCard({ title, pages, issues, status, score, prompt, delay }: { title: string, pages: number, issues: number, status: string, score: string, prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <FlaskConical className="size-4 text-primary/45" />
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                    </div>
+                    <span className="text-lg font-bold text-primary/45">{score}</span>
+                </div>
+                {/* Mini progress bars */}
+                <div className="space-y-1.5 mb-3">
+                    {['HTML', 'CSS', 'Performance', 'SEO'].map((label, i) => (
+                        <div key={label} className="flex items-center gap-2">
+                            <span className="text-[7px] text-muted-foreground/35 w-14">{label}</span>
+                            <div className="flex-1 h-1 rounded-full bg-border/20 overflow-hidden">
+                                <div className="h-full bg-primary/30 rounded-full" style={{ width: `${85 + i * 4}%` }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3 text-[8px] text-muted-foreground/40">
+                    <span>{pages} pages</span>
+                    <span>{issues} issues</span>
+                    <span className={cn("font-medium", status === 'Pass' ? 'text-primary/50' : 'text-muted-foreground/40')}>{status}</span>
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Analyzed</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Accessibility report card
+function A11yReportCard({ title, score, checks, prompt, delay }: { title: string, score: number, checks: { label: string, pass: boolean }[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                    {/* Score circle */}
+                    <div className="relative size-12 shrink-0">
+                        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-border/15" />
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" className="text-primary/50"
+                                strokeDasharray={`${2 * Math.PI * 42}`} strokeDashoffset={`${(2 * Math.PI * 42) * (1 - score / 100)}`} />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[11px] font-bold text-foreground/70">{score}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                        <p className="text-[8px] text-primary/45 font-medium">{score >= 95 ? 'Excellent' : 'Good'}</p>
+                    </div>
+                </div>
+                {/* Check items */}
+                <div className="space-y-1">
+                    {checks.map(c => (
+                        <div key={c.label} className="flex items-center justify-between">
+                            <span className="text-[8px] text-muted-foreground/40">{c.label}</span>
+                            <CircleCheck className={cn("size-3", c.pass ? 'text-primary/40' : 'text-muted-foreground/20')} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">WCAG AA</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+function CommunityShowcase() {
+    const [activeTab, setActiveTab] = useState<ShowcaseTab>('All')
+    const [isAutoSwitching, setIsAutoSwitching] = useState(true)
+
+    useEffect(() => {
+        if (!isAutoSwitching) return
+        const interval = setInterval(() => {
+            setActiveTab(prev => {
+                const idx = SHOWCASE_TABS.indexOf(prev)
+                return SHOWCASE_TABS[(idx + 1) % SHOWCASE_TABS.length]!
+            })
+        }, 5000)
+        return () => clearInterval(interval)
+    }, [isAutoSwitching])
+
+    const handleTabClick = (tab: ShowcaseTab) => {
+        setActiveTab(tab)
+        setIsAutoSwitching(false)
+        setTimeout(() => setIsAutoSwitching(true), 15000)
+    }
+
+    return (
+        <div>
+            {/* Tabs */}
+            <div className="flex gap-1.5 mb-6 sm:mb-8 overflow-x-auto scrollbar-hide pb-1">
+                {SHOWCASE_TABS.map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => handleTabClick(tab)}
+                        className={cn(
+                            "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 shrink-0",
+                            activeTab === tab
+                                ? 'bg-primary/10 text-primary/80 border border-primary/20'
+                                : 'text-muted-foreground/50 border border-transparent hover:text-muted-foreground/70 hover:bg-muted/20'
+                        )}
+                    >
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Content */}
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                {(activeTab === 'All' || activeTab === 'Resumes') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Resumes</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <ResumePreviewCard name="Arjun Mehta" role="Senior Frontend Developer" skills={['React', 'Next.js', 'TypeScript', 'Tailwind']} prompt="Create a senior frontend developer resume focused on React, Next.js and TypeScript" delay={0} />
+                            <ResumePreviewCard name="Maya Chen" role="Product Designer" skills={['Figma', 'UX Research', 'Design Systems']} prompt="Create a product designer resume with clean minimal layout highlighting UX skills" delay={0.05} />
+                            <ResumePreviewCard name="Ravi Kumar" role="Full-Stack Engineer" skills={['Node.js', 'React', 'PostgreSQL', 'AWS']} prompt="Create an ATS-optimized full-stack engineer resume" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Portfolios') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Portfolios</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <PortfolioPreviewCard title="Ethan.dev" navItems={['Work', 'About', 'Contact']} heroText="Hi, I'm Ethan Carter" heroSub="Product Designer & Developer" prompt="" delay={0} action="studio" />
+                            <PortfolioPreviewCard title="Pixel Studio" navItems={['Projects', 'Team', 'Blog']} heroText="Creative Agency" heroSub="We build digital experiences" prompt="Build a creative agency landing page with case studies" delay={0.05} action="try" />
+                            <PortfolioPreviewCard title="Sara.design" navItems={['Gallery', 'About', 'Hire']} heroText="Freelance Designer" heroSub="Available for projects" prompt="Create a minimal freelance designer portfolio with contact form" delay={0.1} action="try" />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Testing') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Testing Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <TestReportCard title="E-commerce Store" pages={12} issues={0} status="Pass" score="98%" prompt="Test my e-commerce store for performance issues" delay={0} />
+                            <TestReportCard title="SaaS Dashboard" pages={8} issues={2} status="Pass" score="95%" prompt="Run a test suite on my SaaS dashboard" delay={0.05} />
+                            <TestReportCard title="Blog Platform" pages={15} issues={0} status="Pass" score="100%" prompt="Test my blog for broken links and SEO issues" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Accessibility') && (
+                    <div>
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Accessibility Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <A11yReportCard title="Portfolio Audit" score={98} checks={[{ label: 'Color Contrast', pass: true }, { label: 'ARIA Labels', pass: true }, { label: 'Keyboard Nav', pass: true }, { label: 'Alt Text', pass: true }]} prompt="Run a WCAG accessibility audit on my portfolio" delay={0} />
+                            <A11yReportCard title="Restaurant Menu" score={95} checks={[{ label: 'Contrast', pass: true }, { label: 'Navigation', pass: true }, { label: 'Forms', pass: true }, { label: 'Semantics', pass: false }]} prompt="Check my restaurant menu for accessibility" delay={0.05} />
+                            <A11yReportCard title="Landing Page" score={100} checks={[{ label: 'Headings', pass: true }, { label: 'ARIA', pass: true }, { label: 'Focus', pass: true }, { label: 'Contrast', pass: true }]} prompt="Audit my landing page for accessibility" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    )
+}
+
+// --- Testimonial scroller ---
+
+const TESTIMONIALS = [
+    {
+        quote: '"I just described what I needed… and it worked."',
+        description: 'Built a parent-teacher meeting scheduler without writing a single line of code. Parents get a link, pick a slot, done.',
+        name: 'Priya S.',
+        role: 'Teacher, Kerala',
+        tags: ['No code', 'Shipped'],
+        avatar: 'P',
+        stars: 5,
+    },
+    {
+        quote: '"Menu was live before lunch rush."',
+        description: 'Dragged together a menu page in Studio and hit publish. Twenty minutes, start to finish. Still using it daily.',
+        name: 'Rahul M.',
+        role: 'Restaurant Owner',
+        tags: ['20 min', 'Studio'],
+        avatar: 'R',
+        stars: 4.5,
+    },
+    {
+        quote: '"Four resumes, one interview within a week."',
+        description: 'Created four tailored resumes for different roles, exported as PDFs, and got a callback within days.',
+        name: 'Amit K.',
+        role: 'Job Seeker',
+        tags: ['Builder', '4 resumes'],
+        avatar: 'A',
+        stars: 5,
+    },
+    {
+        quote: '"Two days stuck. Fixed it in one prompt."',
+        description: 'A CORS issue had been blocking deployment. Described the problem in AI Chat, got the fix, applied it immediately.',
+        name: 'Dev R.',
+        role: 'Full-Stack Developer',
+        tags: ['AI Chat', 'Instant'],
+        avatar: 'D',
+        stars: 4.5,
+    },
+    {
+        quote: '"Went from idea to deployed in an afternoon."',
+        description: 'Prototyped a feedback form app, tested it, and pushed it live. The whole workflow felt seamless.',
+        name: 'Sara J.',
+        role: 'Product Manager',
+        tags: ['Live', 'No code'],
+        avatar: 'S',
+        stars: 5,
+    },
+]
+
+function TestimonialStars({ count, active }: { count: number, active: boolean }) {
+    return (
+        <div className="flex gap-0.5 mb-2">
+            {[...Array(5)].map((_, i) => {
+                const filled = i < Math.floor(count)
+                const half = !filled && i < count
+                return (
+                    <div key={i} className="relative">
+                        {/* Empty star */}
+                        <Star className={cn("size-3", active ? 'text-primary/15' : 'text-primary/8')} />
+                        {/* Filled overlay */}
+                        {filled && (
+                            <Star className={cn("size-3 fill-current absolute inset-0", active ? 'text-primary/50' : 'text-primary/20')} />
+                        )}
+                        {/* Half-filled overlay */}
+                        {half && (
+                            <div className="absolute inset-0 overflow-hidden" style={{ width: '50%' }}>
+                                <Star className={cn("size-3 fill-current", active ? 'text-primary/50' : 'text-primary/20')} />
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
+function TestimonialScroller() {
+    const [isPaused, setIsPaused] = useState(false)
+    const [offset, setOffset] = useState(0)
+    const itemHeight = 150
+    const totalItems = TESTIMONIALS.length
+    const totalHeight = totalItems * itemHeight
+
+    useEffect(() => {
+        if (isPaused) return
+        const interval = setInterval(() => {
+            setOffset(prev => (prev + 0.85) % totalHeight)
+        }, 25)
+        return () => clearInterval(interval)
+    }, [isPaused, totalHeight])
+
+    const items = [...TESTIMONIALS, ...TESTIMONIALS]
+
+    return (
+        <div
+            className="relative h-[420px] sm:h-[440px] overflow-hidden"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+        >
+            {/* Top fade */}
+            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background to-transparent z-10 pointer-events-none" />
+            {/* Bottom fade */}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none" />
+
+            <div
+                className="absolute inset-x-0"
+                style={{ transform: `translateY(-${offset}px)` }}
+            >
+                {items.map((t, i) => {
+                    const itemTop = i * itemHeight - offset
+                    const centerY = 420 / 2
+                    const itemCenter = itemTop + itemHeight / 2
+                    const dist = Math.abs(itemCenter - centerY)
+                    // Sharp focus — active within 40% of item height (narrow band)
+                    const isActive = dist < itemHeight * 0.4
+                    const isNear = dist < itemHeight * 1.1
+                    const isFar = !isNear
+
+                    return (
+                        <div
+                            key={`${t.avatar}-${i}`}
+                            className="px-2 sm:px-3"
+                            style={{ height: itemHeight, display: 'flex', alignItems: 'center' }}
+                        >
+                            <div
+                                className={cn(
+                                    "w-full rounded-xl border p-4 sm:p-5 transition-all duration-300",
+                                    isActive
+                                        ? 'border-primary/20 bg-card/80 dark:bg-[#0e0e18]/90 shadow-[0_0_24px_rgba(59,130,246,0.06)] scale-100 opacity-100'
+                                        : isFar
+                                            ? 'border-border/15 bg-card/20 dark:bg-[#0d0d14]/30 scale-[0.93] opacity-25 blur-[1px]'
+                                            : 'border-border/25 bg-card/40 dark:bg-[#0d0d14]/50 scale-[0.97] opacity-55'
+                                )}
+                            >
+                                <TestimonialStars count={t.stars} active={isActive} />
+
+                                {/* Quote */}
+                                <p className={cn(
+                                    "text-[13px] sm:text-sm font-semibold leading-snug mb-1.5 transition-colors duration-500",
+                                    isActive ? 'text-foreground/90' : 'text-foreground/50'
+                                )}>
+                                    {t.quote}
+                                </p>
+
+                                {/* Description */}
+                                <p className={cn(
+                                    "text-[11px] sm:text-xs leading-relaxed mb-3 transition-colors duration-500",
+                                    isActive ? 'text-muted-foreground/55' : 'text-muted-foreground/30'
+                                )}>
+                                    {t.description}
+                                </p>
+
+                                {/* Footer */}
+                                <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                        "size-5 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors duration-500",
+                                        isActive ? 'bg-primary/10 text-primary/50' : 'bg-primary/5 text-primary/25'
+                                    )}>
+                                        {t.avatar}
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-medium text-foreground/50">{t.name}</p>
+                                        <p className="text-[7px] text-muted-foreground/30">{t.role}</p>
+                                    </div>
+                                    <div className="flex gap-1 ml-auto">
+                                        {t.tags.map(tag => (
+                                            <span key={tag} className={cn(
+                                                "text-[7px] px-1.5 py-0.5 rounded-full font-medium transition-colors duration-500",
+                                                isActive ? 'bg-primary/[0.06] text-primary/40' : 'bg-primary/[0.03] text-primary/20'
+                                            )}>{tag}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 // --- Flow connector dots ---
 
 const FLOW_DOTS = [
@@ -774,60 +1247,66 @@ function FlowConnectorWrapper({ children }: { children: React.ReactNode }) {
 
 function FlowChatToStudioTransition() {
     const transitionRef = useRef<HTMLDivElement>(null)
+    const [mounted, setMounted] = useState(false)
     const { scrollYProgress } = useScroll({
         target: transitionRef,
-        offset: ['start start', 'end end'],
+        offset: ['start end', 'end start'],
     })
 
-    // Phase 1 (0–0.25): Container moves center + scales up
-    const containerX = useTransform(scrollYProgress, [0, 0.2], ['0%', '0%'])
-    const containerScale = useTransform(scrollYProgress, [0, 0.15, 0.3], [0.85, 1.02, 1])
-    const containerWidth = useTransform(scrollYProgress, [0.1, 0.35], ['100%', '100%'])
+    // Ensure stable measurement after mount
+    useEffect(() => { setMounted(true) }, [])
 
-    // Phase 2 (0.15–0.4): Chat content fades out
-    const chatContentOpacity = useTransform(scrollYProgress, [0.1, 0.3], [1, 0])
-    const chatContentY = useTransform(scrollYProgress, [0.1, 0.3], [0, -20])
+    // Remap: the actual visible range is ~0.2 to ~0.8 of the raw scroll progress
+    // This makes the animation more reliable across environments
+    const progress = useTransform(scrollYProgress, [0.15, 0.85], [0, 1])
 
-    // Phase 2.5 (0.2–0.4): Title bar label morphs
-    const chatLabelOpacity = useTransform(scrollYProgress, [0.2, 0.3], [1, 0])
-    const studioLabelOpacity = useTransform(scrollYProgress, [0.3, 0.4], [0, 1])
+    // Phase 1 (0–0.2): Container scales up
+    const containerScale = useTransform(progress, [0, 0.12, 0.25], [0.85, 1.02, 1])
 
-    // Phase 3 (0.3–0.5): Grid lines appear
-    const gridOpacity = useTransform(scrollYProgress, [0.3, 0.45], [0, 0.5])
+    // Phase 2 (0.1–0.3): Chat content fades out
+    const chatContentOpacity = useTransform(progress, [0.08, 0.25], [1, 0])
+    const chatContentY = useTransform(progress, [0.08, 0.25], [0, -20])
 
-    // Phase 4 (0.4–0.9): UI elements form inside
-    const navbarOpacity = useTransform(scrollYProgress, [0.38, 0.48], [0, 1])
-    const navbarY = useTransform(scrollYProgress, [0.38, 0.48], [-12, 0])
-    const heroOpacity = useTransform(scrollYProgress, [0.46, 0.56], [0, 1])
-    const heroScale = useTransform(scrollYProgress, [0.46, 0.56], [0.95, 1])
-    const cardsOpacity = useTransform(scrollYProgress, [0.56, 0.7], [0, 1])
-    const cardsY = useTransform(scrollYProgress, [0.56, 0.7], [16, 0])
-    const footerOpacity = useTransform(scrollYProgress, [0.7, 0.8], [0, 1])
+    // Phase 2.5 (0.2–0.35): Title bar label morphs
+    const chatLabelOpacity = useTransform(progress, [0.18, 0.28], [1, 0])
+    const studioLabelOpacity = useTransform(progress, [0.28, 0.38], [0, 1])
+
+    // Phase 3 (0.25–0.45): Grid lines appear
+    const gridOpacity = useTransform(progress, [0.25, 0.40], [0, 0.5])
+
+    // Phase 4 (0.35–0.85): UI elements form inside
+    const navbarOpacity = useTransform(progress, [0.33, 0.43], [0, 1])
+    const navbarY = useTransform(progress, [0.33, 0.43], [-12, 0])
+    const heroOpacity = useTransform(progress, [0.42, 0.52], [0, 1])
+    const heroScale = useTransform(progress, [0.42, 0.52], [0.95, 1])
+    const cardsOpacity = useTransform(progress, [0.52, 0.66], [0, 1])
+    const cardsY = useTransform(progress, [0.52, 0.66], [16, 0])
+    const footerOpacity = useTransform(progress, [0.66, 0.78], [0, 1])
 
     // Connection line glow
-    const lineProgress = useTransform(scrollYProgress, [0, 1], [0, 100])
+    const lineProgress = useTransform(progress, [0, 1], [0, 100])
 
     return (
-        <section ref={transitionRef} className="relative" style={{ height: '250vh' }}>
-            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
+        <section ref={transitionRef} className="relative hidden sm:block" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
+            <div className="sticky top-0 h-screen flex items-center justify-center px-4 sm:px-6 overflow-hidden">
                 {/* Connection line (energy flow) */}
                 <motion.div
                     className="absolute left-1/2 -translate-x-1/2 w-px top-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent pointer-events-none"
                     style={{
                         height: useTransform(lineProgress, (v) => `${Math.min(v * 1.2, 100)}%`),
-                        opacity: useTransform(scrollYProgress, [0, 0.05, 0.9, 1], [0, 0.6, 0.6, 0]),
+                        opacity: useTransform(progress, [0, 0.05, 0.9, 1], [0, 0.6, 0.6, 0]),
                     }}
                 >
                     {/* Glowing dot at tip */}
                     <motion.div
                         className="absolute bottom-0 left-1/2 -translate-x-1/2 size-2 rounded-full bg-primary/40 blur-sm"
-                        style={{ opacity: useTransform(scrollYProgress, [0, 0.05, 0.85, 1], [0, 1, 1, 0]) }}
+                        style={{ opacity: useTransform(progress, [0, 0.05, 0.85, 1], [0, 1, 1, 0]) }}
                     />
                 </motion.div>
 
                 {/* The single transforming container */}
                 <motion.div
-                    style={{ scale: containerScale, x: containerX, width: containerWidth }}
+                    style={{ scale: containerScale }}
                     className="relative w-full max-w-lg md:max-w-xl rounded-2xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-sm overflow-hidden"
                 >
                     {/* Title bar — morphing label */}
@@ -943,7 +1422,7 @@ function FlowChatToStudioTransition() {
                             </motion.div>
 
                             {/* 3 Cards */}
-                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-1.5">
+                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                                 {[
                                     { title: 'Web Design', desc: 'Modern responsive interfaces' },
                                     { title: 'Branding', desc: 'Identity and visual systems' },
@@ -1016,7 +1495,7 @@ type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' 
 
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
     const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
     const [cursorVisible, setCursorVisible] = useState(false)
@@ -1215,7 +1694,7 @@ function FlowStudioSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text — top */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -1355,7 +1834,7 @@ function FlowStudioSection() {
                             </motion.div>
 
                             {/* ── Main Editor Area ── */}
-                            <div className="flex relative" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                            <div className="flex relative" style={{ height: 'clamp(260px, 44vw, 520px)' }}>
                                 {/* Animated cursor */}
                                 {cursorVisible && (
                                     <motion.div
@@ -1917,7 +2396,7 @@ function FlowStudioToBuilderTransition() {
     const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Subtle background grid — depth layer */}
             <motion.div
                 style={{ opacity: gridOpacity }}
@@ -1960,38 +2439,20 @@ function FlowStudioToBuilderTransition() {
 
             <div className="max-w-6xl mx-auto px-6 relative">
                 {/* Left side — UI fragments floating toward positions */}
-                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none">
-                    {TRANSITION_FRAGMENTS.left.map((frag) => (
+                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none hidden sm:block">
+                    {[...TRANSITION_FRAGMENTS.left, ...TRANSITION_FRAGMENTS.right].map((frag) => (
                         <motion.div
                             key={frag.label}
-                            initial={{ opacity: 0, y: 15, scale: 0.9 }}
+                            initial={{ opacity: 0, y: 14, scale: 0.92 }}
                             whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
                             className="absolute"
                             style={{ left: frag.x, top: frag.y }}
                         >
-                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-card/80 border border-border/30 shadow-sm backdrop-blur-sm">
-                                <frag.icon className="size-3 text-primary/40" />
-                                <span className="text-[9px] font-medium text-foreground/50">{frag.label}</span>
-                            </div>
-                        </motion.div>
-                    ))}
-
-                    {/* Right side — code fragments */}
-                    {TRANSITION_FRAGMENTS.right.map((frag) => (
-                        <motion.div
-                            key={frag.label}
-                            initial={{ opacity: 0, y: 12, x: 10 }}
-                            whileInView={{ opacity: 1, y: 0, x: 0 }}
-                            viewport={{ once: true, margin: '-80px' }}
-                            transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
-                            className="absolute"
-                            style={{ left: frag.x, top: frag.y }}
-                        >
-                            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#0d1117]/80 border border-blue-400/10 shadow-sm backdrop-blur-sm">
-                                <frag.icon className="size-3 text-blue-400/40" />
-                                <span className="text-[9px] font-mono text-blue-300/50">{frag.label}</span>
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card/90 border border-border/40 shadow-sm backdrop-blur-sm">
+                                <frag.icon className="size-3 text-primary/50" />
+                                <span className="text-[9px] font-medium text-foreground/55">{frag.label}</span>
                             </div>
                         </motion.div>
                     ))}
@@ -2001,7 +2462,7 @@ function FlowStudioToBuilderTransition() {
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-100px' }}
+                    viewport={{ once: true, margin: '-20px' }}
                     transition={{ duration: 0.6 }}
                     className="relative z-10 flex justify-center py-8"
                 >
@@ -2038,7 +2499,7 @@ type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pus
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [step, setStep] = useState<BuildStep | 'idle'>('idle')
     const [codeLines, setCodeLines] = useState(0)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -2118,9 +2579,9 @@ function FlowBuilderSection() {
     }
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Left — Builder card */}
                     <motion.div
                         initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -2142,7 +2603,7 @@ function FlowBuilderSection() {
                                 </div>
 
                                 {/* Card body — content crossfades by step */}
-                                <div className="relative min-h-[320px] md:min-h-[360px]">
+                                <div className="relative min-h-[260px] sm:min-h-[320px] md:min-h-[360px]">
                                     {/* Step 1: Prompt */}
                                     {(step === 'idle' || step === 'prompt') && (
                                         <motion.div
@@ -2438,7 +2899,7 @@ function FlowBuilderToTestingTransition() {
     const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
 
                 {/* Trailing glow — soft, fades quickly */}
@@ -2528,7 +2989,7 @@ const ANALYSIS_ITEMS = [
 
 function FlowTestingSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [phase, setPhase] = useState<TestPhase>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [progress, setProgress] = useState(0)
@@ -2645,7 +3106,7 @@ function FlowTestingSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text header */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -2714,7 +3175,7 @@ function FlowTestingSection() {
 
                             {/* URL Input + Run Tests */}
                             <div className="px-5 py-4 border-b border-border/20">
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <div className={cn(
                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                         phase === 'typing-url' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
@@ -2722,19 +3183,19 @@ function FlowTestingSection() {
                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
                                         <div className="flex-1 min-h-[18px] flex items-center">
                                             {phase !== 'idle' ? (
-                                                <span className="text-[12px] text-foreground/70 font-mono">
+                                                <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono">
                                                     {testUrl.slice(0, urlChars)}
                                                     {phase === 'typing-url' && urlChars < testUrl.length && (
                                                         <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
                                                     )}
                                                 </span>
                                             ) : (
-                                                <span className="text-[12px] text-muted-foreground/30">Enter URL to test...</span>
+                                                <span className="text-[10px] sm:text-[12px] text-muted-foreground/30">Enter URL to test...</span>
                                             )}
                                         </div>
                                     </div>
                                     <button className={cn(
-                                        "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
+                                        "w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-[11px] font-semibold transition-all duration-200 shrink-0",
                                         phase === 'running' || phase === 'analyzing'
                                             ? 'bg-primary/70 text-primary-foreground cursor-wait'
                                             : phase === 'complete' || phase === 'expanding'
@@ -3047,7 +3508,7 @@ function FlowTestingToA11yTransition() {
     const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Background pulse — origin flash from testing completion */}
             <motion.div
                 style={{ opacity: pulseOpacity }}
@@ -3118,7 +3579,7 @@ function FlowTestingToA11yTransition() {
 
 function FlowAccessibilityLiveCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-30px', amount: 0.1 })
     const [step, setStep] = useState<A11yStep>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [visibleLogs, setVisibleLogs] = useState(0)
@@ -3225,9 +3686,9 @@ function FlowAccessibilityLiveCTA() {
     return (
         <>
             {/* ── Accessibility Testing Section ── */}
-            <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+            <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
                 <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                         {/* Left — Static description (NO animations) */}
                         <div>
                             <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
@@ -3284,7 +3745,7 @@ function FlowAccessibilityLiveCTA() {
                                     </div>
 
                                     {/* Card body — steps crossfade */}
-                                    <div className="relative min-h-[370px] md:min-h-[410px]">
+                                    <div className="relative min-h-[300px] sm:min-h-[370px] md:min-h-[410px]">
 
                                         {/* Step 1: URL Input */}
                                         {(step === 'idle' || step === 'typing' || step === 'running') && (
@@ -3295,13 +3756,13 @@ function FlowAccessibilityLiveCTA() {
                                                 className="absolute inset-0 p-5 flex flex-col"
                                             >
                                                 <p className="text-[10px] text-muted-foreground/40 mb-3">Enter a URL to test accessibility</p>
-                                                <div className="flex gap-2 mb-4">
+                                                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                                                     <div className={cn(
                                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                                         step === 'typing' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
                                                     )}>
                                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
-                                                        <span className="text-[12px] text-foreground/70 font-mono flex-1">
+                                                        <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono flex-1">
                                                             {step !== 'idle' ? testUrl.slice(0, urlChars) : ''}
                                                             {step === 'typing' && urlChars < testUrl.length && (
                                                                 <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
@@ -3310,7 +3771,7 @@ function FlowAccessibilityLiveCTA() {
                                                         </span>
                                                     </div>
                                                     <div className={cn(
-                                                        "px-3 py-2.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold transition-all duration-200",
+                                                        "w-full sm:w-auto px-3 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-semibold transition-all duration-200 shrink-0",
                                                         step === 'running'
                                                             ? 'bg-primary/70 text-primary-foreground scale-95'
                                                             : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
@@ -3504,25 +3965,18 @@ function FlowAccessibilityLiveCTA() {
 
 // --- Launch + Final CTA ---
 
-type LaunchPhase = 'idle' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
+type LaunchPhase = 'idle' | 'entering' | 'reveal' | 'scrolling' | 'live' | 'exit' | 'cta'
 
 function FlowLaunchCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: true, margin: '-30px', amount: 0.1 })
     const [phase, setPhase] = useState<LaunchPhase>('idle')
     const [scrollY, setScrollY] = useState(0)
+    const hasCompleted = useRef(false)
     const timers = useRef<ReturnType<typeof setTimeout>[]>([])
 
-    // Reset when leaving viewport
     useEffect(() => {
-        if (!isInView) {
-            timers.current.forEach(clearTimeout); timers.current = []
-            setPhase('idle'); setScrollY(0)
-        }
-    }, [isInView])
-
-    useEffect(() => {
-        if (!isInView) return
+        if (!isInView || hasCompleted.current) return
         let cancelled = false
         const delay = (ms: number) => new Promise<void>(resolve => {
             const t = setTimeout(resolve, ms)
@@ -3530,12 +3984,17 @@ function FlowLaunchCTA() {
         })
 
         const run = async () => {
-            await delay(400)
+            await delay(300)
             if (cancelled) return
 
-            // Step 1: Reveal website
+            // Step 0: Begin entry — element starts emerging
+            setPhase('entering')
+            await delay(800)
+            if (cancelled) return
+
+            // Step 1: Fully revealed
             setPhase('reveal')
-            await delay(1500)
+            await delay(1200)
             if (cancelled) return
 
             // Step 2: Auto-scroll through the site
@@ -3560,42 +4019,44 @@ function FlowLaunchCTA() {
             await delay(800)
             if (cancelled) return
 
-            // Step 5: CTA
+            // Step 5: CTA — lock final state
             setPhase('cta')
+            hasCompleted.current = true
         }
 
         run()
         return () => { cancelled = true; timers.current.forEach(clearTimeout) }
     }, [isInView])
 
-    const showSite = phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
+    const showSite = phase === 'entering' || phase === 'reveal' || phase === 'scrolling' || phase === 'live' || phase === 'exit'
     const showCTA = phase === 'cta'
 
+    // Derive animation target from phase
+    const siteAnimation = (() => {
+        switch (phase) {
+            case 'idle': return { opacity: 0, scale: 0.94, y: 30, filter: 'blur(8px)' }
+            case 'entering': return { opacity: 0.7, scale: 0.97, y: 12, filter: 'blur(2px)' }
+            case 'exit': return { opacity: 0, scale: 0.92, y: -10, filter: 'blur(6px)' }
+            case 'cta': return { opacity: 0, scale: 0.90, y: -20, filter: 'blur(8px)' }
+            default: return { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
+        }
+    })()
+
+    // Derive transition timing from phase
+    const siteTiming = phase === 'entering' ? 0.8 : phase === 'exit' ? 0.7 : phase === 'cta' ? 0.5 : 0.6
+
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.015] to-transparent pointer-events-none" />
+        <section ref={sectionRef} className="relative px-6 py-16 md:py-24 overflow-hidden" style={{ minHeight: showCTA ? undefined : '60vh' }}>
 
             <div className="max-w-5xl mx-auto relative">
-                {/* ── Website Preview ── */}
-                {showSite && (
+                {/* ── Website Preview — always rendered, animated via state ── */}
+                {!showCTA && (
                     <motion.div
-                        initial={{ opacity: 0, scale: 0.96, y: 20 }}
-                        animate={phase === 'exit'
-                            ? { opacity: 0, scale: 0.93, y: -10, filter: 'blur(6px)' }
-                            : { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' }
-                        }
-                        transition={{ duration: phase === 'exit' ? 0.7 : 0.9, ease: [0.25, 0.1, 0.25, 1] }}
+                        animate={siteAnimation}
+                        transition={{ duration: siteTiming, ease: [0.25, 0.1, 0.25, 1] }}
                         className="relative"
                     >
-                        {/* Glow */}
-                        <motion.div
-                            animate={phase === 'live'
-                                ? { opacity: [0.04, 0.08, 0.04] }
-                                : { opacity: 0.03 }
-                            }
-                            transition={phase === 'live' ? { duration: 2.5, repeat: Infinity, ease: 'easeInOut' } : {}}
-                            className="absolute -inset-8 rounded-3xl bg-primary blur-3xl pointer-events-none"
-                        />
+                        {/* No background glow — clean render */}
 
                         <div className="relative rounded-xl border border-border/40 bg-card shadow-2xl shadow-black/10 dark:shadow-black/30 overflow-hidden">
                             {/* Browser chrome */}
@@ -3615,7 +4076,7 @@ function FlowLaunchCTA() {
                             </div>
 
                             {/* Scrollable viewport */}
-                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(300px, 38vw, 440px)' }}>
+                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(220px, 38vw, 440px)' }}>
                                 <div style={{ transform: `translateY(-${scrollY}px)`, transition: 'transform 0.08s linear' }}>
                                     {/* ── Navbar ── */}
                                     <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 sticky top-0 bg-[#0f1117]/95 backdrop-blur-sm z-10">
@@ -3772,7 +4233,7 @@ function FlowLaunchCTA() {
                             <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/45 mb-5">
                                 The complete platform
                             </p>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
                                 Build, launch, and scale —<br />
                                 <span className="text-muted-foreground/40">all in one place.</span>
                             </h2>
@@ -3818,12 +4279,12 @@ function FlowLaunchCTA() {
 
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 pt-8 sm:pt-10 md:pt-14 pb-10 sm:pb-14 md:pb-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Text — staggered entrance */}
                     <div>
                         <motion.span
@@ -3909,6 +4370,34 @@ export default function LandingPage() {
         const t = setTimeout(clearMicError, 5000)
         return () => clearTimeout(t)
     }, [micError, clearMicError])
+
+    // Lenis smooth scroll — homepage only.
+    // Lenis intercepts wheel/touch events and animates scrollTop on the root,
+    // which fires real native scroll events so Framer Motion's useScroll and
+    // IntersectionObserver-based useInView both continue to work without changes.
+    useEffect(() => {
+        const lenis = new Lenis({
+            // lerp controls the smoothing factor (0 = instant, 1 = never arrives).
+            // 0.1 is snappy enough to not feel laggy while still ironing out chop.
+            lerp: 0.1,
+            // Don't smooth touch/trackpad on mobile — native momentum already feels
+            // good and double-smoothing causes perceptible lag on low-end devices.
+            smoothWheel: true,
+            touchMultiplier: 1.5,
+        })
+
+        let rafId: number
+        const raf = (time: number) => {
+            lenis.raf(time)
+            rafId = requestAnimationFrame(raf)
+        }
+        rafId = requestAnimationFrame(raf)
+
+        return () => {
+            cancelAnimationFrame(rafId)
+            lenis.destroy()
+        }
+    }, [])
 
     const { scrollYProgress } = useScroll({
         target: heroRef,
@@ -4015,11 +4504,14 @@ export default function LandingPage() {
                 </div>
             </motion.nav>
 
+            {/* ── Hero + Flow unified wrapper ── */}
+            <div className="relative">
+
             {/* ── Hero Section ── */}
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-               className="relative min-h-[100svh] flex flex-col items-center justify-center px-6 overflow-hidden"
+               className="relative flex flex-col items-center justify-center px-4 sm:px-6 pt-20 sm:pt-24 md:pt-36 pb-4 md:pb-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />
@@ -4091,6 +4583,9 @@ export default function LandingPage() {
                     }}
                 />
 
+                {/* Bottom fade — blends hero into next section */}
+                <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+
                 <div className="relative z-10 max-w-4xl mx-auto text-center">
                     {/* Pill badge */}
                     <motion.div
@@ -4098,7 +4593,7 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.3}
-                        className="mb-8"
+                        className="mb-6"
                     >
                         <span className="pill-shimmer inline-flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground border border-border/60 rounded-full px-4 py-1.5 bg-muted/30 backdrop-blur-sm">
                             <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -4107,15 +4602,15 @@ export default function LandingPage() {
                     </motion.div>
 
                     {/* Heading */}
-                    <div className="space-y-1 mb-10">
+                    <div className="space-y-1 mb-4">
                         <RevealText delay={0.4}>
-                            <h1 className="text-[clamp(2.5rem,7.5vw,5.5rem)] font-bold leading-[0.93] tracking-tighter text-shimmer">
-                                Build apps with
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-shimmer">
+                                From idea to live
                             </h1>
                         </RevealText>
                         <RevealText delay={0.5}>
-                            <h1 className="text-[clamp(2.5rem,7.5vw,5.5rem)] font-bold leading-[0.93] tracking-tighter text-muted-foreground/35">
-                                a single prompt.
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
+                                all in one place.
                             </h1>
                         </RevealText>
                     </div>
@@ -4126,192 +4621,116 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.7}
-                        className="text-base md:text-lg text-muted-foreground/80 max-w-xl mx-auto mb-14 leading-[1.7]"
+                        className="text-xs sm:text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-6 sm:mb-8 leading-[1.7] px-2 sm:px-0"
                     >
-                        Describe what you want. Buildify generates production&#8209;ready
-                        code — complete with UI, logic, and deployable output.
+                        Plan, design, build, test, and launch production-ready apps with AI.
                     </motion.p>
 
-                    {/* Prompt input */}
-                    <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        animate="visible"
-                        custom={0.9}
-                        className="w-full max-w-2xl mx-auto"
-                    >
-                        {/* Hidden file input */}
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt"
-                            multiple
-                            className="hidden"
-                            onChange={handleFileChange}
-                        />
-
-                        {/* Main input card */}
-                        <div
-                            className={cn(
-                                "relative rounded-2xl bg-background overflow-hidden transition-all duration-300 border",
-                                inputFocused
-                                    ? "border-primary ring-2 ring-primary/20 shadow-md"
-                                    : "border-border/60 dark:border-border/80 shadow-sm hover:border-border/80 dark:hover:border-border"
-                            )}
-                        >                            {/* Attachment preview strip */}
-                            {attachments.length > 0 && (
-                                <div className="flex flex-wrap gap-2 px-4 pt-4">
-                                    {attachments.map((att) => (
-                                        <AttachmentCard
-                                            key={att.id}
-                                            attachment={att}
-                                            onRemove={() => setAttachments((a) => a.filter((x) => x.id !== att.id))}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Textarea with animated placeholder overlay */}
-                            <div className="relative">
-                                {!prompt && (
-                                    <div className="absolute top-5 left-5 pointer-events-none">
-                                        <DynamicPlaceholder paused={inputFocused} />
-                                    </div>
-                                )}
-                                <textarea
-                                    value={prompt}
-                                    onChange={(e) => setPrompt(e.target.value)}
-                                    onFocus={() => setInputFocused(true)}
-                                    onBlur={() => setInputFocused(false)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                                            e.preventDefault()
-                                            handlePromptSubmit(prompt)
-                                        }
-                                    }}
-                                    placeholder=""
-                                    className="w-full resize-none bg-transparent px-5 pt-5 pb-3 text-sm min-h-[96px] leading-relaxed focus:outline-none"
-                                />
-                            </div>
-
-                            {/* Toolbar */}
-                            <div className="flex items-center justify-between px-3 pb-3 pt-0.5">
-                                {/* Left: upload + mic */}
-                                <div className="flex items-center gap-0.5">
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        className="size-8 rounded-xl flex items-center justify-center text-muted-foreground/60 hover:text-foreground hover:bg-muted/60 transition-all duration-150"
-                                        title="Attach media"
-                                    >
-                                        <Plus className="size-4" />
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={toggleMic}
-                                        disabled={micState === 'processing'}
-                                        title={
-                                            micState === 'recording'
-                                                ? 'Stop recording'
-                                                : micState === 'processing'
-                                                ? 'Processing…'
-                                                : 'Voice input'
-                                        }
-                                        className={[
-                                            'size-8 rounded-xl flex items-center justify-center transition-all duration-200',
-                                            micState === 'recording'
-                                                ? 'bg-[#3B7EFF] text-white shadow-md'
-                                                : micState === 'processing'
-                                                ? 'text-muted-foreground/50 cursor-wait'
-                                                : 'text-muted-foreground/60 hover:text-foreground hover:bg-muted/60',
-                                        ].join(' ')}
-                                    >
-                                        {micState === 'processing' ? (
-                                            <Loader2 className="size-4 animate-spin" />
-                                        ) : (
-                                            <Mic className={['size-4', micState === 'recording' ? 'animate-pulse' : ''].join(' ')} />
-                                        )}
-                                    </button>
-                                </div>
-
-                                {/* Right: Build button */}
-                                <Button
-                                    size="sm"
-                                    onClick={() => handlePromptSubmit(prompt)}
-                                    className="rounded-xl h-8 px-4 gap-2 text-xs font-semibold transition-all duration-200 shadow-md"
-                                >
-                                    Build
-                                    <SendHorizonal className="size-3.5" />
-                                </Button>
-                            </div>
-
-                        </div>
-
-                        {/* Mic error toast */}
-                        {micError && (
-                            <div className="flex items-center gap-2 mt-3 px-4 py-2.5 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200/60 dark:border-red-800/40">
-                                <p className="text-xs text-red-600 dark:text-red-400 leading-tight flex-1">{micError}</p>
-                                <button
-                                    type="button"
-                                    onClick={clearMicError}
-                                    className="text-red-400 hover:text-red-600 dark:hover:text-red-300 shrink-0 transition-colors"
-                                >
-                                    <X className="size-3.5" />
-                                </button>
-                            </div>
-                        )}
-
-                        {/* Suggestion chips */}
-                        <div className="flex flex-wrap gap-2.5 mt-5 justify-center">
-                            {[
-                                'A todo app with drag & drop',
-                                'A SaaS dashboard with charts',
-                                'An e-commerce product page',
-                            ].map((example) => (
-                                <button
-                                    key={example}
-                                    onClick={() => handlePromptSubmit(example)}
-                                    className="text-xs text-muted-foreground/55 border border-border/40 rounded-full px-4 py-1.5 hover:border-[rgba(59,126,255,0.35)] hover:text-[#3B7EFF] hover:bg-[rgba(59,126,255,0.05)] hover:scale-[1.03] active:scale-[0.98] transition-all duration-200"
-                                >
-                                    {example}
-                                </button>
-                            ))}
-                        </div>
-
-                        <p className="text-center mt-5">
-                            <button
-                                onClick={() => document.getElementById('community')?.scrollIntoView({ behavior: 'smooth' })}
-                                className="text-xs text-muted-foreground/40 hover:text-muted-foreground transition-colors duration-150"
-                            >
-                                or browse community examples
-                            </button>
-                        </p>
-                    </motion.div>
                 </div>
 
-                {/* Scroll indicator */}
+                {/* ── Flow Pipeline ── */}
                 <motion.div
                     variants={fadeIn}
                     initial="hidden"
                     animate="visible"
-                    custom={1.5}
-                    className="absolute bottom-12 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3"
+                    custom={0.9}
+                    className="relative w-full mt-10 md:mt-14"
                 >
-                    <motion.span
-                        className="text-[10px] tracking-[0.2em] uppercase text-muted-foreground/25 font-medium"
-                        animate={{ opacity: [0.15, 0.45, 0.15] }}
-                        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+                    <div className="max-w-5xl mx-auto">
+                        {/* Desktop flow — spacious 7-column grid */}
+                        <div className="relative hidden md:block">
+                            <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40" />
+                            <div className="grid grid-cols-7 gap-3">
+                                {[
+                                    { icon: MessageSquareText, title: 'AI Chat' },
+                                    { icon: Palette, title: 'Studio' },
+                                    { icon: Code2, title: 'Builder' },
+                                    { icon: Rocket, title: 'Deploy' },
+                                    { icon: FlaskConical, title: 'Testing' },
+                                    { icon: ScanEye, title: 'Accessibility' },
+                                    { icon: Radio, title: 'Live' },
+                                ].map((step, index) => (
+                                    <div key={step.title} className="relative flex flex-col items-center">
+                                        <div className="relative z-10 size-12 rounded-xl border border-border/70 bg-background flex items-center justify-center">
+                                            <step.icon className="size-[18px] text-primary/70" />
+                                        </div>
+                                        {index < 6 && (
+                                            <div className="absolute top-6 -right-[calc(50%-6px)] flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                                <ArrowRight className="size-3 text-muted-foreground/20" />
+                                            </div>
+                                        )}
+                                        <span className="mt-3 text-sm font-medium text-foreground/80 text-center">
+                                            {step.title}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Mobile flow — compact single row */}
+                        <div className="flex items-center justify-center w-full md:hidden">
+                            {[
+                                { icon: MessageSquareText, short: 'AI' },
+                                { icon: Palette, short: 'Studio' },
+                                { icon: Code2, short: 'Build' },
+                                { icon: Rocket, short: 'Deploy' },
+                                { icon: FlaskConical, short: 'Test' },
+                                { icon: ScanEye, short: 'Access' },
+                                { icon: Radio, short: 'Live' },
+                            ].map((step, index) => (
+                                <div key={step.short} className="flex items-center">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <div className="size-7 sm:size-8 rounded-md border border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                                            <step.icon className="size-3 sm:size-3.5 text-primary/60" />
+                                        </div>
+                                        <span className="mt-0.5 text-[7px] sm:text-[8px] font-medium text-muted-foreground/55 text-center">
+                                            {step.short}
+                                        </span>
+                                    </div>
+                                    {index < 6 && (
+                                        <div className="flex items-center mx-0.5 sm:mx-1 -mt-3">
+                                            <div className="w-1.5 sm:w-2.5 h-px bg-border/30" />
+                                            <ArrowRight className="size-1.5 sm:size-2 text-muted-foreground/15 -ml-px" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </motion.div>
+
+                {/* ── CTA Button ── */}
+                <motion.div
+                    variants={fadeIn}
+                    initial="hidden"
+                    animate="visible"
+                    custom={1.1}
+                    className="mt-8 sm:mt-10 md:mt-12 flex justify-center px-4 sm:px-0"
+                >
+                    <button
+                        onClick={() => router.push('/chat')}
+                        className="relative inline-flex items-center gap-2 sm:gap-2.5 rounded-xl h-11 sm:h-12 px-6 sm:px-9 text-xs sm:text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
                     >
-                        Scroll
-                    </motion.span>
-                    <motion.div
-                        className="w-px h-10 bg-gradient-to-b from-primary/30 via-border/40 to-transparent"
-                        animate={{ opacity: [0.2, 0.6, 0.2], scaleY: [0.7, 1, 0.7] }}
-                        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ transformOrigin: 'top' }}
-                    />
+                        Start Building
+                        <ArrowRight className="size-4 text-white/70" />
+                    </button>
                 </motion.div>
             </motion.section>
+
+            {/* ── Developer Flow Sections ── */}
+            <FlowConnectorWrapper>
+                <FlowAIChatSection />
+                <FlowChatToStudioTransition />
+                <FlowStudioSection />
+                <FlowStudioToBuilderTransition />
+                <FlowBuilderSection />
+                <FlowBuilderToTestingTransition />
+                <FlowTestingSection />
+                <FlowTestingToA11yTransition />
+                <FlowAccessibilityLiveCTA />
+            </FlowConnectorWrapper>
+
+            </div>{/* end Hero + Flow unified wrapper */}
 
             {/* ── Stats Bar ── */}
             <section className="relative bg-muted/20 stats-section">
@@ -4327,7 +4746,7 @@ export default function LandingPage() {
                                 variants={blurIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={i * 0.15}
                                 className="text-center"
                             >
@@ -4495,7 +4914,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.2}
                         >
                             <div className="flex items-baseline gap-3">
@@ -4510,7 +4929,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-8"
                             >
@@ -4556,96 +4975,6 @@ export default function LandingPage() {
                 </div>
             </section>
 
-            {/* ── Developer Flow Pipeline Section ── */}
-            <div className="section-divider" />
-            <section className="relative py-16 md:py-20 px-6 overflow-hidden">
-                <div className="max-w-6xl mx-auto">
-                    {/* Header */}
-                    <div className="text-center mb-10">
-                        <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70">
-                            <span className="inline-block size-1.5 rounded-full bg-primary/50" />
-                            The Buildify Flow
-                        </span>
-                        <h2 className="mt-5 text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
-                            From idea to live &mdash; all in one place
-                        </h2>
-                        <p className="mt-4 text-base md:text-lg text-muted-foreground/60 max-w-2xl mx-auto">
-                            Plan, design, build, test, and launch &mdash; without switching tools.
-                        </p>
-                    </div>
-
-                    {/* Pipeline */}
-                    <div className="relative">
-                        {/* Connecting line (desktop) */}
-                        <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/60 hidden md:block" />
-
-                        {/* Connecting line (mobile) */}
-                        <div className="absolute top-0 bottom-0 left-6 w-px bg-border/60 md:hidden" />
-
-                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 md:gap-3">
-                            {[
-                                { icon: MessageSquareText, title: 'AI Chat' },
-                                { icon: Palette, title: 'Studio' },
-                                { icon: Code2, title: 'Builder' },
-                                { icon: Rocket, title: 'Deploy' },
-                                { icon: FlaskConical, title: 'Testing' },
-                                { icon: ScanEye, title: 'Accessibility' },
-                                { icon: Radio, title: 'Live' },
-                            ].map((step, index) => (
-                                <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-4 md:gap-0">
-                                    {/* Node dot */}
-                                    <div className="relative z-10 size-12 rounded-xl border border-border/80 bg-background flex items-center justify-center shrink-0">
-                                        <step.icon className="size-[18px] text-primary/70" />
-                                    </div>
-
-                                    {/* Arrow between cards (desktop only) */}
-                                    {index < 6 && (
-                                        <div className="absolute top-6 -right-[calc(50%-6px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
-                                            <ArrowRight className="size-3 text-muted-foreground/30" />
-                                        </div>
-                                    )}
-
-                                    {/* Title */}
-                                    <span className="md:mt-3 text-sm font-medium text-foreground/80 text-center">
-                                        {step.title}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Buildify Developer Flow — 6 Full-Screen Sections ── */}
-            <FlowConnectorWrapper>
-                {/* 1. AI Chat (Planning) — Text Left, Visual Right */}
-                <FlowAIChatSection />
-
-                {/* Transition: AI Chat → Studio (single container transforms) */}
-                <FlowChatToStudioTransition />
-
-                {/* 2. Studio (Design) — Visual Left, Text Right */}
-                <FlowStudioSection />
-
-                {/* Transition: Studio → Builder (continuous scroll) */}
-                <FlowStudioToBuilderTransition />
-
-                {/* 3. Builder (Development) */}
-                <FlowBuilderSection />
-
-                {/* Transition: Builder → Testing (URL handoff) */}
-                <FlowBuilderToTestingTransition />
-
-                {/* 4. Deploy + Testing (TinyFish) */}
-                <FlowTestingSection />
-
-                {/* Transition: Testing → Accessibility */}
-                <FlowTestingToA11yTransition />
-
-                {/* 5. Accessibility Testing */}
-                <FlowAccessibilityLiveCTA />
-            </FlowConnectorWrapper>
-
             {/* ── Feature Demos Section ── */}
             <div className="section-divider" />
             <section className="relative py-20 md:py-28 px-6 overflow-hidden">
@@ -4666,7 +4995,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
@@ -4688,7 +5017,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0}
                                             className="feature-index inline-flex items-center gap-3 text-xs font-mono text-muted-foreground/40 mb-4"
                                         >
@@ -4704,7 +5033,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.15}
                                             className="mt-4 text-[15px] text-muted-foreground leading-[1.7]"
                                         >
@@ -4714,7 +5043,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.25}
                                             className="mt-6 space-y-3"
                                         >
@@ -4737,7 +5066,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.45}
                                             className="mt-8"
                                         >
@@ -4772,6 +5101,49 @@ export default function LandingPage() {
                                 </div>
                             )
                         })}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Testimonials Section ── */}
+            <div className="section-divider" />
+            <section className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                        {/* Left — heading */}
+                        <div>
+                            <SectionLabel>Stories</SectionLabel>
+                            <RevealText delay={0.1} className="mt-5">
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                                    Built by people,
+                                </h2>
+                            </RevealText>
+                            <RevealText delay={0.2}>
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                                    not just prompts.
+                                </h2>
+                            </RevealText>
+                            <motion.p
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-20px' }}
+                                custom={0.3}
+                                className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            >
+                                Real things people are already doing with Buildify.
+                            </motion.p>
+                        </div>
+
+                        {/* Right — auto-scrolling testimonials */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: '-20px' }}
+                            transition={{ duration: 0.6, delay: 0.2 }}
+                        >
+                            <TestimonialScroller />
+                        </motion.div>
                     </div>
                 </div>
             </section>
@@ -4856,7 +5228,7 @@ export default function LandingPage() {
                                         variants={blurIn}
                                         initial="hidden"
                                         whileInView="visible"
-                                        viewport={{ once: true, margin: '-60px' }}
+                                        viewport={{ once: true, margin: '-20px' }}
                                         custom={0.2 + i * 0.15}
                                         className="flex gap-5 group"
                                     >
@@ -4872,7 +5244,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-10"
                             >
@@ -4892,7 +5264,7 @@ export default function LandingPage() {
                             variants={scaleIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-100px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="relative"
                         >
@@ -4941,17 +5313,17 @@ export default function LandingPage() {
 
             {/* ── Community Builds Section ── */}
             <div className="section-divider" />
-            <section id="community" className="relative py-20 md:py-28 px-6">
+            <section id="community" className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6">
                 <div className="max-w-6xl mx-auto">
-                    <div className="max-w-xl mb-20">
+                    <div className="max-w-xl mb-12 md:mb-16">
                         <SectionLabel>Community</SectionLabel>
                         <RevealText delay={0.1} className="mt-5">
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
                                 Built by developers,
                             </h2>
                         </RevealText>
                         <RevealText delay={0.2}>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
                                 for developers.
                             </h2>
                         </RevealText>
@@ -4959,23 +5331,15 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
-                            className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
-                            Explore what others are creating with Buildify. Get inspired, fork a project, and make it your own.
+                            Explore what people are creating with Buildify. Real outputs, real use cases.
                         </motion.p>
                     </div>
 
-                    <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
-                        custom={0.2}
-                    >
-                        <CommunityBuildsGrid showHeader={false} />
-                    </motion.div>
+                    <CommunityShowcase />
                 </div>
             </section>
 
@@ -4996,7 +5360,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-80px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.3}
                         className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
@@ -5006,7 +5370,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.5}
                         className="mt-10"
                     >

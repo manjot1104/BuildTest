@@ -24,13 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import type { ResumeTemplate } from './templates'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
+import { ResumeScorePanel, type ResumeScoreData } from './components/resume-score-panel'
 
 // ─── OpenRouter Models ───────────────────────────────────────────────────────
 
@@ -106,18 +107,27 @@ function getModelName(modelId: string): string {
 const resumeSchema = z.object({
   templateType: z.enum(['latex', 'html']),
   fullName: z.string().min(1, 'Full name is required').max(100),
+  title: z.string().max(200).optional(),
   email: z.string().email('Invalid email address'),
   phone: z.string().min(1, 'Phone number is required').max(20),
-  skills: z.string().min(1, 'Skills are required'),
-  experience: z.string().min(1, 'Experience is required'),
-  education: z.string().min(1, 'Education is required'),
-  projects: z.string().min(1, 'Projects are required'),
+  location: z.string().max(200).optional(),
+  linkedin: z.string().max(300).optional(),
+  github: z.string().max(300).optional(),
+  portfolio: z.string().max(300).optional(),
+  summary: z.string().optional(),
+  skills: z.string().optional(),
+  experience: z.string().optional(),
+  education: z.string().optional(),
+  projects: z.string().optional(),
+  certifications: z.string().optional(),
+  achievements: z.string().optional(),
+  languagesKnown: z.string().optional(),
   additionalInstructions: z.string().optional(),
 })
 
 type ResumeFormData = z.infer<typeof resumeSchema>
 
-type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling'
+type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling' | 'score'
 
 export default function AIResumeBuilderPage() {
   const [currentStep, setCurrentStep] = useState<Step>('format-selection')
@@ -141,21 +151,37 @@ export default function AIResumeBuilderPage() {
   const [jdFile, setJdFile] = useState<File | null>(null)
   const [isParsingFiles, setIsParsingFiles] = useState(false)
   const [parsedData, setParsedData] = useState<{
-    resumeData?: any
-    jdRequirements?: any
+    resumeData?: Record<string, string | string[] | undefined>
+    jdRequirements?: Record<string, string | string[] | undefined>
   } | null>(null)
+  const [isScoring, setIsScoring] = useState(false)
+  const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null)
+  const [showScore, setShowScore] = useState(false)
+  const [scoreInput, setScoreInput] = useState('')
+  const [scoreFormat, setScoreFormat] = useState<'html' | 'latex' | 'text'>('text')
+  const [scoreFile, setScoreFile] = useState<File | null>(null)
+  const [isExtractingText, setIsExtractingText] = useState(false)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
     defaultValues: {
       templateType: 'latex',
       fullName: '',
+      title: '',
       email: '',
       phone: '',
+      location: '',
+      linkedin: '',
+      github: '',
+      portfolio: '',
+      summary: '',
       skills: '',
       experience: '',
       education: '',
       projects: '',
+      certifications: '',
+      achievements: '',
+      languagesKnown: '',
       additionalInstructions: '',
     },
   })
@@ -208,7 +234,12 @@ export default function AIResumeBuilderPage() {
         const error = await response.json().catch(() => ({ 
           error: `Server returned error: ${response.status} ${response.statusText}` 
         }))
-        throw new Error(error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`)
+        const message = error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        toast.error(message, {
+          id: 'resume-generate',
+          duration: 7000,
+        })
+        return
       }
 
       const result = await response.json()
@@ -383,6 +414,49 @@ export default function AIResumeBuilderPage() {
     }
   }
 
+  // Score resume with AI
+  const handleScoreResume = async (codeOverride?: string, formatOverride?: 'html' | 'latex' | 'text') => {
+    const currentCode = codeOverride || (templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode))
+    const currentFormat = formatOverride || templateType
+    if (!currentCode.trim()) {
+      toast.error('No resume code to score')
+      return
+    }
+
+    setIsScoring(true)
+    toast.loading('Analyzing your resume...', { id: 'resume-score' })
+
+    try {
+      const response = await fetch('/api/resume/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: currentCode,
+          format: currentFormat,
+          model: selectedModel,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Failed to score resume' }))
+        throw new Error((error as { error?: string }).error || 'Failed to score resume')
+      }
+
+      const result = await response.json() as { scoring: ResumeScoreData }
+      setScoreData(result.scoring)
+      setShowScore(true)
+      toast.success(`Resume scored: ${result.scoring.score}/100`, { id: 'resume-score' })
+    } catch (error) {
+      console.error('Error scoring resume:', error)
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to score resume. Please try again.',
+        { id: 'resume-score' },
+      )
+    } finally {
+      setIsScoring(false)
+    }
+  }
+
   const handleReset = () => {
     setCurrentStep('format-selection')
     setSelectedTemplate(null)
@@ -399,6 +473,10 @@ export default function AIResumeBuilderPage() {
     setResumeFile(null)
     setJdFile(null)
     setParsedData(null)
+    setScoreData(null)
+    setShowScore(false)
+    setScoreFile(null)
+    setScoreInput('')
     form.reset()
   }
 
@@ -420,6 +498,7 @@ export default function AIResumeBuilderPage() {
     if (!resume && !jd) return
 
     setIsParsingFiles(true)
+    let aiProgressTimer: ReturnType<typeof setTimeout> | null = null
     
     // Show progress updates
     toast.loading('Extracting text from files...', { id: 'parse-files' })
@@ -430,7 +509,7 @@ export default function AIResumeBuilderPage() {
       if (jd) formData.append('jd', jd)
 
       // Update progress
-      setTimeout(() => {
+      aiProgressTimer = setTimeout(() => {
         toast.loading('Analyzing content with AI...', { id: 'parse-files' })
       }, 2000)
 
@@ -439,22 +518,27 @@ export default function AIResumeBuilderPage() {
         response = await fetch('/api/resume/parse-files', {
           method: 'POST',
           body: formData,
-          // Add timeout to prevent hanging
-          signal: AbortSignal.timeout(60000), // 60 seconds
+          // Match server maxDuration (60s) + buffer
+          signal: AbortSignal.timeout(65000), // 65 seconds
         })
       } catch (fetchError) {
-        console.error('[parse-files] Fetch error:', fetchError)
+        console.warn('[parse-files] Fetch error (handled gracefully):', fetchError)
+        
+        if (aiProgressTimer) { clearTimeout(aiProgressTimer); aiProgressTimer = null }
         
         if (fetchError instanceof Error) {
           if (fetchError.name === 'AbortError' || fetchError.name === 'TimeoutError') {
-            throw new Error('Request timed out. The files might be too large. Please try smaller files or fill the form manually.')
+            toast.error('Request timed out. Please try smaller files or fill the form manually.', { id: 'parse-files', duration: 5000 })
+          } else if (fetchError.message === 'Failed to fetch') {
+            toast.error('Unable to connect to server. Please check if the server is running.', { id: 'parse-files', duration: 5000 })
+          } else {
+            toast.error(`Network error: ${fetchError.message}`, { id: 'parse-files', duration: 5000 })
           }
-          if (fetchError.message === 'Failed to fetch') {
-            throw new Error('Unable to connect to server. Please check if the server is running and try again.')
-          }
-          throw fetchError
+        } else {
+          toast.error('Network error occurred. Please check your connection.', { id: 'parse-files', duration: 5000 })
         }
-        throw new Error('Network error occurred. Please check your connection and try again.')
+        setIsParsingFiles(false)
+        return
       }
 
       if (!response.ok) {
@@ -463,6 +547,10 @@ export default function AIResumeBuilderPage() {
         throw new Error(errorMessage)
       }
 
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+        aiProgressTimer = null
+      }
       toast.loading('Processing extracted data...', { id: 'parse-files' })
 
       const result = await response.json()
@@ -472,6 +560,10 @@ export default function AIResumeBuilderPage() {
       
       // Check if extraction failed - but still continue if success is true
       if (result.success === false) {
+        if (aiProgressTimer) {
+          clearTimeout(aiProgressTimer)
+          aiProgressTimer = null
+        }
         toast.warning(
           result.error || 'Could not extract data from files. Please fill the form manually.',
           { 
@@ -486,6 +578,10 @@ export default function AIResumeBuilderPage() {
       
       // If no data extracted, show friendly info message (not error)
       if (!result.extractedResumeData && !result.jdRequirements) {
+        if (aiProgressTimer) {
+          clearTimeout(aiProgressTimer)
+          aiProgressTimer = null
+        }
         // Show as info message - this is normal for image-based PDFs
         toast.info(
           'Files uploaded successfully',
@@ -510,60 +606,43 @@ export default function AIResumeBuilderPage() {
         const data = result.extractedResumeData
         console.log('[parse-files] Auto-filling form with data:', data)
         
-        if (data.fullName) {
-          form.setValue('fullName', data.fullName)
-          fieldsFilled++
-        }
-        if (data.email) {
-          form.setValue('email', data.email)
-          fieldsFilled++
-        }
-        if (data.phone) {
-          form.setValue('phone', data.phone)
-          fieldsFilled++
-        }
-        if (data.skills) {
-          form.setValue('skills', data.skills)
-          fieldsFilled++
-        }
-        if (data.experience) {
-          form.setValue('experience', data.experience)
-          fieldsFilled++
-        }
-        // Education - always set, even if empty (will use fallback from API)
-        if (data.education) {
-          form.setValue('education', data.education)
-          fieldsFilled++
-          console.log('[parse-files] ✅ Education field filled:', data.education.substring(0, 50))
-        } else {
-          console.warn('[parse-files] ⚠️ Education field missing in extracted data')
-          // Set a default value if missing
-          form.setValue('education', 'Not specified')
-        }
+        // Simple string fields — set if present
+        const fieldMap: Array<[keyof ResumeFormData, string | undefined]> = [
+          ['fullName', data.fullName],
+          ['title', data.title],
+          ['email', data.email],
+          ['phone', data.phone],
+          ['location', data.location],
+          ['linkedin', data.linkedin],
+          ['github', data.github],
+          ['portfolio', data.portfolio],
+          ['summary', data.summary],
+          ['skills', data.skills],
+          ['experience', data.experience],
+          ['education', data.education],
+          ['projects', data.projects],
+          ['certifications', data.certifications],
+          ['achievements', data.achievements],
+          ['languagesKnown', data.languagesKnown],
+        ]
         
-        // Projects - always set, even if empty (will use fallback from API)
-        if (data.projects) {
-          form.setValue('projects', data.projects)
+        for (const [field, value] of fieldMap) {
+          if (value?.trim()) {
+            form.setValue(field, value)
           fieldsFilled++
-          console.log('[parse-files] ✅ Projects field filled:', data.projects.substring(0, 50))
-        } else {
-          console.warn('[parse-files] ⚠️ Projects field missing in extracted data')
-          // Set a default value if missing
-          form.setValue('projects', 'Not specified')
+        }
         }
         
         console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
-        console.log('[parse-files] Form values after auto-fill:', {
-          education: form.getValues('education'),
-          projects: form.getValues('projects'),
-        })
       } else {
         console.warn('[parse-files] No extractedResumeData found in response')
       }
 
       // Add JD requirements to additional instructions if JD is provided
       if (result.jdRequirements && jd) {
-        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${result.jdRequirements.requiredSkills?.join(', ') || 'N/A'}\n- Qualifications: ${result.jdRequirements.qualifications || 'N/A'}\n- Key Requirements: ${result.jdRequirements.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
+        const jdReqs = result.jdRequirements as Record<string, string | string[] | undefined>
+        const requiredSkills = Array.isArray(jdReqs.requiredSkills) ? jdReqs.requiredSkills.join(', ') : (jdReqs.requiredSkills || 'N/A')
+        const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${requiredSkills}\n- Qualifications: ${jdReqs.qualifications || 'N/A'}\n- Key Requirements: ${jdReqs.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
         const currentInstructions = form.getValues('additionalInstructions') || ''
         form.setValue('additionalInstructions', currentInstructions + jdInstructions)
         console.log('[parse-files] Added JD requirements to instructions')
@@ -577,12 +656,19 @@ export default function AIResumeBuilderPage() {
         toast.success('Files parsed successfully!', { id: 'parse-files' })
       }
     } catch (error) {
-      console.error('Error parsing files:', error)
-      const errorMessage = error instanceof Error && error.message.includes('timeout')
-        ? 'Parsing took too long. Please try with smaller files or check your connection.'
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+        aiProgressTimer = null
+      }
+      console.warn('[parse-files] Handled error:', error)
+      const errorMessage = error instanceof Error
+        ? error.message
         : 'Failed to parse files. Please try again.'
-      toast.error(errorMessage, { id: 'parse-files' })
+      toast.error(errorMessage, { id: 'parse-files', duration: 5000 })
     } finally {
+      if (aiProgressTimer) {
+        clearTimeout(aiProgressTimer)
+      }
       setIsParsingFiles(false)
     }
   }
@@ -604,7 +690,282 @@ export default function AIResumeBuilderPage() {
   if (currentStep === 'format-selection') {
     return (
       <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-        <TemplateSelection onSelect={handleFormatSelect} />
+        <TemplateSelection onSelect={handleFormatSelect} onScoreResume={() => setCurrentStep('score')} />
+      </div>
+    )
+  }
+
+  // Handle file upload for scoring
+  const handleScoreFileUpload = async (file: File) => {
+    setScoreFile(file)
+    setIsExtractingText(true)
+
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase()
+
+      // For plain text files, read directly
+      if (ext === 'txt') {
+        const text = await file.text()
+        setScoreInput(text)
+        toast.success('Resume text loaded')
+        setIsExtractingText(false)
+        return
+      }
+
+      // For PDF/DOC/DOCX, use the parse-files API to extract text
+      const formData = new FormData()
+      formData.append('resume', file)
+
+      const response = await fetch('/api/resume/parse-files', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to extract text from file')
+      }
+
+      const result = await response.json() as {
+        extractedResumeData?: Record<string, string | string[] | undefined>
+        resumeText?: string
+      }
+
+      // Build readable resume text from parsed data
+      const parts: string[] = []
+      const rd = result.extractedResumeData
+      if (rd) {
+        if (rd.fullName) parts.push(`Name: ${rd.fullName}`)
+        if (rd.title) parts.push(`Title: ${rd.title}`)
+        if (rd.email) parts.push(`Email: ${rd.email}`)
+        if (rd.phone) parts.push(`Phone: ${rd.phone}`)
+        if (rd.location) parts.push(`Location: ${rd.location}`)
+        if (rd.linkedin) parts.push(`LinkedIn: ${rd.linkedin}`)
+        if (rd.github) parts.push(`GitHub: ${rd.github}`)
+        if (rd.portfolio) parts.push(`Portfolio: ${rd.portfolio}`)
+        if (rd.summary) parts.push(`\nSummary:\n${rd.summary}`)
+        if (rd.skills) parts.push(`\nSkills:\n${rd.skills}`)
+        if (rd.experience) parts.push(`\nExperience:\n${rd.experience}`)
+        if (rd.education) parts.push(`\nEducation:\n${rd.education}`)
+        if (rd.projects) parts.push(`\nProjects:\n${rd.projects}`)
+        if (rd.certifications) {
+          const certs = Array.isArray(rd.certifications) ? rd.certifications.join('\n') : rd.certifications
+          parts.push(`\nCertifications:\n${certs}`)
+        }
+        if (rd.achievements) {
+          const achs = Array.isArray(rd.achievements) ? rd.achievements.join('\n') : rd.achievements
+          parts.push(`\nAchievements:\n${achs}`)
+        }
+      }
+
+      const extractedText = parts.length > 3 ? parts.join('\n') : (result.resumeText || '')
+
+      if (extractedText.trim()) {
+        setScoreInput(extractedText)
+        toast.success('Resume text extracted successfully')
+      } else {
+        toast.error('Could not extract text from file. Try pasting your resume text directly.')
+      }
+    } catch (error) {
+      console.error('Error extracting text:', error)
+      toast.error('Failed to read file. Try pasting your resume text directly.')
+    } finally {
+      setIsExtractingText(false)
+    }
+  }
+
+  // Show score step
+  if (currentStep === 'score') {
+    return (
+      <div className="container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-4">
+            <div className="flex items-start gap-3 sm:gap-4">
+              <button
+                onClick={() => { setCurrentStep('format-selection'); setScoreData(null); setShowScore(false); setScoreInput(''); setScoreFile(null) }}
+                className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="size-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Score Your Resume</h1>
+                  <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-600 ring-1 ring-emerald-500/20 dark:text-emerald-400">
+                    AI Review
+                  </span>
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Upload your resume or paste text for a FAANG-level AI analysis with detailed scoring.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* AI Model Selection */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <Settings2 className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">AI Model</span>
+              </div>
+              <div className="p-4">
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="h-9 max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESUME_MODELS.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name} <span className="text-muted-foreground">— {model.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <Upload className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Upload Resume</span>
+              </div>
+              <div className="p-4">
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleScoreFileUpload(file)
+                    }}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    disabled={isExtractingText || isScoring}
+                  />
+                  <div className={cn(
+                    "flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border/60 bg-muted/10 px-6 py-8 text-center transition-colors hover:border-emerald-500/40 hover:bg-emerald-500/5",
+                    isExtractingText && "pointer-events-none opacity-60"
+                  )}>
+                    {isExtractingText ? (
+                      <>
+                        <Loader2 className="size-8 animate-spin text-emerald-500" />
+                        <div>
+                          <p className="text-sm font-medium">Extracting text...</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">Reading your resume file</p>
+                        </div>
+                      </>
+                    ) : scoreFile ? (
+                      <>
+                        <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
+                          <FileCheck className="size-5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{scoreFile.name}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {(scoreFile.size / 1024).toFixed(1)} KB — Click or drop to replace
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex size-12 items-center justify-center rounded-xl bg-muted ring-1 ring-border/60">
+                          <Upload className="size-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">Drop your resume here or click to browse</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            Supports PDF, DOC, DOCX, TXT
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border/60" />
+              <span className="text-xs font-medium text-muted-foreground">OR</span>
+              <div className="h-px flex-1 bg-border/60" />
+            </div>
+
+            {/* Text Paste */}
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <div className="flex items-center gap-2.5">
+                  <FileText className="size-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Paste Resume Text</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {scoreInput.trim() && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {scoreInput.length.toLocaleString()} chars
+                    </span>
+                  )}
+                  {scoreInput.trim() && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 text-xs text-muted-foreground"
+                      onClick={() => { setScoreInput(''); setScoreFile(null) }}
+                    >
+                      <X className="size-3" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <Textarea
+                value={scoreInput}
+                onChange={(e) => setScoreInput(e.target.value)}
+                className={cn(
+                  "min-h-[200px] text-sm leading-relaxed sm:min-h-[280px]",
+                  "resize-none border-0 rounded-none focus-visible:ring-0"
+                )}
+                placeholder={"Paste your resume content here...\n\nExample:\nJohn Doe\nSoftware Engineer\njohn@email.com | (555) 123-4567\n\nSummary:\nExperienced software engineer with 5+ years...\n\nExperience:\nSenior Engineer at Google (2021-Present)\n• Built scalable microservices...\n• Led team of 8 engineers..."}
+              />
+            </div>
+
+            {/* Score Button */}
+            <div className="flex items-center justify-between gap-4">
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                Analyzed across 6 categories: ATS Compatibility, Content Quality, Impact &amp; Metrics, Keywords, Readability, Experience Strength.
+              </p>
+              <Button
+                onClick={() => void handleScoreResume(scoreInput, scoreFormat)}
+                disabled={isScoring || isExtractingText || !scoreInput.trim()}
+                size="lg"
+                className="gap-2"
+              >
+                {isScoring ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Analyzing...
+                  </>
+                ) : (
+                  <>
+                    <Target className="size-4" />
+                    Score My Resume
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Score Results */}
+            {showScore && scoreData && (
+              <ResumeScorePanel
+                data={scoreData}
+                onClose={() => setShowScore(false)}
+              />
+            )}
+          </div>
+        </motion.div>
       </div>
     )
   }
@@ -664,13 +1025,32 @@ export default function AIResumeBuilderPage() {
                 size="sm"
                 onClick={() => {
                   const codeToCopy = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
-                  navigator.clipboard.writeText(codeToCopy)
+                  void navigator.clipboard.writeText(codeToCopy)
                   toast.success(`${templateType === 'latex' ? 'LaTeX' : 'HTML'} copied to clipboard`)
                 }}
                 className="gap-1.5"
               >
                 <Copy className="size-3.5" />
                 <span className="hidden xs:inline">Copy</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleScoreResume()}
+                disabled={isScoring || (templateType === 'latex' ? !editedLatex.trim() : !editedHtml.trim())}
+                className="gap-1.5"
+              >
+                {isScoring ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span className="hidden xs:inline">Scoring...</span>
+                  </>
+                ) : (
+                  <>
+                    <Target className="size-3.5" />
+                    <span className="hidden xs:inline">Score</span>
+                  </>
+                )}
               </Button>
               <Button
                 onClick={onCompilePDF}
@@ -721,7 +1101,7 @@ export default function AIResumeBuilderPage() {
                 className="overflow-hidden rounded-xl border border-border/60 bg-card"
               >
                 <div className="max-h-[400px] overflow-auto p-4">
-                  <pre className="text-xs font-mono whitespace-pre-wrap break-words text-muted-foreground">
+                  <pre className="text-xs font-mono whitespace-pre-wrap wrap-break-word text-muted-foreground">
                     {rawAIResponse}
                   </pre>
                 </div>
@@ -806,7 +1186,7 @@ export default function AIResumeBuilderPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault()
-                      handleFollowUpPrompt()
+                      void handleFollowUpPrompt()
                     }
                   }}
                   disabled={isProcessingFollowUp}
@@ -826,6 +1206,14 @@ export default function AIResumeBuilderPage() {
                 </Button>
               </div>
             </div>
+
+            {/* Resume Score Panel */}
+            {showScore && scoreData && (
+              <ResumeScorePanel
+                data={scoreData}
+                onClose={() => setShowScore(false)}
+              />
+            )}
 
             {/* Bottom Actions */}
             <div className="flex flex-col-reverse items-start gap-2 pt-2 sm:flex-row sm:items-center sm:justify-between">
@@ -888,7 +1276,7 @@ export default function AIResumeBuilderPage() {
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
-                        if (file) handleFileUpload('resume', file)
+                        if (file) void handleFileUpload('resume', file)
                       }}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={isParsingFiles}
@@ -929,7 +1317,7 @@ export default function AIResumeBuilderPage() {
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
-                        if (file) handleFileUpload('jd', file)
+                        if (file) void handleFileUpload('jd', file)
                       }}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                       disabled={isParsingFiles}
@@ -1145,6 +1533,21 @@ export default function AIResumeBuilderPage() {
                 />
                 <FormField
                   control={form.control}
+                  name="title"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Job Title <span className="text-[10px] text-muted-foreground">(Optional)</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="Senior Software Engineer" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
                   name="email"
                   render={({ field }) => (
                     <FormItem>
@@ -1156,7 +1559,6 @@ export default function AIResumeBuilderPage() {
                     </FormItem>
                   )}
                 />
-              </div>
               <FormField
                 control={form.control}
                 name="phone"
@@ -1165,8 +1567,110 @@ export default function AIResumeBuilderPage() {
                     <FormLabel>Phone</FormLabel>
                     <FormControl>
                       <Input placeholder="+1 (555) 123-4567" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={form.control}
+                name="location"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Location <span className="text-[10px] text-muted-foreground">(Optional)</span></FormLabel>
+                    <FormControl>
+                      <Input placeholder="San Francisco, CA" {...field} />
                     </FormControl>
                     <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Links Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.12, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Link2 className="size-4 text-cyan-500" />
+              <span className="text-sm font-medium text-muted-foreground">Links</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="space-y-4 p-4">
+              <div className="grid gap-4 md:grid-cols-3">
+                <FormField
+                  control={form.control}
+                  name="linkedin"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">LinkedIn</FormLabel>
+                      <FormControl>
+                        <Input placeholder="linkedin.com/in/johndoe" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="github"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">GitHub</FormLabel>
+                      <FormControl>
+                        <Input placeholder="github.com/johndoe" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="portfolio"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-xs">Portfolio</FormLabel>
+                      <FormControl>
+                        <Input placeholder="johndoe.dev" {...field} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Professional Summary Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.13, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <MessageSquare className="size-4 text-indigo-500" />
+              <span className="text-sm font-medium text-muted-foreground">Professional Summary</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="summary"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Results-driven software engineer with 6+ years of experience building scalable applications..."
+                        className="min-h-[80px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      2-3 sentence professional summary highlighting your key strengths and impact.
+                    </FormDescription>
                   </FormItem>
                 )}
               />
@@ -1192,15 +1696,14 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., JavaScript, React, Node.js, Python, SQL, AWS..."
+                        placeholder={"Languages: JavaScript, TypeScript, Python\nFrameworks: React, Next.js, Node.js\nTools: AWS, Docker, Git, PostgreSQL"}
                         className="min-h-[100px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      List your technical skills, programming languages, tools, and technologies.
+                      List skills by category or comma-separated. If left empty, this section won&apos;t appear.
                     </FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -1226,49 +1729,14 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., Software Engineer at Company X (2020-2023) - Developed web applications..."
+                        placeholder={"Senior Software Engineer | Google | 2021 – Present\n• Architected microservices platform reducing deployment time by 60%\n• Led migration serving 5M+ DAU with 99.99% uptime\n\nSoftware Engineer | Stripe | 2019 – 2021\n• Built payment processing pipeline handling $2B+ annual volume"}
                         className="min-h-[150px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Include job titles, companies, dates, and key achievements.
+                      Use &quot;Role | Company | Dates&quot; then bullet points. Separate entries with blank lines. Empty = section hidden.
                     </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-          </motion.div>
-
-          {/* Education Section */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden rounded-xl border border-border/60 bg-card"
-          >
-            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
-              <GraduationCap className="size-4 text-violet-500" />
-              <span className="text-sm font-medium">Education</span>
-            </div>
-            <div className="p-4">
-              <FormField
-                control={form.control}
-                name="education"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormControl>
-                      <Textarea
-                        placeholder="e.g., Bachelor of Science in Computer Science, University Name (2016-2020)..."
-                        className="min-h-[100px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Degrees, institutions, and graduation dates.
-                    </FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -1279,7 +1747,7 @@ export default function AIResumeBuilderPage() {
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            transition={{ duration: 0.4, delay: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
             className="overflow-hidden rounded-xl border border-border/60 bg-card"
           >
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
@@ -1294,15 +1762,113 @@ export default function AIResumeBuilderPage() {
                   <FormItem>
                     <FormControl>
                       <Textarea
-                        placeholder="e.g., E-commerce Platform (2023) - Built a full-stack application using React and Node.js..."
+                        placeholder={"Analytics Dashboard | React, D3.js, WebSocket\n• Streaming analytics processing 50K+ events/sec\n• Reduced decision-making time by 40%\n\nCLI Tool | TypeScript, Node.js\n• Developer productivity tool with 2K+ GitHub stars"}
                         className="min-h-[150px]"
                         {...field}
                       />
                     </FormControl>
                     <FormDescription>
-                      Notable projects, technologies used, and key features.
+                      Use &quot;Project Name | Tech Stack&quot; then bullet points. Separate entries with blank lines. Empty = section hidden.
                     </FormDescription>
-                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Education Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.3, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-border/60 bg-card"
+          >
+            <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+              <GraduationCap className="size-4 text-violet-500" />
+              <span className="text-sm font-medium">Education</span>
+            </div>
+            <div className="p-4">
+              <FormField
+                control={form.control}
+                name="education"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormControl>
+                      <Textarea
+                        placeholder={"B.S. Computer Science\nStanford University | 2015 – 2019"}
+                        className="min-h-[80px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Use &quot;Degree&quot; on first line, &quot;College | Year&quot; on second. Empty = section hidden.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+            </div>
+          </motion.div>
+
+          {/* Certifications & Achievements Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
+            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+          >
+            <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+              <Award className="size-4 text-orange-500" />
+              <span className="text-sm font-medium text-muted-foreground">Certifications &amp; Achievements</span>
+              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+            </div>
+            <div className="space-y-4 p-4">
+              <FormField
+                control={form.control}
+                name="certifications"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Certifications</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="AWS Solutions Architect Associate (2023), Google Cloud Professional Developer (2022)"
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Comma-separated list. If empty, section won&apos;t appear.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="achievements"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Achievements</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Best Innovation Award — Google Hackathon 2023, Speaker — ReactConf 2022"
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Awards, recognitions, notable achievements. Comma-separated.
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="languagesKnown"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs">Languages Spoken</FormLabel>
+                    <FormControl>
+                      <Input placeholder="English (Native), Spanish (Conversational)" {...field} />
+                    </FormControl>
                   </FormItem>
                 )}
               />

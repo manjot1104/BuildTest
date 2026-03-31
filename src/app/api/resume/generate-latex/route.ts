@@ -1,31 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { generateLaTeXResume } from '@/lib/openrouter'
+import { normalizeResumeInput } from '@/lib/resume/template-validator'
+import { generateLatexTemplateFallback } from '@/lib/resume/template-fallback-generator'
+import { pruneGeneratedSections } from '@/lib/resume/section-pruner'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
 
 // Configure runtime for longer operations
 export const maxDuration = 120 // 2 minutes for AI generation
 
-const resumeRequestSchema = z.object({
-  fullName: z.string().min(1).max(100),
-  email: z.string().email().max(255),
-  phone: z.string().min(1).max(20),
-  skills: z.string().min(1).max(5000),
-  experience: z.string().min(1).max(10000),
-  education: z.string().min(1).max(5000),
-  projects: z.string().min(1).max(10000),
-  additionalInstructions: z.string().max(2000).optional(),
-  model: z.string().max(100).optional(),
-  templateId: z.string().max(100).optional(),
-  templateStyleGuide: z.string().max(50000).optional(),
-})
-
 /**
  * Generate LaTeX code only (without compiling to PDF)
  * POST /api/resume/generate-latex
  */
 export async function POST(request: NextRequest) {
+  let validatedData: ReturnType<typeof normalizeResumeInput> | null = null
   try {
     const session = await getSession()
     if (!session?.user) {
@@ -33,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const validatedData = resumeRequestSchema.parse(body)
+    validatedData = normalizeResumeInput(body)
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
@@ -51,8 +41,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const prunedLatex = pruneGeneratedSections(result.cleaned, 'latex', validatedData)
+
     return NextResponse.json({
-      latex: result.cleaned,
+      latex: prunedLatex,
       model: result.model,
       isFallback: result.isFallback,
       success: true,
@@ -64,6 +56,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid request data', details: error.issues },
         { status: 400 }
+      )
+    }
+
+    if (error instanceof Error) {
+      const message = error.message || 'Failed to generate LaTeX code'
+      const lower = message.toLowerCase()
+      const isRateLimit = lower.includes('rate limit') || lower.includes('429')
+      const isProviderPolicy = lower.includes('no endpoints available') || lower.includes('guardrail')
+
+      // Local fallback so users can still generate a resume even when OpenRouter is unavailable.
+      if ((isRateLimit || isProviderPolicy) && validatedData) {
+        const latex = pruneGeneratedSections(
+          generateLatexTemplateFallback(validatedData),
+          'latex',
+          validatedData
+        )
+        return NextResponse.json({
+          latex,
+          model: 'local-template-fallback',
+          isFallback: true,
+          success: true,
+          warning: isRateLimit
+            ? 'OpenRouter rate limit reached. Generated with local template fallback.'
+            : 'OpenRouter endpoint policy blocked. Generated with local template fallback.',
+        })
+      }
+
+      return NextResponse.json(
+        {
+          error: isRateLimit
+            ? 'OpenRouter rate limit reached for available models. Please retry later or add credits.'
+            : isProviderPolicy
+              ? 'No OpenRouter endpoints are available under current privacy/guardrail settings. Please adjust OpenRouter settings.'
+              : message,
+        },
+        { status: isRateLimit ? 429 : 500 }
       )
     }
 

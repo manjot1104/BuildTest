@@ -1,9 +1,11 @@
 'use client'
 
-import React, { useState } from 'react'
-import { LayoutTemplate, ArrowRight } from 'lucide-react'
+import React, { useState, useRef, useEffect } from 'react'
+import { LayoutTemplate, ArrowRight, Eye } from 'lucide-react'
 import { TEMPLATES, type StudioTemplate, type TemplateCategory } from './templates'
 import { type CanvasElement, type CanvasBackground } from './types'
+// CanvasBackground still used in applyTemplate return type
+import { PreviewCanvas } from './preview-modal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,85 +29,29 @@ const CATEGORIES: { id: TemplateCategory | 'all'; label: string }[] = [
 
 // ─── Thumbnail helpers ────────────────────────────────────────────────────────
 
-const TYPE_COLORS: Record<string, string> = {
-  navbar: '#374151',
-  heading: '#3b82f6',
-  paragraph: '#6b7280',
-  image: '#059669',
-  button: '#7c3aed',
-  section: '#4b5563',
-  container: '#6b7280',
-  divider: '#9ca3af',
-  'code-block': '#0f172a',
-  'social-links': '#0891b2',
-  form: '#d97706',
-  icon: '#fbbf24',
-  spacer: 'transparent',
-  'video-embed': '#1f2937',
-}
+function TemplateThumbnail({ template, containerW }: { template: StudioTemplate; containerW: number }) {
+  const thumbH = Math.round(960 * (containerW / 1440))
 
-function getThumbColor(el: CanvasElement): string {
-  if (el.type === 'spacer') return 'transparent'
-  const explicit = el.styles.backgroundColor
-  // Use the element's explicit backgroundColor when it's not transparent
-  if (explicit && explicit !== 'transparent' && !explicit.startsWith('rgba(0,0,0,0)') && !explicit.startsWith('transparent')) {
-    return explicit
-  }
-  return TYPE_COLORS[el.type] ?? '#9ca3af'
-}
-
-function getBgStyle(bg: CanvasBackground): React.CSSProperties {
-  if (bg.type === 'gradient') {
-    return { background: `linear-gradient(${bg.gradientAngle}deg, ${bg.gradientFrom}, ${bg.gradientTo})` }
-  }
-  return { backgroundColor: bg.color }
-}
-
-// Canvas is 1440×960. Thumbnail uses full sidebar width minus 2×8px padding = ~208px
-// but clamped for safety. Scale ≈ 208/1440, height = 960 × scale
-const THUMB_W = 208
-const SCALE = THUMB_W / 1440
-const THUMB_H = Math.round(960 * SCALE)
-
-function TemplateThumbnail({ template }: { template: StudioTemplate }) {
   return (
     <div
       style={{
         width: '100%',
-        height: THUMB_H,
+        height: thumbH,
         overflow: 'hidden',
         position: 'relative',
         borderRadius: 8,
-        ...getBgStyle(template.background),
+        pointerEvents: 'none',
       }}
     >
-      <div
-        style={{
-          width: 1440,
-          height: 960,
-          transform: `scale(${SCALE})`,
-          transformOrigin: 'top left',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-        }}
-      >
-        {template.elements.map((el) => (
-          <div
-            key={el.id}
-            style={{
-              position: 'absolute',
-              left: el.x,
-              top: el.y,
-              width: el.width,
-              height: el.height,
-              backgroundColor: getThumbColor(el),
-              borderRadius: Math.min(el.styles.borderRadius ?? (el.type === 'button' ? 6 : el.type === 'divider' ? 2 : 4), 32),
-              opacity: el.type === 'spacer' ? 0 : 0.9,
-            }}
-          />
-        ))}
-      </div>
+      <PreviewCanvas
+        elements={template.elements}
+        background={template.background}
+        deviceWidth={1440}
+        deviceHeight={960}
+        containerW={containerW}
+        containerH={thumbH}
+        deviceId="desktop"
+      />
     </div>
   )
 }
@@ -126,12 +72,27 @@ function applyTemplate(template: StudioTemplate): { elements: CanvasElement[]; b
 export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps) {
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'all'>('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const [containerW, setContainerW] = useState(208)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Track sidebar width dynamically so thumbnails resize when sidebar is dragged
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const obs = new ResizeObserver(() => {
+      setContainerW(el.getBoundingClientRect().width)
+    })
+    obs.observe(el)
+    // Set initial width
+    setContainerW(el.getBoundingClientRect().width)
+    return () => obs.disconnect()
+  }, [])
 
   const filtered =
     activeCategory === 'all' ? TEMPLATES : TEMPLATES.filter((t) => t.category === activeCategory)
 
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={containerRef} className="flex flex-col gap-4">
       {/* Category filter */}
       <div className="flex flex-wrap gap-1">
         {CATEGORIES.map((cat) => (
@@ -179,7 +140,7 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
               className="transition-transform duration-300 ease-out"
               style={{ transform: hoveredId === template.id ? 'scale(1.03)' : 'scale(1)' }}
             >
-              <TemplateThumbnail template={template} />
+              <TemplateThumbnail template={template} containerW={containerW} />
             </div>
           </div>
 
@@ -191,6 +152,21 @@ export function TemplateBrowser({ onApply, onStartBlank }: TemplateBrowserProps)
                 {template.category}
               </p>
             </div>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.setItem('template-preview', JSON.stringify({
+                  elements: template.elements,
+                  background: template.background,
+                  name: template.name,
+                }))
+                window.open('/template-preview', '_blank')
+              }}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground transition-all hover:border-primary/50 hover:text-foreground active:scale-95"
+              title="Preview in new tab"
+            >
+              <Eye className="size-3" />
+            </button>
             <button
               type="button"
               onClick={() => {

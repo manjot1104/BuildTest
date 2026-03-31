@@ -2,12 +2,21 @@ import { env } from '@/env'
 
 export interface ResumeData {
   fullName: string
+  title?: string
   email: string
   phone: string
+  location?: string
+  linkedin?: string
+  github?: string
+  portfolio?: string
+  summary?: string
   skills: string
   experience: string
   education: string
   projects: string
+  certifications?: string
+  achievements?: string
+  languagesKnown?: string
   additionalInstructions?: string
   model?: string
   templateId?: string
@@ -418,6 +427,11 @@ STEP 3: Replace ONLY these placeholders:
 
 STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
    🚨 MANDATORY CONTENT REQUIREMENTS:
+  
+   0. DATA PRESERVATION (ABSOLUTE):
+      - DO NOT shorten, summarize, or drop user-provided details.
+      - Keep ALL significant experience, project, and education details from input.
+      - If input has many lines, include them across multiple bullet points/entries instead of compressing.
    
    1. NAME FORMATTING (HIGHEST PRIORITY):
       - Name MUST be the LARGEST and MOST PROMINENT element in the entire resume
@@ -485,12 +499,21 @@ CRITICAL: The template code structure is FIXED. You can ONLY replace text placeh
 
 USER DATA TO INSERT:
 - Name: ${data.fullName}
+${data.title ? `- Title: ${data.title}` : ''}
 - Email: ${data.email}
 - Phone: ${data.phone}
+${data.location ? `- Location: ${data.location}` : ''}
+${data.linkedin ? `- LinkedIn: ${data.linkedin}` : ''}
+${data.github ? `- GitHub: ${data.github}` : ''}
+${data.portfolio ? `- Portfolio: ${data.portfolio}` : ''}
+${data.summary ? `- Summary: ${data.summary}` : ''}
 - Skills: ${data.skills}
 - Experience: ${data.experience}
 - Education: ${data.education}
 - Projects: ${data.projects}
+${data.certifications ? `- Certifications: ${data.certifications}` : ''}
+${data.achievements ? `- Achievements: ${data.achievements}` : ''}
+${data.languagesKnown ? `- Languages Known: ${data.languagesKnown}` : ''}
 
 Return ONLY the complete LaTeX code with placeholders replaced. No markdown, no explanations, no code blocks.`
     : `You are an expert LaTeX resume writer and professional designer. Generate a modern, visually appealing, and professional LaTeX resume based on the following information.
@@ -562,12 +585,21 @@ FINAL REMINDER:
 
 USER INFORMATION:
 - Name: ${data.fullName}
+${data.title ? `- Title: ${data.title}` : ''}
 - Email: ${data.email}
 - Phone: ${data.phone}
+${data.location ? `- Location: ${data.location}` : ''}
+${data.linkedin ? `- LinkedIn: ${data.linkedin}` : ''}
+${data.github ? `- GitHub: ${data.github}` : ''}
+${data.portfolio ? `- Portfolio: ${data.portfolio}` : ''}
+${data.summary ? `- Summary: ${data.summary}` : ''}
 - Skills: ${data.skills}
 - Experience: ${data.experience}
 - Education: ${data.education}
 - Projects: ${data.projects}
+${data.certifications ? `- Certifications: ${data.certifications}` : ''}
+${data.achievements ? `- Achievements: ${data.achievements}` : ''}
+${data.languagesKnown ? `- Languages Known: ${data.languagesKnown}` : ''}
 
 Generate the complete LaTeX document code now. Return ONLY the LaTeX code, nothing else.`
 
@@ -1014,6 +1046,11 @@ STEP 3: Replace ONLY these placeholders:
 
 STEP 4: CONTENT ENHANCEMENT & FORMATTING (CRITICAL - APPLY TO ALL TEMPLATES):
    🚨 MANDATORY CONTENT REQUIREMENTS:
+  
+   0. DATA PRESERVATION (ABSOLUTE):
+      - DO NOT shorten, summarize, or drop user-provided details.
+      - Keep ALL significant experience, project, and education details from input.
+      - If input has many lines, include them across multiple bullet points/entries instead of compressing.
    
    1. NAME FORMATTING (HIGHEST PRIORITY):
       - Name MUST be the LARGEST and MOST PROMINENT element in the entire resume
@@ -1084,12 +1121,21 @@ CRITICAL: The template code structure is FIXED. You can ONLY replace text placeh
 
 USER DATA TO INSERT:
 - Name: ${data.fullName}
+${data.title ? `- Title: ${data.title}` : ''}
 - Email: ${data.email}
 - Phone: ${data.phone}
+${data.location ? `- Location: ${data.location}` : ''}
+${data.linkedin ? `- LinkedIn: ${data.linkedin}` : ''}
+${data.github ? `- GitHub: ${data.github}` : ''}
+${data.portfolio ? `- Portfolio: ${data.portfolio}` : ''}
+${data.summary ? `- Summary: ${data.summary}` : ''}
 - Skills: ${data.skills}
 - Experience: ${data.experience}
 - Education: ${data.education}
 - Projects: ${data.projects}
+${data.certifications ? `- Certifications: ${data.certifications}` : ''}
+${data.achievements ? `- Achievements: ${data.achievements}` : ''}
+${data.languagesKnown ? `- Languages Known: ${data.languagesKnown}` : ''}
 
 Return ONLY the complete HTML code with placeholders replaced. No markdown, no explanations, no code blocks.`
     : `You are an expert HTML/CSS resume designer. Generate a modern, visually appealing, and professional HTML resume based on the following information.
@@ -1161,12 +1207,21 @@ FINAL REMINDER:
 
 USER INFORMATION:
 - Name: ${data.fullName}
+${data.title ? `- Title: ${data.title}` : ''}
 - Email: ${data.email}
 - Phone: ${data.phone}
+${data.location ? `- Location: ${data.location}` : ''}
+${data.linkedin ? `- LinkedIn: ${data.linkedin}` : ''}
+${data.github ? `- GitHub: ${data.github}` : ''}
+${data.portfolio ? `- Portfolio: ${data.portfolio}` : ''}
+${data.summary ? `- Summary: ${data.summary}` : ''}
 - Skills: ${data.skills}
 - Experience: ${data.experience}
 - Education: ${data.education}
 - Projects: ${data.projects}
+${data.certifications ? `- Certifications: ${data.certifications}` : ''}
+${data.achievements ? `- Achievements: ${data.achievements}` : ''}
+${data.languagesKnown ? `- Languages Known: ${data.languagesKnown}` : ''}
 
 Generate the complete HTML document code now. Return ONLY the HTML code, nothing else.`
 
