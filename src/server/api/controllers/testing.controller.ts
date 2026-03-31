@@ -110,7 +110,7 @@ interface PlanLimits {
 // "free" is the fallback for users with no active subscription.
 // ---------------------------------------------------------------------------
 const DAILY_RUN_LIMITS: Record<string, number> = {
-  free:       2,
+  free:       0,
   starter:    5,
   pro:        15,
   enterprise: 50,
@@ -699,7 +699,7 @@ async function runPipelineStages(
           attempt++
         ) {
           // Pass userTimeouts into retry calls as well.
-          const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
+          const retryResult = await executeTest(testUrl, goal, true , attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
             isFlaky = true;
@@ -804,18 +804,8 @@ async function runPipelineStages(
               testTitle: tc.title ?? "",
               category,
               steps,
-              actualResult: result.actualResult,
-              errorDetails: result.errorDetails,
               expectedResult: tc.expected_result ?? "",
-              consoleLogs: result.consoleLogs,
-              networkErrors: result.networkLogs
-                .filter((l) => l.status !== null && l.status >= 400)
-                .map((l) => ({
-                  url: l.url,
-                  method: l.method,
-                  status: l.status,
-                  error: l.error,
-                })),
+              tinyfishRaw: result.tinyfishRaw,
             },
           });
 
