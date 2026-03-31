@@ -1,5 +1,7 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import ReactMarkdown from "react-markdown"
+
 import { ModeSelection } from "./components/mode-selection"
 import { KeyRound } from 'lucide-react'
 import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
@@ -50,12 +52,15 @@ import { BuildifyLogo } from '@/components/buildify-logo'
 import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
+
 function SearchParamsHandler({
     onReset,
     onChatIdChange,
+    onAutoPrompt,
 }: {
     onReset: () => void
     onChatIdChange: (chatId: string | null) => void
+    onAutoPrompt?: (prompt: string, chatId: string) => void
 }) {
     const searchParams = useSearchParams()
 
@@ -64,22 +69,37 @@ function SearchParamsHandler({
         const reset = searchParams.get('reset')
         if (reset === 'true') {
             onReset()
-
-            // Remove the reset parameter from URL without triggering navigation
             const newUrl = new URL(window.location.href)
             newUrl.searchParams.delete('reset')
             window.history.replaceState({}, '', newUrl.pathname)
         }
     }, [searchParams])
 
-    // Handle chatId from URL
-   // Handle chatId from URL
+    useEffect(() => {
+        const chatId = searchParams.get('chatId')
+        if (chatId !== null) {              
+            onChatIdChange(chatId)
+        }
+    }, [searchParams, onChatIdChange])
+
+    // Handle auto-prompt (e.g. seo-audit) — only fires once after chatId is set
+    const hasHandledRef = useRef(false)
 useEffect(() => {
+    if (hasHandledRef.current) return   // ✅ guard
+
+    const prompt = searchParams.get('prompt')
     const chatId = searchParams.get('chatId')
-    if (chatId !== null) {              
-        onChatIdChange(chatId)
+
+    if (prompt && chatId && onAutoPrompt) {
+        hasHandledRef.current = true   // ✅ mark done
+
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete('prompt')
+        window.history.replaceState({}, '', newUrl.toString())
+
+        onAutoPrompt(prompt, chatId)
     }
-}, [searchParams, onChatIdChange])
+}, [searchParams])
 
     return null
 }
@@ -110,14 +130,16 @@ useEffect(() => {
   }
 }, [chatMode])
 
-   useEffect(() => {
-  if (urlChatId && chatMode !== "BUILDER") {
+ useEffect(() => {
+  if (urlChatId && chatMode === null) {  
     setChatMode("BUILDER")
     setShowChatInterface(true)
   }
-}, [urlChatId])
+}, [urlChatId, chatMode])
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+
 
     const {
         currentChat: hookCurrentChat,
@@ -153,18 +175,17 @@ useEffect(() => {
         }
     }
 
-    const shouldShowPreview =
-    !!hookCurrentChat?.demo &&
-    !!hookCurrentChat?.id &&
-    !isStreaming
+  const shouldShowPreview =
+  !!hookCurrentChat?.id && !isStreaming
 
 
     // Sync loading state
     useEffect(() => {
         setIsLoading(hookIsLoading)
     }, [hookIsLoading])
-
+const autoPromptFiredRef = useRef(false)
   const handleReset = useCallback(() => {
+    autoPromptFiredRef.current = false
     setShowChatInterface(false)
     setChatMode(null)
     setMessage('')
@@ -186,6 +207,43 @@ useEffect(() => {
 const handleChatIdChange = (chatId: string | null) => {
     setUrlChatId(chatId)
 }
+
+
+
+
+
+
+const [seoAuditResult, setSeoAuditResult] = useState<string | null>(null)
+const [seoAuditLoading, setSeoAuditLoading] = useState(false)
+
+const handleAutoPrompt = useCallback((prompt: string, chatId: string) => {
+    if (autoPromptFiredRef.current) return
+    autoPromptFiredRef.current = true
+
+    if (prompt === 'seo-audit') {
+        const appUrl = `${window.location.origin}/apps/${chatId}`
+        setSeoAuditLoading(true)
+        setSeoAuditResult(null)
+
+        fetch('/api/seo-audit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appUrl }),
+        })
+        .then(res => res.json())
+        .then(data => {
+            setSeoAuditResult(data.result ?? 'No result received')
+            setSeoAuditLoading(false)
+        })
+        .catch(() => {
+            setSeoAuditResult('SEO audit failed. Please try again.')
+            setSeoAuditLoading(false)
+        })
+    }
+}, [])
+
+
+
 
     // Auto-focus the textarea on page load and restore from sessionStorage
     useEffect(() => {
@@ -321,6 +379,7 @@ const handleChatIdChange = (chatId: string | null) => {
                         <SearchParamsHandler
                             onReset={handleReset}
                             onChatIdChange={handleChatIdChange}
+                            onAutoPrompt={handleAutoPrompt}
                         />
                     </Suspense>
 
@@ -450,6 +509,8 @@ const handleChatIdChange = (chatId: string | null) => {
                         </div>
                     </div>
                 </div>
+
+
             </ChatActionsProvider>
         )
     }
@@ -460,6 +521,7 @@ if (!chatMode) {
         <SearchParamsHandler
           onReset={handleReset}
           onChatIdChange={handleChatIdChange}
+          onAutoPrompt={handleAutoPrompt}
         />
       </Suspense>
       <ModeSelection
@@ -606,6 +668,7 @@ Design:
                 <SearchParamsHandler
                     onReset={handleReset}
                     onChatIdChange={handleChatIdChange}
+                    onAutoPrompt={handleAutoPrompt}
                 />
             </Suspense>
 
@@ -783,14 +846,62 @@ Design:
                     </p>
                            </div>
 )}
-          {!showChatInterface && (
+        {!showChatInterface && (
 <div className="px-4 sm:px-6 lg:px-8 pb-12">
       <div className="max-w-5xl w-full mx-auto">
           <CommunityBuildsGrid />
       </div>
   </div>
 )}
+
         </div>
+
+        {/* SEO Audit Floating Panel */}
+        {(seoAuditLoading || seoAuditResult) && (
+            
+            <div className="fixed bottom-6 right-6 z-50 w-[420px] max-h-[75vh] flex flex-col rounded-2xl border bg-card shadow-2xl">
+                <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">🔍 SEO Audit</span>
+                        {seoAuditLoading && (
+                            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        )}
+                    </div>
+                    <button
+                        onClick={() => {
+                            setSeoAuditResult(null)
+                            setSeoAuditLoading(false)
+                            autoPromptFiredRef.current = false
+                        }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        ✕ Close
+                    </button>
+                </div>
+             <div className="flex-1 overflow-auto p-4 text-sm text-foreground">
+                    {seoAuditLoading ? (
+                        <p className="text-muted-foreground">Running SEO audit…</p>
+                    ) : (
+                    <div className="prose prose-invert max-w-none text-sm leading-relaxed space-y-3">
+<ReactMarkdown
+  components={{
+    code({ node, className, children, ...props }) {
+      return (
+        <pre className="overflow-x-auto bg-muted p-3 rounded-md text-xs">
+          <code {...props}>{children}</code>
+        </pre>
+      )
+    }
+  }}
+>
+  {seoAuditResult || ""}
+</ReactMarkdown>
+</div>
+                    )}
+                </div>
+            </div>
+        )}
+
         </ChatActionsProvider>
     )
 

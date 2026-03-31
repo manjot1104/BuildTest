@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { AlertCircle, ExternalLink, Loader2 } from 'lucide-react'
+import { AlertCircle, ExternalLink, Loader2, Search } from 'lucide-react'
 
 type AppData = {
   demoUrl: string
@@ -124,13 +124,22 @@ export default function AppPageClient() {
         <span className="max-w-[50%] truncate text-xs text-muted-foreground">
           {title}
         </span>
-        <Link
-          href={`/chat?chatId=${chatId}`}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Open Chat
-          <ExternalLink className="h-3 w-3" />
-        </Link>
+      <div className="flex items-center gap-3">
+  <Link
+    href={`/chat?chatId=${chatId}`}
+    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+  >
+    Open Chat
+    <ExternalLink className="h-3 w-3" />
+  </Link>
+  <Link
+    href={`/chat?chatId=${chatId}&prompt=seo-audit`}
+    className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+  >
+    <Search className="h-3 w-3" />
+    SEO Audit
+  </Link>
+</div>
       </div>
 
       {/* Iframe container */}

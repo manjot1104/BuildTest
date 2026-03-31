@@ -19,6 +19,7 @@ import {
   Code,
   Github,
   FlaskConical,
+  Search,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
@@ -94,8 +95,9 @@ export function PreviewPanel({
   setIsFullscreen,
   isBuilding = false,
 }: PreviewPanelProps) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-  const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
+const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
 
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
@@ -108,11 +110,13 @@ export function PreviewPanel({
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
   // Sync iframeSrc when currentChat.demo changes
-  useEffect(() => {
-    if (currentChat?.demo) {
-      setIframeSrc(currentChat.demo)
-    }
-  }, [currentChat?.demo])
+useEffect(() => {
+  if (currentChat?.demo) {
+    setIframeSrc(currentChat.demo)
+  } else if (currentChat?.id) {
+    setIframeSrc(`${baseUrl}/apps/${currentChat.id}`)
+  }
+}, [currentChat?.demo, currentChat?.id])
 
   const effectiveSrc = iframeSrc || currentChat?.demo
 const showBuildingLoader = isBuilding && !effectiveSrc
@@ -153,17 +157,23 @@ const showBuildingLoader = isBuilding && !effectiveSrc
         <WebPreview defaultUrl={currentChat?.demo ?? ''}>
 
           {/* ---------------- NAV BAR ---------------- */}
-          <WebPreviewNavigation>
-            <WebPreviewUrl
-              readOnly
-              placeholder="Your app will appear here..."
-              className="h-8 min-w-0 flex-1 text-xs"
-              value={
-                currentChat?.id
-                  ? `https://buildify.sh/apps/${currentChat.id}`
-                  : ''
-              }
-            />
+         <WebPreviewNavigation>
+  <WebPreviewUrl
+    readOnly
+    placeholder="Your app will appear here..."
+    className="h-8 min-w-0 flex-[0_1_280px] text-xs"  // flex-1 → fixed max width
+    value={currentChat?.id ? `${baseUrl}/apps/${currentChat.id}` : ''}
+  />
+ {currentChat?.id && (
+    <a
+      href={`/chat?chatId=${currentChat.id}&prompt=seo-audit`}
+      className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      title="Run SEO Audit"
+    >
+      <Search className="h-3 w-3" />
+      SEO Audit
+    </a>
+  )}
 
             <div className="flex items-center gap-1 shrink-0">
               <WebPreviewNavigationButton
