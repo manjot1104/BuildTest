@@ -2084,7 +2084,6 @@ MANDATORY STRUCTURE (LaTeX):
 \\usepackage{geometry}
 \\usepackage{xcolor}
 \\usepackage{enumitem}
-\\usepackage{fontawesome5}
 
 \\geometry{top=0.78in,bottom=0.78in,left=0.78in,right=0.78in}
 \\definecolor{bluepurple}{RGB}{102,102,255}
@@ -2105,10 +2104,10 @@ MANDATORY STRUCTURE (LaTeX):
 \\begin{document}
 {\\color{bluepurple}\\fontsize{23}{26}\\selectfont\\bfseries NAME}\\\\[4pt]
 {\\small\\color{darkgray} TITLE}\\\\[4pt]
-\\faPhone\\ PHONE\\quad
-\\faEnvelope\\ EMAIL\\quad
-\\faMapMarker\\ LOCATION\\quad
-\\faLinkedin\\ LINKEDIN
+Phone: PHONE\\quad
+Email: EMAIL\\quad
+Location: LOCATION\\quad
+LinkedIn: LINKEDIN
 
 \\vspace{0.55em}
 

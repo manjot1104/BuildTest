@@ -2,9 +2,9 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Code, Loader2 } from 'lucide-react'
-import { RESUME_TEMPLATES, type ResumeTemplate } from '../templates'
+import { type ResumeTemplate } from '../templates'
 import { renderTemplate, DUMMY_RESUME_DATA } from '@/lib/resume/template-renderer'
-import { resolveHtmlPreviewTemplate } from '../template-structure'
+import { ensureLatexDummyPdfUrl, getCachedLatexDummyPdfUrl } from './latex-dummy-pdf-cache'
 
 // ── A4 Page Dimensions at 96 DPI ──────────────────────────────────────────────
 const A4_WIDTH = 794
@@ -26,9 +26,8 @@ interface ResumeTemplatePreviewModalProps {
  * This guarantees preview ≡ final output in layout & structure.
  *
  * RENDERING PIPELINE:
- *   HTML templates → renderTemplate() → srcdoc iframe (immediate)
- *   LaTeX templates → renderTemplate('latex') → compile-pdf API → PDF iframe
- *                   → if compilation fails → renderTemplate('html') as fallback
+ *   HTML templates → renderTemplate('html') → srcdoc iframe (same as generated HTML)
+ *   LaTeX templates → renderTemplate('latex') → compile-pdf → PDF iframe (same as generated PDF)
  */
 export function ResumeTemplatePreviewModal({
   open,
@@ -91,57 +90,42 @@ export function ResumeTemplatePreviewModal({
   useEffect(() => {
     if (!open || !template) return
     let cancelled = false
-    let createdPdfUrl: string | null = null
     setPreviewError('')
     setPreviewHtml('')
     setPreviewPdfUrl('')
 
     const isLatexPreview = defaultFormat === 'latex' || template.format === 'latex'
 
-    const htmlPreviewTemplate = resolveHtmlPreviewTemplate(template, RESUME_TEMPLATES)
-    console.log('[ResumePreview] selected templateId:', template.id)
-    console.log('[ResumePreview] rendering template:', htmlPreviewTemplate?.id ?? null)
-    console.log('[ResumePreview] mode:', isLatexPreview ? 'latex-pdf' : 'html')
-
     const run = async () => {
-      if (isLatexPreview) {
-        try {
-          const latexContent = renderTemplate(template.styleGuide, 'latex', DUMMY_RESUME_DATA)
-          const response = await fetch('/api/resume/compile-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ latex: latexContent, fileName: 'Template_Preview' }),
-          })
-
-          if (!response.ok) throw new Error('LaTeX preview compile failed')
-
-          const blob = await response.blob()
-          const url = URL.createObjectURL(blob)
-          createdPdfUrl = url
-          if (!cancelled) {
-            setPreviewPdfUrl(url)
-            setIframeHeight(A4_MIN_HEIGHT)
-          } else {
-            URL.revokeObjectURL(url)
-          }
-          return
-        } catch (err) {
-          console.warn('[ResumePreview] LaTeX preview compile failed, using HTML fallback:', err)
-          // Fallback to mapped HTML preview so users can still inspect structure.
-        }
-      }
-
-      if (!htmlPreviewTemplate) {
+      if (!isLatexPreview) {
+        const htmlContent = renderTemplate(template.styleGuide, 'html', DUMMY_RESUME_DATA)
         if (!cancelled) {
-          setPreviewError(`Preview mapping missing for template: ${template.id}`)
+          setPreviewHtml(htmlContent || '')
+          setIframeHeight(A4_MIN_HEIGHT)
         }
         return
       }
 
-      const htmlContent = renderTemplate(htmlPreviewTemplate.styleGuide, 'html', DUMMY_RESUME_DATA)
-      if (!cancelled) {
-        setPreviewHtml(htmlContent || '')
+      // Instant paint when card hover / thumbnail already compiled this session
+      const cachedPdf = getCachedLatexDummyPdfUrl(template.id)
+      if (cachedPdf) {
+        setPreviewPdfUrl(cachedPdf)
         setIframeHeight(A4_MIN_HEIGHT)
+      }
+
+      // LaTeX: shared cache + single in-flight compile per template (same dummy PDF as export)
+      try {
+        const url = await ensureLatexDummyPdfUrl(template)
+        if (!cancelled) {
+          setPreviewPdfUrl(url)
+          setIframeHeight(A4_MIN_HEIGHT)
+        }
+        return
+      } catch (err) {
+        console.warn('[ResumePreview] LaTeX preview compile failed:', err)
+        if (!cancelled) {
+          setPreviewError(`LaTeX preview compile failed for "${template.name}".`)
+        }
       }
     }
 
@@ -149,9 +133,6 @@ export function ResumeTemplatePreviewModal({
 
     return () => {
       cancelled = true
-      if (createdPdfUrl) {
-        URL.revokeObjectURL(createdPdfUrl)
-      }
     }
   }, [open, template, defaultFormat])
 
@@ -167,7 +148,6 @@ export function ResumeTemplatePreviewModal({
 
   if (!open || !template) return null
 
-  const isHtml = true
   const showHtmlContent = !!previewHtml.trim()
   const showPdfContent = !!previewPdfUrl
   const isPreviewLoading = !showPdfContent && !showHtmlContent && !previewError
@@ -362,7 +342,7 @@ export function ResumeTemplatePreviewModal({
         className="flex h-12 shrink-0 items-center justify-between border-t px-6"
         style={{ borderColor: 'rgba(255,255,255,0.06)', background: '#141418' }}
       >
-        <div className="flex items-center gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
           <span className="text-xs text-white/40">
             Preview with sample data. Your resume will use the same layout with your information.
           </span>
