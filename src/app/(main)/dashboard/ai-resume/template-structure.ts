@@ -7,6 +7,10 @@ export const LATEX_TO_HTML_PREVIEW_MAP: Record<string, string> = {
   'latex-academic': 'html-academic-research',
   'latex-executive': 'executive-summary',
   'latex-technical': 'tech-professional',
+  // Thumbnail / fallback HTML family for LaTeX templates (modal PDF uses compiled LaTeX)
+  'latex-blue-magenta-financial': 'html-contemporary-design',
+  'latex-dwight-modern-engineer': 'tech-professional',
+  'latex-dwight-classic-iconbars': 'creative-portfolio',
 }
 
 function extractMandatoryBlock(styleGuide: string | undefined, kind: 'HTML' | 'LaTeX'): string | null {
