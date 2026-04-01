@@ -95,9 +95,9 @@ export function PreviewPanel({
   setIsFullscreen,
   isBuilding = false,
 }: PreviewPanelProps) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin
+ 
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
+const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
 
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
@@ -109,14 +109,12 @@ const [iframeSrc, setIframeSrc] = useState<string | undefined>(undefined)
 
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
-  // Sync iframeSrc when currentChat.demo changes
+
 useEffect(() => {
   if (currentChat?.demo) {
     setIframeSrc(currentChat.demo)
-  } else if (currentChat?.id) {
-    setIframeSrc(`${baseUrl}/apps/${currentChat.id}`)
   }
-}, [currentChat?.demo, currentChat?.id])
+}, [currentChat?.demo])
 
   const effectiveSrc = iframeSrc || currentChat?.demo
 const showBuildingLoader = isBuilding && !effectiveSrc
@@ -161,21 +159,26 @@ const showBuildingLoader = isBuilding && !effectiveSrc
   <WebPreviewUrl
     readOnly
     placeholder="Your app will appear here..."
-    className="h-8 min-w-0 flex-[0_1_280px] text-xs"  // flex-1 → fixed max width
-    value={currentChat?.id ? `${baseUrl}/apps/${currentChat.id}` : ''}
+    className="h-8 min-w-0 flex-[0_1_280px] text-xs"  
+    
+value={
+  currentChat?.id
+    ? `https://buildify.sh/apps/${currentChat.id}`
+    : ''
+}
   />
  {currentChat?.id && (
     <a
       href={`/chat?chatId=${currentChat.id}&prompt=seo-audit`}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+      className= "inline-flex shrink-0 items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
       title="Run SEO Audit"
     >
-      <Search className="h-3 w-3" />
+      <Search className="h-4 w-4" />
       SEO Audit
     </a>
   )}
 
-            <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
               <WebPreviewNavigationButton
                 tooltip="View source code"
                 disabled={!hasFiles}

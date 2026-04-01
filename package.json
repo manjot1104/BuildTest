@@ -23,6 +23,7 @@
     "make-admin": "tsx scripts/make-admin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
     "@auth/drizzle-adapter": "^1.7.2",
     "@axe-core/puppeteer": "^4.11.1",
     "@daytonaio/sdk": "^0.147.0",
