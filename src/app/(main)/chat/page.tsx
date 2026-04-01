@@ -1,9 +1,9 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
-import ReactMarkdown from "react-markdown"
+import { SeoAuditResults } from '@/components/chat/seo-audit-results'
 
 import { ModeSelection } from "./components/mode-selection"
-import { KeyRound, SearchCheckIcon, Maximize2, Minimize2 , Layout,
+import { KeyRound, SearchCheckIcon, Maximize2, Minimize2, Layout,
     CheckSquare,
     BarChart3,
     FileText,
@@ -52,62 +52,62 @@ import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // ─── Draggable SEO Panel ──────────────────────────────────────────────────────
 function DraggableSeoPanel({
-    
     loading,
     result,
+    mobileData,
+    desktopData,
     onClose,
 }: {
     loading: boolean
     result: string | null
+    mobileData: any
+    desktopData: any
     onClose: () => void
-    
 }) {
-  const [width, setWidth] = useState(420)
-  const [isFull, setIsFull] = useState(false)
-const isResizingRef = useRef(false)
-const startResize = () => {
-  isResizingRef.current = true
-}
+    const [width, setWidth] = useState(420)
+    const [isFull, setIsFull] = useState(false)
+    const isResizingRef = useRef(false)
 
-useEffect(() => {
-  const handleMove = (e: MouseEvent) => {
-    if (!isResizingRef.current) return
+    const startResize = () => {
+        isResizingRef.current = true
+    }
 
-    const newWidth = window.innerWidth - e.clientX
-    setWidth(Math.max(320, Math.min(newWidth, window.innerWidth * 0.8)))
-  }
+    useEffect(() => {
+        const handleMove = (e: MouseEvent) => {
+            if (!isResizingRef.current) return
+            const newWidth = window.innerWidth - e.clientX
+            setWidth(Math.max(320, Math.min(newWidth, window.innerWidth * 0.8)))
+        }
+        const stopResize = () => {
+            isResizingRef.current = false
+        }
+        window.addEventListener("mousemove", handleMove)
+        window.addEventListener("mouseup", stopResize)
+        return () => {
+            window.removeEventListener("mousemove", handleMove)
+            window.removeEventListener("mouseup", stopResize)
+        }
+    }, [])
 
-  const stopResize = () => {
-    isResizingRef.current = false
-  }
-
-  window.addEventListener("mousemove", handleMove)
-  window.addEventListener("mouseup", stopResize)
-
-  return () => {
-    window.removeEventListener("mousemove", handleMove)
-    window.removeEventListener("mouseup", stopResize)
-  }
-}, [])
-   return (
-<div
-  style={isFull ? {} : { width }}
-  className={cn(
-    "fixed z-50 flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl",
-   isFull
-  ? "inset-0 w-screen h-screen"
-    : "bottom-8 right-6 min-w-[320px] max-w-[80vw] resize overflow-hidden h-[70vh] max-h-[700px]"
-  )}
->
-
-{!isFull && (
-  <div
-    onMouseDown={startResize}
-    className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10"
-  >
-    <div className="w-full h-full hover:bg-white/10 transition" />
-  </div>
-)}
+    return (
+        <div
+            style={isFull ? {} : { width }}
+            className={cn(
+                "fixed z-50 flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl",
+                isFull
+                    ? "inset-0 w-screen h-screen"
+                    : "bottom-8 right-6 min-w-[320px] max-w-[80vw] overflow-hidden h-[70vh] max-h-[700px]"
+            )}
+        >
+            {/* Resize handle */}
+            {!isFull && (
+                <div
+                    onMouseDown={startResize}
+                    className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10"
+                >
+                    <div className="w-full h-full hover:bg-white/10 transition" />
+                </div>
+            )}
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0 select-none">
@@ -120,114 +120,31 @@ useEffect(() => {
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     )}
                 </div>
-               <div className="flex items-center gap-1 ml-auto">
- <button
-  onClick={() => setIsFull(!isFull)}
- className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors translate-y-[0.5px]"
->
-  {isFull ? (
-    <Minimize2 className="h-4 w-4" />
-  ) : (
-    <Maximize2 className="h-4 w-4" />
-  )}
-</button>
-
-  <button
-    onClick={onClose}
-    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs"
-  >
-    ✕
-  </button>
-</div>
+                <div className="flex items-center gap-1 ml-auto">
+                    <button
+                        onClick={() => setIsFull(!isFull)}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    >
+                        {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                    </button>
+                    <button
+                        onClick={onClose}
+                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs"
+                    >
+                        ✕
+                    </button>
+                </div>
             </div>
 
             {/* Body */}
-           <div className="flex-1 overflow-y-auto min-h-0">
-                {loading ? (
-                    <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
-                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        <p className="text-sm text-muted-foreground">Analyzing your app…</p>
-                        <p className="text-xs text-muted-foreground/50">This may take 15–20 seconds</p>
-                    </div>
-                ) : (
-                  <div
-  className={cn(
-    "space-y-0.5",
-  isFull
-  ? "w-full px-8 py-6"
-      : "p-4"
-  )}
->
-                        <ReactMarkdown
-                            components={{
-                                h1: ({ children }) => (
-                                    <h1 className="text-base font-bold text-foreground mt-0 mb-3 pb-2 border-b border-border/40">
-                                        {children}
-                                    </h1>
-                                ),
-                                h2: ({ children }) => (
-                                    <h2 className="text-sm font-semibold text-foreground mt-5 mb-2 first:mt-0 flex items-center gap-2">
-                                        <span className="inline-block w-1 h-3.5 rounded-full bg-primary/60 shrink-0" />
-                                        {children}
-                                    </h2>
-                                ),
-                                h3: ({ children }) => (
-                                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mt-3 mb-1.5">
-                                        {children}
-                                    </h3>
-                                ),
-                                p: ({ children }) => (
-                                    <p className="text-sm text-foreground/75 leading-relaxed mb-2">{children}</p>
-                                ),
-                                ul: ({ children }) => (
-                                    <ul className="mb-3 space-y-1">{children}</ul>
-                                ),
-                                li: ({ children }) => (
-                                    <li className="flex items-start gap-2 text-sm text-foreground/75 leading-snug">
-                                        <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted-foreground/40 shrink-0" />
-                                        <span>{children}</span>
-                                    </li>
-                                ),
-                                ol: ({ children }) => (
-                                    <ol className="mb-3 space-y-1.5 list-decimal list-inside">{children}</ol>
-                                ),
-                                strong: ({ children }) => (
-                                    <strong className="font-semibold text-foreground">{children}</strong>
-                                ),
-                                blockquote: ({ children }) => (
-                                    <blockquote className="my-2 border-l-2 border-amber-500/40 bg-amber-500/5 pl-3 pr-2 py-1.5 rounded-r-md text-xs text-muted-foreground italic">
-                                        {children}
-                                    </blockquote>
-                                ),
-                                table: ({ children }) => (
-                                    <div className="overflow-x-auto mb-3 rounded-lg border border-border/30">
-                                        <table className="w-full text-xs border-collapse">{children}</table>
-                                    </div>
-                                ),
-                                thead: ({ children }) => (
-                                    <thead className="bg-muted/40">{children}</thead>
-                                ),
-                                th: ({ children }) => (
-                                    <th className="text-left text-muted-foreground font-medium px-3 py-2 border-b border-border/30">
-                                        {children}
-                                    </th>
-                                ),
-                                td: ({ children }) => (
-                                    <td className="px-3 py-1.5 border-b border-border/10 text-foreground/80">{children}</td>
-                                ),
-                                code: ({ children }) => (
-                                    <code className="bg-muted rounded px-1 py-0.5 text-xs font-mono">{children}</code>
-                                ),
-                                pre: ({ children }) => (
-                                    <pre className="bg-muted rounded-lg p-3 text-xs overflow-x-auto mb-2 font-mono">{children}</pre>
-                                ),
-                                hr: () => <hr className="my-4 border-border/30" />,
-                            }}
-                        >
-                            {result || ''}
-                        </ReactMarkdown>
-                    </div>
-                )}
+            <div className="flex-1 overflow-y-auto min-h-0">
+                <SeoAuditResults
+                    result={result}
+                    mobileData={mobileData}
+                    desktopData={desktopData}
+                    loading={loading}
+                    isFull={isFull}
+                />
             </div>
 
             {/* Footer */}
@@ -393,7 +310,8 @@ export default function ChatPage() {
     // ── SEO Audit state ──
     const [seoAuditResult, setSeoAuditResult] = useState<string | null>(null)
     const [seoAuditLoading, setSeoAuditLoading] = useState(false)
-    const [pageSpeedData, setPageSpeedData] = useState<any>(null)
+    const [mobileData, setMobileData] = useState<any>(null)
+    const [desktopData, setDesktopData] = useState<any>(null)
 
     const handleAutoPrompt = useCallback((prompt: string, chatId: string) => {
         if (autoPromptFiredRef.current) return
@@ -412,7 +330,8 @@ export default function ChatPage() {
                 .then((res) => res.json())
                 .then((data) => {
                     setSeoAuditResult(data.result ?? 'No result received')
-                    setPageSpeedData(data.pageSpeedData ?? null)
+                    setMobileData(data.mobileData ?? null)
+                    setDesktopData(data.desktopData ?? null)
                     setSeoAuditLoading(false)
                 })
                 .catch(() => {
@@ -735,13 +654,13 @@ export default function ChatPage() {
                             }
                             rightPanel={
                                 shouldShowPreview ? (
-                                   <PreviewPanel
-  currentChat={hookCurrentChat}
-  isFullscreen={isFullscreen}
-  setIsFullscreen={setIsFullscreen}
-  isBuilding={false}
-  onSeoAudit={handleAutoPrompt}
-/>
+                                    <PreviewPanel
+                                        currentChat={hookCurrentChat}
+                                        isFullscreen={isFullscreen}
+                                        setIsFullscreen={setIsFullscreen}
+                                        isBuilding={false}
+                                        onSeoAudit={handleAutoPrompt}
+                                    />
                                 ) : null
                             }
                         />
@@ -847,9 +766,13 @@ export default function ChatPage() {
                 <DraggableSeoPanel
                     loading={seoAuditLoading}
                     result={seoAuditResult}
+                    mobileData={mobileData}
+                    desktopData={desktopData}
                     onClose={() => {
                         setSeoAuditResult(null)
                         setSeoAuditLoading(false)
+                        setMobileData(null)
+                        setDesktopData(null)
                         autoPromptFiredRef.current = false
                     }}
                 />

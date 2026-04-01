@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { env } from '@/env'
 
 const FALLBACK_MODELS = [
   "arcee-ai/trinity-large-preview:free",
@@ -8,23 +9,22 @@ const FALLBACK_MODELS = [
 ]
 
 // ─── PageSpeed Insights fetch ─────────────────────────────────────────────
-async function fetchPageSpeedData(url: string) {
-  const apiKey = process.env.PAGESPEED_API_KEY
+async function fetchPageSpeedData(url: string, strategy: 'mobile' | 'desktop' = 'mobile') {
+  const apiKey = env.PAGESPEED_API_KEY
   if (!apiKey) return null
 
   try {
-    const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&strategy=mobile&category=PERFORMANCE&category=SEO&category=ACCESSIBILITY&category=BEST_PRACTICES`
-    
+    const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&strategy=${strategy}&category=PERFORMANCE&category=SEO&category=ACCESSIBILITY&category=BEST_PRACTICES`
+
     const res = await fetch(psUrl, { signal: AbortSignal.timeout(15000) })
     if (!res.ok) return null
-    
+
     const data = await res.json()
     const categories = data.lighthouseResult?.categories
     const audits = data.lighthouseResult?.audits
 
-    // Core Web Vitals
     const lcp = audits?.['largest-contentful-paint']
-  const inp = audits?.['interaction-to-next-paint']
+    const inp = audits?.['interaction-to-next-paint']
     const cls = audits?.['cumulative-layout-shift']
     const fcp = audits?.['first-contentful-paint']
     const tbt = audits?.['total-blocking-time']
@@ -63,52 +63,21 @@ function scoreLabel(score: number | null) {
   return '🔴'
 }
 
-export async function POST(req: Request) {
-  try {
-    const { appUrl } = await req.json()
+// ─── PageSpeed section builder ────────────────────────────────────────────
+function buildPageSpeedSection(
+  mobileData: Awaited<ReturnType<typeof fetchPageSpeedData>>,
+  desktopData: Awaited<ReturnType<typeof fetchPageSpeedData>>,
+) {
+  if (!mobileData && !desktopData) {
+    return `\n> ⚠️ PageSpeed data unavailable (localhost or API key missing — deploy your app for real metrics)\n`
+  }
 
-    // Run PageSpeed + HTML fetch in parallel
-    const [psData, htmlResult] = await Promise.allSettled([
-      fetchPageSpeedData(appUrl),
-      (async () => {
-        const pageRes = await fetch(appUrl, {
-          headers: { 'User-Agent': 'SEO-Audit-Bot/1.0' },
-          signal: AbortSignal.timeout(8000),
-        })
-        const html = await pageRes.text()
-        const headMatch = html.match(/<head[\s\S]*?<\/head>/i)
-        return headMatch ? headMatch[0].slice(0, 3000) : html.slice(0, 3000)
-      })(),
-    ])
+  const renderTable = (d: NonNullable<Awaited<ReturnType<typeof fetchPageSpeedData>>>, label: string) => {
+    const { scores, coreWebVitals: cwv, opportunities } = d
+    return `
+### ${label}
 
-    const pageSpeedData = psData.status === 'fulfilled' ? psData.value : null
-    
-
-const pageContent =
-  htmlResult.status === 'fulfilled'
-    ? htmlResult.value
-    : '(Page not publicly accessible — URL-only analysis)'
-
-const html = pageContent || ''
-
-const hasSchema = html.includes('application/ld+json')
-const hasOG = html.includes('og:title')
-const hasTwitter = html.includes('twitter:card')
-const hasMetaDesc = html.includes('name="description"')
-const hasCanonical = html.includes('rel="canonical"')
-const hasRobotsMeta = html.includes('name="robots"')
-const hasH1 = html.includes('<h1')
-const hasAlt = html.includes('alt=')
-const hasFavicon = html.includes('rel="icon"')
-const hasViewport = html.includes('name="viewport"')
-    // Build PageSpeed section for the report
-    let pageSpeedSection = ''
-    if (pageSpeedData) {
-      const { scores, coreWebVitals: cwv, opportunities } = pageSpeedData
-      pageSpeedSection = `
-## 📊 PageSpeed Insights (Real Data)
-
-### Category Scores
+#### Category Scores
 | Category | Score |
 |---|---|
 | 🚀 Performance | ${scores.performance}/100 |
@@ -116,7 +85,7 @@ const hasViewport = html.includes('name="viewport"')
 | ♿ Accessibility | ${scores.accessibility}/100 |
 | ✅ Best Practices | ${scores.bestPractices}/100 |
 
-### Core Web Vitals
+#### Core Web Vitals
 | Metric | Value | Status |
 |---|---|---|
 | LCP (Largest Contentful Paint) | ${cwv.lcp.value} | ${scoreLabel(cwv.lcp.score)} |
@@ -126,15 +95,59 @@ const hasViewport = html.includes('name="viewport"')
 | TBT (Total Blocking Time) | ${cwv.tbt.value} | ${scoreLabel(cwv.tbt.score)} |
 | Speed Index | ${cwv.si.value} | ${scoreLabel(cwv.si.score)} |
 
-
 > 🟢 Good &nbsp; 🟡 Needs Improvement &nbsp; 🔴 Poor
-
-${opportunities.length > 0 ? `### ⚡ Top Optimization Opportunities\n${opportunities.map(o => `- **${o.title}** ${o.savings}`).join('\n')}` : ''}
+${opportunities.length > 0 ? `\n#### ⚡ Top Optimization Opportunities\n${opportunities.map(o => `- **${o.title}** ${o.savings}`).join('\n')}` : ''}
 `
-    } else {
-      pageSpeedSection = `\n> ⚠️ PageSpeed data unavailable (localhost or API key missing — deploy your app for real metrics)\n`
+  }
+
+  let section = `## 📊 PageSpeed Insights (Real Data)\n`
+  if (mobileData) section += renderTable(mobileData, '📱 Mobile')
+  if (desktopData) section += renderTable(desktopData, '🖥️ Desktop')
+  return section
+}
+
+export async function POST(req: Request) {
+  try {
+    const { appUrl } = await req.json()
+
+    if (!appUrl || typeof appUrl !== 'string' || !appUrl.startsWith('http')) {
+      return NextResponse.json({ result: 'Invalid URL provided' }, { status: 400 })
     }
-const technicalSeoSection = `
+
+    // Run all 3 fetches in parallel — mobile, desktop, HTML
+    const [[mobileData, desktopData], htmlResult] = await Promise.all([
+      Promise.all([
+        fetchPageSpeedData(appUrl, 'mobile'),
+        fetchPageSpeedData(appUrl, 'desktop'),
+      ]),
+      (async () => {
+        const pageRes = await fetch(appUrl, {
+          headers: { 'User-Agent': 'SEO-Audit-Bot/1.0' },
+          signal: AbortSignal.timeout(8000),
+        })
+        const html = await pageRes.text()
+        const headMatch = html.match(/<head[\s\S]*?<\/head>/i)
+        return headMatch ? headMatch[0].slice(0, 3000) : html.slice(0, 3000)
+      })().catch(() => null),
+    ])
+
+    const pageContent = htmlResult ?? '(Page not publicly accessible — URL-only analysis)'
+    const html = pageContent || ''
+
+    const hasSchema    = html.includes('application/ld+json')
+    const hasOG        = html.includes('og:title')
+    const hasTwitter   = html.includes('twitter:card')
+    const hasMetaDesc  = html.includes('name="description"')
+    const hasCanonical = html.includes('rel="canonical"')
+    const hasRobotsMeta = html.includes('name="robots"')
+    const hasH1        = html.includes('<h1')
+    const hasAlt       = html.includes('alt=')
+    const hasFavicon   = html.includes('rel="icon"')
+    const hasViewport  = html.includes('name="viewport"')
+
+    const pageSpeedSection = buildPageSpeedSection(mobileData, desktopData)
+
+    const technicalSeoSection = `
 ## 🔎 Basic SEO Checks
 
 - Schema Markup: ${hasSchema ? '✅ Present' : '❌ Missing'}
@@ -154,6 +167,7 @@ const technicalSeoSection = `
 - H1 Tag: ${hasH1 ? '✅ Present' : '❌ Missing'}
 - Image Alt Text: ${hasAlt ? '✅ Present' : '❌ Missing'}
 `
+
     // AI SEO analysis
     for (const model of FALLBACK_MODELS) {
       try {
@@ -161,7 +175,7 @@ const technicalSeoSection = `
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+            'Authorization': `Bearer ${env.OPENROUTER_API_KEY}`,
           },
           body: JSON.stringify({
             model,
@@ -169,7 +183,6 @@ const technicalSeoSection = `
               {
                 role: 'user',
                 content: `
-
 You are a senior SEO expert with deep knowledge of technical SEO, performance, and modern AI search (Google + ChatGPT + Perplexity).
 
 Perform a DETAILED and PRACTICAL SEO audit.
@@ -188,9 +201,13 @@ ${pageContent !== '(Page not publicly accessible — URL-only analysis)'
   ? `HTML HEAD:\n${pageContent}`
   : `HTML not available — infer issues based on common problems.`}
 
-${pageSpeedData ? `PageSpeed:
-- Performance: ${pageSpeedData.scores.performance}/100
-- SEO: ${pageSpeedData.scores.seo}/100` : ''}
+${mobileData ? `PageSpeed Mobile:
+- Performance: ${mobileData.scores.performance}/100
+- SEO: ${mobileData.scores.seo}/100` : ''}
+
+${desktopData ? `PageSpeed Desktop:
+- Performance: ${desktopData.scores.performance}/100
+- SEO: ${desktopData.scores.seo}/100` : ''}
 
 ---
 
@@ -220,7 +237,7 @@ ${pageSpeedData ? `PageSpeed:
 - Include CODE
 
 Example:
-❌ Missing meta description  
+❌ Missing meta description
 ✅ Fix:
 <meta name="description" content="SEO optimized description" />
 
@@ -231,37 +248,6 @@ Be developer-friendly.
 Avoid fluff.
 Be precise.
 Return a HIGH-QUALITY structured report in MARKDOWN.
-
-## SEO Score
-- Give a score out of 100
-- Explain briefly WHY this score
-
-## Technical Issues
-- Each issue MUST include:
-  - What is wrong
-  - Why it matters
-
-## On-Page SEO Issues
-- Meta tags, headings, structure
-
-## Performance & UX Issues
-- Based on best practices or PageSpeed
-
-## Fixes (VERY IMPORTANT)
-- Give practical fixes
-- Include code snippets when possible
-
-Example:
-❌ Missing meta description  
-✅ Fix:
-<meta name="description" content="Your description here" />
-
-## Priority
-- High / Medium / Low fixes
-
-Be detailed, avoid generic answers.
-Use clean markdown formatting.
-Always give actionable, developer-friendly fixes.
 `
               }
             ]
@@ -277,10 +263,10 @@ Always give actionable, developer-friendly fixes.
         const aiResult = data.choices?.[0]?.message?.content
 
         if (aiResult) {
-          // Combine PageSpeed section + AI analysis
           return NextResponse.json({
             result: pageSpeedSection + '\n---\n' + technicalSeoSection + '\n---\n\n' + aiResult,
-            pageSpeedData, // also send raw data for future UI use
+            mobileData,
+            desktopData,
           })
         }
       } catch {
@@ -288,10 +274,11 @@ Always give actionable, developer-friendly fixes.
       }
     }
 
-    // If AI fails, still return PageSpeed data
+    // AI fails — still return PageSpeed data
     return NextResponse.json({
       result: pageSpeedSection + '\n\n> AI analysis unavailable — all models rate-limited.',
-      pageSpeedData,
+      mobileData,
+      desktopData,
     })
 
   } catch (err) {
