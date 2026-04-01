@@ -24,7 +24,7 @@ async function fetchPageSpeedData(url: string) {
 
     // Core Web Vitals
     const lcp = audits?.['largest-contentful-paint']
-    const fid = audits?.['max-potential-fid'] ?? audits?.['interactive']
+  const inp = audits?.['interaction-to-next-paint']
     const cls = audits?.['cumulative-layout-shift']
     const fcp = audits?.['first-contentful-paint']
     const tbt = audits?.['total-blocking-time']
@@ -39,7 +39,7 @@ async function fetchPageSpeedData(url: string) {
       },
       coreWebVitals: {
         lcp: { value: lcp?.displayValue ?? 'N/A', score: lcp?.score ?? null },
-        fid: { value: fid?.displayValue ?? 'N/A', score: fid?.score ?? null },
+        inp: { value: inp?.displayValue ?? 'N/A', score: inp?.score ?? null },
         cls: { value: cls?.displayValue ?? 'N/A', score: cls?.score ?? null },
         fcp: { value: fcp?.displayValue ?? 'N/A', score: fcp?.score ?? null },
         tbt: { value: tbt?.displayValue ?? 'N/A', score: tbt?.score ?? null },
@@ -82,10 +82,25 @@ export async function POST(req: Request) {
     ])
 
     const pageSpeedData = psData.status === 'fulfilled' ? psData.value : null
-    const pageContent = htmlResult.status === 'fulfilled'
-      ? htmlResult.value
-      : '(Page not publicly accessible — URL-only analysis)'
+    
 
+const pageContent =
+  htmlResult.status === 'fulfilled'
+    ? htmlResult.value
+    : '(Page not publicly accessible — URL-only analysis)'
+
+const html = pageContent || ''
+
+const hasSchema = html.includes('application/ld+json')
+const hasOG = html.includes('og:title')
+const hasTwitter = html.includes('twitter:card')
+const hasMetaDesc = html.includes('name="description"')
+const hasCanonical = html.includes('rel="canonical"')
+const hasRobotsMeta = html.includes('name="robots"')
+const hasH1 = html.includes('<h1')
+const hasAlt = html.includes('alt=')
+const hasFavicon = html.includes('rel="icon"')
+const hasViewport = html.includes('name="viewport"')
     // Build PageSpeed section for the report
     let pageSpeedSection = ''
     if (pageSpeedData) {
@@ -105,10 +120,12 @@ export async function POST(req: Request) {
 | Metric | Value | Status |
 |---|---|---|
 | LCP (Largest Contentful Paint) | ${cwv.lcp.value} | ${scoreLabel(cwv.lcp.score)} |
+| INP (Interaction to Next Paint) | ${cwv.inp.value} | ${scoreLabel(cwv.inp.score)} |
 | CLS (Cumulative Layout Shift) | ${cwv.cls.value} | ${scoreLabel(cwv.cls.score)} |
 | FCP (First Contentful Paint) | ${cwv.fcp.value} | ${scoreLabel(cwv.fcp.score)} |
 | TBT (Total Blocking Time) | ${cwv.tbt.value} | ${scoreLabel(cwv.tbt.score)} |
 | Speed Index | ${cwv.si.value} | ${scoreLabel(cwv.si.score)} |
+
 
 > 🟢 Good &nbsp; 🟡 Needs Improvement &nbsp; 🔴 Poor
 
@@ -117,7 +134,26 @@ ${opportunities.length > 0 ? `### ⚡ Top Optimization Opportunities\n${opportun
     } else {
       pageSpeedSection = `\n> ⚠️ PageSpeed data unavailable (localhost or API key missing — deploy your app for real metrics)\n`
     }
+const technicalSeoSection = `
+## 🔎 Basic SEO Checks
 
+- Schema Markup: ${hasSchema ? '✅ Present' : '❌ Missing'}
+- Open Graph Tags: ${hasOG ? '✅ Present' : '❌ Missing'}
+- Twitter Card: ${hasTwitter ? '✅ Present' : '❌ Missing'}
+- Meta Description: ${hasMetaDesc ? '✅ Present' : '❌ Missing'}
+
+## ⚙️ Technical SEO
+
+- Canonical Tag: ${hasCanonical ? '✅ Present' : '❌ Missing'}
+- Robots Meta Tag: ${hasRobotsMeta ? '✅ Present' : '❌ Missing'}
+- Viewport Meta: ${hasViewport ? '✅ Present' : '❌ Missing'}
+- Favicon: ${hasFavicon ? '✅ Present' : '❌ Missing'}
+
+## 🧱 Structure & Content
+
+- H1 Tag: ${hasH1 ? '✅ Present' : '❌ Missing'}
+- Image Alt Text: ${hasAlt ? '✅ Present' : '❌ Missing'}
+`
     // AI SEO analysis
     for (const model of FALLBACK_MODELS) {
       try {
@@ -132,24 +168,101 @@ ${opportunities.length > 0 ? `### ⚡ Top Optimization Opportunities\n${opportun
             messages: [
               {
                 role: 'user',
-                content: `You are an expert SEO auditor.
+                content: `
 
-Analyze this web app: ${appUrl}
+You are a senior SEO expert with deep knowledge of technical SEO, performance, and modern AI search (Google + ChatGPT + Perplexity).
+
+Perform a DETAILED and PRACTICAL SEO audit.
+
+IMPORTANT:
+- Be specific, not generic
+- Use the provided HTML + PageSpeed data
+- If something is missing, clearly explain impact
+
+---
+
+URL:
+${appUrl}
 
 ${pageContent !== '(Page not publicly accessible — URL-only analysis)'
-  ? `Here is the actual HTML head:\n${pageContent}`
-  : `HTML not accessible — do best possible analysis based on URL and typical issues.`
-}
+  ? `HTML HEAD:\n${pageContent}`
+  : `HTML not available — infer issues based on common problems.`}
 
-${pageSpeedData ? `PageSpeed scores already computed: Performance ${pageSpeedData.scores.performance}/100, SEO ${pageSpeedData.scores.seo}/100` : ''}
+${pageSpeedData ? `PageSpeed:
+- Performance: ${pageSpeedData.scores.performance}/100
+- SEO: ${pageSpeedData.scores.seo}/100` : ''}
 
-Give response in clean markdown format.
+---
 
-Sections:
-- SEO Score (/100) — use the PageSpeed SEO score if provided above
-- Issues (bullet points)
-- Fixes (numbered)
-- Improved Meta Title & Description`
+## OUTPUT FORMAT (STRICT)
+
+### 🔢 SEO Score (0–100)
+- Give score
+- Explain reasoning clearly
+
+### 🚨 Critical Issues
+- Only important problems
+- Explain impact
+
+### ⚙️ Technical SEO Issues
+- meta, canonical, robots, schema
+
+### 🧠 AI / Modern SEO
+- Is this site optimized for AI search?
+- Structured content?
+- Clear semantics?
+
+### ⚡ Performance Issues
+- Based on PageSpeed or best practices
+
+### 🛠 Fixes (MOST IMPORTANT)
+- Practical fixes
+- Include CODE
+
+Example:
+❌ Missing meta description  
+✅ Fix:
+<meta name="description" content="SEO optimized description" />
+
+### 🎯 Priority
+- High / Medium / Low
+
+Be developer-friendly.
+Avoid fluff.
+Be precise.
+Return a HIGH-QUALITY structured report in MARKDOWN.
+
+## SEO Score
+- Give a score out of 100
+- Explain briefly WHY this score
+
+## Technical Issues
+- Each issue MUST include:
+  - What is wrong
+  - Why it matters
+
+## On-Page SEO Issues
+- Meta tags, headings, structure
+
+## Performance & UX Issues
+- Based on best practices or PageSpeed
+
+## Fixes (VERY IMPORTANT)
+- Give practical fixes
+- Include code snippets when possible
+
+Example:
+❌ Missing meta description  
+✅ Fix:
+<meta name="description" content="Your description here" />
+
+## Priority
+- High / Medium / Low fixes
+
+Be detailed, avoid generic answers.
+Use clean markdown formatting.
+Always give actionable, developer-friendly fixes.
+`
               }
             ]
           })
@@ -166,7 +279,7 @@ Sections:
         if (aiResult) {
           // Combine PageSpeed section + AI analysis
           return NextResponse.json({
-            result: pageSpeedSection + '\n---\n\n' + aiResult,
+            result: pageSpeedSection + '\n---\n' + technicalSeoSection + '\n---\n\n' + aiResult,
             pageSpeedData, // also send raw data for future UI use
           })
         }

@@ -3,7 +3,14 @@ import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react
 import ReactMarkdown from "react-markdown"
 
 import { ModeSelection } from "./components/mode-selection"
-import { KeyRound } from 'lucide-react'
+import { KeyRound, SearchCheckIcon, Maximize2, Minimize2 , Layout,
+    CheckSquare,
+    BarChart3,
+    FileText,
+    ShoppingCart,
+    AlertCircle,
+    RotateCw,
+} from 'lucide-react'
 import { EnvVariablesPanel } from '@/components/chat/env-variables-panel'
 import { useEnvVariables } from '@/hooks/use-env-variables'
 import { useSearchParams } from 'next/navigation'
@@ -38,22 +45,14 @@ import { useUserCredits } from '@/hooks/use-user-credits'
 import { useForkChat } from '@/client-api/query-hooks'
 import { useStateMachine } from '@/context/state-machine'
 import type { MessageBinaryFormat } from '@v0-sdk/react'
-import {
-    Layout,
-    CheckSquare,
-    BarChart3,
-    FileText,
-    ShoppingCart,
-    AlertCircle,
-    RotateCw,
-    Search,
-} from 'lucide-react'
+
 import { cn } from '@/lib/utils'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // ─── Draggable SEO Panel ──────────────────────────────────────────────────────
 function DraggableSeoPanel({
+    
     loading,
     result,
     onClose,
@@ -61,111 +60,89 @@ function DraggableSeoPanel({
     loading: boolean
     result: string | null
     onClose: () => void
+    
 }) {
-    const panelRef = useRef<HTMLDivElement>(null)
-    const dragState = useRef<{
-        dragging: boolean
-        startX: number
-        startY: number
-        origX: number
-        origY: number
-    }>({ dragging: false, startX: 0, startY: 0, origX: 0, origY: 0 })
-    const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
+  const [width, setWidth] = useState(420)
+  const [isFull, setIsFull] = useState(false)
+const isResizingRef = useRef(false)
+const startResize = () => {
+  isResizingRef.current = true
+}
 
-    useEffect(() => {
-        setPos({
-            x: window.innerWidth - 480,
-            y: Math.max(20, window.innerHeight - window.innerHeight * 0.82),
-        })
-    }, [])
+useEffect(() => {
+  const handleMove = (e: MouseEvent) => {
+    if (!isResizingRef.current) return
 
-    const startDrag = (e: React.MouseEvent) => {
-        if (!panelRef.current) return
-        const rect = panelRef.current.getBoundingClientRect()
-        dragState.current = {
-            dragging: true,
-            startX: e.clientX,
-            startY: e.clientY,
-            origX: rect.left,
-            origY: rect.top,
-        }
-        e.preventDefault()
-    }
+    const newWidth = window.innerWidth - e.clientX
+    setWidth(Math.max(320, Math.min(newWidth, window.innerWidth * 0.8)))
+  }
 
-    useEffect(() => {
-        const onMove = (e: MouseEvent) => {
-            if (!dragState.current.dragging) return
-            const dx = e.clientX - dragState.current.startX
-            const dy = e.clientY - dragState.current.startY
-            setPos({
-                x: dragState.current.origX + dx,
-                y: dragState.current.origY + dy,
-            })
-        }
-        const onUp = () => {
-            dragState.current.dragging = false
-        }
-        window.addEventListener('mousemove', onMove)
-        window.addEventListener('mouseup', onUp)
-        return () => {
-            window.removeEventListener('mousemove', onMove)
-            window.removeEventListener('mouseup', onUp)
-        }
-    }, [])
+  const stopResize = () => {
+    isResizingRef.current = false
+  }
 
-    if (!pos) return null
+  window.addEventListener("mousemove", handleMove)
+  window.addEventListener("mouseup", stopResize)
 
-    return (
-        <div
-            ref={panelRef}
-            style={{ left: pos.x, top: pos.y }}
-            className="fixed z-50 w-[460px] max-h-[80vh] flex flex-col rounded-2xl border border-border/60 bg-card/97 backdrop-blur-md shadow-2xl shadow-black/25"
-        >
-            {/* LEFT EDGE — drag handle */}
-            <div
-                onMouseDown={startDrag}
-                className="absolute left-0 top-0 h-full w-3 rounded-l-2xl cursor-col-resize z-10 group"
-            >
-                <div className="absolute left-1 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                </div>
-            </div>
+  return () => {
+    window.removeEventListener("mousemove", handleMove)
+    window.removeEventListener("mouseup", stopResize)
+  }
+}, [])
+   return (
+<div
+  style={isFull ? {} : { width }}
+  className={cn(
+    "fixed z-50 flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl",
+   isFull
+  ? "inset-0 w-screen h-screen"
+    : "bottom-8 right-6 min-w-[320px] max-w-[80vw] resize overflow-hidden h-[70vh] max-h-[700px]"
+  )}
+>
 
-            {/* RIGHT EDGE — drag handle */}
-            <div
-                onMouseDown={startDrag}
-                className="absolute right-0 top-0 h-full w-3 rounded-r-2xl cursor-col-resize z-10 group"
-            >
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                    <span className="w-0.5 h-3 rounded-full bg-muted-foreground/40" />
-                </div>
-            </div>
+{!isFull && (
+  <div
+    onMouseDown={startResize}
+    className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10"
+  >
+    <div className="w-full h-full hover:bg-white/10 transition" />
+  </div>
+)}
 
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0 select-none">
                 <div className="flex items-center gap-2.5">
                     <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted">
-                        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                        <SearchCheckIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     </div>
                     <span className="text-sm font-semibold tracking-tight">SEO Audit</span>
                     {loading && (
                         <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                     )}
                 </div>
-                <button
-                    onClick={onClose}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs"
-                >
-                    ✕
-                </button>
+               <div className="flex items-center gap-1 ml-auto">
+ <button
+  onClick={() => setIsFull(!isFull)}
+ className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors translate-y-[0.5px]"
+>
+  {isFull ? (
+    <Minimize2 className="h-4 w-4" />
+  ) : (
+    <Maximize2 className="h-4 w-4" />
+  )}
+</button>
+
+  <button
+    onClick={onClose}
+    className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs"
+  >
+    ✕
+  </button>
+</div>
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-auto">
+           <div className="flex-1 overflow-y-auto min-h-0">
                 {loading ? (
                     <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
                         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -173,7 +150,14 @@ function DraggableSeoPanel({
                         <p className="text-xs text-muted-foreground/50">This may take 15–20 seconds</p>
                     </div>
                 ) : (
-                    <div className="p-4 space-y-0.5">
+                  <div
+  className={cn(
+    "space-y-0.5",
+  isFull
+  ? "w-full px-8 py-6"
+      : "p-4"
+  )}
+>
                         <ReactMarkdown
                             components={{
                                 h1: ({ children }) => (
@@ -751,12 +735,13 @@ export default function ChatPage() {
                             }
                             rightPanel={
                                 shouldShowPreview ? (
-                                    <PreviewPanel
-                                        currentChat={hookCurrentChat}
-                                        isFullscreen={isFullscreen}
-                                        setIsFullscreen={setIsFullscreen}
-                                        isBuilding={false}
-                                    />
+                                   <PreviewPanel
+  currentChat={hookCurrentChat}
+  isFullscreen={isFullscreen}
+  setIsFullscreen={setIsFullscreen}
+  isBuilding={false}
+  onSeoAudit={handleAutoPrompt}
+/>
                                 ) : null
                             }
                         />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, lazy, Suspense } from 'react'
+
 import {
   WebPreview,
   WebPreviewNavigation,
@@ -19,13 +20,15 @@ import {
   Code,
   Github,
   FlaskConical,
-  Search,
+  
+  SearchCheckIcon
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
 import { cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { TestingLaunchDialog } from '@/components/chat/testing-launch-dialog'
+
 
 // Lazy-load the GitHub dialog — it's heavy (pulls in React Query hooks, auth client, etc.)
 // Only mounted when user actually opens it, never on initial render.
@@ -48,6 +51,7 @@ interface PreviewPanelProps {
   isFullscreen: boolean
   setIsFullscreen: (fullscreen: boolean) => void
   isBuilding?: boolean
+  onSeoAudit?: (prompt: string, chatId: string) => void  
 }
 
 type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
@@ -94,6 +98,7 @@ export function PreviewPanel({
   isFullscreen,
   setIsFullscreen,
   isBuilding = false,
+  onSeoAudit,
 }: PreviewPanelProps) {
  
   const [device, setDevice] = useState<PreviewDevice>('desktop')
@@ -156,10 +161,11 @@ const showBuildingLoader = isBuilding && !effectiveSrc
 
           {/* ---------------- NAV BAR ---------------- */}
          <WebPreviewNavigation>
+          <div className="flex items-center gap-2 flex-1">
   <WebPreviewUrl
     readOnly
     placeholder="Your app will appear here..."
-    className="h-8 min-w-0 flex-[0_1_280px] text-xs"  
+    className="h-8 min-w-0 flex-1 text-xs"
     
 value={
   currentChat?.id
@@ -167,16 +173,8 @@ value={
     : ''
 }
   />
- {currentChat?.id && (
-    <a
-      href={`/chat?chatId=${currentChat.id}&prompt=seo-audit`}
-      className= "inline-flex shrink-0 items-center justify-center h-7 w-7 rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-      title="Run SEO Audit"
-    >
-      <Search className="h-4 w-4" />
-      SEO Audit
-    </a>
-  )}
+
+</div>
 
             <div className="flex items-center gap-1 shrink-0 ml-auto">
               <WebPreviewNavigationButton
@@ -186,7 +184,15 @@ value={
               >
                 <Code className="h-4 w-4" />
               </WebPreviewNavigationButton>
-
+<WebPreviewNavigationButton
+  tooltip="Run SEO Audit"
+ onClick={() => {
+  if (!currentChat?.id) return
+ onSeoAudit?.("seo-audit", currentChat.id)
+}}
+>
+  <SearchCheckIcon className="h-4 w-4" />
+</WebPreviewNavigationButton>
               <WebPreviewNavigationButton
                 tooltip="Push to GitHub"
                 disabled={!hasFiles}
