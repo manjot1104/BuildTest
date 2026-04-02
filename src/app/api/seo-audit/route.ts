@@ -10,16 +10,27 @@ const FALLBACK_MODELS = [
 
 // ─── PageSpeed Insights fetch ─────────────────────────────────────────────
 async function fetchPageSpeedData(url: string, strategy: 'mobile' | 'desktop' = 'mobile') {
-  const apiKey = env.PAGESPEED_API_KEY
+  const apiKey = process.env.PAGESPEED_API_KEY
+  console.log("API KEY:", process.env.PAGESPEED_API_KEY)
   if (!apiKey) return null
 
   try {
     const psUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&strategy=${strategy}&category=PERFORMANCE&category=SEO&category=ACCESSIBILITY&category=BEST_PRACTICES`
 
-    const res = await fetch(psUrl, { signal: AbortSignal.timeout(15000) })
-    if (!res.ok) return null
+   const res = await fetch(psUrl, { signal: AbortSignal.timeout(15000) })
 
-    const data = await res.json()
+if (!res.ok) {
+  const errorText = await res.text()
+  console.log("PageSpeed ERROR:", res.status, errorText)
+  return null
+}
+
+const data = await res.json()
+
+if (!data.lighthouseResult) {
+  console.log("Invalid PageSpeed response:", data)
+  return null
+}
     const categories = data.lighthouseResult?.categories
     const audits = data.lighthouseResult?.audits
 
@@ -101,8 +112,13 @@ ${opportunities.length > 0 ? `\n#### ⚡ Top Optimization Opportunities\n${oppor
   }
 
   let section = `## 📊 PageSpeed Insights (Real Data)\n`
-  if (mobileData) section += renderTable(mobileData, '📱 Mobile')
-  if (desktopData) section += renderTable(desktopData, '🖥️ Desktop')
+section += mobileData
+  ? renderTable(mobileData, '📱 Mobile')
+  : `\n### 📱 Mobile\n❌ Mobile data unavailable\n`
+
+section += desktopData
+  ? renderTable(desktopData, '🖥️ Desktop')
+  : `\n### 🖥️ Desktop\n❌ Desktop data unavailable\n`
   return section
 }
 
@@ -123,7 +139,7 @@ export async function POST(req: Request) {
       (async () => {
         const pageRes = await fetch(appUrl, {
           headers: { 'User-Agent': 'SEO-Audit-Bot/1.0' },
-          signal: AbortSignal.timeout(8000),
+         signal: AbortSignal.timeout(30000),
         })
         const html = await pageRes.text()
         const headMatch = html.match(/<head[\s\S]*?<\/head>/i)

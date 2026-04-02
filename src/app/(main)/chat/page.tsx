@@ -64,7 +64,7 @@ function DraggableSeoPanel({
     desktopData: any
     onClose: () => void
 }) {
-    const [width, setWidth] = useState(420)
+    const [width, setWidth] = useState(460)
     const [isFull, setIsFull] = useState(false)
     const isResizingRef = useRef(false)
 
@@ -76,7 +76,7 @@ function DraggableSeoPanel({
         const handleMove = (e: MouseEvent) => {
             if (!isResizingRef.current) return
             const newWidth = window.innerWidth - e.clientX
-            setWidth(Math.max(320, Math.min(newWidth, window.innerWidth * 0.8)))
+            setWidth(Math.max(360, Math.min(newWidth, window.innerWidth * 0.75)))
         }
         const stopResize = () => {
             isResizingRef.current = false
@@ -93,43 +93,43 @@ function DraggableSeoPanel({
         <div
             style={isFull ? {} : { width }}
             className={cn(
-                "fixed z-50 flex flex-col rounded-2xl border border-border/60 bg-card/95 backdrop-blur-md shadow-2xl",
+                "fixed z-50 flex flex-col bg-card border border-border/50 shadow-2xl shadow-black/30",
                 isFull
-                    ? "inset-0 w-screen h-screen"
-                    : "bottom-8 right-6 min-w-[320px] max-w-[80vw] overflow-hidden h-[70vh] max-h-[700px]"
+                    ? "inset-0 w-screen h-screen rounded-none"
+                    : "bottom-0 right-0 top-12 rounded-l-2xl overflow-hidden"
             )}
         >
-            {/* Resize handle */}
+            {/* Resize handle — left edge */}
             {!isFull && (
                 <div
                     onMouseDown={startResize}
-                    className="absolute left-0 top-0 h-full w-1.5 cursor-ew-resize z-10"
+                    className="absolute left-0 top-0 h-full w-1 cursor-ew-resize z-10 group"
                 >
-                    <div className="w-full h-full hover:bg-white/10 transition" />
+                    <div className="w-full h-full group-hover:bg-primary/20 transition-colors" />
                 </div>
             )}
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0 select-none">
-                <div className="flex items-center gap-2.5">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-muted">
-                        <SearchCheckIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    </div>
-                    <span className="text-sm font-semibold tracking-tight">SEO Audit</span>
-                    {loading && (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    )}
+            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 shrink-0 bg-muted/20 select-none">
+                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 border border-primary/20">
+                    <SearchCheckIcon className="h-3.5 w-3.5 text-primary" />
                 </div>
-                <div className="flex items-center gap-1 ml-auto">
+                <span className="text-sm font-semibold tracking-tight text-foreground">SEO Audit</span>
+                {loading && (
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent ml-0.5" />
+                )}
+                <div className="flex items-center gap-0.5 ml-auto">
                     <button
                         onClick={() => setIsFull(!isFull)}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        title={isFull ? "Minimize" : "Maximize"}
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                     >
-                        {isFull ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                        {isFull ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                     </button>
                     <button
                         onClick={onClose}
-                        className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs"
+                        title="Close"
+                        className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors text-xs font-medium"
                     >
                         ✕
                     </button>
@@ -137,7 +137,7 @@ function DraggableSeoPanel({
             </div>
 
             {/* Body */}
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div className="flex-1 overflow-y-auto min-h-0 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-border/40">
                 <SeoAuditResults
                     result={result}
                     mobileData={mobileData}
@@ -149,8 +149,8 @@ function DraggableSeoPanel({
 
             {/* Footer */}
             {result && !loading && (
-                <div className="px-4 py-2 border-t border-border/40 shrink-0 bg-muted/20">
-                    <p className="text-[10px] text-muted-foreground/40 text-center">
+                <div className="px-4 py-2 border-t border-border/30 shrink-0 bg-muted/10">
+                    <p className="text-[10px] text-muted-foreground/30 text-center font-medium">
                         Powered by Google PageSpeed + AI Analysis
                     </p>
                 </div>
@@ -158,6 +158,7 @@ function DraggableSeoPanel({
         </div>
     )
 }
+
 
 // ─── SearchParamsHandler ──────────────────────────────────────────────────────
 function SearchParamsHandler({
@@ -318,7 +319,7 @@ export default function ChatPage() {
         autoPromptFiredRef.current = true
 
         if (prompt === 'seo-audit') {
-            const appUrl = `${window.location.origin}/apps/${chatId}`
+          const appUrl = `${window.location.origin}/apps/${chatId}`
             setSeoAuditLoading(true)
             setSeoAuditResult(null)
 
