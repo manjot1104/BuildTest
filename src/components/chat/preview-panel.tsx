@@ -318,7 +318,7 @@ const showBuildingLoader = isBuilding && !effectiveSrc
           open={testingDialogOpen}
           onOpenChange={setTestingDialogOpen}
           chatId={currentChat.id}
-          demoUrl={currentChat.demo}
+          demoUrl={`https://buildify.sh/apps/${currentChat.id}`}
         />
       )}
     </>
