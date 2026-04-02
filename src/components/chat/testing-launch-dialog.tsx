@@ -134,7 +134,8 @@ export function TestingLaunchDialog({
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-lg">
+        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
+        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -142,7 +143,8 @@ export function TestingLaunchDialog({
             </DialogTitle>
             <DialogDescription>Setting up your test run…</DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-6">
+          {/* FIX: scrollable body */}
+          <div className="flex flex-col gap-4 py-6 overflow-y-auto flex-1">
             <div className="space-y-3">
               <div className="h-4 w-24 bg-muted animate-pulse rounded" />
               <div className="h-10 bg-muted animate-pulse rounded-lg" />
@@ -164,7 +166,8 @@ export function TestingLaunchDialog({
   if (!isGithubConnected) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-lg">
+        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
+        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -175,22 +178,23 @@ export function TestingLaunchDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 pt-2">
+          {/* FIX: scrollable body */}
+          <div className="flex flex-col gap-4 pt-2 overflow-y-auto flex-1">
 
             {/* Step overview */}
             <div className="space-y-3 py-1">
               <StepRow
                 number={1}
                 label="Test target"
-           description={
-  demoUrl ? (
-    <span className="break-all text-xs">
-      Will crawl {demoUrl.replace(/^https?:\/\//, '')}
-    </span>
-  ) : (
-    'No demo URL yet — you can enter one on the testing page.'
-  )
-}
+                description={
+                  demoUrl ? (
+                    <span className="break-all text-xs">
+                      Will crawl {demoUrl.replace(/^https?:\/\//, '')}
+                    </span>
+                  ) : (
+                    'No demo URL yet — you can enter one on the testing page.'
+                  )
+                }
                 status="done"
               />
               <StepRow
@@ -226,23 +230,25 @@ export function TestingLaunchDialog({
               </Button>
             </div>
 
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              {/* Still let them run URL-only tests */}
-              <Button
-                className="flex-1 gap-2"
-                onClick={handleLaunch}
-                disabled={!demoUrl}
-              >
-                <FlaskConical className="size-4" />
-                Run without source
-                <ArrowRight className="size-3" />
-              </Button>
-            </div>
-
           </div>
+
+          {/* FIX: sticky footer — moved outside scrollable div, always visible */}
+          <div className="flex gap-2 pt-3 border-t border-border shrink-0">
+            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            {/* Still let them run URL-only tests */}
+            <Button
+              className="flex-1 gap-2"
+              onClick={handleLaunch}
+              disabled={!demoUrl}
+            >
+              <FlaskConical className="size-4" />
+              Run without source
+              <ArrowRight className="size-3" />
+            </Button>
+          </div>
+
         </DialogContent>
       </Dialog>
     )
@@ -254,7 +260,8 @@ export function TestingLaunchDialog({
   if (isGithubConnected && !hasRepo) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
+        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -265,7 +272,8 @@ export function TestingLaunchDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4 pt-2">
+          {/* FIX: scrollable body */}
+          <div className="flex flex-col gap-4 pt-2 overflow-y-auto flex-1">
 
             {/* Connected user — same pill as GithubPushDialog */}
             {githubStatus?.login && (
@@ -314,22 +322,24 @@ export function TestingLaunchDialog({
               </p>
             </div>
 
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 gap-2"
-                onClick={handleLaunch}
-                disabled={!demoUrl}
-              >
-                <FlaskConical className="size-4" />
-                Run without source
-                <ArrowRight className="size-3" />
-              </Button>
-            </div>
-
           </div>
+
+          {/* FIX: sticky footer — moved outside scrollable div, always visible */}
+          <div className="flex gap-2 pt-3 border-t border-border shrink-0">
+            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={handleLaunch}
+              disabled={!demoUrl}
+            >
+              <FlaskConical className="size-4" />
+              Run without source
+              <ArrowRight className="size-3" />
+            </Button>
+          </div>
+
         </DialogContent>
       </Dialog>
     )
@@ -339,7 +349,8 @@ export function TestingLaunchDialog({
   // Shows both URL and repo, with a toggleable source inclusion card.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-   <DialogContent className="sm:max-w-lg">
+      {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="size-5" />
@@ -350,7 +361,8 @@ export function TestingLaunchDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4 pt-1">
+        {/* FIX: scrollable body */}
+        <div className="flex flex-col gap-4 pt-1 overflow-y-auto flex-1">
 
           {/* Connected user indicator */}
           {githubStatus?.login && (
@@ -370,9 +382,11 @@ export function TestingLaunchDialog({
               Test target
             </p>
             {demoUrl ? (
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5">
+              // FIX: added overflow-hidden to container so long URLs truncate properly
+              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 overflow-hidden">
                 <Globe className="size-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-mono truncate flex-1">{demoUrl.replace(/^https?:\/\//, '')}</span>
+                {/* FIX: added min-w-0 so truncate works correctly inside flex */}
+                <span className="text-sm font-mono truncate flex-1 min-w-0">{demoUrl.replace(/^https?:\/\//, '')}</span>
                 <a
                   href={demoUrl}
                   target="_blank"
@@ -461,23 +475,24 @@ export function TestingLaunchDialog({
             </p>
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 gap-2"
-              onClick={handleLaunch}
-              disabled={!demoUrl}
-            >
-              <FlaskConical className="size-4" />
-              {includeSource ? 'Run with source' : 'Run tests'}
-              <ArrowRight className="size-3" />
-            </Button>
-          </div>
-
         </div>
+
+        {/* FIX: sticky footer — moved outside scrollable div, always visible */}
+        <div className="flex gap-2 pt-3 border-t border-border shrink-0">
+          <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 gap-2"
+            onClick={handleLaunch}
+            disabled={!demoUrl}
+          >
+            <FlaskConical className="size-4" />
+            {includeSource ? 'Run with source' : 'Run tests'}
+            <ArrowRight className="size-3" />
+          </Button>
+        </div>
+
       </DialogContent>
     </Dialog>
   )
