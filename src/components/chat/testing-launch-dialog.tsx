@@ -134,7 +134,6 @@ export function TestingLaunchDialog({
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
         <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -143,7 +142,6 @@ export function TestingLaunchDialog({
             </DialogTitle>
             <DialogDescription>Setting up your test run…</DialogDescription>
           </DialogHeader>
-          {/* FIX: scrollable body */}
           <div className="flex flex-col gap-4 py-6 overflow-y-auto flex-1">
             <div className="space-y-3">
               <div className="h-4 w-24 bg-muted animate-pulse rounded" />
@@ -166,7 +164,6 @@ export function TestingLaunchDialog({
   if (!isGithubConnected) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
         <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -178,7 +175,7 @@ export function TestingLaunchDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {/* FIX: scrollable body */}
+        
           <div className="flex flex-col gap-4 pt-2 overflow-y-auto flex-1">
 
             {/* Step overview */}
@@ -232,7 +229,7 @@ export function TestingLaunchDialog({
 
           </div>
 
-          {/* FIX: sticky footer — moved outside scrollable div, always visible */}
+        
           <div className="flex gap-2 pt-3 border-t border-border shrink-0">
             <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
               Cancel
@@ -260,7 +257,6 @@ export function TestingLaunchDialog({
   if (isGithubConnected && !hasRepo) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
         <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -272,7 +268,7 @@ export function TestingLaunchDialog({
             </DialogDescription>
           </DialogHeader>
 
-          {/* FIX: scrollable body */}
+
           <div className="flex flex-col gap-4 pt-2 overflow-y-auto flex-1">
 
             {/* Connected user — same pill as GithubPushDialog */}
@@ -324,7 +320,7 @@ export function TestingLaunchDialog({
 
           </div>
 
-          {/* FIX: sticky footer — moved outside scrollable div, always visible */}
+  
           <div className="flex gap-2 pt-3 border-t border-border shrink-0">
             <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
               Cancel
@@ -361,7 +357,7 @@ export function TestingLaunchDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* FIX: scrollable body */}
+        
         <div className="flex flex-col gap-4 pt-1 overflow-y-auto flex-1">
 
           {/* Connected user indicator */}
@@ -382,10 +378,8 @@ export function TestingLaunchDialog({
               Test target
             </p>
             {demoUrl ? (
-              // FIX: added overflow-hidden to container so long URLs truncate properly
               <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/40 px-3.5 py-2.5 overflow-hidden">
                 <Globe className="size-4 text-muted-foreground shrink-0" />
-                {/* FIX: added min-w-0 so truncate works correctly inside flex */}
                 <span className="text-sm font-mono truncate flex-1 min-w-0">{demoUrl.replace(/^https?:\/\//, '')}</span>
                 <a
                   href={demoUrl}
@@ -477,7 +471,6 @@ export function TestingLaunchDialog({
 
         </div>
 
-        {/* FIX: sticky footer — moved outside scrollable div, always visible */}
         <div className="flex gap-2 pt-3 border-t border-border shrink-0">
           <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>
             Cancel
