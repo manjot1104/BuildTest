@@ -5,16 +5,16 @@
 // ═══════════════════════════════════════════════════════════════════════════
 //
 // (Discovery-first):
-//   STAGE 0 │ Free URL seeding (sitemap + static HTML, no TinyFish)
-//   STAGE 1 │ ONE TinyFish "discoverer" call on the root URL
-//            │   Goal: navigate the site, click nav items, collect all URLs
-//            │   Returns: flat list of discovered page URLs
+//   STAGE 0 │ ONE TinyFish "discoverer" call on the root URL
+//           │   Goal: navigate the site, click nav items, collect all URLs
+//           │   Returns: flat list of discovered page URLs
+//   STAGE 1 │ Free URL seeding (sitemap + static HTML, no TinyFish)
 //   STAGE 2 │ Parallel TinyFish extraction on all discovered URLs
 //            │   Each page gets its own call, all fire simultaneously
 //   STAGE 3 │ Test budget allocation
 //   STAGE 4 │ Background: screenshots for bugs + performance (non-blocking)
 //
-// NOTE: When maxPages === 1, Stage 0 and Stage 1 are skipped entirely.
+// NOTE: When maxPages === 1, ALL of Stage 0 and Stage 1 are skipped entirely.
 //       We already have the only URL we need (rootUrl), so seeding and
 //       discovery would waste time and TinyFish credits for zero gain.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -194,7 +194,7 @@ export type CrawlProgressEvent =
 // (testing.controller.ts → runPipelineStages) can pass user-requested
 // timeout overrides all the way down to the TinyFish calls.
 //
-//CrawlOptions now also accepts an optional onProgress callback so
+// CrawlOptions now also accepts an optional onProgress callback so
 // the controller can forward live crawl events to SSE clients.
 //
 // CrawlOptions now also accepts an optional crawlContext string.
@@ -1243,58 +1243,27 @@ export async function crawlSite(
       `concurrency=${options.budget?.concurrency ?? "default"})`,
   );
 
-  // ── Stage 0 + 1: Skip entirely when maxPages === 1 ────────────────────────
+// ── Stage 0 + 1: URL discovery and seeding ────────────────────────────────
   //
-  // When the user only needs one page we already have the exact URL we
-  // need (rootUrl). Running the sitemap fetch, static HTML scrape, and TinyFish
-  // discovery call would waste time and credits without adding any value.
-  // Jump straight to Stage 2 with a single-element candidate list.
+  // Rules:
+  //  1. maxPages === 1  → skip discovery AND seeding entirely; use rootUrl only.
+  //  2. discovery >= maxPages → clamp to maxPages, skip seeding.
+  //  3. discovery < maxPages  → run seeding, combine (deduped), clamp to maxPages.
   let allCandidateUrls: string[];
 
   if (budget.maxPages === 1) {
+    // ── Rule 1: single URL needed — nothing to discover or seed ─────────────
     console.log(
-      `[Stage0/1] maxPages=1 — skipping seeding & discovery, using rootUrl directly`,
+      `[Stage0/1] maxPages=1 — skipping ALL discovery & seeding, using rootUrl directly`,
     );
     const rootNorm = normalizeUrl(rootUrl);
     allCandidateUrls = [rootNorm];
     emitProgress({ type: "crawl_url_found", url: rootNorm, source: "html" });
   } else {
-    // ── Stage 0: Free URL seeding ──────────────────────────────────────────
-    // Notify the client that we're starting the free seeding stage.
-    emitProgress({
-      type: "crawl_stage_change",
-      stage: "Seeding URLs",
-      description: "Scanning sitemap and static HTML for page URLs",
-    });
-
-    const [sitemapUrls, staticHtmlLinks] = await Promise.all([
-      fetchSitemapUrls(rootUrl, allowedHostname),
-      fetchStaticHtmlLinks(rootUrl, allowedHostname),
-    ]);
-
-    const freeUrls = dedupeUrls(
-      [normalizeUrl(rootUrl), ...sitemapUrls, ...staticHtmlLinks],
-      allowedHostname,
-      budget.maxPages * 3,
-    );
-
-    console.log(
-      `[Stage0] Free seed: ${freeUrls.length} URLs (sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
-    );
-
-    // Emit each URL found during free seeding so the UI can start
-    // populating the "URLs found" list immediately, before TinyFish even starts.
-    for (const url of freeUrls) {
-      const source = sitemapUrls.includes(url) ? "sitemap" : "html";
-      emitProgress({ type: "crawl_url_found", url, source });
-    }
-
-    // ── Stage 1: Discovery via TinyFish ───────────────────────────────────
-    let discoveredUrls: string[] = [];
-
+    // ── Stage 0: Discovery via TinyFish ──────────────────────────────────────
     if (abortSignal?.aborted) throw new Error("AbortError: crawl cancelled");
 
-    console.log(`[Stage1] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
+    console.log(`[Stage0] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
 
     //  Tell the user we're now running the TinyFish discovery call.
     emitProgress({
@@ -1382,7 +1351,7 @@ export async function crawlSite(
         candidates.push(...found);
         if (found.length > 0) {
           console.log(
-            `[Stage1] Regex fallback extracted ${found.length} URLs from rawText`,
+            `[Stage0] Regex fallback extracted ${found.length} URLs from rawText`,
           );
         }
       }
@@ -1391,46 +1360,76 @@ export async function crawlSite(
     }
 
     const rawDiscovered = extractUrlsFromDiscovery(discoveryResult);
-    discoveredUrls = dedupeUrls(
-      rawDiscovered,
-      allowedHostname,
-      budget.maxPages * 2,
-    );
+    // Clamp discovery results to maxPages immediately.
+    const discoveredUrls = dedupeUrls(rawDiscovered, allowedHostname, budget.maxPages);
 
     if (discoveredUrls.length > 0) {
-      console.log(`[Stage1] ✓ Discovery found ${discoveredUrls.length} pages`);
-      // Emit each newly-discovered URL (not already seen from free seeding).
-      // We track which ones are new to avoid double-emitting root URL and sitemap links.
-      const alreadyEmitted = new Set(freeUrls);
+      console.log(`[Stage0] ✓ Discovery found ${discoveredUrls.length} pages`);
       for (const url of discoveredUrls) {
-        if (!alreadyEmitted.has(url)) {
-          emitProgress({ type: "crawl_url_found", url, source: "discovery" });
-        }
+        emitProgress({ type: "crawl_url_found", url, source: "discovery" });
       }
     } else {
       console.warn(
-        `[Stage1] ⚠ Discovery returned 0 URLs. status=${discoveryResult.error ?? "ok"} rawText="${discoveryResult.rawText?.slice(0, 200)}"`,
+        `[Stage0] ⚠ Discovery returned 0 URLs. status=${discoveryResult.error ?? "ok"} ` +
+          `rawText="${discoveryResult.rawText?.slice(0, 200)}"`,
       );
     }
 
-    const rootNorm = normalizeUrl(rootUrl);
-    if (!discoveredUrls.includes(rootNorm)) discoveredUrls.unshift(rootNorm);
+    // ── Rule 2: discovery filled the budget → skip seeding ──────────────────
+    if (discoveredUrls.length >= budget.maxPages) {
+      console.log(
+        `[Stage1] Discovery filled budget (${discoveredUrls.length}/${budget.maxPages}) — skipping seeding`,
+      );
+      allCandidateUrls = discoveredUrls;
+    } else {
+      // ── Rule 3: discovery came up short → run seeding and combine ───────────
+      console.log(
+        `[Stage1] Discovery gave ${discoveredUrls.length}/${budget.maxPages} URLs — running seeding`,
+      );
 
-    allCandidateUrls = dedupeUrls(
-      [...discoveredUrls, ...freeUrls],
-      allowedHostname,
-      budget.maxPages,
-    );
+      emitProgress({
+        type: "crawl_stage_change",
+        stage: "Seeding URLs",
+        description: "Scanning sitemap and static HTML for page URLs",
+      });
 
-    if (discoveredUrls.length <= 1) {
-      console.warn(
-        `[Stage1] Discovery found ≤1 URL — filling from free seed (total candidates: ${allCandidateUrls.length})`,
+      const [sitemapUrls, staticHtmlLinks] = await Promise.all([
+        fetchSitemapUrls(rootUrl, allowedHostname),
+        fetchStaticHtmlLinks(rootUrl, allowedHostname),
+      ]);
+
+      const seededUrls = dedupeUrls(
+        [normalizeUrl(rootUrl), ...sitemapUrls, ...staticHtmlLinks],
+        allowedHostname,
+        budget.maxPages,
+      );
+
+      console.log(
+        `[Stage1] Free seed: ${seededUrls.length}/${budget.maxPages} URLs ` +
+          `(sitemap:${sitemapUrls.length} html:${staticHtmlLinks.length})`,
+      );
+
+      // Emit only URLs not already emitted during discovery.
+      const alreadyEmitted = new Set(discoveredUrls);
+      for (const url of seededUrls) {
+        if (!alreadyEmitted.has(url)) {
+          const source = sitemapUrls.includes(url) ? "sitemap" : "html";
+          emitProgress({ type: "crawl_url_found", url, source });
+        }
+      }
+
+      // Combine discovery + seeding. Discovery goes first (higher signal).
+      // dedupeUrls handles any overlap so no URL is counted twice.
+      const rootNorm = normalizeUrl(rootUrl);
+      const combined = [...discoveredUrls, ...seededUrls];
+      if (!combined.includes(rootNorm)) combined.unshift(rootNorm);
+
+      allCandidateUrls = dedupeUrls(combined, allowedHostname, budget.maxPages);
+
+      console.log(
+        `[Stage1] Final URL list (${allCandidateUrls.length}): ${allCandidateUrls.join(", ")}`,
       );
     }
-
-    console.log(
-      `[Stage1] Final URL list (${allCandidateUrls.length}): ${allCandidateUrls.join(", ")}`,
-    );
   }
 
   // ── Stage 2: Parallel extraction ──────────────────────────────────────────
