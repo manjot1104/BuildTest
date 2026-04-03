@@ -55,18 +55,28 @@ function buildModelChain(requested: string): string[] {
 /**
  * Calls OpenRouter chat completions API for a single model (no retry)
  */
+type OpenRouterCallOptions = {
+  /** Default 4000; lower speeds up provider completion for typical single-file resumes. */
+  maxTokens?: number
+  /** Abort fetch after this many ms (default 90000). */
+  timeoutMs?: number
+}
+
 async function callOpenRouterSingle(
   messages: { role: string; content: string }[],
   model: string,
+  options?: OpenRouterCallOptions,
 ): Promise<string> {
   const apiKey = env.OPENROUTER_API_KEY
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not configured.')
   }
 
-  // Add timeout with AbortController for faster failure
+  const timeoutMs = options?.timeoutMs ?? 90_000
+  const max_tokens = options?.maxTokens ?? 4000
+
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 90000) // 90 seconds timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -81,7 +91,7 @@ async function callOpenRouterSingle(
       model,
       messages,
       temperature: 0.3,
-      max_tokens: 4000,
+      max_tokens,
     }),
       signal: controller.signal,
   })
@@ -105,7 +115,7 @@ async function callOpenRouterSingle(
   } catch (error) {
     clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(`Request timeout after 90 seconds for model: ${model}`)
+      throw new Error(`Request timeout after ${Math.round(timeoutMs / 1000)} seconds for model: ${model}`)
     }
     throw error
   }
@@ -117,13 +127,14 @@ async function callOpenRouterSingle(
 async function callOpenRouter(
   messages: { role: string; content: string }[],
   requestedModel: string,
+  callOptions?: OpenRouterCallOptions,
 ): Promise<{ content: string; model: string; isFallback: boolean }> {
   const chain = buildModelChain(requestedModel)
 
   for (let i = 0; i < chain.length; i++) {
     const model = chain[i]!
     try {
-      const content = await callOpenRouterSingle(messages, model)
+      const content = await callOpenRouterSingle(messages, model, callOptions)
       return {
         content,
         model,
@@ -625,6 +636,7 @@ You are NOT a designer. You are a code copier. Copy the template structure exact
       { role: 'user', content: prompt },
     ],
     model,
+    { maxTokens: 3600, timeoutMs: 72_000 },
   )
 
   return {
@@ -1251,6 +1263,7 @@ You are NOT a designer. You are NOT an instructor. You are a code copier. Copy t
       { role: 'user', content: prompt },
     ],
     model,
+    { maxTokens: 3600, timeoutMs: 72_000 },
   )
 
   return {

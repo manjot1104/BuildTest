@@ -584,7 +584,15 @@ function buildLatexList(items: string[]): string {
 // ── Section replacement engine ───────────────────────────────────────────────
 
 const SECTION_HEADING_ALIASES = {
-  summary: ['Summary', 'Professional Summary', 'Profile', 'Executive Summary', 'Objective', 'Career Objective'],
+  summary: [
+    'Summary',
+    'Professional Summary',
+    'Profile',
+    'Executive Summary',
+    'Objective',
+    'Career Objective',
+    'About Me',
+  ],
   contact: ['Contact', 'CONTACT'],
   skills: ['Skills', 'Technical Skills', 'Core Skills', 'TECHNICAL SKILLS', 'Skill Ribbon', 'SKILLS'],
   experience: ['Experience', 'Working Experience', 'Work Experience', 'Employment History', 'Experience Timeline', 'Leadership Experience', 'Research Experience', 'EXPERIENCE'],
@@ -593,6 +601,7 @@ const SECTION_HEADING_ALIASES = {
   certifications: ['Certifications', 'Certificates', 'CERTIFICATIONS'],
   achievements: ['Achievements', 'Accomplishments', 'Awards', 'Awards \\& Honors', 'Honors \\& Awards', 'Impact Highlights', 'AWARDS \\& HONORS'],
   languages: ['Languages', 'Language', 'LANGUAGES'],
+  references: ['References', 'REFERENCES'],
   publications: ['Publications', 'PUBLICATIONS'],
   volunteer: ['Volunteer Experience', 'Volunteering'],
   interests: ['Interests', 'Hobbies', 'INTERESTS'],
@@ -726,9 +735,202 @@ function stripEmptyHtmlSections(html: string): string {
   return out
 }
 
+// ── Slate Split Header Sidebar (`.s-title` + `.exp-item`) — not matched by generic replaceHtmlSection
+
+function isSlateSplitHeaderLayout(html: string): boolean {
+  return (
+    html.includes('s-title') &&
+    /\bsection\b/.test(html) &&
+    (html.includes('exp-item') || html.includes('c-item'))
+  )
+}
+
+function sliceBalancedDivFrom(html: string, sectionStart: number): number {
+  let depth = 0
+  const re = /<\/?div\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null) {
+    if (m.index < sectionStart) continue
+    if (m[0].startsWith('</')) depth--
+    else depth++
+    if (depth === 0) return m.index + m[0].length
+  }
+  return -1
+}
+
+function findSlateSectionByTitle(
+  html: string,
+  title: string,
+): { start: number; end: number; innerStart: number } | null {
+  const esc = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const headRe = new RegExp(
+    `<div[^>]*class=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*class=["'][^"']*s-title[^"']*["'][^>]*>\\s*${esc}\\s*</div>`,
+    'i',
+  )
+  const m = headRe.exec(html)
+  if (!m || m.index === undefined) return null
+  const start = m.index
+  const innerStart = m.index + m[0].length
+  const end = sliceBalancedDivFrom(html, start)
+  if (end < 0) return null
+  return { start, end, innerStart }
+}
+
+function replaceSlateHtmlSection(html: string, title: string, innerBody: string): string {
+  const r = findSlateSectionByTitle(html, title)
+  if (!r) return html
+  const prefix = html.slice(r.start, r.innerStart)
+  return html.slice(0, r.start) + prefix + innerBody + '</div>' + html.slice(r.end)
+}
+
+function removeSlateHtmlSection(html: string, title: string): string {
+  const r = findSlateSectionByTitle(html, title)
+  if (!r) return html
+  return html.slice(0, r.start) + html.slice(r.end)
+}
+
+function replaceSlateHeaderAndContact(html: string, data: ResumeRenderData): string {
+  let out = html
+  const name = safeHtml((data.fullName || 'Candidate').toUpperCase())
+  const role = safeHtml((data.title || '').toUpperCase())
+  out = out.replace(
+    /<div class="name">[^<]*<\/div>\s*<div class="role">[^<]*<\/div>/i,
+    `<div class="name">${name}</div><div class="role">${role}</div>`,
+  )
+  const cells = [
+    data.phone,
+    data.email,
+    data.portfolio || data.linkedin,
+    data.location,
+  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+  if (cells.length > 0) {
+    const padded = [...cells, '', '', '', ''].slice(0, 4)
+    const row = padded
+      .map((c) => {
+        const t = String(c).trim()
+        return `<div class="c-item"><div class="c-ico"></div><span>${t ? safeHtml(t) : '—'}</span></div>`
+      })
+      .join('\n    ')
+    out = out.replace(/<div class="contact">[\s\S]*?<\/div>/i, `<div class="contact">\n    ${row}\n  </div>`)
+  }
+  return out
+}
+
+function buildHtmlExperienceSlate(entries: ExperienceEntry[]): string {
+  if (entries.length === 0) return ''
+  const items = entries
+    .map(
+      (e) => `            <div class="exp-item"><div class="dot"></div>
+              <div class="e-head"><div class="e-role">${safeHtml(e.role)}</div><div class="e-date">${safeHtml(e.duration)}</div></div>
+              <div class="e-org">${safeHtml(e.company)}</div>
+              <ul>${e.points.map((p) => `<li>${safeHtml(p)}</li>`).join('')}</ul>
+            </div>`,
+    )
+    .join('\n')
+  return `\n          <div class="exp">\n${items}\n          </div>\n        `
+}
+
+function buildHtmlEducationSlate(entries: EducationEntry[]): string {
+  if (entries.length === 0) return ''
+  return entries
+    .map((e) => {
+      return `\n          <div class="e-head"><div class="e-role">${safeHtml(e.degree)}</div><div class="e-date">${safeHtml(e.year)}</div></div>
+          <div class="e-org">${safeHtml(e.college)}</div>`
+    })
+    .join('\n')
+}
+
+function buildHtmlSkillsSlateUl(skillsStr: string): string {
+  const parts = skillsStr
+    .split(/[,|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  return `<ul>${parts.map((p) => `<li>${safeHtml(p)}</li>`).join('')}</ul>`
+}
+
+function buildHtmlReferencesSlate(items: string[]): string {
+  if (items.length === 0) return ''
+  const cards = items.slice(0, 4).map((line) => {
+    const bits = line.split(/\s*[·•|—–-]\s*/).map((s) => s.trim())
+    const name = bits[0] || line
+    const role = bits[1] || ''
+    const extra = bits.slice(2).join(' · ')
+    return `<div class="ref-card"><div class="ref-name">${safeHtml(name)}</div>${role ? `<div class="ref-role">${safeHtml(role)}</div>` : ''}${extra ? `<small>${safeHtml(extra)}</small>` : ''}</div>`
+  })
+  return `\n          <div class="refs">\n            ${cards.join('\n            ')}\n          </div>\n        `
+}
+
+function renderHtmlSlateSections(block: string, data: ResumeRenderData): string {
+  let out = replaceSlateHeaderAndContact(block, data)
+
+  const expEntries = normalizeExperience(data.experience)
+  const eduEntries = normalizeEducation(data.education)
+  const skillsStr = normalizeSkillsToString(data.skills)
+  const achievements = normalizeStringArray(data.achievements)
+  const langs = normalizeStringArray(data.languagesKnown)
+
+  const hasSummary = !isPlaceholder(data.summary)
+  const hasSkills = !!skillsStr
+  const hasExp = expEntries.length > 0
+  const hasEdu = eduEntries.length > 0
+  const hasAchievements = achievements.length > 0
+  const hasLanguages = langs.length > 0
+
+  if (hasSummary) {
+    out = replaceSlateHtmlSection(out, 'About Me', `<p>${safeHtml(data.summary!)}</p>`)
+  } else {
+    out = removeSlateHtmlSection(out, 'About Me')
+  }
+
+  if (hasEdu) {
+    out = replaceSlateHtmlSection(out, 'Education', buildHtmlEducationSlate(eduEntries))
+  } else {
+    out = removeSlateHtmlSection(out, 'Education')
+  }
+
+  if (hasSkills) {
+    out = replaceSlateHtmlSection(out, 'Skills', buildHtmlSkillsSlateUl(skillsStr))
+  } else {
+    out = removeSlateHtmlSection(out, 'Skills')
+  }
+
+  if (hasLanguages) {
+    out = replaceSlateHtmlSection(
+      out,
+      'Language',
+      `<ul>${langs.map((l) => `<li>${safeHtml(l)}</li>`).join('')}</ul>`,
+    )
+  } else {
+    out = removeSlateHtmlSection(out, 'Language')
+  }
+
+  if (hasExp) {
+    out = replaceSlateHtmlSection(out, 'Experience', buildHtmlExperienceSlate(expEntries))
+  } else {
+    out = removeSlateHtmlSection(out, 'Experience')
+  }
+
+  if (hasAchievements) {
+    out = replaceSlateHtmlSection(out, 'References', buildHtmlReferencesSlate(achievements))
+  } else {
+    out = removeSlateHtmlSection(out, 'References')
+  }
+
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.publications)
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.volunteer)
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.interests)
+
+  return out.replace(/\n{3,}/g, '\n\n')
+}
+
 // ── Core render functions ────────────────────────────────────────────────────
 
 function renderHtmlSections(block: string, data: ResumeRenderData): string {
+  if (isSlateSplitHeaderLayout(block)) {
+    return renderHtmlSlateSections(block, data)
+  }
+
   let out = block
 
   const expEntries = normalizeExperience(data.experience)
@@ -891,6 +1093,14 @@ function renderLatexSections(block: string, data: ResumeRenderData): string {
     out = replaceLatexSection(out, SECTION_HEADING_ALIASES.achievements, buildLatexList(achievements))
   } else {
     out = removeLatexSection(out, SECTION_HEADING_ALIASES.achievements)
+  }
+
+  if (/\\resumeSection\{\s*References\s*\}/i.test(out)) {
+    if (hasAchievements) {
+      out = replaceLatexSection(out, SECTION_HEADING_ALIASES.references, buildLatexList(achievements))
+    } else {
+      out = removeLatexSection(out, SECTION_HEADING_ALIASES.references)
+    }
   }
 
   if (hasLanguages) {

@@ -51,7 +51,7 @@ export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: Resu
         <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Choose a template</h2>
         <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground sm:text-[15px]">
           Each card shows a live preview of the layout. Open <span className="font-medium text-foreground/90">Preview</span>{' '}
-          for full-screen detail — LaTeX templates open the same PDF pipeline as export.
+          for full-screen detail (including an A4 text-layout view). LaTeX templates open the same PDF pipeline as export.
         </p>
       </div>
 

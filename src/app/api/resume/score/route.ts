@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
+
+const scoreRequestSchema = z.object({
+  code: z.string().min(50),
+  format: z.string().max(20).optional(),
+  model: z.string().max(100).optional(),
+  /** Optional Pretext-style layout context from the client (page/line estimate). */
+  layoutContext: z.string().max(1200).optional(),
+})
 
 export const maxDuration = 120
 
@@ -135,15 +144,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = (await request.json()) as { code?: string; format?: string; model?: string }
-    const { code, format, model } = body
-
-    if (!code || typeof code !== 'string' || code.trim().length < 50) {
+    const parsedBody = scoreRequestSchema.safeParse(await request.json())
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: 'Resume content is required (min 50 characters).' },
+        { error: 'Invalid request', details: parsedBody.error.flatten() },
         { status: 400 },
       )
     }
+    const { code, format, model, layoutContext } = parsedBody.data
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(
@@ -155,11 +163,16 @@ export async function POST(request: NextRequest) {
     const requestedModel = model || DEFAULT_MODEL
     const formatLabel = format === 'latex' ? 'LaTeX' : format === 'html' ? 'HTML' : 'plain text'
 
+    const layoutPrefix =
+      layoutContext && layoutContext.trim().length > 0
+        ? `${layoutContext.trim()}\n\n---\n\n`
+        : ''
+
     const messages = [
       { role: 'system', content: SCORING_PROMPT },
       {
         role: 'user',
-        content: `Score this resume (${formatLabel}):\n\n${code}`,
+        content: `${layoutPrefix}Score this resume (${formatLabel}):\n\n${code}`,
       },
     ]
 

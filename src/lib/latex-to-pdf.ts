@@ -83,7 +83,7 @@ async function callLatexApiWithServerRetries(latexCode: string): Promise<Respons
     }
 
     // Transient upstream failures are common; brief backoff improves success rate.
-    await sleep(700 * attempt);
+    await sleep(450 * attempt);
   }
   return lastResponse as Response;
 }

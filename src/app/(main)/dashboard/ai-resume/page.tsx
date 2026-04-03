@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import React, { useState, useMemo } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { motion } from 'framer-motion'
@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target, LayoutGrid } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
 import { RESUME_TEMPLATES, type ResumeTemplate } from './templates'
@@ -32,6 +32,25 @@ import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
 import { ResumeScorePanel, type ResumeScoreData } from './components/resume-score-panel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ResumeLayoutPreview } from './components/resume-layout-preview'
+import { ResumeLayoutInsights } from './components/resume-layout-insights'
+import {
+  ParsedResumeLayoutStrip,
+  type ParsedResumeLayoutEstimate,
+} from './components/parsed-resume-layout-strip'
+import { ScoreLayoutInsights } from './components/score-layout-insights'
+import {
+  pickAiResumeLayoutFields,
+  resumeFormToResumeData,
+} from '@/lib/text-layout/form-to-resume-data'
+import { computeResumeLayoutStatsFromResumeCode } from '@/lib/text-layout/layout-from-resume-code'
+import { plainResumeTextToResumeData } from '@/lib/text-layout/plain-text-to-resume-data'
+import {
+  computeResumeLayoutStats,
+  formatLayoutContextForScoring,
+  TEXT_LAYOUT_CLIENT_OPTIONS,
+} from '@/lib/text-layout/layout-stats'
 
 // ─── OpenRouter Models ───────────────────────────────────────────────────────
 
@@ -153,6 +172,8 @@ export default function AIResumeBuilderPage() {
   const [parsedData, setParsedData] = useState<{
     resumeData?: Record<string, string | string[] | undefined>
     jdRequirements?: Record<string, string | string[] | undefined>
+    /** A4 text-layout estimate from raw uploaded resume text (parse-files API). */
+    resumeLayoutEstimate?: ParsedResumeLayoutEstimate | null
   } | null>(null)
   const [isScoring, setIsScoring] = useState(false)
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null)
@@ -186,6 +207,29 @@ export default function AIResumeBuilderPage() {
     },
   })
 
+  const watchedResumeFields = useWatch({ control: form.control }) as ResumeFormData
+
+  const layoutPreviewForm = pickAiResumeLayoutFields(watchedResumeFields ?? {})
+
+  const previewLayoutStats = useMemo(() => {
+    const formStats = computeResumeLayoutStats(
+      resumeFormToResumeData(layoutPreviewForm),
+      TEXT_LAYOUT_CLIENT_OPTIONS,
+    )
+    const fmt = templateType === 'latex' ? 'latex' : 'html'
+    const code =
+      templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+    const fromCode = computeResumeLayoutStatsFromResumeCode(code, fmt, TEXT_LAYOUT_CLIENT_OPTIONS)
+    return fromCode ?? formStats
+  }, [
+    templateType,
+    editedLatex,
+    latexCode,
+    editedHtml,
+    htmlCode,
+    JSON.stringify(layoutPreviewForm),
+  ])
+
   const currentModelInfo = RESUME_MODELS.find((m) => m.id === selectedModel)
 
   // Generate Resume code (LaTeX or HTML)
@@ -197,7 +241,12 @@ export default function AIResumeBuilderPage() {
 
     try {
       const endpoint = isLaTeX ? '/api/resume/generate-latex' : '/api/resume/generate-html'
-      
+
+      const layoutStatsForUi = computeResumeLayoutStats(
+        resumeFormToResumeData(pickAiResumeLayoutFields(data)),
+        TEXT_LAYOUT_CLIENT_OPTIONS,
+      )
+
       // Create AbortController for timeout
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes timeout
@@ -207,8 +256,8 @@ export default function AIResumeBuilderPage() {
         response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            ...data, 
+          body: JSON.stringify({
+            ...data,
             model: selectedModel,
             templateId: selectedTemplate?.id,
             // Keep generation format-specific to avoid mixed HTML/LaTeX outputs.
@@ -266,7 +315,10 @@ export default function AIResumeBuilderPage() {
       if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
       } else {
-        toast.success(`${isLaTeX ? 'LaTeX' : 'HTML'} code generated successfully!`, { id: 'resume-generate' })
+        toast.success(
+          `${isLaTeX ? 'LaTeX' : 'HTML'} generated · ~${layoutStatsForUi.pageCount} pg text estimate (see Layout tab)`,
+          { id: 'resume-generate' },
+        )
       }
     } catch (error) {
       console.error(`Error generating ${isLaTeX ? 'LaTeX' : 'HTML'}:`, error)
@@ -289,6 +341,23 @@ export default function AIResumeBuilderPage() {
   // Compile to PDF (LaTeX or HTML)
   const onCompilePDF = async () => {
     setIsCompiling(true)
+
+    const fmt = templateType === 'latex' ? 'latex' : 'html'
+    const codeForLayout =
+      templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+    const compileLayoutStats =
+      computeResumeLayoutStatsFromResumeCode(codeForLayout, fmt, TEXT_LAYOUT_CLIENT_OPTIONS) ??
+      computeResumeLayoutStats(
+        resumeFormToResumeData(layoutPreviewForm),
+        TEXT_LAYOUT_CLIENT_OPTIONS,
+      )
+    if (compileLayoutStats.exceedsTwoPages) {
+      toast.info(
+        `Your resume content estimates ~${compileLayoutStats.pageCount} A4 pages (text layout). The PDF may be long.`,
+        { duration: 4500 },
+      )
+    }
+
     toast.loading('Generating PDF...', { id: 'resume-compile' })
 
     try {
@@ -364,7 +433,7 @@ export default function AIResumeBuilderPage() {
     try {
       const endpoint = templateType === 'latex' ? '/api/resume/follow-up' : '/api/resume/follow-up-html'
       const currentCode = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
-      
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -428,6 +497,35 @@ export default function AIResumeBuilderPage() {
     setIsScoring(true)
     toast.loading('Analyzing your resume...', { id: 'resume-score' })
 
+    let layoutContext: string | undefined
+    try {
+      const usePlainTextLayout = formatOverride === 'text'
+      let s
+      if (usePlainTextLayout) {
+        s = computeResumeLayoutStats(
+          plainResumeTextToResumeData(currentCode.trim()),
+          TEXT_LAYOUT_CLIENT_OPTIONS,
+        )
+      } else {
+        const fmt = currentFormat === 'latex' ? 'latex' : 'html'
+        s =
+          computeResumeLayoutStatsFromResumeCode(
+            currentCode,
+            fmt,
+            TEXT_LAYOUT_CLIENT_OPTIONS,
+          ) ??
+          computeResumeLayoutStats(
+            resumeFormToResumeData(pickAiResumeLayoutFields(form.getValues())),
+            TEXT_LAYOUT_CLIENT_OPTIONS,
+          )
+      }
+      if (s.lineCount > 0) {
+        layoutContext = formatLayoutContextForScoring(s)
+      }
+    } catch {
+      // Ignore layout failures; scoring still runs without layout context.
+    }
+
     try {
       const response = await fetch('/api/resume/score', {
         method: 'POST',
@@ -436,6 +534,7 @@ export default function AIResumeBuilderPage() {
           code: currentCode,
           format: currentFormat,
           model: selectedModel,
+          ...(layoutContext ? { layoutContext } : {}),
         }),
       })
 
@@ -555,7 +654,18 @@ export default function AIResumeBuilderPage() {
       }
       toast.loading('Processing extracted data...', { id: 'parse-files' })
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success?: boolean
+        error?: string
+        details?: string
+        extractedResumeData?: Record<string, string | string[] | undefined> | null
+        jdRequirements?: Record<string, string | string[] | undefined> | null
+        resumeLayoutEstimate?: {
+          pageCount: number
+          lineCount: number
+          exceedsTwoPages: boolean
+        } | null
+      }
       console.log('[parse-files] API response:', result)
       console.log('[parse-files] Extracted resume data:', result.extractedResumeData)
       console.log('[parse-files] JD requirements:', result.jdRequirements)
@@ -600,6 +710,7 @@ export default function AIResumeBuilderPage() {
       setParsedData({
         resumeData: result.extractedResumeData,
         jdRequirements: result.jdRequirements,
+        resumeLayoutEstimate: result.resumeLayoutEstimate ?? null,
       })
 
       // Auto-fill form if resume data is extracted
@@ -650,12 +761,22 @@ export default function AIResumeBuilderPage() {
         console.log('[parse-files] Added JD requirements to instructions')
       }
 
+      const layoutNote =
+        result.resumeLayoutEstimate && result.resumeLayoutEstimate.lineCount > 0
+          ? ` · ~${result.resumeLayoutEstimate.pageCount} pg text estimate`
+          : ''
+
       if (fieldsFilled > 0) {
-        toast.success(`Files parsed successfully! ${fieldsFilled} form fields auto-filled.`, { id: 'parse-files' })
+        toast.success(
+          `Files parsed successfully! ${fieldsFilled} form fields auto-filled.${layoutNote}`,
+          { id: 'parse-files' },
+        )
       } else if (result.extractedResumeData) {
-        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', { id: 'parse-files' })
+        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', {
+          id: 'parse-files',
+        })
       } else {
-        toast.success('Files parsed successfully!', { id: 'parse-files' })
+        toast.success(`Files parsed successfully!${layoutNote}`, { id: 'parse-files' })
       }
     } catch (error) {
       if (aiProgressTimer) {
@@ -730,6 +851,7 @@ export default function AIResumeBuilderPage() {
       const result = await response.json() as {
         extractedResumeData?: Record<string, string | string[] | undefined>
         resumeText?: string
+        resumeLayoutEstimate?: { pageCount: number; lineCount: number } | null
       }
 
       // Build readable resume text from parsed data
@@ -763,7 +885,12 @@ export default function AIResumeBuilderPage() {
 
       if (extractedText.trim()) {
         setScoreInput(extractedText)
-        toast.success('Resume text extracted successfully')
+        const est = result.resumeLayoutEstimate
+        toast.success(
+          est && est.lineCount > 0
+            ? `Resume text extracted · ~${est.pageCount} pg text estimate`
+            : 'Resume text extracted successfully',
+        )
       } else {
         toast.error('Could not extract text from file. Try pasting your resume text directly.')
       }
@@ -932,6 +1059,7 @@ export default function AIResumeBuilderPage() {
                 )}
                 placeholder={"Paste your resume content here...\n\nExample:\nJohn Doe\nSoftware Engineer\njohn@email.com | (555) 123-4567\n\nSummary:\nExperienced software engineer with 5+ years...\n\nExperience:\nSenior Engineer at Google (2021-Present)\n• Built scalable microservices...\n• Led team of 8 engineers..."}
               />
+              <ScoreLayoutInsights pastedText={scoreInput} className="border-t border-border/60" />
             </div>
 
             {/* Score Button */}
@@ -1005,6 +1133,14 @@ export default function AIResumeBuilderPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{templateType === 'latex' ? 'LaTeX' : 'HTML'} Preview</h1>
+                  {previewLayoutStats.lineCount > 0 && (
+                    <span
+                      className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/60"
+                      title="Approximate A4 text-layout from current HTML/LaTeX when enough text is present, otherwise from your form (not exact PDF pagination)"
+                    >
+                      ~{previewLayoutStats.pageCount} pg
+                    </span>
+                  )}
                   {usedModel && (
                     <span className={cn(
                       "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
@@ -1110,65 +1246,92 @@ export default function AIResumeBuilderPage() {
               </motion.div>
             )}
 
-            {/* Code Display/Editor */}
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
-                    <FileText className="size-3 text-primary" />
-                  </div>
-                  <span className="truncate font-mono text-xs font-medium text-muted-foreground">
-                    {templateType === 'latex' ? 'resume.tex' : 'resume.html'}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {!isEditing ? (
-                    <Button variant="ghost" size="sm" onClick={handleEdit} className="h-7 gap-1.5 text-xs">
-                      <Edit className="size-3" />
-                      <span className="hidden xs:inline">Edit</span>
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleSaveEdit}
-                        className="h-7 gap-1.5 text-xs text-green-600 hover:text-green-700"
-                      >
-                        <Check className="size-3" />
-                        <span className="hidden xs:inline">Save</span>
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-7 gap-1.5 text-xs">
-                        <X className="size-3" />
-                        <span className="hidden xs:inline">Cancel</span>
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* Code display / structured layout (pretext-style engine from form data) */}
+            <Tabs defaultValue="code" className="w-full">
+              <TabsList variant="line" className="h-auto w-full flex-wrap justify-start gap-1 sm:w-auto">
+                <TabsTrigger value="code" className="gap-1.5">
+                  <FileText className="size-3.5 shrink-0" />
+                  {templateType === 'latex' ? 'LaTeX' : 'HTML'}
+                </TabsTrigger>
+                <TabsTrigger value="layout" className="gap-1.5">
+                  <LayoutGrid className="size-3.5 shrink-0" />
+                  Layout preview
+                </TabsTrigger>
+              </TabsList>
 
-              {isEditing ? (
-                <Textarea
-                  value={templateType === 'latex' ? editedLatex : editedHtml}
-                  onChange={(e) => {
-                    if (templateType === 'latex') {
-                      setEditedLatex(e.target.value)
-                    } else {
-                      setEditedHtml(e.target.value)
-                    }
-                  }}
-                  className={cn(
-                    "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
-                    "resize-none border-0 rounded-none focus-visible:ring-0"
+              <TabsContent value="code" className="mt-4">
+                <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
+                        <FileText className="size-3 text-primary" />
+                      </div>
+                      <span className="truncate font-mono text-xs font-medium text-muted-foreground">
+                        {templateType === 'latex' ? 'resume.tex' : 'resume.html'}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {!isEditing ? (
+                        <Button variant="ghost" size="sm" onClick={handleEdit} className="h-7 gap-1.5 text-xs">
+                          <Edit className="size-3" />
+                          <span className="hidden xs:inline">Edit</span>
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleSaveEdit}
+                            className="h-7 gap-1.5 text-xs text-green-600 hover:text-green-700"
+                          >
+                            <Check className="size-3" />
+                            <span className="hidden xs:inline">Save</span>
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-7 gap-1.5 text-xs">
+                            <X className="size-3" />
+                            <span className="hidden xs:inline">Cancel</span>
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditing ? (
+                    <Textarea
+                      value={templateType === 'latex' ? editedLatex : editedHtml}
+                      onChange={(e) => {
+                        if (templateType === 'latex') {
+                          setEditedLatex(e.target.value)
+                        } else {
+                          setEditedHtml(e.target.value)
+                        }
+                      }}
+                      className={cn(
+                        "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
+                        "resize-none border-0 rounded-none focus-visible:ring-0"
+                      )}
+                      placeholder={`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code will appear here...`}
+                    />
+                  ) : templateType === 'latex' ? (
+                    <LaTeXPreview code={latexCode} />
+                  ) : (
+                    <HTMLPreview code={htmlCode} />
                   )}
-                  placeholder={`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code will appear here...`}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="layout" className="mt-4 space-y-2">
+                <ResumeLayoutPreview
+                  formValues={layoutPreviewForm}
+                  emptyHint="Go back to the form and fill your details to populate this preview."
                 />
-              ) : templateType === 'latex' ? (
-                <LaTeXPreview code={latexCode} />
-              ) : (
-                <HTMLPreview code={htmlCode} />
-              )}
-            </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Pretext-style pipeline on your form: canvas prepare + deterministic wrap. Generated{" "}
+                  {templateType === 'latex' ? 'LaTeX' : 'HTML'} for PDF is separate; use this to sanity-check length
+                  and line breaks.
+                </p>
+              </TabsContent>
+            </Tabs>
 
             {/* Follow-up Prompt Section */}
             <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
@@ -1369,6 +1532,11 @@ export default function AIResumeBuilderPage() {
                   </p>
                 </div>
               )}
+              {parsedData?.resumeLayoutEstimate &&
+                parsedData.resumeLayoutEstimate.lineCount > 0 &&
+                !isParsingFiles && (
+                  <ParsedResumeLayoutStrip estimate={parsedData.resumeLayoutEstimate} />
+                )}
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Upload your existing resume to auto-fill the form, or upload a job description to tailor your resume to specific requirements.
               </p>
@@ -1911,6 +2079,8 @@ export default function AIResumeBuilderPage() {
               />
             </div>
           </motion.div>
+
+          <ResumeLayoutInsights formValues={layoutPreviewForm} />
 
           {/* Submit */}
           <motion.div

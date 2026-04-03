@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { followUpLaTeX } from '@/lib/openrouter'
 import { validateLatexFollowUpInput } from '@/lib/resume/code-validator'
+import { mergeFollowUpPromptWithLayoutHintFromCode } from '@/lib/text-layout/layout-from-resume-code'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
 
@@ -26,7 +27,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await followUpLaTeX(currentLatex, prompt, model)
+    const promptWithLayout = mergeFollowUpPromptWithLayoutHintFromCode(
+      currentLatex,
+      'latex',
+      prompt,
+    )
+
+    const result = await followUpLaTeX(currentLatex, promptWithLayout, model)
 
     return NextResponse.json({
       latex: result.cleaned,
