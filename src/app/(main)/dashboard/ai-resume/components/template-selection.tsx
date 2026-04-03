@@ -25,7 +25,7 @@ export function TemplateSelection({ onSelect, onScoreResume }: Props) {
           Select Resume Format
         </h1>
         <p className="mt-3 mb-10 max-w-lg text-center text-muted-foreground">
-          Choose between LaTeX or HTML format. HTML includes templates, LaTeX templates coming soon.
+          Choose between LaTeX or HTML format. HTML includes templates, LaTeX templates coming soon. The builder uses an internal A4 text-layout estimate to preview length and nudge the AI.
         </p>
       </motion.div>
 

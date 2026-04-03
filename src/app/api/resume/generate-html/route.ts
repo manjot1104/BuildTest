@@ -6,6 +6,12 @@ import { generateHtmlTemplateFallback } from '@/lib/resume/template-fallback-gen
 import { pruneGeneratedSections } from '@/lib/resume/section-pruner'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
+import { normalizedResumeInputToResumeData } from '@/lib/text-layout/normalized-to-resume-data'
+import {
+  appendLayoutHintToAdditionalInstructions,
+  computeResumeLayoutStats,
+  TEXT_LAYOUT_SERVER_OPTIONS,
+} from '@/lib/text-layout/layout-stats'
 
 // Configure runtime for longer operations
 export const maxDuration = 120 // 2 minutes for AI generation
@@ -25,6 +31,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     validatedData = normalizeResumeInput(body)
+
+    const layoutStats = computeResumeLayoutStats(
+      normalizedResumeInputToResumeData(validatedData),
+      TEXT_LAYOUT_SERVER_OPTIONS,
+    )
+    validatedData = {
+      ...validatedData,
+      additionalInstructions: appendLayoutHintToAdditionalInstructions(
+        validatedData.additionalInstructions,
+        layoutStats,
+      ),
+    }
 
     if (!env.OPENROUTER_API_KEY) {
       return NextResponse.json(

@@ -6,6 +6,12 @@ import { generateLatexTemplateFallback } from '@/lib/resume/template-fallback-ge
 import { pruneGeneratedSections } from '@/lib/resume/section-pruner'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
+import { normalizedResumeInputToResumeData } from '@/lib/text-layout/normalized-to-resume-data'
+import {
+  appendLayoutHintToAdditionalInstructions,
+  computeResumeLayoutStats,
+  TEXT_LAYOUT_SERVER_OPTIONS,
+} from '@/lib/text-layout/layout-stats'
 
 // Configure runtime for longer operations
 export const maxDuration = 120 // 2 minutes for AI generation
@@ -28,6 +34,18 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     validatedData = normalizeResumeInput(body)
+
+    const layoutStats = computeResumeLayoutStats(
+      normalizedResumeInputToResumeData(validatedData),
+      TEXT_LAYOUT_SERVER_OPTIONS,
+    )
+    validatedData = {
+      ...validatedData,
+      additionalInstructions: appendLayoutHintToAdditionalInstructions(
+        validatedData.additionalInstructions,
+        layoutStats,
+      ),
+    }
 
     // Some highly visual templates are better rendered deterministically to avoid AI dummy/sample leakage.
     if (validatedData.templateId && FORCE_DETERMINISTIC_TEMPLATE_IDS.has(validatedData.templateId)) {
