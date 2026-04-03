@@ -170,23 +170,23 @@ export type CrawlProgressEvent =
       source: "sitemap" | "html" | "discovery";
     }
   | {
-      type: "crawl_page_extracted";
-      url: string;
-      title: string;
-      elementsCount: number;
-      formsCount: number;
-      linksCount: number;
-      /** 1-based index so the UI can show "2 / 5 pages extracted" */
-      index: number;
-      total: number;
-    }
+    type: "crawl_page_extracted";
+    url: string;
+    title: string;
+    elementsCount: number;
+    formsCount: number;
+    linksCount: number;
+    /** 1-based index so the UI can show "2 / 5 pages extracted" */
+    index: number;
+    total: number;
+  }
   | {
-      type: "crawl_page_failed";
-      url: string;
-      reason: string;
-      index: number;
-      total: number;
-    };
+    type: "crawl_page_failed";
+    url: string;
+    reason: string;
+    index: number;
+    total: number;
+  };
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
@@ -328,13 +328,13 @@ export interface PagePerformanceMetrics {
 export type PipelineSSEEvent =
   | { type: "status"; status: string; percent: number }
   | {
-      type: "test_update";
-      testResultId: string;
-      testCaseId: string;
-      title: string;
-      status: "pending" | "running" | "passed" | "failed" | "flaky" | "skipped";
-      durationMs?: number;
-    }
+    type: "test_update";
+    testResultId: string;
+    testCaseId: string;
+    title: string;
+    status: "pending" | "running" | "passed" | "failed" | "flaky" | "skipped";
+    durationMs?: number;
+  }
   | {
       type: "counter";
       passed: number;
@@ -1265,6 +1265,9 @@ export async function crawlSite(
 
     console.log(`[Stage0] 🔍 Discovering pages via TinyFish: ${rootUrl}`);
 
+    const rootNorm = normalizeUrl(rootUrl);
+    emitProgress({ type: "crawl_url_found", url: rootNorm, source: "html" });
+
     //  Tell the user we're now running the TinyFish discovery call.
     emitProgress({
       type: "crawl_stage_change",
@@ -1360,8 +1363,13 @@ export async function crawlSite(
     }
 
     const rawDiscovered = extractUrlsFromDiscovery(discoveryResult);
+
+    //Always include root URL — don't waste discovery on it
+    const rawWithRoot = rawDiscovered.includes(rootNorm)
+    ? rawDiscovered
+    : [rootNorm, ...rawDiscovered];
     // Clamp discovery results to maxPages immediately.
-    const discoveredUrls = dedupeUrls(rawDiscovered, allowedHostname, budget.maxPages);
+    const discoveredUrls = dedupeUrls(rawWithRoot, allowedHostname, budget.maxPages);
 
     if (discoveredUrls.length > 0) {
       console.log(`[Stage0] ✓ Discovery found ${discoveredUrls.length} pages`);
