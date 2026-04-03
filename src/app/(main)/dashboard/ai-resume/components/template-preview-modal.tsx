@@ -1,14 +1,19 @@
 'use client'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { X, Code, Loader2 } from 'lucide-react'
+import { X, Code, Loader2, LayoutGrid } from 'lucide-react'
 import { type ResumeTemplate } from '../templates'
 import { renderTemplate, DUMMY_RESUME_DATA } from '@/lib/resume/template-renderer'
 import { ensureLatexDummyPdfUrl, getCachedLatexDummyPdfUrl } from './latex-dummy-pdf-cache'
+import { resumeRenderDataToResumeData } from '@/lib/text-layout/render-data-to-resume-data'
+import { ResumeLayoutPreview } from './resume-layout-preview'
 
 // ── A4 Page Dimensions at 96 DPI ──────────────────────────────────────────────
 const A4_WIDTH = 794
 const A4_MIN_HEIGHT = 1123
+
+/** Same dummy profile as HTML/LaTeX preview, converted for the text-layout engine. */
+const DUMMY_RESUME_FOR_TEXT_LAYOUT = resumeRenderDataToResumeData(DUMMY_RESUME_DATA)
 
 interface ResumeTemplatePreviewModalProps {
   open: boolean
@@ -28,6 +33,8 @@ interface ResumeTemplatePreviewModalProps {
  * RENDERING PIPELINE:
  *   HTML templates → renderTemplate('html') → srcdoc iframe (same as generated HTML)
  *   LaTeX templates → renderTemplate('latex') → compile-pdf → PDF iframe (same as generated PDF)
+ *
+ * Text layout tab: {@link ResumeLayoutPreview} on structured dummy data (prepare + layout, no template HTML).
  */
 export function ResumeTemplatePreviewModal({
   open,
@@ -43,6 +50,7 @@ export function ResumeTemplatePreviewModal({
   const [previewError, setPreviewError] = useState<string>('')
   const [scale, setScale] = useState(1)
   const [iframeHeight, setIframeHeight] = useState(A4_MIN_HEIGHT)
+  const [modalView, setModalView] = useState<'template' | 'textlayout'>('template')
 
   // ── Calculate scale to fit paper in container ────────────────────────────
   const updateScale = useCallback(() => {
@@ -136,6 +144,10 @@ export function ResumeTemplatePreviewModal({
     }
   }, [open, template, defaultFormat])
 
+  useEffect(() => {
+    if (open) setModalView('template')
+  }, [open, template?.id])
+
   // ── Escape key to close ───────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return
@@ -167,10 +179,46 @@ export function ResumeTemplatePreviewModal({
         className="flex h-14 shrink-0 items-center justify-between gap-4 border-b px-6"
         style={{ borderColor: 'rgba(255,255,255,0.08)', background: '#141418' }}
       >
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-              <Code className="size-5 text-violet-400" />
-            <h2 className="text-lg font-semibold text-white">{template.name}</h2>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3 sm:gap-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <Code className="size-5 shrink-0 text-violet-400" />
+            <h2 className="truncate text-lg font-semibold text-white">{template.name}</h2>
+          </div>
+          <div
+            className="flex shrink-0 rounded-lg p-0.5"
+            style={{ background: "rgba(255,255,255,0.06)" }}
+            role="tablist"
+            aria-label="Preview mode"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={modalView === "template"}
+              onClick={() => setModalView("template")}
+              className="rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3"
+              style={
+                modalView === "template"
+                  ? { background: "rgba(255,255,255,0.14)", color: "#fff" }
+                  : { color: "rgba(255,255,255,0.45)" }
+              }
+            >
+              Template
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={modalView === "textlayout"}
+              onClick={() => setModalView("textlayout")}
+              className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors sm:px-3"
+              style={
+                modalView === "textlayout"
+                  ? { background: "rgba(255,255,255,0.14)", color: "#fff" }
+                  : { color: "rgba(255,255,255,0.45)" }
+              }
+            >
+              <LayoutGrid className="size-3.5 opacity-90" />
+              Text layout
+            </button>
           </div>
         </div>
 
@@ -191,7 +239,22 @@ export function ResumeTemplatePreviewModal({
         className="flex flex-1 justify-center overflow-auto"
         style={{ background: '#1a1a1e', padding: '24px 24px 48px' }}
       >
-        {/* Paper container — scaled to fit viewport */}
+        {modalView === "textlayout" ? (
+          <div className="w-full max-w-4xl">
+            <p className="mb-3 text-center text-xs text-zinc-500">
+              A4 text layout from the same dummy profile (prepare + line wrap). Independent of this template&apos;s
+              HTML/LaTeX styling.
+            </p>
+            <div style={{ maxHeight: "min(78vh, 820px)" }} className="w-full overflow-hidden">
+              <ResumeLayoutPreview
+                resumeData={DUMMY_RESUME_FOR_TEXT_LAYOUT}
+                variant="minimal"
+                scale={0.36}
+                className="w-full border-white/10 bg-transparent"
+              />
+            </div>
+          </div>
+        ) : (
         <div
           style={{
             width: `${scaledWidth}px`,
@@ -335,6 +398,7 @@ export function ResumeTemplatePreviewModal({
 
           </div>
         </div>
+        )}
       </div>
 
       {/* ── Footer ──────────────────────────────────────────────────────── */}
@@ -344,7 +408,9 @@ export function ResumeTemplatePreviewModal({
       >
         <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:gap-4">
           <span className="text-xs text-white/40">
-            Preview with sample data. Your resume will use the same layout with your information.
+            {modalView === "textlayout"
+              ? "Text layout tab: A4 wrap from the text engine (dummy data). Switch to Template for HTML/PDF styling."
+              : "Preview with sample data. Your resume will use the same layout with your information."}
           </span>
         </div>
         <div className="flex items-center gap-2">
