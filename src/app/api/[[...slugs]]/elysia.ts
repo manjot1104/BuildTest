@@ -112,6 +112,10 @@ import {
   deleteTestCaseHandler,
   confirmAndExecuteHandler,
 } from "@/server/api/controllers/testing.controller";
+import {
+  generateVideoHandler,
+  renderVideoHandler,
+} from '@/server/api/controllers/video.controller';
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
 
@@ -1978,4 +1982,54 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     {
       params: t.Object({ token: t.String() }),
     },
-  );
+  )
+
+  // ============================================
+  // Video Generation Endpoints
+  // ============================================
+ 
+  // POST /api/video/generate — prompt → VideoJson
+  // Returns validated VideoJson ready to pass to the Remotion Player.
+  .post(
+    '/video/generate',
+    async ({ body, set }) => {
+      const result = await generateVideoHandler({ body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      body: t.Object({
+        prompt: t.String(),
+        duration: t.Optional(t.Number()),
+      }),
+    },
+  )
+ 
+  // POST /api/video/render — VideoJson → render job 
+  // Currently returns a stub jobId. In the future, this will trigger actual rendering and return a real jobId that can be polled for status and results.
+  .post(
+    '/video/render',
+    async ({ body, set }) => {
+      const result = await renderVideoHandler({ body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      body: t.Object({
+        videoJson: t.Object({
+          duration: t.Number(),
+          fps: t.Optional(t.Number()),
+          width: t.Optional(t.Number()),
+          height: t.Optional(t.Number()),
+          scenes: t.Array(t.Any()),
+          globalFontFamily: t.Optional(t.String()),
+        }),
+      }),
+    },
+  )
