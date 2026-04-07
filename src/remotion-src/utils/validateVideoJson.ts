@@ -6,21 +6,44 @@ import { z } from 'zod';
 
 const AnimationTypeSchema = z.enum([
   'fade', 'slide-up', 'slide-down', 'slide-left', 'slide-right',
-  'zoom-in', 'zoom-out', 'bounce', 'typewriter', 'none',
+  'zoom-in', 'zoom-out', 'bounce', 'spring-up', 'spring-scale',
+  'typewriter', 'none',
 ]);
 
 const TransitionTypeSchema = z.enum([
   'fade', 'slide-left', 'slide-right', 'slide-up', 'zoom', 'none',
 ]);
 
-const BackgroundSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('color'), value: z.string() }),
-  z.object({ type: z.literal('gradient'), from: z.string(), to: z.string(), angle: z.number().optional() }),
-  z.object({ type: z.literal('image'), url: z.string().url(), objectFit: z.enum(['cover', 'contain', 'fill']).optional() }),
-  z.object({ type: z.literal('video'), url: z.string().url() }),
+const LayoutTypeSchema = z.enum([
+  'TITLE', 'TITLE_SUBTITLE', 'STATEMENT', 'BULLET_POINTS',
+  'IMAGE_CAPTION', 'SPLIT_LEFT', 'SPLIT_RIGHT', 'THIRDS',
+  'LOWER_THIRD', 'FULLSCREEN',
 ]);
 
-const BaseElementProps = {
+const SlotNameSchema = z.enum([
+  'main', 'title', 'subtitle', 'heading', 'bullet',
+  'caption', 'text', 'visual', 'col1', 'col2', 'col3', 'lower',
+]);
+
+const BackgroundSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('color'), value: z.string() }),
+  z.object({
+    type: z.literal('gradient'),
+    from: z.string(),
+    to: z.string(),
+    angle: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal('image'),
+    url: z.string(),
+    objectFit: z.enum(['cover', 'contain', 'fill']).optional(),
+    kenBurns: z.enum(['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'none']).optional(),
+  }),
+  z.object({ type: z.literal('video'), url: z.string() }),
+]);
+
+const BaseElementSchema = {
+  slot: SlotNameSchema.optional(),
   animation: AnimationTypeSchema.optional(),
   animationDelay: z.number().optional(),
   animationDuration: z.number().optional(),
@@ -30,98 +53,88 @@ const BaseElementProps = {
 const TextElementSchema = z.object({
   type: z.literal('text'),
   text: z.string(),
-  fontSize: z.number().optional(),
+  fontSize: z.number().min(12).max(200).optional(),
   fontFamily: z.string().optional(),
   fontWeight: z.string().optional(),
   color: z.string().optional(),
   textAlign: z.enum(['left', 'center', 'right']).optional(),
-  x: z.union([z.number(), z.string()]).optional(),
-  y: z.union([z.number(), z.string()]).optional(),
-  width: z.union([z.number(), z.string()]).optional(),
-  maxWidth: z.union([z.number(), z.string()]).optional(),
   lineHeight: z.number().optional(),
   letterSpacing: z.number().optional(),
   shadow: z.boolean().optional(),
   background: z.string().optional(),
   padding: z.number().optional(),
   borderRadius: z.number().optional(),
-  ...BaseElementProps,
+  ...BaseElementSchema,
+});
+
+const BulletListElementSchema = z.object({
+  type: z.literal('bullet-list'),
+  items: z.array(z.string()).min(1).max(8),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  fontWeight: z.string().optional(),
+  color: z.string().optional(),
+  bulletColor: z.string().optional(),
+  lineHeight: z.number().optional(),
+  itemDelay: z.number().optional(),
+  shadow: z.boolean().optional(),
+  ...BaseElementSchema,
 });
 
 const ImageElementSchema = z.object({
   type: z.literal('image'),
   url: z.string(),
-  x: z.union([z.number(), z.string()]).optional(),
-  y: z.union([z.number(), z.string()]).optional(),
-  width: z.union([z.number(), z.string()]).optional(),
-  height: z.union([z.number(), z.string()]).optional(),
   objectFit: z.enum(['cover', 'contain', 'fill']).optional(),
   borderRadius: z.number().optional(),
   shadow: z.boolean().optional(),
   border: z.string().optional(),
-  ...BaseElementProps,
+  ...BaseElementSchema,
 });
 
 const ShapeElementSchema = z.object({
   type: z.literal('shape'),
   shape: z.enum(['rectangle', 'circle', 'line', 'triangle']),
-  x: z.union([z.number(), z.string()]).optional(),
-  y: z.union([z.number(), z.string()]).optional(),
-  width: z.union([z.number(), z.string()]).optional(),
-  height: z.union([z.number(), z.string()]).optional(),
   color: z.string().optional(),
   borderRadius: z.number().optional(),
   border: z.string().optional(),
-  ...BaseElementProps,
+  width: z.union([z.number(), z.string()]).optional(),
+  height: z.union([z.number(), z.string()]).optional(),
+  ...BaseElementSchema,
 });
 
 const DividerElementSchema = z.object({
   type: z.literal('divider'),
-  x: z.union([z.number(), z.string()]).optional(),
-  y: z.union([z.number(), z.string()]).optional(),
-  width: z.union([z.number(), z.string()]).optional(),
   thickness: z.number().optional(),
   color: z.string().optional(),
-  ...BaseElementProps,
+  width: z.union([z.number(), z.string()]).optional(),
+  ...BaseElementSchema,
 });
 
-// Forward reference for group (recursive)
-const SceneElementSchema: z.ZodType<any> = z.lazy(() =>
-  z.discriminatedUnion('type', [
-    TextElementSchema,
-    ImageElementSchema,
-    ShapeElementSchema,
-    DividerElementSchema,
-    z.object({
-      type: z.literal('group'),
-      x: z.union([z.number(), z.string()]).optional(),
-      y: z.union([z.number(), z.string()]).optional(),
-      width: z.union([z.number(), z.string()]).optional(),
-      height: z.union([z.number(), z.string()]).optional(),
-      elements: z.array(SceneElementSchema),
-      ...BaseElementProps,
-    }),
-  ])
-);
+const SceneElementSchema = z.discriminatedUnion('type', [
+  TextElementSchema,
+  BulletListElementSchema,
+  ImageElementSchema,
+  ShapeElementSchema,
+  DividerElementSchema,
+]);
 
 const SceneSchema = z.object({
   id: z.string().optional(),
-  durationInFrames: z.number().min(1),
+  layout: LayoutTypeSchema.default('TITLE'),
+  durationInFrames: z.number().min(1).default(120),
   background: BackgroundSchema,
   elements: z.array(SceneElementSchema),
   transition: TransitionTypeSchema.optional(),
   transitionDuration: z.number().optional(),
   overlay: z.string().optional(),
-  overlayOpacity: z.number().optional(),
-  padding: z.number().optional(),
-  layout: z.enum(['free', 'centered', 'split-left', 'split-right']).optional(),
+  overlayOpacity: z.number().optional().default(1),
 });
 
 export const VideoJsonSchema = z.object({
-  duration: z.number().min(1),
-  fps: z.number().optional(),
-  width: z.number().optional(),
-  height: z.number().optional(),
+  duration: z.number().min(1).default(450),
+  fps: z.number().optional().default(30),
+  width: z.number().optional().default(1280),
+  height: z.number().optional().default(720),
   scenes: z.array(SceneSchema).min(1),
   globalFontFamily: z.string().optional(),
   globalColorScheme: z.object({
@@ -133,11 +146,135 @@ export const VideoJsonSchema = z.object({
   }).optional(),
 });
 
-/**
- * Validates and parses LLM-generated JSON.
- * Returns { success, data } or { success: false, error }.
- */
+// ============================================================
+// FUZZY MATCHERS — snaps LLM hallucinations to valid Enums
+// ============================================================
+
+function mapAnimation(val: any): any {
+  if (typeof val !== 'string') return 'fade';
+  const s = val.toLowerCase();
+  if (s.includes('spring') && s.includes('up')) return 'spring-up';
+  if (s.includes('spring') && s.includes('scale')) return 'spring-scale';
+  if (s.includes('slide') && s.includes('up')) return 'slide-up';
+  if (s.includes('slide') && s.includes('down')) return 'slide-down';
+  if (s.includes('slide') && s.includes('left')) return 'slide-left';
+  if (s.includes('slide') && s.includes('right')) return 'slide-right';
+  if (s.includes('zoom') && s.includes('in')) return 'zoom-in';
+  if (s.includes('zoom') && s.includes('out')) return 'zoom-out';
+  if (s.includes('type')) return 'typewriter';
+  if (s.includes('bounce')) return 'bounce';
+  if (s.includes('fade')) return 'fade';
+  return 'fade';
+}
+
+function mapSlot(val: any): any {
+  if (typeof val !== 'string') return 'main';
+  const s = val.toLowerCase();
+  if (s.includes('title')) return 'title';
+  if (s.includes('subtitle')) return 'subtitle';
+  if (s.includes('head')) return 'heading';
+  if (s.includes('bullet')) return 'bullet';
+  if (s.includes('cap')) return 'caption';
+  if (s.includes('visual') || s.includes('image')) return 'visual';
+  if (s.includes('col1')) return 'col1';
+  if (s.includes('col2')) return 'col2';
+  if (s.includes('col3')) return 'col3';
+  if (s.includes('lower')) return 'lower';
+  if (s.includes('text')) return 'text';
+  return 'main';
+}
+
+// ============================================================
+// SANITIZER — repairs common LLM mistakes
+// ============================================================
+
+function sanitizeBackground(bg: any): any {
+  if (!bg || typeof bg !== 'object') {
+    return { type: 'color', value: '#111827' };
+  }
+
+  // Ensure type exists for discriminated union
+  if (!bg.type) bg.type = 'color';
+
+  if (bg.type === 'gradient') {
+    bg.from = bg.from ?? bg.start ?? bg.color1 ?? bg.startColor ?? '#0f0c29';
+    bg.to = bg.to ?? bg.end ?? bg.color2 ?? bg.endColor ?? '#302b63';
+  }
+
+  if (bg.type === 'color') {
+    bg.value = bg.value ?? bg.color ?? bg.hex ?? bg.fill ?? '#111827';
+  }
+
+  if (bg.type === 'image' || bg.type === 'video') {
+    bg.url = bg.url ?? bg.src ?? bg.source ?? '';
+  }
+
+  return bg;
+}
+
+export function sanitizeVideoJson(raw: any): any {
+  if (!raw || typeof raw !== 'object') return raw;
+
+  // Handle bare array fallback
+  if (Array.isArray(raw)) {
+    const totalFrames = raw.reduce(
+      (sum: number, s: any) => sum + (Number(s?.durationInFrames) || 150),
+      0,
+    );
+    raw = {
+      duration: totalFrames,
+      fps: 30,
+      scenes: raw,
+    };
+  }
+
+  if (!Array.isArray(raw.scenes)) raw.scenes = [];
+
+  // Duration Logic: If suspiciously low, assume seconds and convert to frames
+  const sumOfFrames = raw.scenes.reduce(
+    (sum: number, s: any) => sum + (Number(s?.durationInFrames) || 150),
+    0
+  );
+
+  if (!raw.duration || raw.duration < 120) {
+    raw.duration = sumOfFrames > 0 ? sumOfFrames : 450;
+  }
+
+  raw.scenes = raw.scenes.map((scene: any, index: number) => {
+    if (!scene || typeof scene !== 'object') return scene;
+
+    if (scene.durationInFrames === undefined || scene.durationInFrames === null) {
+      scene.durationInFrames = 150;
+    }
+
+    // Force layout to uppercase string literal match
+    if (typeof scene.layout === 'string') {
+      scene.layout = scene.layout.toUpperCase().replace(/\s+/g, '_');
+    } else if (!scene.layout) {
+      scene.layout = index === 0 ? 'TITLE' : 'STATEMENT';
+    }
+
+    scene.background = sanitizeBackground(scene.background);
+
+    if (Array.isArray(scene.elements)) {
+      scene.elements = scene.elements.map((el: any) => ({
+        ...el,
+        slot: mapSlot(el.slot),
+        animation: mapAnimation(el.animation),
+      }));
+    } else {
+      scene.elements = [];
+    }
+
+    return scene;
+  });
+
+  return raw;
+}
+
 export const validateVideoJson = (raw: unknown) => {
-  const result = VideoJsonSchema.safeParse(raw);
-  return result;
+  const sanitized = sanitizeVideoJson(
+    typeof raw === 'string' ? JSON.parse(raw) : raw
+  );
+  return VideoJsonSchema.safeParse(sanitized);
 };

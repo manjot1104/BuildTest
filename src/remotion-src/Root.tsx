@@ -4,119 +4,96 @@ import { VideoComposition } from './VideoComposition';
 import type { VideoJson } from './types';
 
 // ============================================================
-// ROOT
-// Registers compositions with Remotion Studio / CLI.
-// defaultProps are used in Remotion Studio for previewing.
+// DEFAULT PROPS (Matches LLM System Prompt v3)
 // ============================================================
-
 const defaultVideo: VideoJson = {
-  duration: 390,
+  duration: 10, // Fallback
   fps: 30,
   width: 1280,
   height: 720,
+  globalColorScheme: {
+    primary: "#ffffff",
+    secondary: "#a5b4fc",
+    accent: "#6366f1",
+    background: "#111827",
+    text: "#ffffff"
+  },
   scenes: [
     {
       id: "scene-1",
+      layout: "TITLE_SUBTITLE", // Crucial: Matches v3
       durationInFrames: 150,
-      background: { type: "gradient", from: "#0f0c29", to: "#302b63", angle: 135 },
-      transition: "fade",
-      transitionDuration: 15,
+      background: {
+        type: "image",
+        url: "https://picsum.photos/seed/build/1280/720.jpg",
+        objectFit: "cover",
+        kenBurns: "zoom-in"
+      },
+      overlay: "rgba(0,0,0,0.5)",
       elements: [
         {
           type: "text",
-          text: "Hello World",
-          fontSize: 96,
+          slot: "title", // Crucial: Matches v3
+          text: "Pipeline Integrated",
+          fontSize: 80,
           fontWeight: "800",
           color: "#ffffff",
-          animation: "slide-up",
-          animationDelay: 5,
-          animationDuration: 25,
-          shadow: true,
+          animation: "spring-up",
+          shadow: true
         },
         {
           type: "text",
-          text: "Testing the pipeline",
-          fontSize: 32,
-          fontWeight: "300",
-          color: "rgba(255,255,255,0.7)",
+          slot: "subtitle",
+          text: "Layout System v3 Active",
+          fontSize: 36,
+          color: "rgba(255,255,255,0.8)",
           animation: "fade",
-          animationDelay: 25,
-          animationDuration: 20,
-          y: "62%",
-        },
-      ],
+          shadow: true
+        }
+      ]
     },
     {
       id: "scene-2",
-      durationInFrames: 120,
-      background: { type: "color", value: "#111827" },
-      transition: "fade",
-      transitionDuration: 15,
+      layout: "STATEMENT",
+      durationInFrames: 150,
+      background: { 
+        type: "gradient", 
+        from: "#1e1b4b", 
+        to: "#312e81", 
+        angle: 135 
+      },
       elements: [
         {
-          type: "shape",
-          shape: "rectangle",
-          x: "10%",
-          y: "40%",
-          width: "80%",
-          height: 4,
-          color: "#6366f1",
-          animation: "slide-left",
-          animationDelay: 0,
-          animationDuration: 20,
-        },
-        {
           type: "text",
-          text: "Scene Two",
+          slot: "main",
+          text: "No More X/Y Coordinates",
           fontSize: 72,
           fontWeight: "700",
-          color: "#f9fafb",
-          animation: "zoom-in",
-          animationDelay: 10,
-          animationDuration: 20,
-        },
-        {
-          type: "text",
-          text: "Shapes and transitions working",
-          fontSize: 28,
-          color: "#9ca3af",
-          animation: "fade",
-          animationDelay: 25,
-          animationDuration: 20,
-          y: "65%",
-        },
-      ],
-    },
-    {
-      id: "scene-3",
-      durationInFrames: 120,
-      background: { type: "gradient", from: "#134e4a", to: "#065f46", angle: 160 },
-      elements: [
-        {
-          type: "text",
-          text: "It works! 🎉",
-          fontSize: 88,
-          fontWeight: "800",
           color: "#ffffff",
-          animation: "bounce",
-          animationDelay: 5,
-          animationDuration: 30,
-          shadow: true,
-        },
-      ],
-    },
-  ],
+          animation: "spring-scale"
+        }
+      ]
+    }
+  ]
 };
 
 export const Root: React.FC = () => {
+  // 1. Always calculate total duration from scenes to avoid the "0.15s" bug
+  const totalFrames = defaultVideo.scenes.reduce(
+    (sum, scene) => sum + (scene.durationInFrames || 0), 
+    0
+  );
+
   return (
     <Composition
       id="VideoComposition"
       component={VideoComposition}
-      durationInFrames={defaultVideo.duration}
-      fps={defaultVideo.fps ?? 30}
-      width={defaultVideo.width ?? 1280}
-      height={defaultVideo.height ?? 720}
+      // Use the dynamic sum of frames
+      durationInFrames={totalFrames || 300} 
+      fps={defaultVideo.fps || 30}
+      width={defaultVideo.width || 1280}
+      height={defaultVideo.height || 720}
+      // Pass the JSON to your components
       defaultProps={{ videoJson: defaultVideo }}
     />
   );

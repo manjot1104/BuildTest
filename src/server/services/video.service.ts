@@ -10,251 +10,447 @@
 //   4. extractContent()    (if new provider has a different response shape)
 // Nothing in video.controller.ts or elysia.ts needs to change.
 
-import { validateVideoJson } from '@/remotion-src/utils/validateVideoJson'
-import { VIDEO_SYSTEM_PROMPT, buildVideoPrompt } from '@/remotion-src/utils/llmPrompt'
-import type { VideoJson } from '@/remotion-src/types'
+import { validateVideoJson } from "@/remotion-src/utils/validateVideoJson";
+import {
+  VIDEO_SYSTEM_PROMPT,
+  buildVideoPrompt,
+} from "@/remotion-src/utils/llmPrompt";
+import type { VideoJson } from "@/remotion-src/types";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
-const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY
+const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-const RETRY_DELAY_MS = 2_000
+const RETRY_DELAY_MS = 2_000;
 
 // Free models ordered by JSON reliability for structured output tasks.
-// All confirmed free on OpenRouter as of 2026.
-// Falls through to the next model on 429 / 402 / empty response.
 const VIDEO_MODELS = [
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'mistralai/mistral-small-3.1-24b-instruct:free',
-  'arcee-ai/trinity-large-preview:free',
-  'upstage/solar-pro-3:free',
-  'nvidia/nemotron-3-nano-30b-a3b:free',
-  'stepfun/step-3.5-flash:free',
-  'google/gemma-3-12b-it:free',
-  'qwen/qwen3-4b:free',
-  'openrouter/free',
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "upstage/solar-pro-3:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "stepfun/step-3.5-flash:free",
+  "google/gemma-3-12b-it:free",
+  "qwen/qwen3-4b:free",
+  "arcee-ai/trinity-large-preview:free",
+  "mistralai/mistral-small-3.1-24b-instruct:free",
+  "openrouter/free",
 ];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface OpenRouterMessage {
-  role: 'system' | 'user' | 'assistant'
-  content: string
+  role: "system" | "user" | "assistant";
+  content: string;
 }
 
 interface OpenRouterResponse {
-  choices: { message: { content: string } }[]
+  choices: { message: { content: string } }[];
 }
 
 export interface GenerateVideoResult {
-  success: true
-  videoJson: VideoJson
+  success: true;
+  videoJson: VideoJson;
 }
 
 export interface GenerateVideoError {
-  success: false
-  error: string
-  details?: string
+  success: false;
+  error: string;
+  details?: string;
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Strips markdown fences and extracts the outermost JSON object.
-// LLMs sometimes wrap output in ```json``` blocks despite instructions not to.
+// ── Parse top-level JSON objects from a string, depth-aware ──────────────────
+// Handles the case where a model emits bare scene objects instead of a root wrapper.
+
+function extractBareScenes(text: string): any[] {
+  const scenes: any[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === "{") {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        const chunk = text.slice(start, i + 1);
+        try {
+          const parsed = JSON.parse(chunk);
+          // Only treat as a scene if it has scene-like fields
+          if (parsed.layout || parsed.elements || parsed.durationInFrames) {
+            scenes.push(parsed);
+          }
+        } catch {
+          /* skip unparseable chunks */
+        }
+        start = -1;
+      }
+    }
+  }
+
+  return scenes;
+}
+
 function extractJson(raw: string): string {
   const stripped = raw
-    .replace(/```json\s*/gi, '')
-    .replace(/```\s*/gi, '')
-    .trim()
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/gi, "")
+    .trim();
 
-  const start = stripped.indexOf('{')
-  const end = stripped.lastIndexOf('}')
-  if (start !== -1 && end > start) return stripped.slice(start, end + 1)
+  const start = stripped.indexOf("{");
+  const end = stripped.lastIndexOf("}");
+  if (start === -1 || end <= start) return stripped;
 
-  return stripped
+  const candidate = stripped.slice(start, end + 1);
+
+  // Happy path: parses fine as-is
+  try {
+    JSON.parse(candidate);
+    return candidate;
+  } catch {
+    /* fall through */
+  }
+
+  // Detect bare concatenated scene objects (model skipped the root wrapper)
+  const bareScenes = extractBareScenes(stripped);
+  if (bareScenes.length > 0) {
+    console.log(
+      `[VideoService] Detected ${bareScenes.length} bare scene objects — wrapping into root`,
+    );
+    const totalFrames = bareScenes.reduce(
+      (sum: number, s: any) => sum + (Number(s?.durationInFrames) || 150),
+      0,
+    );
+    const wrapped = {
+      duration: totalFrames, // Keep it as total frames
+      fps: 30,
+      scenes: bareScenes,
+    };
+    return JSON.stringify(wrapped);
+  }
+
+  // Return candidate for truncation repair to attempt
+  return candidate;
+}
+
+function repairTruncatedJson(raw: string): string {
+  try {
+    JSON.parse(raw);
+    return raw;
+  } catch {}
+
+  let text = raw.trim();
+  // Strip trailing incomplete key or value
+  text = text.replace(/,\s*"[^"]*$/, "");
+  text = text.replace(/,\s*"[^"]+"\s*:\s*[^,\}\]]*$/, "");
+  text = text.replace(/,\s*$/, "");
+  // Remove any dangling open quote left after the above strips
+  text = text.replace(/"\s*$/, "");
+  text = text.trim();
+
+  let braces = 0;
+  let brackets = 0;
+  let inString = false;
+  let escape = false;
+
+  for (const ch of text) {
+    if (escape) {
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === "{") braces++;
+    else if (ch === "}") braces--;
+    else if (ch === "[") brackets++;
+    else if (ch === "]") brackets--;
+  }
+
+  text += "]".repeat(Math.max(0, brackets));
+  text += "}".repeat(Math.max(0, braces));
+  return text;
+}
+
+// ── Deep debug: walk the object and report null/undefined leaves ─────────────
+
+function findUndefinedFields(obj: any, path = ""): string[] {
+  const problems: string[] = [];
+  if (obj === null || obj === undefined) {
+    problems.push(`${path} = ${obj}`);
+    return problems;
+  }
+  if (Array.isArray(obj)) {
+    obj.forEach((item, i) =>
+      problems.push(...findUndefinedFields(item, `${path}[${i}]`)),
+    );
+    return problems;
+  }
+  if (typeof obj === "object") {
+    for (const [key, val] of Object.entries(obj)) {
+      const fullPath = path ? `${path}.${key}` : key;
+      if (val === undefined || val === null) {
+        problems.push(`${fullPath} = ${val}`);
+      } else {
+        problems.push(...findUndefinedFields(val, fullPath));
+      }
+    }
+  }
+  return problems;
 }
 
 // ── Request / response adapters ───────────────────────────────────────────────
 
-function buildRequestBody(model: string, messages: OpenRouterMessage[]): object {
+function buildRequestBody(
+  model: string,
+  messages: OpenRouterMessage[],
+): object {
   return {
     model,
-    max_tokens: 2000,
-    // Low temperature for deterministic, schema-conforming JSON output.
-    // Matches the 0.1 used in openRouter.service.ts for the same reason.
+    max_tokens: 8192,
     temperature: 0.1,
     messages,
-  }
+  };
 }
 
 function extractContent(data: OpenRouterResponse): string | null {
-  return data?.choices?.[0]?.message?.content ?? null
+  return data?.choices?.[0]?.message?.content ?? null;
 }
 
 // ── Core OpenRouter call ──────────────────────────────────────────────────────
-// Mirrors the callOpenRouter() pattern in openRouter.service.ts:
-// tries each model in order, retries on 429/402 with a delay, throws if all fail.
 
 async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
-  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set')
+  if (!OPENROUTER_API_KEY) throw new Error("OPENROUTER_API_KEY is not set");
 
-  let lastError: Error | null = null
+  let lastError: Error | null = null;
 
   for (const model of VIDEO_MODELS) {
     try {
       const response = await fetch(OPENROUTER_API_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000',
-          'X-Title': 'Video Generator',
+          "Content-Type": "application/json",
+          "HTTP-Referer":
+            process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+          "X-Title": "Video Generator",
         },
         body: JSON.stringify(buildRequestBody(model, messages)),
-      })
+      });
 
       if (response.status === 429) {
-        console.warn(`[VideoService] ${model} rate-limited (429) — waiting ${RETRY_DELAY_MS}ms`)
-        lastError = new Error(`Rate limited: ${await response.text()}`)
-        await sleep(RETRY_DELAY_MS)
-        continue
+        console.warn(
+          `[VideoService] ${model} rate-limited (429) — waiting ${RETRY_DELAY_MS}ms`,
+        );
+        lastError = new Error(`Rate limited: ${await response.text()}`);
+        await sleep(RETRY_DELAY_MS);
+        continue;
       }
 
       if (response.status === 402) {
-        console.error(`[VideoService] ${model} spend limit (402)`)
-        lastError = new Error(`Spend limit reached: ${await response.text()}`)
-        await sleep(RETRY_DELAY_MS)
-        continue
+        console.error(`[VideoService] ${model} spend limit (402)`);
+        lastError = new Error(`Spend limit reached: ${await response.text()}`);
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+
+      if (response.status === 404) {
+        const body = await response.text();
+        console.warn(
+          `[VideoService] ${model} not found (404) — skipping: ${body}`,
+        );
+        lastError = new Error(`Model not found: ${body}`);
+        continue;
       }
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+        throw new Error(`HTTP ${response.status}: ${await response.text()}`);
       }
 
-      const data = (await response.json()) as OpenRouterResponse
-      const content = extractContent(data)
+      const data = (await response.json()) as OpenRouterResponse;
+      const content = extractContent(data);
 
       if (!content) {
-        console.warn(`[VideoService] ${model} returned empty content — trying next model`)
-        lastError = new Error('Empty response')
-        continue
+        console.warn(
+          `[VideoService] ${model} returned empty content — trying next model`,
+        );
+        lastError = new Error("Empty response");
+        continue;
       }
 
-      console.log(`[VideoService] ✓ model=${model} chars=${content.length}`)
-      return content
-
+      console.log(`[VideoService] ✓ model=${model} chars=${content.length}`);
+      return content;
     } catch (err) {
-      lastError = err instanceof Error ? err : new Error(String(err))
-      console.warn(`[VideoService] ${model} failed: ${lastError.message}`)
-      await sleep(RETRY_DELAY_MS)
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.warn(`[VideoService] ${model} failed: ${lastError.message}`);
+      await sleep(RETRY_DELAY_MS);
     }
   }
 
-  throw new Error(`All video models failed. Last error: ${lastError?.message}`)
+  throw new Error(`All video models failed. Last error: ${lastError?.message}`);
 }
 
 // ── Public service API ────────────────────────────────────────────────────────
 
-/**
- * Converts a user prompt into a validated VideoJson object.
- *
- * Tries each model in VIDEO_MODELS in order (same fallback strategy as
- * openRouter.service.ts). On invalid JSON or schema failure, retries once
- * with the next available model before giving up.
- *
- * @param prompt          — user's video description
- * @param durationSeconds — target video length in seconds (default 15)
- */
 export async function generateVideoJson(
   prompt: string,
   durationSeconds = 15,
 ): Promise<GenerateVideoResult | GenerateVideoError> {
   const messages: OpenRouterMessage[] = [
-    { role: 'system', content: VIDEO_SYSTEM_PROMPT },
-    { role: 'user', content: buildVideoPrompt(prompt, durationSeconds) },
-  ]
+    { role: "system", content: VIDEO_SYSTEM_PROMPT },
+    { role: "user", content: buildVideoPrompt(prompt, durationSeconds) },
+  ];
 
-  let lastError = ''
+  let lastError = "";
 
-  // Two attempts: first call may succeed with one model, retry uses the next.
-  // The model fallback loop inside callOpenRouter handles per-model failures.
-  // This outer loop handles JSON parse / schema validation failures — in that
-  // case we re-call with a clarifying nudge to get a cleaner response.
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
-      console.log(`[VideoService] generateVideoJson attempt ${attempt}/2`)
+      console.log(`[VideoService] generateVideoJson attempt ${attempt}/2`);
 
-      // On retry, append a reminder to the messages to fix common mistakes
       const attemptMessages: OpenRouterMessage[] =
         attempt === 1
           ? messages
           : [
               ...messages,
               {
-                role: 'assistant',
-                content: lastError.slice(0, 300),
+                role: "assistant",
+                content:
+                  lastError || "Previous attempt failed with invalid JSON.",
               },
               {
-                role: 'user',
+                role: "user",
                 content:
-                  'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema. No markdown, no explanation.',
+                  'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
               },
-            ]
+            ];
 
-      const raw = await callOpenRouter(attemptMessages)
-      const jsonString = extractJson(raw)
+      const raw = await callOpenRouter(attemptMessages);
 
-      let parsed: unknown
+      // Debug: show what the model actually ended with
+      console.log(`[VideoService] raw tail: ...${raw.trimEnd().slice(-120)}`);
+
+      const jsonString = extractJson(raw);
+
+      // Debug: show what extractJson produced
+      console.log(
+        `[VideoService] extracted tail: ...${jsonString.trimEnd().slice(-120)}`,
+      );
+
+      let parsed: unknown;
       try {
-        parsed = JSON.parse(jsonString)
+        parsed = JSON.parse(jsonString);
       } catch {
-        lastError = `Attempt ${attempt}: invalid JSON — ${jsonString.slice(0, 300)}`
-        console.warn(`[VideoService] ${lastError}`)
-        if (attempt < 2) await sleep(RETRY_DELAY_MS)
-        continue
+        const repaired = repairTruncatedJson(jsonString);
+        console.warn(
+          `[VideoService] JSON parse failed on attempt ${attempt} — trying repair ` +
+            `(${jsonString.length} chars → ${repaired.length} chars)`,
+        );
+        try {
+          parsed = JSON.parse(repaired);
+          console.log(
+            `[VideoService] ✓ Truncation repair succeeded on attempt ${attempt}`,
+          );
+        } catch {
+          lastError = `Attempt ${attempt}: invalid JSON — ${jsonString}`;
+          console.warn(`[VideoService] ${lastError}`);
+          if (attempt < 2) await sleep(RETRY_DELAY_MS);
+          continue;
+        }
       }
 
-      const validation = validateVideoJson(parsed)
-      if (!validation.success) {
-        lastError = `Attempt ${attempt}: schema validation failed — ${validation.error.issues.map((i) => i.message).join(', ')}`
-        console.warn(`[VideoService] ${lastError}`)
-        if (attempt < 2) await sleep(RETRY_DELAY_MS)
-        continue
+      // ── DEBUG: dump the full parsed object so we can see exactly what came back
+      console.log(
+        `[VideoService] DEBUG parsed JSON (attempt ${attempt}):\n` +
+          JSON.stringify(parsed, null, 2),
+      );
+
+      // ── DEBUG: surface any null/undefined fields before Zod sees them
+      const undefinedFields = findUndefinedFields(parsed);
+      if (undefinedFields.length > 0) {
+        console.warn(
+          `[VideoService] DEBUG null/undefined fields:\n` +
+            undefinedFields.map((f) => `  ${f}`).join("\n"),
+        );
       }
+
+      const validation = validateVideoJson(parsed);
+      if (!validation.success) {
+        const issueDetails = validation.error.issues
+          .map(
+            (i) =>
+              `  path=${JSON.stringify(i.path)} code=${i.code} msg="${i.message}"`,
+          )
+          .join("\n");
+        lastError =
+          `Attempt ${attempt}: schema validation failed — ` +
+          validation.error.issues.map((i) => i.message).join(", ");
+        console.warn(
+          `[VideoService] ${lastError}\nZod issue detail:\n${issueDetails}`,
+        );
+        if (attempt < 2) await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+
+      const totalFrames = validation.data.duration;
+      const calculatedSeconds = totalFrames / (validation.data.fps || 30);
 
       console.log(
         `[VideoService] ✓ Generated ${validation.data.scenes.length} scenes, ` +
-        `${validation.data.duration} frames (${durationSeconds}s)`,
-      )
+        `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`
+      );
 
-      return { success: true, videoJson: validation.data as VideoJson }
-
+      return { success: true, videoJson: validation.data as VideoJson };
     } catch (err) {
-      lastError = `Attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`
-      console.error(`[VideoService] ${lastError}`)
-      if (attempt < 2) await sleep(RETRY_DELAY_MS)
+      lastError = `Attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`;
+      console.error(`[VideoService] ${lastError}`);
+      if (attempt < 2) await sleep(RETRY_DELAY_MS);
     }
   }
 
   return {
     success: false,
-    error: 'Failed to generate valid video JSON after retries',
+    error: "Failed to generate valid video JSON after retries",
     details: lastError,
-  }
+  };
 }
 
-/**
- * Stub for video rendering. Phase 5 replaces this with a real BullMQ job.
- */
 export async function renderVideo(
   videoJson: VideoJson,
-): Promise<{ success: true; status: 'queued'; jobId: string } | GenerateVideoError> {
-  // TODO Phase 5: enqueue a BullMQ job, return real jobId
-  console.log(`[VideoService] renderVideo stub — ${videoJson.scenes.length} scenes`)
-  return { success: true, status: 'queued', jobId: `stub_${Date.now()}` }
+): Promise<
+  { success: true; status: "queued"; jobId: string } | GenerateVideoError
+> {
+  console.log(
+    `[VideoService] renderVideo stub — ${videoJson.scenes.length} scenes`,
+  );
+  return { success: true, status: "queued", jobId: `stub_${Date.now()}` };
 }

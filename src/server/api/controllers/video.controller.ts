@@ -42,12 +42,14 @@ export async function generateVideoHandler({
       return { error: 'Failed to generate video. Please try again or rephrase your prompt.', status: 500 }
     }
 
+    const fps = result.videoJson.fps || 30;
+    const totalFrames = result.videoJson.duration;
     return {
       videoJson: result.videoJson,
       meta: {
         scenes: result.videoJson.scenes.length,
-        totalFrames: result.videoJson.duration,
-        durationSeconds: result.videoJson.duration / (result.videoJson.fps ?? 30),
+        totalFrames: totalFrames,
+        durationSeconds: Math.round(totalFrames / fps),
       },
     }
 

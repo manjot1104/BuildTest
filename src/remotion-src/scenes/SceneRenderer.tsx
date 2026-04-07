@@ -2,12 +2,13 @@ import React from 'react';
 import { AbsoluteFill, useVideoConfig, useCurrentFrame } from 'remotion';
 import type { Scene } from '../types';
 import { BackgroundRenderer } from './BackgroundRenderer';
-import { ElementRenderer } from './ElementRenderer';
+import { LayoutRenderer } from './LayoutRenderer';
 import { TransitionOverlay } from '../transitions/TransitionOverlay';
 
 // ============================================================
 // SCENE RENDERER
-// Renders one scene: background → elements → transition overlay.
+// Renders one scene: background → layout (with elements) → transition.
+// Layout is now required — it controls how elements are positioned.
 // ============================================================
 
 type Props = {
@@ -20,32 +21,24 @@ export const SceneRenderer: React.FC<Props> = ({ scene }) => {
 
   const transitionDuration = scene.transitionDuration ?? 15;
   const transition = scene.transition ?? 'none';
-
-  // Fade out at the end of this scene if it has a transition
   const isNearEnd = frame > durationInFrames - transitionDuration;
+
+  // Default to TITLE if layout somehow missing (defensive)
+  const layout = scene.layout ?? 'TITLE';
 
   return (
     <AbsoluteFill>
-      {/* Background */}
+      {/* Layer 1: Background (color / gradient / image with Ken Burns / video) */}
       <BackgroundRenderer
         background={scene.background}
         overlay={scene.overlay}
         overlayOpacity={scene.overlayOpacity}
       />
 
-      {/* Elements */}
-      <AbsoluteFill
-        style={{
-          padding: scene.padding ?? 0,
-          position: 'relative',
-        }}
-      >
-        {scene.elements.map((element, i) => (
-          <ElementRenderer key={i} element={element} />
-        ))}
-      </AbsoluteFill>
+      {/* Layer 2: Elements, positioned by the layout system */}
+      <LayoutRenderer layout={layout} elements={scene.elements} />
 
-      {/* Transition out — applied at the end of the scene */}
+      {/* Layer 3: Transition overlay, rendered last so it sits on top */}
       {isNearEnd && transition !== 'none' && (
         <TransitionOverlay
           type={transition}
