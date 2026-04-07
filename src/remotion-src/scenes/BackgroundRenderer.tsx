@@ -1,11 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import { AbsoluteFill, Img, Video, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 import type { BackgroundType } from "../types";
-
-// ============================================================
-// BACKGROUND RENDERER
-// Handles all background types from the JSON schema.
-// ============================================================
 
 type Props = {
   background: BackgroundType;
@@ -18,10 +13,29 @@ export const BackgroundRenderer: React.FC<Props> = ({
   overlay,
   overlayOpacity = 1,
 }) => {
+  const [hasError, setHasError] = useState(false);
   const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
+  const { durationInFrames, width: compositionWidth } = useVideoConfig();
+  const scale = compositionWidth / 1280;
 
   const renderBackground = () => {
+    // Technical Fallback UI
+    if (hasError) {
+      return (
+        <AbsoluteFill style={{ background: '#0a0a0a' }}>
+           <div style={{ 
+             position: 'absolute', width: '100%', height: '100%', 
+             backgroundImage: `radial-gradient(rgba(255,255,255,0.07) ${1 * scale}px, transparent 0)`,
+             backgroundSize: `${40 * scale}px ${40 * scale}px` 
+           }} />
+           <div style={{
+             position: 'absolute', width: '100%', height: '100%',
+             background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.5))'
+           }} />
+        </AbsoluteFill>
+      );
+    }
+
     switch (background.type) {
       case "color":
         return <AbsoluteFill style={{ backgroundColor: background.value }} />;
@@ -45,29 +59,22 @@ export const BackgroundRenderer: React.FC<Props> = ({
         });
 
         let kbTransform = "none";
-        if (kenBurns === "zoom-in")
-          kbTransform = `scale(${interpolate(progress, [0, 1], [1, 1.1])})`;
-        if (kenBurns === "zoom-out")
-          kbTransform = `scale(${interpolate(progress, [0, 1], [1.1, 1])})`;
-        if (kenBurns === "pan-left")
-          kbTransform = `translateX(${interpolate(progress, [0, 1], [0, -5])}%) scale(1.1)`;
-        if (kenBurns === "pan-right")
-          kbTransform = `translateX(${interpolate(progress, [0, 1], [0, 5])}%) scale(1.1)`;
+        if (kenBurns === "zoom-in") kbTransform = `scale(${interpolate(progress, [0, 1], [1, 1.1])})`;
+        if (kenBurns === "zoom-out") kbTransform = `scale(${interpolate(progress, [0, 1], [1.1, 1])})`;
+        if (kenBurns === "pan-left") kbTransform = `translateX(${interpolate(progress, [0, 1], [0, -5])}%) scale(1.1)`;
+        if (kenBurns === "pan-right") kbTransform = `translateX(${interpolate(progress, [0, 1], [0, 5])}%) scale(1.1)`;
 
         return (
           <AbsoluteFill style={{ overflow: "hidden" }}>
             <Img
               src={background.url}
               style={{
-                width: '100%',
-                height: '100%',
+                width: '100%', height: '100%',
                 objectFit: background.objectFit ?? 'cover',
                 transform: kbTransform,
-                willChange: 'transform',
-                // Add a slight blur to background images to separate them from foreground elements
-                filter: 'blur(2px)', 
+                filter: 'blur(3px)', 
               }}
-              onError={() => console.warn('[BackgroundRenderer] Image failed:', background.url)}
+              onError={() => setHasError(true)}
             />
           </AbsoluteFill>
         );
@@ -78,13 +85,9 @@ export const BackgroundRenderer: React.FC<Props> = ({
           <AbsoluteFill>
             <Video
               src={background.url}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                filter: 'blur(2px)',
-              }}
-              muted // Background videos should usually be muted
+              style={{ width: "100%", height: "100%", objectFit: "cover", filter: 'blur(3px)' }}
+              muted
+              onError={() => setHasError(true)}
             />
           </AbsoluteFill>
         );
@@ -98,26 +101,19 @@ export const BackgroundRenderer: React.FC<Props> = ({
     <>
       {renderBackground()}
 
-      {/* 1. SAFETY SCRIM: Subtle darkening so text always pops */}
-      <AbsoluteFill 
-        style={{ 
-          backgroundColor: 'black', 
-          opacity: 0.3 // Constant baseline darkness
-        }} 
-      />
+      {/* Safety Layers */}
+      <AbsoluteFill style={{ backgroundColor: 'black', opacity: 0.3 }} />
 
-      {/* 2. DYNAMIC OVERLAY: LLM's requested color/opacity */}
       {overlay && (
         <AbsoluteFill
           style={{
             backgroundColor: overlay,
             opacity: overlayOpacity,
-            mixBlendMode: 'multiply', // Better color integration than flat opacity
+            mixBlendMode: 'multiply',
           }}
         />
       )}
 
-      {/* 3. VIGNETTE: Soft dark edges to draw eye to center/foreground */}
       <AbsoluteFill
         style={{
           background: 'radial-gradient(circle, transparent 40%, rgba(0,0,0,0.5) 150%)',

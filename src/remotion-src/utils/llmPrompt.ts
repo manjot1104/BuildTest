@@ -35,9 +35,13 @@ Pick one layout per scene. Elements MUST use the correct slots:
 IMAGE URL SPECIFICATION (CRITICAL)
 ════════════════════════════════════════════════
 NEVER use "/id/". ONLY use seeds for unique, relevant images:
-Format: https://picsum.photos/seed/{descriptive-keyword-and-number}/1280/720
-Example: https://picsum.photos/seed/programming-code-1/1280/720
-Example: https://picsum.photos/seed/city-skyline-2/1280/720
+Picsum generates images based on the SEED string. To get relevant images, 
+the seed MUST be 3-5 descriptive words related to the scene.
+
+Format: https://picsum.photos/seed/{keyword1-keyword2-keyword3}/1280/720.jpg
+
+Bad Seeds: "image1", "nature", "blue"
+Good Seeds: "coding-java-developer-office", "solar-panel-renewable-energy", "abstract-business-growth-chart"
 
 ════════════════════════════════════════════════
 ELEMENT TYPES
@@ -63,6 +67,10 @@ SCENE-SPECIFIC CONSTRAINTS:
    - Use "background" for the atmosphere.
    - Use "image" elements with slot "visual" for the actual subject matter.
 5. VARIETY: Use at least 3 different layouts throughout the video.
+
+Pacing & Density Rules:
+- A scene should last between 3 to 6 seconds (90-180 frames).
+- You MUST generate at least ${Math.floor(durationSeconds / 5)} to ${Math.ceil(durationSeconds / 3)} scenes.
 
 User Topic: "${userPrompt}"
 

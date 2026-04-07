@@ -159,6 +159,7 @@ export type ImageElementProps = {
   animationDuration?: number;
   shadow?: boolean;
   border?: string;
+  alt?: string;  // alt text for accessibility and error fallback
 };
 
 export type ShapeElementProps = {
