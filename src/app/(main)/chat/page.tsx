@@ -73,31 +73,31 @@ import { ChatExportMenu } from '@/components/chat/chat-export-menu'
 
 // ─── 3D Templates ─────────────────────────────────────────────────────────────
 const threeDTemplates = [
-    {
-        label: 'Creative Portfolio',
-        icon: Palette,
-        prompt: `Build a minimal 3D portfolio. Off-white #fcfcfc bg. Central glass-morphism sphere (SphereGeometry, MeshPhysicalMaterial: transmission 1, thickness 0.5, roughness 0) with a subtle oscillating wave motion. Large serif "PLAYFAIR" (import from Google Fonts) typography. Nav: Work, Info, Contact (href="#"). 1500 tiny silver particles. Smooth scroll effect on camera.z. Output raw HTML.`,
-    },
-    {
-        label: 'Tech Launch',
-        icon: Store,
-        prompt: `Build a premium tech landing page. Deep charcoal #080808 bg. Floating abstract prism (OctahedronGeometry, MeshStandardMaterial: metalness 1, roughness 0.1) with soft cyan #00f2ff rim light. Modern "INTER" sans-serif. Nav: Features, Tech, Order (href="#"). Subtle starfield (2500 white points). Clean feature grid overlay. Output raw HTML.`,
-    },
-    {
-        label: 'Digital Agency',
-        icon: Briefcase,
-        prompt: `Build a bold agency site. Near-black #050505 bg. Interactive 3D wave plane (PlaneBufferGeometry, animate vertices in rAF) in soft violet #8b5cf6. Heavy "SYNE" typography. Nav: Work, Studio, Talk (href="#"). Minimal glass cards for services. Smooth mouse-follow scene rotation. Output raw HTML.`,
-    },
-    {
-        label: 'SaaS Hero',
-        icon: Globe,
-        prompt: `Build a clean SaaS hero. White #ffffff bg. Floating minimal wireframe (IcosahedronGeometry, MeshBasicMaterial: wireframe:true, color:#3b82f6) with a soft solid core. "PLUS JAKARTA SANS" font. Nav: Product, Pricing, Docs (href="#"). Clean badge: "v2.0 is live". Dual CTA buttons. Output raw HTML.`,
-    },
-    {
-        label: 'Art Gallery',
-        icon: Palette,
-        prompt: `Build an architectural 3D gallery. Warm grey #e5e5e5 bg. Rotating abstract structure (LatheGeometry, MeshStandardMaterial: color:#ffffff, metalness:0.2) with soft shadows. Serif "BASKERVILLE" font. Nav: Gallery, Artists, About (href="#"). Minimalist spacing and clear hierarchy. Output raw HTML.`,
-    },
+  {
+    label: 'Creative Portfolio',
+    icon: Palette,
+    prompt: `3D creative portfolio with floating glass sphere, soft lighting, minimal typography, elegant premium feel`,
+  },
+  {
+    label: 'Tech Launch',
+    icon: Store,
+    prompt: `futuristic 3D tech product launch with metallic object, dark theme, neon rim lighting, cinematic depth`,
+  },
+  {
+    label: 'Digital Agency',
+    icon: Briefcase,
+    prompt: `bold 3D digital agency hero with animated wave surface, dark aesthetic, smooth motion, premium look`,
+  },
+  {
+    label: 'SaaS Hero',
+    icon: Globe,
+    prompt: `clean SaaS 3D hero with floating geometric shapes, white theme, soft shadows, modern minimal UI`,
+  },
+  {
+    label: 'Art Gallery',
+    icon: Palette,
+    prompt: `minimal 3D art gallery with sculptural object, soft warm lighting, fog depth, luxury aesthetic`,
+  },
 ]
 
 // ─── Draggable SEO Panel ──────────────────────────────────────────────────────
@@ -581,32 +581,28 @@ export default function ChatPage() {
 
         const isFollowUp = !!existingHtml
 
-        const systemPrompt = `You are an expert Three.js r128 developer. Output ONLY raw HTML starting with <!DOCTYPE html> and ending with </html>. No markdown, no backticks, no explanation. Ensure the output is a complete, production-ready 3D website.`
+        // System prompt passed to blackbox route — will be overridden by the expert prompt there for 3D
+      const systemPrompt = `You are an elite creative 3D web designer.
 
-        const userPrompt = isFollowUp
-            ? `Modify this Three.js 3D website: "${userMessage}"
-            
-Rules:
-- Preserve all existing Three.js geometry, logic, and animations.
-- Only update the specific elements requested.
-- Ensure all nav links use href="#" and include an interceptor script for smooth scrolling.
-- Output the COMPLETE updated HTML.
+Output ONLY production-ready HTML (Three.js r128).
+Focus on cinematic depth, lighting, and composition.
 
-EXISTING HTML:
-${existingHtml}`
-            : `Build a clean, modern, minimal 3D website: "${userMessage}"
+Avoid basic or generic scenes.
+Prioritize mood, realism, and spatial depth.
 
-Design Standards:
-- Style: draftly.space aesthetics — subtle, premium, and sophisticated.
-- Background: Minimal (pure white, off-white, or deep charcoal).
-- Geometry: Single abstract primitive (e.g., Sphere, Octahedron, TorusKnot) with soft, high-quality materials (glass, metal, or matte).
-- Animation: Smooth, subtle motion; mouse-lerp rotation; scroll-based camera zoom.
-- Typography: Large, elegant fonts (Playfair Display, Inter, Syne) with clear hierarchy and generous whitespace.
-- Navigation: Fixed header; links (href="#") with smooth-scroll interceptor script.
-- Particles: 1000-2000 tiny, subtle particles matching the palette.
-- UI: Minimal overlay with glassmorphism or clean typography. Zero flashiness.
+No explanations. Only HTML.
+`
 
-Output the COMPLETE raw HTML ending with </html>.`
+   const cleanInput = userMessage.split('\n')[0] 
+
+const userPrompt = `
+Create a premium cinematic 3D website for: "${cleanInput}"
+
+Cinematic, minimal, high-end.
+Strong depth, smooth motion, realistic lighting.
+
+No clutter.
+`
 
         try {
             const res = await fetch('/api/blackbox', {
@@ -617,20 +613,28 @@ Output the COMPLETE raw HTML ending with </html>.`
             const data = await res.json()
             const finishReason = data?.choices?.[0]?.finish_reason
             let output = data?.choices?.[0]?.message?.content || ''
-            output = output.replace(/^```html\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim()
 
-            if (finishReason === 'length' && output && !output.includes('</html>')) {
-                output += '\n</script></body></html>'
+            // Strip any markdown wrapping
+            output = output
+                .replace(/^```html\s*/i, '')
+                .replace(/^```\s*/i, '')
+                .replace(/```\s*$/i, '')
+                .trim()
+
+            // Graceful recovery if truncated at token limit
+            if (finishReason === 'length' && output) {
+                if (!output.includes('</body>')) output += '\n</body>'
+                if (!output.includes('</html>')) output += '\n</html>'
             }
 
             setThreeDHtml(output)
             setThreeDMessages(prev => [...prev, {
                 role: 'assistant',
                 content: finishReason === 'length'
-                    ? 'Scene generated (hit token limit — some elements may be incomplete). Try a shorter prompt or hit Regenerate.'
+                    ? '⚠️ Scene generated but hit the token limit — some elements may be cut off. Try a more focused prompt or hit Regenerate.'
                     : isFollowUp
-                        ? 'Done. Changes applied to the scene.'
-                        : 'Scene ready. Move your mouse to rotate. Scroll the preview panel to zoom.',
+                        ? '✓ Changes applied to the scene.'
+                        : '✓ Scene ready — move your mouse to rotate, scroll to zoom.',
             }])
         } catch (e) {
             console.error('3D generation failed', e)
