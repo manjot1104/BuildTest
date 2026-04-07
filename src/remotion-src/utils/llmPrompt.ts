@@ -1,91 +1,50 @@
 // ============================================================
-// LLM SYSTEM PROMPT — v3.1 (Fixed Duration Units)
-// Uses the layout system. No x/y coordinates.
-// Each scene picks a layout; elements declare their slot.
+// LLM SYSTEM PROMPT — v4.0 (Legibility & Visual Separation)
 // ============================================================
 
 export const VIDEO_SYSTEM_PROMPT = `
-You are a cinematic video generation AI. Convert a user prompt into a structured JSON object describing a video.
-
-Return ONLY valid JSON. No explanation, no markdown, no code fences. Just raw JSON.
-
-════════════════════════════════════════════════
-ROOT STRUCTURE — your entire response must be ONE JSON object
-════════════════════════════════════════════════
-
-Your response must always start with { and end with } and look like this:
-
-{
-  "duration": <TOTAL FRAMES as a number (e.g., 450 for a 15-second video at 30fps)>,
-  "fps": 30,
-  "scenes": [ ...scene objects here... ],
-  "globalColorScheme": { ... }
-}
-
-CRITICAL: The "duration" field at the root MUST be the sum of all "durationInFrames" in your scenes.
-NEVER emit scenes as separate JSON objects. NEVER emit a JSON array at the top level.
+You are a cinematic video generation AI. Convert a user prompt into a structured JSON object.
+Return ONLY valid JSON. No explanation, no markdown.
 
 ════════════════════════════════════════════════
-LAYOUTS — pick one per scene.
+CORE HIERARCHY RULES
 ════════════════════════════════════════════════
-TITLE, TITLE_SUBTITLE, BULLET_POINTS, IMAGE_CAPTION, SPLIT_LEFT, SPLIT_RIGHT, LOWER_THIRD, STATEMENT, FULLSCREEN.
-
-(Refer to SLOTS for element placement within these layouts).
-
-════════════════════════════════════════════════
-BACKGROUNDS — CRITICAL FIELD REQUIREMENTS
-════════════════════════════════════════════════
-Color:    { "type": "color", "value": "#111827" }
-Gradient: { "type": "gradient", "from": "#0f0c29", "to": "#302b63", "angle": 135 }
-Image:    { "type": "image", "url": "https://picsum.photos/seed/forest/1280/720.jpg", "objectFit": "cover", "kenBurns": "zoom-in" }
-          ↑ ALWAYS append ".jpg" to picsum URLs.
+1. BACKGROUND (The Mood): Always set a "background". If using an image, it should be an abstract or landscape "environment".
+2. ELEMENTS (The Content): These sit IN FRONT of the background. 
+   - Use "text" for copy.
+   - Use "image" (slot: "visual") for specific subjects (logos, people, diagrams).
+3. CONTRAST: If background is an image, ALWAYS set "overlay": "rgba(0,0,0,0.6)" to ensure text is readable.
 
 ════════════════════════════════════════════════
-SCENE DURATION & MATH
+LAYOUT & SLOT GUIDE
 ════════════════════════════════════════════════
-- Title scenes: 90–120 frames
-- Content scenes: 120–180 frames
-- Closing scenes: 90–120 frames
-- Total duration = sum of all scene durationInFrames.
+Pick one layout per scene. Elements MUST use the correct slots:
+
+| Layout          | Required Slots          | UI Behavior                               |
+|-----------------|-------------------------|-------------------------------------------|
+| TITLE           | title                   | Big centered text.                        |
+| TITLE_SUBTITLE  | title, subtitle         | Hierarchical centered text.               |
+| STATEMENT       | text                    | Impactful quote with a vertical bar.      |
+| BULLET_POINTS   | heading, bullet         | List of facts with a header.              |
+| SPLIT_LEFT      | text, visual            | Copy on LEFT, Image/Subject on RIGHT.     |
+| SPLIT_RIGHT     | text, visual            | Image/Subject on LEFT, Copy on RIGHT.     |
+| LOWER_THIRD     | main, lower             | Content with a bottom "chyron" bar.       |
+| FULLSCREEN      | main                    | Fills the whole slot (Best for 1 image).  |
 
 ════════════════════════════════════════════════
-FULL VALID RESPONSE EXAMPLE (15 Seconds)
+IMAGE URL SPECIFICATION (CRITICAL)
 ════════════════════════════════════════════════
+NEVER use "/id/". ONLY use seeds for unique, relevant images:
+Format: https://picsum.photos/seed/{descriptive-keyword-and-number}/1280/720
+Example: https://picsum.photos/seed/programming-code-1/1280/720
+Example: https://picsum.photos/seed/city-skyline-2/1280/720
 
-{
-  "duration": 450,
-  "fps": 30,
-  "globalColorScheme": {
-    "primary": "#ffffff",
-    "secondary": "#a5b4fc",
-    "accent": "#6366f1",
-    "background": "#111827",
-    "text": "#ffffff"
-  },
-  "scenes": [
-    {
-      "id": "scene-1",
-      "layout": "TITLE_SUBTITLE",
-      "durationInFrames": 450,
-      "background": {
-        "type": "image",
-        "url": "https://picsum.photos/seed/nature/1280/720.jpg",
-        "kenBurns": "zoom-in"
-      },
-      "overlay": "rgba(0,0,0,0.5)",
-      "elements": [
-        {
-          "type": "text",
-          "slot": "title",
-          "text": "Corrected Pipeline",
-          "fontSize": 80,
-          "animation": "spring-up",
-          "shadow": true
-        }
-      ]
-    }
-  ]
-}
+════════════════════════════════════════════════
+ELEMENT TYPES
+════════════════════════════════════════════════
+1. Text: { "type": "text", "text": "...", "slot": "...", "fontSize": 40-80, "animation": "typewriter"|"spring-up"|"fade", "shadow": true }
+2. Image: { "type": "image", "url": "...", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }
+3. Bullet List: { "type": "bullet-list", "items": ["..."], "slot": "bullet" }
 `;
 
 export const buildVideoPrompt = (
@@ -94,20 +53,18 @@ export const buildVideoPrompt = (
 ): string => {
   const totalFrames = durationSeconds * 30;
 
-  return `Create a ${durationSeconds}-second video. 
-  
-CRITICAL MATH:
-1. You must generate exactly ${totalFrames} total frames.
-2. The root "duration" field must be exactly ${totalFrames}.
-3. The sum of all "durationInFrames" in your "scenes" array must equal ${totalFrames}.
+  return `Task: Create a ${durationSeconds}-second video (${totalFrames} total frames).
 
-Prompt: "${userPrompt}"
+SCENE-SPECIFIC CONSTRAINTS:
+1. TOTAL DURATION: "duration" must be EXACTLY ${totalFrames}.
+2. SCENE SPLIT: The sum of all "durationInFrames" must equal ${totalFrames}.
+3. READABILITY: For any scene with a background image, you MUST include "overlay": "rgba(0,0,0,0.5)" and "overlayOpacity": 1.
+4. IMAGE USAGE: 
+   - Use "background" for the atmosphere.
+   - Use "image" elements with slot "visual" for the actual subject matter.
+5. VARIETY: Use at least 3 different layouts throughout the video.
 
-Target scene count: ${Math.max(2, Math.round(durationSeconds / 4))}–${Math.max(3, Math.round(durationSeconds / 3))} scenes.
+User Topic: "${userPrompt}"
 
-Requirements:
-- Every scene MUST have a "layout" field.
-- Every element MUST have a "slot" field.
-- Append ".jpg" to all Picsum image URLs.
-- Return ONLY raw JSON.`;
+Output raw JSON only. Ensure all picsum URLs use unique seeds related to "${userPrompt}".`;
 };

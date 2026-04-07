@@ -27,32 +27,21 @@ export const TextElement: React.FC<TextElementProps> = ({
   animationDelay = 0,
   animationDuration = 25,
   opacity: baseOpacity = 1,
-  shadow = false,
+  shadow = true,
   background,
   padding,
   borderRadius = 0,
 }) => {
   const { width: compositionWidth } = useVideoConfig();
-
-  // Scale font size relative to canvas width.
-  // fontSize values in the JSON are authored for 1280px canvas.
   const scaleFactor = compositionWidth / 1280;
   const effectiveFontSize = Math.round(fontSize * scaleFactor);
 
   const animStyle = useAnimationStyle(animation, animationDelay, animationDuration);
-
-  // Typewriter uses a hook — must be called unconditionally
-  const typewriterText = useTypewriter(
-    text,
-    animationDelay,
-    animationDuration,
-  );
+  const typewriterText = useTypewriter(text, animationDelay, animationDuration);
   const displayText = animation === 'typewriter' ? typewriterText : text;
 
   const style: React.CSSProperties = {
     fontSize: effectiveFontSize,
-    // Fall back to system sans-serif — globalFontFamily from VideoComposition
-    // is set on the root wrapper so it cascades automatically
     fontFamily: fontFamily ?? 'inherit',
     fontWeight,
     color,
@@ -62,16 +51,28 @@ export const TextElement: React.FC<TextElementProps> = ({
     opacity: animStyle.opacity * baseOpacity,
     transform: animStyle.transform,
     background: background ?? undefined,
-    // Scale padding with canvas so spacing stays proportional
     padding: padding != null ? `${padding * scaleFactor}px` : undefined,
     borderRadius: borderRadius ? `${borderRadius * scaleFactor}px` : undefined,
-    // Hard cap: text never wider than 80% of the canvas
-    maxWidth: `${compositionWidth * 0.8}px`,
-    width: '100%',
+    
+    // --- LEGIBILITY & BOUNDARY UPDATES ---
+    
+    // 1. Boundary Stroke: Creates a thin dark outline around letters
+    // This is the "boundary color" you mentioned.
+    WebkitTextStroke: `${1 * scaleFactor}px rgba(0,0,0,0.15)`,
+    paintOrder: 'stroke fill',
+
+    // 2. Multi-Layer Shadow: 
+    // Layer 1: Tight dark shadow for immediate contrast.
+    // Layer 2: Softer, larger shadow to create "depth" from the background.
     textShadow: shadow
-      ? `0 ${2 * scaleFactor}px ${12 * scaleFactor}px rgba(0,0,0,0.6)`
+      ? `0 ${2 * scaleFactor}px ${4 * scaleFactor}px rgba(0,0,0,0.7), 
+         0 ${4 * scaleFactor}px ${15 * scaleFactor}px rgba(0,0,0,0.3)`
       : undefined,
-    // Prevent overflow — wraps gracefully at word boundaries
+
+    // --- CONTAINMENT UPDATES ---
+    maxWidth: '100%', // Let the Layout Slot handle the outer width
+    width: 'fit-content', // Don't take up 100% if the text is short
+    margin: '0 auto', // Center within the slot
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     overflowWrap: 'break-word',
