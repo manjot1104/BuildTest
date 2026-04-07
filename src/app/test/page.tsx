@@ -31,42 +31,32 @@ export default function TestPage() {
     setHtml("");
 
     const userPrompt = `
-Create a cinematic Three.js r128 hero section. Output ONLY a complete HTML file — no markdown, no explanation.
+Create a cinematic, premium Three.js r128 3D website. Output ONLY a complete HTML file — no markdown, no explanation.
 
-=== THREE.JS SCENE (mandatory) ===
-- Black/near-black background (#05050f)
-- CENTERPIECE: A smooth icosahedron (radius 4, detail 4) with MeshStandardMaterial, metalness 0.9, roughness 0.1, color #1a1a3e, with a slow Y-axis rotation
-- WIREFRAME SHELL: Same icosahedron shape but larger (radius 4.5) with wireframe MeshBasicMaterial, color #00dcff, opacity 0.15, transparent
-- ORBITING RINGS: 3 torus rings at different angles (rx: 0, 1.2, 0.6), radius 7–9, tube 0.03, color #00dcff/#7b2fff/#ff2d95, each rotating at different speeds
-- PARTICLES: 5000 points in a sphere distribution (radius 40), vertex colors cycling cyan/purple/pink, PointsMaterial size 0.12, additive blending
-- FLOATING SHARDS: 12 small tetrahedrons scattered around center, each drifting in a slow sin() orbit path
-- LIGHTS: AmbientLight #111133. PointLight cyan #00dcff intensity 4 at (15,15,15). PointLight purple #7b2fff intensity 4 at (-15,-10,15). Both lights pulse using sin(clock.elapsed)
-- MOUSE: On mousemove, lerp scene.rotation.x toward (mouseY * 0.0008) and scene.rotation.y toward (mouseX * 0.0008)
-- SCROLL: Listen for postMessage {type:"SCROLL", progress:0–1}. On scroll, move camera.position.z from 28 down to 18, and tilt scene.rotation.x up by progress * 0.4. Also scale the centerpiece from 1.0 down to 0.7 as progress goes 0→1.
-- Fog: FogExp2 #05050f density 0.018
-- Resize handler updating camera aspect + renderer size
+=== DESIGN STANDARDS (draftly.space level) ===
+- BACKGROUND: Deep, sophisticated charcoal (#0a0a0b) or pure gallery white (#fcfcfc).
+- DEPTH: Use FogExp2 for atmospheric perspective. Layer elements with clear z-index hierarchy.
+- MATERIALS: MeshPhysicalMaterial for premium glass-morphism (transmission: 1, thickness: 0.5, roughness: 0.05). High metalness (0.9) and low roughness (0.1) for metallic accents.
+- SHADOWS: Enable renderer.shadowMap.enabled = true. Use soft shadows for realism.
+- TYPOGRAPHY: Elegant, high-contrast serif for headings (e.g., 'Playfair Display') and clean sans-serif for body (e.g., 'Inter').
+
+=== THREE.JS SCENE ===
+- CENTERPIECE: An abstract, morphing organic shape (LatheGeometry or custom BufferGeometry) with a glass-like material. It should pulse and rotate subtly.
+- LIGHTING: 3-point lighting setup. Key light (warm #fdfcf0), Fill light (cool #e0f2ff), and Rim light (high intensity #ffffff).
+- PARTICLES: 2000+ tiny, floating dust motes with varying opacity, drifting slowly.
+- INTERACTION: Smooth lerp (0.05) for mouse-follow rotation. Scroll-based camera dolly and element scaling.
+- ANIMATION: Use requestAnimationFrame with clock.elapsed for all motion. No harsh transforms.
 
 === HTML OVERLAY ===
-- position fixed, z-index 10, pointer-events none (buttons get pointer-events: all)
-- Font: use Google Fonts — 'Space Grotesk' for headings, 'Inter' for body
-- Top navbar: logo left ("NX"), nav links right (About, Work, Contact) — small caps, letter-spacing
-- Center hero:
-  - Eyebrow: "NEXT GENERATION PLATFORM" in cyan, letter-spacing 6px, 11px
-  - H1: "Build Beyond" white, then "Imagination" with CSS gradient (linear-gradient 135deg, #00dcff, #7b2fff, #ff2d95), font-size clamp(3rem, 8vw, 7rem), font-weight 900
-  - Subtext: one line, max-width 480px, rgba white 0.6
-  - Two buttons: primary (gradient background, border-radius 999px, padding 14px 40px) and secondary (transparent, border 1px solid rgba(0,220,255,0.4), same shape)
-  - All elements fade in with staggered animation-delay using @keyframes fadeUp
-
-=== SCROLL CONTAINER ===
-- The OUTER page div must have height: 300vh and overflow-y: scroll
-- The canvas and overlay are position: fixed (they stay in view)
-- This lets the user scroll to trigger the scroll effect
+- Layout: Minimalist, spacious, and sophisticated.
+- Fixed navigation with glass-morphism header.
+- Hero section with staggered fade-in animations.
+- Subtle 3D styling for buttons and cards (border-radius: 12px, soft box-shadow, slight hover lift).
 
 === CODE QUALITY ===
-- Three.js CDN: https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
-- requestAnimationFrame loop, clock.getElapsedTime() for all animations
-- Complete closing tags, complete </script>, complete </html>
-- NO external images, everything inline
+- CDN: https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js
+- Fully responsive resize handler.
+- Production-ready, clean JavaScript.
 `;
 
     try {
