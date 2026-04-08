@@ -266,22 +266,26 @@ export async function runAccessibilityTest(
         await new Promise((r) => setTimeout(r, 3000))
 
         // Step 3: Verify page is actually ready before handing to axe
-       const isReady = await page.evaluate(() => {
-  return document.body !== null && document.body.children.length > 0
-}).catch(() => false)
+        const isReady = await page.evaluate(() => {
+          return (
+            document.readyState === 'complete' &&
+            document.body !== null &&
+            document.body.children.length > 0
+          )
+        }).catch(() => false)
 
-console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
+        console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
 
-if (!isReady) {
-  console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
-  onEvent({
-    type: 'error',
-    message: `Skipping ${pageUrl}: page not ready for analysis`,
-    fatal: false,
-  })
-  continue
-}
-        console.log(`   Running axe-core analysis...`)
+        if (!isReady) {
+          console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
+          onEvent({
+            type: 'error',
+            message: `Skipping ${pageUrl}: page not ready for analysis`,
+            fatal: false,
+          })
+          continue
+        }
+
         const pageInfo = await page.evaluate(() => ({
           elementCount: document.querySelectorAll('*').length,
           bodyText: document.body?.innerText?.slice(0, 200) ?? '',
@@ -291,39 +295,44 @@ if (!isReady) {
         console.log(`   Body preview : ${pageInfo.bodyText.replace(/\n/g, ' ').slice(0, 150)}`)
 
         let results
-let retries = 0
-const maxRetries = 2
+        let retries = 0
+        const maxRetries = 2
 
-while (retries <= maxRetries) {
-  try {
-    console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
-    results = await Promise.race([
-      new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
-      ),
-    ])
-    break // success — exit retry loop
-  } catch (axeErr) {
-    const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
-    if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
-      retries++
-      console.warn(`   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`)
-      await new Promise((r) => setTimeout(r, 3000 * retries)) // wait longer each retry
-      continue
-    }
-    // not retryable or max retries reached
-    console.error(`   ❌ axe-core failed: ${message}`)
-    onEvent({
-      type: 'error',
-      message: `Skipping ${pageUrl}: ${message}`,
-      fatal: false,
-    })
-    break
-  }
-}
+        while (retries <= maxRetries) {
+          try {
+            console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
+            console.log(`   Tags passed to axe:`, tags)
+            console.log(`   Standards received:`, config.standards)
+            console.log('   @axe-core/puppeteer imported:', !!AxePuppeteer)
 
-if (!results) continue // skip this page if all retries failed
+            results = await Promise.race([
+              new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
+              ),
+            ])
+            break
+          } catch (axeErr) {
+            const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
+            if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
+              retries++
+              console.warn(
+                `   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`,
+              )
+              await new Promise((r) => setTimeout(r, 3000 * retries))
+              continue
+            }
+            console.error(`   ❌ axe-core failed: ${message}`)
+            onEvent({
+              type: 'error',
+              message: `Skipping ${pageUrl}: ${message}`,
+              fatal: false,
+            })
+            break
+          }
+        }
+
+        if (!results) continue
 
         console.log(`   ✅ axe-core analysis complete`)
         console.log(`   Rules that ran:`, results.passes.map(p => p.id))
