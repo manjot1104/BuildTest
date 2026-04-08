@@ -3,9 +3,9 @@ import {
   appendLayoutHintToFollowUpPrompt,
   computeResumeLayoutStats,
   TEXT_LAYOUT_SERVER_OPTIONS,
-  type ResumeLayoutOptions,
   type ResumeLayoutStats,
 } from "./layout-stats"
+import type { ResumeLayoutOptions } from "./types"
 import { plainResumeTextToResumeData } from "./plain-text-to-resume-data"
 
 const MIN_STRIPPED_CHARS = 40

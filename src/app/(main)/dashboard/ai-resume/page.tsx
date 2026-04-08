@@ -52,6 +52,15 @@ import {
   TEXT_LAYOUT_CLIENT_OPTIONS,
 } from '@/lib/text-layout/layout-stats'
 
+function parsedExtractedFieldToString(
+  v: string | string[] | undefined,
+): string | undefined {
+  if (v === undefined) return undefined
+  const s = Array.isArray(v) ? v.join(', ') : v
+  const t = s.trim()
+  return t.length > 0 ? t : undefined
+}
+
 // ─── OpenRouter Models ───────────────────────────────────────────────────────
 
 const RESUME_MODELS = [
@@ -708,8 +717,8 @@ export default function AIResumeBuilderPage() {
       }
       
       setParsedData({
-        resumeData: result.extractedResumeData,
-        jdRequirements: result.jdRequirements,
+        resumeData: result.extractedResumeData ?? undefined,
+        jdRequirements: result.jdRequirements ?? undefined,
         resumeLayoutEstimate: result.resumeLayoutEstimate ?? null,
       })
 
@@ -721,22 +730,22 @@ export default function AIResumeBuilderPage() {
         
         // Simple string fields — set if present
         const fieldMap: Array<[keyof ResumeFormData, string | undefined]> = [
-          ['fullName', data.fullName],
-          ['title', data.title],
-          ['email', data.email],
-          ['phone', data.phone],
-          ['location', data.location],
-          ['linkedin', data.linkedin],
-          ['github', data.github],
-          ['portfolio', data.portfolio],
-          ['summary', data.summary],
-          ['skills', data.skills],
-          ['experience', data.experience],
-          ['education', data.education],
-          ['projects', data.projects],
-          ['certifications', data.certifications],
-          ['achievements', data.achievements],
-          ['languagesKnown', data.languagesKnown],
+          ['fullName', parsedExtractedFieldToString(data.fullName)],
+          ['title', parsedExtractedFieldToString(data.title)],
+          ['email', parsedExtractedFieldToString(data.email)],
+          ['phone', parsedExtractedFieldToString(data.phone)],
+          ['location', parsedExtractedFieldToString(data.location)],
+          ['linkedin', parsedExtractedFieldToString(data.linkedin)],
+          ['github', parsedExtractedFieldToString(data.github)],
+          ['portfolio', parsedExtractedFieldToString(data.portfolio)],
+          ['summary', parsedExtractedFieldToString(data.summary)],
+          ['skills', parsedExtractedFieldToString(data.skills)],
+          ['experience', parsedExtractedFieldToString(data.experience)],
+          ['education', parsedExtractedFieldToString(data.education)],
+          ['projects', parsedExtractedFieldToString(data.projects)],
+          ['certifications', parsedExtractedFieldToString(data.certifications)],
+          ['achievements', parsedExtractedFieldToString(data.achievements)],
+          ['languagesKnown', parsedExtractedFieldToString(data.languagesKnown)],
         ]
         
         for (const [field, value] of fieldMap) {

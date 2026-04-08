@@ -33,7 +33,7 @@ const EXCLUDED_TEMPLATE_IDS = new Set<string>([
   'editorial-sidebar-clone',
 ])
 
-export const RESUME_TEMPLATES: ResumeTemplate[] = [
+const ALL_RESUME_TEMPLATES = [
   // ── 1. Professional Classic ─────────────────────────────────────────────
   {
     id: 'professional-classic',
@@ -3597,4 +3597,8 @@ CRITICAL FORMATTING RULES:
 
   // ── New LaTeX Templates Batch (15) — FAANG-Level ATS Upgrades ─────────────
 
-].filter((template) => !EXCLUDED_TEMPLATE_IDS.has(template.id))
+] satisfies ResumeTemplate[]
+
+export const RESUME_TEMPLATES = ALL_RESUME_TEMPLATES.filter(
+  (template) => !EXCLUDED_TEMPLATE_IDS.has(template.id),
+)
