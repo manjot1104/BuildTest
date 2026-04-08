@@ -110,7 +110,7 @@ export async function startAccessibilityTestHandler({
         })
 
         // Run test
-        const { summary, pageResults , browser } = await runAccessibilityTest(config, send)
+        const { summary, pageResults, browser } = await runAccessibilityTest(config, send)
 
         // Update status
         await db
@@ -138,13 +138,16 @@ export async function startAccessibilityTestHandler({
         }
 
         // Generate PDF report (returns base64 string)
-        const pdfBase64 = await generateAccessibilityReport({
-      targetUrl: normalizedUrl,
-      standards: config.standards,
-      testDate: new Date().toISOString(),
-      summary,
-      pageResults,
-      }, browser)
+        const pdfBase64 = await generateAccessibilityReport(
+          {
+            targetUrl: normalizedUrl,
+            standards: config.standards,
+            testDate: new Date().toISOString(),
+            summary,
+            pageResults,
+          },
+          browser,
+        )
 
         // Decide storage method: if large, upload to S3 and store URL instead of base64
         // Heuristic: if base64 length > ~6MB (approx 8,000,000 chars), avoid DB bloat/limits
