@@ -6,12 +6,16 @@ const config = {
   serverExternalPackages: [
     "puppeteer",
     "puppeteer-core",
+    "puppeteer-extra",
+    "puppeteer-extra-plugin-stealth",
+    "puppeteer-extra-plugin",
+    "clone-deep",
+    "merge-deep",
     "@sparticuz/chromium",
     "@axe-core/puppeteer",
     "axe-core",
     "pdf-parse",
   ],
-  // Increase memory limits for large files
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.optimization = {
@@ -21,7 +25,6 @@ const config = {
           cacheGroups: {
             default: false,
             vendors: false,
-            // Create a separate chunk for templates
             templates: {
               name: 'templates',
               chunks: 'all',
@@ -37,6 +40,11 @@ const config = {
       config.externals.push(
         "puppeteer",
         "puppeteer-core",
+        "puppeteer-extra",
+        "puppeteer-extra-plugin-stealth",
+        "puppeteer-extra-plugin",
+        "clone-deep",
+        "merge-deep",
         "@sparticuz/chromium",
         "@axe-core/puppeteer",
         "axe-core",
