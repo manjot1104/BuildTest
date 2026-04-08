@@ -1,4 +1,5 @@
 import type { TestSummary, PageResult, ComplianceStandard } from '@/types/accessibility.types'
+import type { Browser } from 'puppeteer-core'
 
 interface ReportData {
   targetUrl: string
@@ -215,12 +216,14 @@ function generateHtmlReport(data: ReportData): string {
 </html>`
 }
 
-export async function generateAccessibilityReport(data: ReportData): Promise<string> {
+export async function generateAccessibilityReport(data: ReportData, browser: Browser): Promise<string> {
   const html = generateHtmlReport(data)
 
-  const { launchBrowser } = await import('@/lib/browser')
-  const browser = await launchBrowser()
+  console.log('\n📄 [A11Y] Generating PDF report...')
+  console.log('   Pages in report:', data.pageResults.length)
+  console.log('   Target URL     :', data.targetUrl)
 
+  // no launchBrowser() call — reusing browser passed from runAccessibilityTest
   try {
     const page = await browser.newPage()
     // Use domcontentloaded — report HTML is self-contained, no external resources to wait for
@@ -231,8 +234,17 @@ export async function generateAccessibilityReport(data: ReportData): Promise<str
       printBackground: true,
       margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' },
     })
+    const pdfBase64Local = Buffer.from(pdfBuffer).toString('base64')
+    const pdfSizeKB = Math.round(Buffer.byteLength(pdfBase64Local, 'utf8') / 1024)
+    const pdfSizeMB = (pdfSizeKB / 1024).toFixed(2)
+    const sizeWarning = pdfSizeKB > 4096
 
-    return Buffer.from(pdfBuffer).toString('base64')
+    console.log(`📦 [A11Y] PDF generated`)
+    console.log(`   Size: ${pdfSizeKB}KB (${pdfSizeMB}MB) ${sizeWarning ? '⚠️  TOO LARGE — DB write will fail' : '✅ OK'}`)
+
+    return pdfBase64Local
+
+    //return Buffer.from(pdfBuffer).toString('base64')
   } finally {
     await browser.close().catch(() => undefined)
   }

@@ -109,7 +109,7 @@ export async function startAccessibilityTestHandler({
         })
 
         // Run test
-        const { summary, pageResults } = await runAccessibilityTest(config, send)
+        const { summary, pageResults , browser } = await runAccessibilityTest(config, send)
 
         // Update status
         await db
@@ -137,13 +137,13 @@ export async function startAccessibilityTestHandler({
         }
 
         // Generate PDF report
-        const pdfBase64 = await generateAccessibilityReport({
-          targetUrl: normalizedUrl,
-          standards: config.standards,
-          testDate: new Date().toISOString(),
-          summary,
-          pageResults,
-        })
+       const pdfBase64 = await generateAccessibilityReport({
+      targetUrl: normalizedUrl,
+      standards: config.standards,
+      testDate: new Date().toISOString(),
+      summary,
+      pageResults,
+      }, browser)
 
         send({ type: 'report:complete', testRunId })
 
