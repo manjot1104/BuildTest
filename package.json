@@ -59,6 +59,7 @@
     "@remotion/cli": "^4.0.445",
     "@remotion/player": "^4.0.445",
     "@remotion/renderer": "^4.0.445",
+    "@remotion/transitions": "^4.0.446",
     "@sinclair/typebox": "^0.34.48",
     "@sparticuz/chromium": "^143.0.4",
     "@t3-oss/env-nextjs": "^0.12.0",

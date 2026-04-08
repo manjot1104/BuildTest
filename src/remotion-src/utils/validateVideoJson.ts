@@ -11,7 +11,7 @@ const AnimationTypeSchema = z.enum([
 ]);
 
 const TransitionTypeSchema = z.enum([
-  'fade', 'slide-left', 'slide-right', 'slide-up', 'zoom', 'none',
+  'fade', 'slide-left', 'slide-right', 'slide-up', 'slide-down', 'wipe', 'none',
 ]);
 
 const LayoutTypeSchema = z.enum([
@@ -84,6 +84,7 @@ const BulletListElementSchema = z.object({
 const ImageElementSchema = z.object({
   type: z.literal('image'),
   url: z.string(),
+  alt: z.string().default('Video asset'),
   objectFit: z.enum(['cover', 'contain', 'fill']).optional(),
   borderRadius: z.number().optional(),
   shadow: z.boolean().optional(),
@@ -125,9 +126,10 @@ const SceneSchema = z.object({
   background: BackgroundSchema,
   elements: z.array(SceneElementSchema),
   transition: TransitionTypeSchema.optional(),
-  transitionDuration: z.number().optional(),
+  // Default 20 frames (~0.67s at 30fps) — enough to feel smooth without eating content
+  transitionDuration: z.number().min(1).max(60).optional().default(20),
   overlay: z.string().optional(),
-  overlayOpacity: z.number().optional().default(1),
+  overlayOpacity: z.number().min(0).max(1).optional().default(1),
 });
 
 export const VideoJsonSchema = z.object({
@@ -150,7 +152,7 @@ export const VideoJsonSchema = z.object({
 // FUZZY MATCHERS — snaps LLM hallucinations to valid Enums
 // ============================================================
 
-function mapAnimation(val: any): any {
+function mapAnimation(val: any): string {
   if (typeof val !== 'string') return 'fade';
   const s = val.toLowerCase();
   if (s.includes('spring') && s.includes('up')) return 'spring-up';
@@ -164,13 +166,14 @@ function mapAnimation(val: any): any {
   if (s.includes('type')) return 'typewriter';
   if (s.includes('bounce')) return 'bounce';
   if (s.includes('fade')) return 'fade';
+  if (s.includes('none')) return 'none';
   return 'fade';
 }
 
-function mapSlot(val: any): any {
+function mapSlot(val: any): string {
   if (typeof val !== 'string') return 'main';
   const s = val.toLowerCase();
-  if (s.includes('title')) return 'title';
+  if (s.includes('title') && !s.includes('sub')) return 'title';
   if (s.includes('subtitle')) return 'subtitle';
   if (s.includes('head')) return 'heading';
   if (s.includes('bullet')) return 'bullet';
@@ -182,6 +185,18 @@ function mapSlot(val: any): any {
   if (s.includes('lower')) return 'lower';
   if (s.includes('text')) return 'text';
   return 'main';
+}
+
+function mapTransition(val: any): string {
+  if (typeof val !== 'string') return 'fade';
+  const s = val.toLowerCase();
+  if (s.includes('slide') && s.includes('left')) return 'slide-left';
+  if (s.includes('slide') && s.includes('right')) return 'slide-right';
+  if (s.includes('slide') && s.includes('up')) return 'slide-up';
+  if (s.includes('slide') && s.includes('down')) return 'slide-down';
+  if (s.includes('wipe')) return 'wipe';
+  if (s.includes('none') || s.includes('cut')) return 'none';
+  return 'fade';
 }
 
 // ============================================================
@@ -230,16 +245,6 @@ export function sanitizeVideoJson(raw: any): any {
 
   if (!Array.isArray(raw.scenes)) raw.scenes = [];
 
-  // Duration Logic: If suspiciously low, assume seconds and convert to frames
-  const sumOfFrames = raw.scenes.reduce(
-    (sum: number, s: any) => sum + (Number(s?.durationInFrames) || 150),
-    0
-  );
-
-  if (!raw.duration || raw.duration < 120) {
-    raw.duration = sumOfFrames > 0 ? sumOfFrames : 450;
-  }
-
   raw.scenes = raw.scenes.map((scene: any, index: number) => {
     if (!scene || typeof scene !== 'object') return scene;
 
@@ -252,6 +257,19 @@ export function sanitizeVideoJson(raw: any): any {
       scene.layout = scene.layout.toUpperCase().replace(/\s+/g, '_');
     } else if (!scene.layout) {
       scene.layout = index === 0 ? 'TITLE' : 'STATEMENT';
+    }
+
+    // Normalize transition
+    if (scene.transition !== undefined) {
+      scene.transition = mapTransition(scene.transition);
+    }
+
+    // Clamp transitionDuration to a sane range
+    if (scene.transitionDuration !== undefined) {
+      scene.transitionDuration = Math.max(
+        1,
+        Math.min(60, Number(scene.transitionDuration) || 20),
+      );
     }
 
     scene.background = sanitizeBackground(scene.background);
@@ -269,12 +287,25 @@ export function sanitizeVideoJson(raw: any): any {
     return scene;
   });
 
+  // Recalculate duration accounting for transition overlaps
+  // (mirrors getTotalDuration in VideoComposition.tsx)
+  const totalDuration = raw.scenes.reduce(
+    (sum: number, scene: any, i: number) => {
+      const isLast = i === raw.scenes.length - 1;
+      const transitionDuration = scene.transitionDuration ?? 20;
+      return sum + scene.durationInFrames - (isLast ? 0 : transitionDuration);
+    },
+    0,
+  );
+
+  raw.duration = totalDuration > 0 ? totalDuration : 450;
+
   return raw;
 }
 
 export const validateVideoJson = (raw: unknown) => {
   const sanitized = sanitizeVideoJson(
-    typeof raw === 'string' ? JSON.parse(raw) : raw
+    typeof raw === 'string' ? JSON.parse(raw) : raw,
   );
   return VideoJsonSchema.safeParse(sanitized);
 };

@@ -1,99 +1,146 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { VideoComposition } from './VideoComposition';
+import { VideoComposition, getTotalDuration } from './VideoComposition';
 import type { VideoJson } from './types';
 
 // ============================================================
-// DEFAULT PROPS (Matches LLM System Prompt v3)
+// ROOT
+// Registers the Remotion composition.
+//
+// IMPORTANT: durationInFrames must use getTotalDuration() — NOT a
+// raw sum of scene frames — because TransitionSeries overlaps
+// adjacent scenes by each scene's transitionDuration. Using a raw
+// sum produces a composition that is longer than the actual output,
+// leaving dead black frames at the end.
 // ============================================================
+
 const defaultVideo: VideoJson = {
-  duration: 10, // Fallback
+  // duration is informational; Remotion uses the Composition prop, not this field.
+  // We set it here so the schema stays consistent with LLM output.
+  duration: 0, // will be overridden by getTotalDuration below
   fps: 30,
   width: 1280,
   height: 720,
   globalColorScheme: {
-    primary: "#ffffff",
-    secondary: "#a5b4fc",
-    accent: "#6366f1",
-    background: "#111827",
-    text: "#ffffff"
+    primary: '#ffffff',
+    secondary: '#a5b4fc',
+    accent: '#6366f1',
+    background: '#111827',
+    text: '#ffffff',
   },
   scenes: [
     {
-      id: "scene-1",
-      layout: "TITLE_SUBTITLE", // Crucial: Matches v3
+      id: 'scene-1',
+      layout: 'TITLE_SUBTITLE',
       durationInFrames: 150,
+      transition: 'slide-left',
+      transitionDuration: 20,
       background: {
-        type: "image",
-        url: "https://picsum.photos/seed/build/1280/720.jpg",
-        objectFit: "cover",
-        kenBurns: "zoom-in"
+        type: 'image',
+        url: 'https://picsum.photos/seed/build-dark-abstract/1280/720.jpg',
+        objectFit: 'cover',
+        kenBurns: 'zoom-in',
       },
-      overlay: "rgba(0,0,0,0.5)",
+      overlay: 'rgba(0,0,0,0.5)',
+      overlayOpacity: 1,
       elements: [
         {
-          type: "text",
-          slot: "title", // Crucial: Matches v3
-          text: "Pipeline Integrated",
+          type: 'text',
+          slot: 'title',
+          text: 'Pipeline Integrated',
           fontSize: 80,
-          fontWeight: "800",
-          color: "#ffffff",
-          animation: "spring-up",
-          shadow: true
+          fontWeight: '800',
+          color: '#ffffff',
+          animation: 'spring-up',
+          shadow: true,
         },
         {
-          type: "text",
-          slot: "subtitle",
-          text: "Layout System v3 Active",
+          type: 'text',
+          slot: 'subtitle',
+          text: 'Layout System v4 Active',
           fontSize: 36,
-          color: "rgba(255,255,255,0.8)",
-          animation: "fade",
-          shadow: true
-        }
-      ]
+          color: 'rgba(255,255,255,0.8)',
+          animation: 'fade',
+          shadow: true,
+        },
+      ],
     },
     {
-      id: "scene-2",
-      layout: "STATEMENT",
+      id: 'scene-2',
+      layout: 'STATEMENT',
       durationInFrames: 150,
-      background: { 
-        type: "gradient", 
-        from: "#1e1b4b", 
-        to: "#312e81", 
-        angle: 135 
+      transition: 'fade',
+      transitionDuration: 20,
+      background: {
+        type: 'gradient',
+        from: '#1e1b4b',
+        to: '#312e81',
+        angle: 135,
       },
       elements: [
         {
-          type: "text",
-          slot: "main",
-          text: "No More X/Y Coordinates",
+          type: 'text',
+          slot: 'main',
+          text: 'Transitions Sync With Audio',
           fontSize: 72,
-          fontWeight: "700",
-          color: "#ffffff",
-          animation: "spring-scale"
-        }
-      ]
-    }
-  ]
+          fontWeight: '700',
+          color: '#ffffff',
+          animation: 'spring-scale',
+        },
+      ],
+    },
+    {
+      id: 'scene-3',
+      layout: 'BULLET_POINTS',
+      durationInFrames: 180,
+      // No transition on last scene — VideoComposition ignores it automatically
+      background: {
+        type: 'color',
+        value: '#111827',
+      },
+      elements: [
+        {
+          type: 'text',
+          slot: 'heading',
+          text: 'How Audio Sync Works',
+          fontSize: 52,
+          fontWeight: '700',
+          color: '#ffffff',
+          animation: 'spring-up',
+        },
+        {
+          type: 'bullet-list',
+          slot: 'bullet',
+          items: [
+            'getTotalDuration() returns the real timeline length',
+            'getAudioOffsets() gives per-scene audio start frames',
+            'transitionDuration controls the overlap window',
+          ],
+          fontSize: 28,
+          color: '#a5b4fc',
+          animation: 'slide-up',
+        },
+      ],
+    },
+  ],
 };
 
+// Patch duration to match actual rendered length
+defaultVideo.duration = getTotalDuration(defaultVideo.scenes);
+
 export const Root: React.FC = () => {
-  // 1. Always calculate total duration from scenes to avoid the "0.15s" bug
-  const totalFrames = defaultVideo.scenes.reduce(
-    (sum, scene) => sum + (scene.durationInFrames || 0), 
-    0
-  );
+  // getTotalDuration accounts for transition frame overlaps.
+  // This is the value Remotion needs — NOT a raw sum of durationInFrames.
+  const totalFrames = getTotalDuration(defaultVideo.scenes);
 
   return (
     <Composition
       id="VideoComposition"
       component={VideoComposition}
-      // Use the dynamic sum of frames
-      durationInFrames={totalFrames || 300} 
-      fps={defaultVideo.fps || 30}
-      width={defaultVideo.width || 1280}
-      height={defaultVideo.height || 720}
-      // Pass the JSON to your components
+      durationInFrames={totalFrames || 300}
+      fps={defaultVideo.fps ?? 30}
+      width={defaultVideo.width ?? 1280}
+      height={defaultVideo.height ?? 720}
       defaultProps={{ videoJson: defaultVideo }}
     />
   );

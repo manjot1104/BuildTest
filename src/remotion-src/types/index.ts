@@ -2,8 +2,7 @@
 // CORE VIDEO JSON TYPES
 // The LLM generates a VideoJson object. Everything flows from this.
 //
-// Elements do not use x/y coordinates.
-// Instead, scenes declare a `layout` which places elements into
+// Scenes declare a `layout` which places elements into
 // named slots. This eliminates text collision entirely.
 // ============================================================
 
@@ -26,7 +25,8 @@ export type TransitionType =
   | 'slide-left'
   | 'slide-right'
   | 'slide-up'
-  | 'zoom'
+  | 'slide-down'
+  | 'wipe'
   | 'none';
 
 export type BackgroundType =
@@ -36,19 +36,17 @@ export type BackgroundType =
       type: 'image';
       url: string;
       objectFit?: 'cover' | 'contain' | 'fill';
-      // Ken Burns motion applied when type is image
       kenBurns?: 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'none';
     }
   | { type: 'video'; url: string };
 
 export type TextAlign = 'left' | 'center' | 'right';
-export type FontWeight = 'normal' | 'bold' | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
+export type FontWeight =
+  | 'normal'
+  | 'bold'
+  | '100' | '200' | '300' | '400' | '500' | '600' | '700' | '800' | '900';
 
 // ── Layout system ──────────────────────────────────────────
-//
-// Each layout defines a set of named slots. Elements are placed
-// into slots — not positioned with x/y. The layout component
-// handles all spacing, padding, and stacking automatically.
 //
 // TITLE          — one large heading, centered, full canvas
 // TITLE_SUBTITLE — heading + subheading, vertically centered
@@ -74,9 +72,6 @@ export type LayoutType =
   | 'FULLSCREEN';
 
 // ── Slot names per layout ──────────────────────────────────
-//
-// Each layout has specific named slots. Elements declare which
-// slot they belong to. Unrecognised slots fall back to 'main'.
 //
 // TITLE:           main
 // TITLE_SUBTITLE:  title, subtitle
@@ -104,16 +99,12 @@ export type SlotName =
   | 'lower';
 
 // ── Elements ──────────────────────────────────────────────
-//
-// NOTE: x/y/width/height are intentionally NOT in the LLM-facing
-// element types anymore. Position is determined by the layout slot.
-// These props are only used internally by layout components.
 
 export type TextElementProps = {
   type: 'text';
-  slot?: SlotName;           // which layout slot this belongs to
+  slot?: SlotName;
   text: string;
-  fontSize?: number;         // in px at 1280px canvas width; auto-scaled
+  fontSize?: number;
   fontFamily?: string;
   fontWeight?: FontWeight;
   color?: string;
@@ -121,11 +112,11 @@ export type TextElementProps = {
   lineHeight?: number;
   letterSpacing?: number;
   animation?: AnimationType;
-  animationDelay?: number;   // frames
-  animationDuration?: number; // frames
+  animationDelay?: number;
+  animationDuration?: number;
   opacity?: number;
   shadow?: boolean;
-  background?: string;       // text highlight/background color
+  background?: string;
   padding?: number;
   borderRadius?: number;
 };
@@ -133,15 +124,15 @@ export type TextElementProps = {
 export type BulletListElementProps = {
   type: 'bullet-list';
   slot?: SlotName;
-  items: string[];           // each bullet item as a plain string
+  items: string[];
   fontSize?: number;
   fontFamily?: string;
   fontWeight?: FontWeight;
   color?: string;
-  bulletColor?: string;      // color of the bullet dot/dash
+  bulletColor?: string;
   lineHeight?: number;
   animation?: AnimationType;
-  itemDelay?: number;        // extra frames between each item appearing
+  itemDelay?: number;
   animationDelay?: number;
   animationDuration?: number;
   shadow?: boolean;
@@ -159,7 +150,7 @@ export type ImageElementProps = {
   animationDuration?: number;
   shadow?: boolean;
   border?: string;
-  alt?: string;  // alt text for accessibility and error fallback
+  alt?: string;
 };
 
 export type ShapeElementProps = {
@@ -173,8 +164,6 @@ export type ShapeElementProps = {
   animationDelay?: number;
   animationDuration?: number;
   border?: string;
-  // Width/height for shapes are kept as they describe the shape itself,
-  // not its position. Layout slot controls where it sits.
   width?: number | string;
   height?: number | string;
 };
@@ -184,7 +173,7 @@ export type DividerElementProps = {
   slot?: SlotName;
   thickness?: number;
   color?: string;
-  width?: number | string;   // width of the line, e.g. "60%"
+  width?: number | string;
   opacity?: number;
   animation?: AnimationType;
   animationDelay?: number;
@@ -202,19 +191,37 @@ export type SceneElement =
 export type Scene = {
   id?: string;
   durationInFrames: number;
-  layout: LayoutType;        // REQUIRED — controls element placement
+  layout: LayoutType;
   background: BackgroundType;
   elements: SceneElement[];
+
+  /**
+   * Transition OUT of this scene (into the next).
+   * Ignored on the last scene.
+   */
   transition?: TransitionType;
+
+  /**
+   * Duration of the transition in frames (default: 20).
+   * TransitionSeries overlaps this scene and the next by this many frames.
+   * AUDIO SYNC: subtract this from the cumulative offset when placing
+   * the next scene's audio track. Use getAudioOffsets() from VideoComposition.
+   */
   transitionDuration?: number;
+
   overlay?: string;          // rgba color overlay on top of background
-  overlayOpacity?: number;
+  overlayOpacity?: number;   // 0–1, default 1
 };
 
 // ── Root Video JSON ────────────────────────────────────────
 
 export type VideoJson = {
-  duration: number;          // total frames
+  /**
+   * Total rendered frames. Should equal getTotalDuration(scenes).
+   * Do NOT set this to the raw sum of durationInFrames — that ignores
+   * transition overlaps and causes dead frames at the end.
+   */
+  duration: number;
   fps?: number;              // default 30
   width?: number;            // default 1280
   height?: number;           // default 720

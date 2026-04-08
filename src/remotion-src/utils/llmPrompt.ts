@@ -1,5 +1,5 @@
 // ============================================================
-// LLM SYSTEM PROMPT — v4.0 (Legibility & Visual Separation)
+// LLM SYSTEM PROMPT
 // ============================================================
 
 export const VIDEO_SYSTEM_PROMPT = `
@@ -9,7 +9,7 @@ Return ONLY valid JSON. No explanation, no markdown.
 ════════════════════════════════════════════════
 CORE HIERARCHY RULES
 ════════════════════════════════════════════════
-1. BACKGROUND (The Mood): Always set a "background". If using an image, it should be an abstract or landscape "environment".
+1. BACKGROUND (The Mood): Always set a "background".
 2. ELEMENTS (The Content): These sit IN FRONT of the background. 
    - Use "text" for copy.
    - Use "image" (slot: "visual") for specific subjects (logos, people, diagrams).
@@ -30,6 +30,22 @@ Pick one layout per scene. Elements MUST use the correct slots:
 | SPLIT_RIGHT     | text, visual            | Image/Subject on LEFT, Copy on RIGHT.     |
 | LOWER_THIRD     | main, lower             | Content with a bottom "chyron" bar.       |
 | FULLSCREEN      | main                    | Fills the whole slot (Best for 1 image).  |
+
+════════════════════════════════════════════════
+TRANSITIONS
+════════════════════════════════════════════════
+Each scene has an optional "transition" (applied when leaving this scene)
+and "transitionDuration" (frames, default 20).
+
+Available transitions: "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "wipe" | "none"
+
+IMPORTANT — FRAME OVERLAP:
+TransitionSeries overlaps adjacent scenes by transitionDuration frames.
+This means the REAL timeline is shorter than the sum of durationInFrames.
+The renderer corrects for this automatically — you do NOT need to adjust durations.
+Just set durationInFrames to how long you want that scene's content visible.
+
+Do NOT set "transition" on the last scene — it is ignored.
 
 ════════════════════════════════════════════════
 IMAGE URL SPECIFICATION (CRITICAL)
@@ -57,20 +73,22 @@ export const buildVideoPrompt = (
 ): string => {
   const totalFrames = durationSeconds * 30;
 
-  return `Task: Create a ${durationSeconds}-second video (${totalFrames} total frames).
+  return `Task: Create a ${durationSeconds}-second video (~${totalFrames} frames of content).
 
 SCENE-SPECIFIC CONSTRAINTS:
-1. TOTAL DURATION: "duration" must be EXACTLY ${totalFrames}.
-2. SCENE SPLIT: The sum of all "durationInFrames" must equal ${totalFrames}.
-3. READABILITY: For any scene with a background image, you MUST include "overlay": "rgba(0,0,0,0.5)" and "overlayOpacity": 1.
+1. TOTAL CONTENT FRAMES: The sum of all scene "durationInFrames" should be approximately ${totalFrames}.
+   The actual rendered duration will be slightly shorter due to transition overlaps — this is handled automatically.
+2. SCENE SPLIT: Aim for ${Math.floor(durationSeconds / 5)} to ${Math.ceil(durationSeconds / 3)} scenes.
+3. READABILITY: For any scene with a background image, include "overlay": "rgba(0,0,0,0.5)" and "overlayOpacity": 1.
 4. IMAGE USAGE: 
    - Use "background" for the atmosphere.
    - Use "image" elements with slot "visual" for the actual subject matter.
 5. VARIETY: Use at least 3 different layouts throughout the video.
+6. TRANSITIONS: Set a "transition" on every scene except the last. Vary them.
+   Use "transitionDuration": 20 as a default (or 15 for snappier cuts, 30 for slower dissolves).
 
 Pacing & Density Rules:
 - A scene should last between 3 to 6 seconds (90-180 frames).
-- You MUST generate at least ${Math.floor(durationSeconds / 5)} to ${Math.ceil(durationSeconds / 3)} scenes.
 
 User Topic: "${userPrompt}"
 
