@@ -12,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { useStateMachine } from '@/context/state-machine'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Zap, Shield, Code2, Layers, Globe, Sparkles, Moon, Sun, SendHorizonal, Plus, Mic, X, FileText, Loader2, Wrench, MessageSquareText, FileUser, Palette, ChevronLeft, ChevronRight, Play, Rocket, FlaskConical, ScanEye, Radio, LayoutTemplate, Type, MousePointerClick, Eye, Save, Upload, Monitor, Tablet, Smartphone, Grid3X3, Undo2, Redo2, Terminal, CircleCheck, Fish, Search, ChevronDown, Star } from 'lucide-react'
 import { BuildifyLogo } from '@/components/buildify-logo'
 import { CommunityBuildsGrid } from '@/components/chat/community-builds-grid'
 import { Footer } from '@/components/layout/footer'
@@ -24,6 +24,7 @@ import { useSpeechRecord } from '@/hooks/use-speech-record'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import Lenis from 'lenis'
 
 // --- Animation Variants ---
 
@@ -200,7 +201,7 @@ function RevealText({ children, delay = 0, className = '' }: {
                 variants={slideUp}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={delay}
             >
                 {children}
@@ -215,7 +216,7 @@ function SectionLabel({ children, delay = 0 }: { children: React.ReactNode; dela
             variants={fadeIn}
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: '-80px' }}
+            viewport={{ once: true, margin: '-20px' }}
             custom={delay}
             className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70"
         >
@@ -415,7 +416,7 @@ function FeatureVideo({ src, index, onClick }: { src: string; index: number; onC
                 variants={maskReveal}
                 initial="hidden"
                 whileInView="visible"
-                viewport={{ once: true, margin: '-80px' }}
+                viewport={{ once: true, margin: '-20px' }}
                 custom={0.15}
                 className="feature-video-inner relative rounded-[20px] overflow-hidden border border-border/30 shadow-lg shadow-black/[0.03] dark:shadow-black/[0.15] cursor-pointer group/video"
                 onClick={onClick}
@@ -565,7 +566,7 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
                 </div>
 
                 {/* Chat body */}
-                <div className="p-5 space-y-4 min-h-[280px] md:min-h-[320px]">
+                <div className="p-5 space-y-4 min-h-[220px] sm:min-h-[280px] md:min-h-[320px]">
                     {/* User message bubble — appears after send */}
                     {showBubble && (
                         <motion.div
@@ -694,6 +695,478 @@ function FlowAIChatVisual({ inView }: { inView: boolean }) {
     )
 }
 
+// --- Community showcase with tabs ---
+
+const SHOWCASE_TABS = ['All', 'Resumes', 'Portfolios', 'Testing', 'Accessibility'] as const
+type ShowcaseTab = typeof SHOWCASE_TABS[number]
+
+// Resume preview card
+function ResumePreviewCard({ name, role, skills, prompt, delay }: { name: string, role: string, skills: string[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini resume preview */}
+            <div className="bg-white dark:bg-[#151520] p-4 border-b border-border/20">
+                <div className="flex items-start gap-3">
+                    <div className="size-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-primary/60">{name[0]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-[11px] font-bold text-foreground/90 dark:text-white/85">{name}</p>
+                        <p className="text-[8px] text-primary/60 font-medium">{role}</p>
+                    </div>
+                </div>
+                <div className="mt-2.5 space-y-1">
+                    <div className="h-1 w-[90%] rounded bg-foreground/[0.06] dark:bg-white/[0.06]" />
+                    <div className="h-1 w-[70%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                    <div className="h-1 w-[80%] rounded bg-foreground/[0.04] dark:bg-white/[0.04]" />
+                </div>
+                <div className="flex flex-wrap gap-1 mt-2.5">
+                    {skills.map(s => (
+                        <span key={s} className="text-[6px] px-1.5 py-0.5 rounded bg-primary/[0.06] text-primary/50 font-medium">{s}</span>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">PDF ready</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Generated</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Portfolio preview card
+function PortfolioPreviewCard({ title, navItems, heroText, heroSub, prompt, delay, action }: { title: string, navItems: string[], heroText: string, heroSub: string, prompt: string, delay: number, action: string }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => action === 'studio' ? router.push('/buildify-studio/new') : router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            {/* Mini website preview */}
+            <div className="bg-[#0f1117] text-white/90 p-0">
+                {/* Navbar */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/5">
+                    <span className="text-[7px] font-bold text-white/70">{title}</span>
+                    <div className="flex gap-2">
+                        {navItems.map(n => <span key={n} className="text-[5px] text-white/30">{n}</span>)}
+                    </div>
+                </div>
+                {/* Hero */}
+                <div className="px-3 py-4">
+                    <p className="text-[10px] font-bold text-white/80">{heroText}</p>
+                    <p className="text-[7px] text-blue-400/60 mt-0.5">{heroSub}</p>
+                    <div className="flex gap-1 mt-2">
+                        <div className="h-3.5 px-2 rounded bg-blue-500/60 flex items-center"><span className="text-[5px] text-white">View Work</span></div>
+                        <div className="h-3.5 px-2 rounded border border-white/10 flex items-center"><span className="text-[5px] text-white/40">About</span></div>
+                    </div>
+                </div>
+                {/* Cards */}
+                <div className="grid grid-cols-3 gap-1 px-3 pb-3">
+                    {[1, 2, 3].map(i => (
+                        <div key={i} className="rounded bg-white/[0.03] border border-white/[0.04] p-1.5">
+                            <div className="aspect-[16/9] rounded bg-white/[0.03] mb-1" />
+                            <div className="h-0.5 w-[60%] rounded bg-white/10" />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between">
+                <div className="flex gap-1">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Live</span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">{action === 'studio' ? 'Studio' : 'Builder'}</span>
+                </div>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {action === 'studio' ? 'Open Studio' : 'Try this'} <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Testing report card
+function TestReportCard({ title, pages, issues, status, score, prompt, delay }: { title: string, pages: number, issues: number, status: string, score: string, prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <FlaskConical className="size-4 text-primary/45" />
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                    </div>
+                    <span className="text-lg font-bold text-primary/45">{score}</span>
+                </div>
+                {/* Mini progress bars */}
+                <div className="space-y-1.5 mb-3">
+                    {['HTML', 'CSS', 'Performance', 'SEO'].map((label, i) => (
+                        <div key={label} className="flex items-center gap-2">
+                            <span className="text-[7px] text-muted-foreground/35 w-14">{label}</span>
+                            <div className="flex-1 h-1 rounded-full bg-border/20 overflow-hidden">
+                                <div className="h-full bg-primary/30 rounded-full" style={{ width: `${85 + i * 4}%` }} />
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-3 text-[8px] text-muted-foreground/40">
+                    <span>{pages} pages</span>
+                    <span>{issues} issues</span>
+                    <span className={cn("font-medium", status === 'Pass' ? 'text-primary/50' : 'text-muted-foreground/40')}>{status}</span>
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">Analyzed</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+// Accessibility report card
+function A11yReportCard({ title, score, checks, prompt, delay }: { title: string, score: number, checks: { label: string, pass: boolean }[], prompt: string, delay: number }) {
+    const router = useRouter()
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay }}
+            onClick={() => router.push(`/chat?prompt=${encodeURIComponent(prompt)}`)}
+            className="group rounded-xl border border-border/40 dark:border-primary/[0.06] bg-card/50 dark:bg-[#0d0d14]/70 overflow-hidden cursor-pointer transition-all duration-300 hover:border-primary/20 hover:shadow-[0_0_20px_rgba(59,130,246,0.04)] hover:-translate-y-0.5"
+        >
+            <div className="p-4">
+                <div className="flex items-center gap-3 mb-3">
+                    {/* Score circle */}
+                    <div className="relative size-12 shrink-0">
+                        <svg viewBox="0 0 100 100" className="size-full -rotate-90">
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" className="text-border/15" />
+                            <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" className="text-primary/50"
+                                strokeDasharray={`${2 * Math.PI * 42}`} strokeDashoffset={`${(2 * Math.PI * 42) * (1 - score / 100)}`} />
+                        </svg>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-[11px] font-bold text-foreground/70">{score}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-[12px] font-semibold text-foreground/80">{title}</p>
+                        <p className="text-[8px] text-primary/45 font-medium">{score >= 95 ? 'Excellent' : 'Good'}</p>
+                    </div>
+                </div>
+                {/* Check items */}
+                <div className="space-y-1">
+                    {checks.map(c => (
+                        <div key={c.label} className="flex items-center justify-between">
+                            <span className="text-[8px] text-muted-foreground/40">{c.label}</span>
+                            <CircleCheck className={cn("size-3", c.pass ? 'text-primary/40' : 'text-muted-foreground/20')} />
+                        </div>
+                    ))}
+                </div>
+            </div>
+            <div className="px-4 py-2 border-t border-border/15 flex items-center justify-between">
+                <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-primary/[0.05] text-primary/40 font-medium">WCAG AA</span>
+                <span className="text-[8px] text-muted-foreground/30 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Try this <ArrowRight className="size-2" />
+                </span>
+            </div>
+        </motion.div>
+    )
+}
+
+function CommunityShowcase() {
+    const [activeTab, setActiveTab] = useState<ShowcaseTab>('All')
+    const [isAutoSwitching, setIsAutoSwitching] = useState(true)
+
+    useEffect(() => {
+        if (!isAutoSwitching) return
+        const interval = setInterval(() => {
+            setActiveTab(prev => {
+                const idx = SHOWCASE_TABS.indexOf(prev)
+                return SHOWCASE_TABS[(idx + 1) % SHOWCASE_TABS.length]!
+            })
+        }, 5000)
+        return () => clearInterval(interval)
+    }, [isAutoSwitching])
+
+    const handleTabClick = (tab: ShowcaseTab) => {
+        setActiveTab(tab)
+        setIsAutoSwitching(false)
+        setTimeout(() => setIsAutoSwitching(true), 15000)
+    }
+
+    return (
+        <div>
+            {/* Tabs */}
+            <div className="flex gap-1.5 mb-6 sm:mb-8 overflow-x-auto scrollbar-hide pb-1">
+                {SHOWCASE_TABS.map(tab => (
+                    <button
+                        key={tab}
+                        onClick={() => handleTabClick(tab)}
+                        className={cn(
+                            "px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200 shrink-0",
+                            activeTab === tab
+                                ? 'bg-primary/10 text-primary/80 border border-primary/20'
+                                : 'text-muted-foreground/50 border border-transparent hover:text-muted-foreground/70 hover:bg-muted/20'
+                        )}
+                    >
+                        {tab}
+                    </button>
+                ))}
+            </div>
+
+            {/* Content */}
+            <motion.div key={activeTab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+                {(activeTab === 'All' || activeTab === 'Resumes') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Resumes</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <ResumePreviewCard name="Arjun Mehta" role="Senior Frontend Developer" skills={['React', 'Next.js', 'TypeScript', 'Tailwind']} prompt="Create a senior frontend developer resume focused on React, Next.js and TypeScript" delay={0} />
+                            <ResumePreviewCard name="Maya Chen" role="Product Designer" skills={['Figma', 'UX Research', 'Design Systems']} prompt="Create a product designer resume with clean minimal layout highlighting UX skills" delay={0.05} />
+                            <ResumePreviewCard name="Ravi Kumar" role="Full-Stack Engineer" skills={['Node.js', 'React', 'PostgreSQL', 'AWS']} prompt="Create an ATS-optimized full-stack engineer resume" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Portfolios') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Portfolios</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <PortfolioPreviewCard title="Ethan.dev" navItems={['Work', 'About', 'Contact']} heroText="Hi, I'm Ethan Carter" heroSub="Product Designer & Developer" prompt="" delay={0} action="studio" />
+                            <PortfolioPreviewCard title="Pixel Studio" navItems={['Projects', 'Team', 'Blog']} heroText="Creative Agency" heroSub="We build digital experiences" prompt="Build a creative agency landing page with case studies" delay={0.05} action="try" />
+                            <PortfolioPreviewCard title="Sara.design" navItems={['Gallery', 'About', 'Hire']} heroText="Freelance Designer" heroSub="Available for projects" prompt="Create a minimal freelance designer portfolio with contact form" delay={0.1} action="try" />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Testing') && (
+                    <div className="mb-6">
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Testing Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <TestReportCard title="E-commerce Store" pages={12} issues={0} status="Pass" score="98%" prompt="Test my e-commerce store for performance issues" delay={0} />
+                            <TestReportCard title="SaaS Dashboard" pages={8} issues={2} status="Pass" score="95%" prompt="Run a test suite on my SaaS dashboard" delay={0.05} />
+                            <TestReportCard title="Blog Platform" pages={15} issues={0} status="Pass" score="100%" prompt="Test my blog for broken links and SEO issues" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+
+                {(activeTab === 'All' || activeTab === 'Accessibility') && (
+                    <div>
+                        {activeTab === 'All' && <p className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/30 font-medium mb-3">Accessibility Reports</p>}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                            <A11yReportCard title="Portfolio Audit" score={98} checks={[{ label: 'Color Contrast', pass: true }, { label: 'ARIA Labels', pass: true }, { label: 'Keyboard Nav', pass: true }, { label: 'Alt Text', pass: true }]} prompt="Run a WCAG accessibility audit on my portfolio" delay={0} />
+                            <A11yReportCard title="Restaurant Menu" score={95} checks={[{ label: 'Contrast', pass: true }, { label: 'Navigation', pass: true }, { label: 'Forms', pass: true }, { label: 'Semantics', pass: false }]} prompt="Check my restaurant menu for accessibility" delay={0.05} />
+                            <A11yReportCard title="Landing Page" score={100} checks={[{ label: 'Headings', pass: true }, { label: 'ARIA', pass: true }, { label: 'Focus', pass: true }, { label: 'Contrast', pass: true }]} prompt="Audit my landing page for accessibility" delay={0.1} />
+                        </div>
+                    </div>
+                )}
+            </motion.div>
+        </div>
+    )
+}
+
+// --- Testimonial scroller ---
+
+const TESTIMONIALS = [
+    {
+        quote: '"I just described what I needed… and it worked."',
+        description: 'Built a parent-teacher meeting scheduler without writing a single line of code. Parents get a link, pick a slot, done.',
+        name: 'Priya S.',
+        role: 'Teacher, Kerala',
+        tags: ['No code', 'Shipped'],
+        avatar: 'P',
+        stars: 5,
+    },
+    {
+        quote: '"Menu was live before lunch rush."',
+        description: 'Dragged together a menu page in Studio and hit publish. Twenty minutes, start to finish. Still using it daily.',
+        name: 'Rahul M.',
+        role: 'Restaurant Owner',
+        tags: ['20 min', 'Studio'],
+        avatar: 'R',
+        stars: 4.5,
+    },
+    {
+        quote: '"Four resumes, one interview within a week."',
+        description: 'Created four tailored resumes for different roles, exported as PDFs, and got a callback within days.',
+        name: 'Amit K.',
+        role: 'Job Seeker',
+        tags: ['Builder', '4 resumes'],
+        avatar: 'A',
+        stars: 5,
+    },
+    {
+        quote: '"Two days stuck. Fixed it in one prompt."',
+        description: 'A CORS issue had been blocking deployment. Described the problem in AI Chat, got the fix, applied it immediately.',
+        name: 'Dev R.',
+        role: 'Full-Stack Developer',
+        tags: ['AI Chat', 'Instant'],
+        avatar: 'D',
+        stars: 4.5,
+    },
+    {
+        quote: '"Went from idea to deployed in an afternoon."',
+        description: 'Prototyped a feedback form app, tested it, and pushed it live. The whole workflow felt seamless.',
+        name: 'Sara J.',
+        role: 'Product Manager',
+        tags: ['Live', 'No code'],
+        avatar: 'S',
+        stars: 5,
+    },
+]
+
+function TestimonialStars({ count, active }: { count: number, active: boolean }) {
+    return (
+        <div className="flex gap-0.5 mb-2">
+            {[...Array(5)].map((_, i) => {
+                const filled = i < Math.floor(count)
+                const half = !filled && i < count
+                return (
+                    <div key={i} className="relative">
+                        {/* Empty star */}
+                        <Star className={cn("size-3", active ? 'text-primary/15' : 'text-primary/8')} />
+                        {/* Filled overlay */}
+                        {filled && (
+                            <Star className={cn("size-3 fill-current absolute inset-0", active ? 'text-primary/50' : 'text-primary/20')} />
+                        )}
+                        {/* Half-filled overlay */}
+                        {half && (
+                            <div className="absolute inset-0 overflow-hidden" style={{ width: '50%' }}>
+                                <Star className={cn("size-3 fill-current", active ? 'text-primary/50' : 'text-primary/20')} />
+                            </div>
+                        )}
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
+
+function TestimonialScroller() {
+    const [isPaused, setIsPaused] = useState(false)
+    const [offset, setOffset] = useState(0)
+    const itemHeight = 150
+    const totalItems = TESTIMONIALS.length
+    const totalHeight = totalItems * itemHeight
+
+    useEffect(() => {
+        if (isPaused) return
+        const interval = setInterval(() => {
+            setOffset(prev => (prev + 0.85) % totalHeight)
+        }, 25)
+        return () => clearInterval(interval)
+    }, [isPaused, totalHeight])
+
+    const items = [...TESTIMONIALS, ...TESTIMONIALS]
+
+    return (
+        <div
+            className="relative h-[420px] sm:h-[440px] overflow-hidden"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+        >
+            {/* Top fade */}
+            <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-background to-transparent z-10 pointer-events-none" />
+            {/* Bottom fade */}
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-background to-transparent z-10 pointer-events-none" />
+
+            <div
+                className="absolute inset-x-0"
+                style={{ transform: `translateY(-${offset}px)` }}
+            >
+                {items.map((t, i) => {
+                    const itemTop = i * itemHeight - offset
+                    const centerY = 420 / 2
+                    const itemCenter = itemTop + itemHeight / 2
+                    const dist = Math.abs(itemCenter - centerY)
+                    // Sharp focus — active within 40% of item height (narrow band)
+                    const isActive = dist < itemHeight * 0.4
+                    const isNear = dist < itemHeight * 1.1
+                    const isFar = !isNear
+
+                    return (
+                        <div
+                            key={`${t.avatar}-${i}`}
+                            className="px-2 sm:px-3"
+                            style={{ height: itemHeight, display: 'flex', alignItems: 'center' }}
+                        >
+                            <div
+                                className={cn(
+                                    "w-full rounded-xl border p-4 sm:p-5 transition-all duration-300",
+                                    isActive
+                                        ? 'border-primary/20 bg-card/80 dark:bg-[#0e0e18]/90 shadow-[0_0_24px_rgba(59,130,246,0.06)] scale-100 opacity-100'
+                                        : isFar
+                                            ? 'border-border/15 bg-card/20 dark:bg-[#0d0d14]/30 scale-[0.93] opacity-25 blur-[1px]'
+                                            : 'border-border/25 bg-card/40 dark:bg-[#0d0d14]/50 scale-[0.97] opacity-55'
+                                )}
+                            >
+                                <TestimonialStars count={t.stars} active={isActive} />
+
+                                {/* Quote */}
+                                <p className={cn(
+                                    "text-[13px] sm:text-sm font-semibold leading-snug mb-1.5 transition-colors duration-500",
+                                    isActive ? 'text-foreground/90' : 'text-foreground/50'
+                                )}>
+                                    {t.quote}
+                                </p>
+
+                                {/* Description */}
+                                <p className={cn(
+                                    "text-[11px] sm:text-xs leading-relaxed mb-3 transition-colors duration-500",
+                                    isActive ? 'text-muted-foreground/55' : 'text-muted-foreground/30'
+                                )}>
+                                    {t.description}
+                                </p>
+
+                                {/* Footer */}
+                                <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                        "size-5 rounded-full flex items-center justify-center text-[8px] font-bold transition-colors duration-500",
+                                        isActive ? 'bg-primary/10 text-primary/50' : 'bg-primary/5 text-primary/25'
+                                    )}>
+                                        {t.avatar}
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-medium text-foreground/50">{t.name}</p>
+                                        <p className="text-[7px] text-muted-foreground/30">{t.role}</p>
+                                    </div>
+                                    <div className="flex gap-1 ml-auto">
+                                        {t.tags.map(tag => (
+                                            <span key={tag} className={cn(
+                                                "text-[7px] px-1.5 py-0.5 rounded-full font-medium transition-colors duration-500",
+                                                isActive ? 'bg-primary/[0.06] text-primary/40' : 'bg-primary/[0.03] text-primary/20'
+                                            )}>{tag}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
 // --- Flow connector dots ---
 
 const FLOW_DOTS = [
@@ -814,8 +1287,8 @@ function FlowChatToStudioTransition() {
     const lineProgress = useTransform(progress, [0, 1], [0, 100])
 
     return (
-        <section ref={transitionRef} className="relative" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
-            <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
+        <section ref={transitionRef} className="relative hidden sm:block" style={{ height: '250vh', minHeight: mounted ? undefined : '250vh' }}>
+            <div className="sticky top-0 h-screen flex items-center justify-center px-4 sm:px-6 overflow-hidden">
                 {/* Connection line (energy flow) */}
                 <motion.div
                     className="absolute left-1/2 -translate-x-1/2 w-px top-0 bg-gradient-to-b from-transparent via-primary/20 to-transparent pointer-events-none"
@@ -949,7 +1422,7 @@ function FlowChatToStudioTransition() {
                             </motion.div>
 
                             {/* 3 Cards */}
-                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-3 gap-1.5">
+                            <motion.div style={{ opacity: cardsOpacity, y: cardsY }} className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                                 {[
                                     { title: 'Web Design', desc: 'Modern responsive interfaces' },
                                     { title: 'Branding', desc: 'Identity and visual systems' },
@@ -1022,7 +1495,7 @@ type StudioAction = 'idle' | 'hover-template' | 'click-template' | 'click-text' 
 
 function FlowStudioSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [cursorPos, setCursorPos] = useState({ x: 50, y: 50 })
     const [cursorAction, setCursorAction] = useState<StudioAction>('idle')
     const [cursorVisible, setCursorVisible] = useState(false)
@@ -1221,7 +1694,7 @@ function FlowStudioSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text — top */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -1361,7 +1834,7 @@ function FlowStudioSection() {
                             </motion.div>
 
                             {/* ── Main Editor Area ── */}
-                            <div className="flex relative" style={{ height: 'clamp(340px, 44vw, 520px)' }}>
+                            <div className="flex relative" style={{ height: 'clamp(260px, 44vw, 520px)' }}>
                                 {/* Animated cursor */}
                                 {cursorVisible && (
                                     <motion.div
@@ -1923,7 +2396,7 @@ function FlowStudioToBuilderTransition() {
     const gridOpacity = useTransform(scrollYProgress, [0.1, 0.25, 0.75, 0.9], [0, 0.06, 0.06, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Subtle background grid — depth layer */}
             <motion.div
                 style={{ opacity: gridOpacity }}
@@ -1966,13 +2439,13 @@ function FlowStudioToBuilderTransition() {
 
             <div className="max-w-6xl mx-auto px-6 relative">
                 {/* Left side — UI fragments floating toward positions */}
-                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none">
+                <motion.div style={{ opacity: fragmentsOpacity }} className="absolute inset-0 pointer-events-none hidden sm:block">
                     {[...TRANSITION_FRAGMENTS.left, ...TRANSITION_FRAGMENTS.right].map((frag) => (
                         <motion.div
                             key={frag.label}
                             initial={{ opacity: 0, y: 14, scale: 0.92 }}
                             whileInView={{ opacity: 1, y: 0, scale: 1 }}
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             transition={{ duration: 0.5, delay: frag.delay, ease: [0.25, 0.1, 0.25, 1] }}
                             className="absolute"
                             style={{ left: frag.x, top: frag.y }}
@@ -1989,7 +2462,7 @@ function FlowStudioToBuilderTransition() {
                 <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-100px' }}
+                    viewport={{ once: true, margin: '-20px' }}
                     transition={{ duration: 0.6 }}
                     className="relative z-10 flex justify-center py-8"
                 >
@@ -2026,7 +2499,7 @@ type BuildStep = 'prompt' | 'generating' | 'code' | 'preview' | 'pushing' | 'pus
 
 function FlowBuilderSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [step, setStep] = useState<BuildStep | 'idle'>('idle')
     const [codeLines, setCodeLines] = useState(0)
     const buildTimers = useRef<ReturnType<typeof setTimeout>[]>([])
@@ -2106,9 +2579,9 @@ function FlowBuilderSection() {
     }
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Left — Builder card */}
                     <motion.div
                         initial={{ opacity: 0, y: 20, scale: 0.97 }}
@@ -2130,7 +2603,7 @@ function FlowBuilderSection() {
                                 </div>
 
                                 {/* Card body — content crossfades by step */}
-                                <div className="relative min-h-[320px] md:min-h-[360px]">
+                                <div className="relative min-h-[260px] sm:min-h-[320px] md:min-h-[360px]">
                                     {/* Step 1: Prompt */}
                                     {(step === 'idle' || step === 'prompt') && (
                                         <motion.div
@@ -2426,7 +2899,7 @@ function FlowBuilderToTestingTransition() {
     const labelOpacity = useTransform(scrollYProgress, [0.40, 0.52, 0.72, 0.85], [0, 1, 1, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             <div className="relative flex flex-col items-center justify-center" style={{ minHeight: 120 }}>
 
                 {/* Trailing glow — soft, fades quickly */}
@@ -2516,7 +2989,7 @@ const ANALYSIS_ITEMS = [
 
 function FlowTestingSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
     const [phase, setPhase] = useState<TestPhase>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [progress, setProgress] = useState(0)
@@ -2633,7 +3106,7 @@ function FlowTestingSection() {
     }, [isInView])
 
     return (
-        <section ref={sectionRef} className="relative px-6 py-16 md:py-20 overflow-hidden">
+        <section ref={sectionRef} className="relative px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
                 {/* Text header */}
                 <div className="max-w-xl mb-8 md:mb-12">
@@ -2702,7 +3175,7 @@ function FlowTestingSection() {
 
                             {/* URL Input + Run Tests */}
                             <div className="px-5 py-4 border-b border-border/20">
-                                <div className="flex gap-2">
+                                <div className="flex flex-col sm:flex-row gap-2">
                                     <div className={cn(
                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                         phase === 'typing-url' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
@@ -2710,19 +3183,19 @@ function FlowTestingSection() {
                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
                                         <div className="flex-1 min-h-[18px] flex items-center">
                                             {phase !== 'idle' ? (
-                                                <span className="text-[12px] text-foreground/70 font-mono">
+                                                <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono">
                                                     {testUrl.slice(0, urlChars)}
                                                     {phase === 'typing-url' && urlChars < testUrl.length && (
                                                         <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
                                                     )}
                                                 </span>
                                             ) : (
-                                                <span className="text-[12px] text-muted-foreground/30">Enter URL to test...</span>
+                                                <span className="text-[10px] sm:text-[12px] text-muted-foreground/30">Enter URL to test...</span>
                                             )}
                                         </div>
                                     </div>
                                     <button className={cn(
-                                        "px-4 py-2.5 rounded-lg flex items-center gap-2 text-[11px] font-semibold transition-all duration-200",
+                                        "w-full sm:w-auto px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 text-[11px] font-semibold transition-all duration-200 shrink-0",
                                         phase === 'running' || phase === 'analyzing'
                                             ? 'bg-primary/70 text-primary-foreground cursor-wait'
                                             : phase === 'complete' || phase === 'expanding'
@@ -3035,7 +3508,7 @@ function FlowTestingToA11yTransition() {
     const pulseOpacity = useTransform(scrollYProgress, [0.05, 0.12, 0.2], [0, 0.15, 0])
 
     return (
-        <section ref={ref} className="relative py-10 md:py-14 overflow-hidden">
+        <section ref={ref} className="relative py-6 sm:py-10 md:py-14 overflow-hidden">
             {/* Background pulse — origin flash from testing completion */}
             <motion.div
                 style={{ opacity: pulseOpacity }}
@@ -3106,7 +3579,7 @@ function FlowTestingToA11yTransition() {
 
 function FlowAccessibilityLiveCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-30px', amount: 0.1 })
     const [step, setStep] = useState<A11yStep>('idle')
     const [urlChars, setUrlChars] = useState(0)
     const [visibleLogs, setVisibleLogs] = useState(0)
@@ -3213,9 +3686,9 @@ function FlowAccessibilityLiveCTA() {
     return (
         <>
             {/* ── Accessibility Testing Section ── */}
-            <section ref={sectionRef} className="relative flex items-center px-6 py-16 md:py-20 overflow-hidden">
+            <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 py-10 sm:py-14 md:py-20 overflow-hidden">
                 <div className="max-w-6xl mx-auto w-full">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                         {/* Left — Static description (NO animations) */}
                         <div>
                             <span className="inline-flex items-center gap-2 text-[11px] font-medium tracking-[0.2em] uppercase text-primary/70 mb-5">
@@ -3272,7 +3745,7 @@ function FlowAccessibilityLiveCTA() {
                                     </div>
 
                                     {/* Card body — steps crossfade */}
-                                    <div className="relative min-h-[370px] md:min-h-[410px]">
+                                    <div className="relative min-h-[300px] sm:min-h-[370px] md:min-h-[410px]">
 
                                         {/* Step 1: URL Input */}
                                         {(step === 'idle' || step === 'typing' || step === 'running') && (
@@ -3283,13 +3756,13 @@ function FlowAccessibilityLiveCTA() {
                                                 className="absolute inset-0 p-5 flex flex-col"
                                             >
                                                 <p className="text-[10px] text-muted-foreground/40 mb-3">Enter a URL to test accessibility</p>
-                                                <div className="flex gap-2 mb-4">
+                                                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                                                     <div className={cn(
                                                         "flex-1 flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-colors duration-200",
                                                         step === 'typing' ? 'border-primary/30 bg-background/80' : 'border-border/30 bg-background/50'
                                                     )}>
                                                         <Search className="size-3.5 text-muted-foreground/30 flex-shrink-0" />
-                                                        <span className="text-[12px] text-foreground/70 font-mono flex-1">
+                                                        <span className="text-[10px] sm:text-[12px] text-foreground/70 font-mono flex-1">
                                                             {step !== 'idle' ? testUrl.slice(0, urlChars) : ''}
                                                             {step === 'typing' && urlChars < testUrl.length && (
                                                                 <span className="inline-block w-[2px] h-[13px] bg-primary/60 ml-0.5 align-middle animate-pulse" />
@@ -3298,7 +3771,7 @@ function FlowAccessibilityLiveCTA() {
                                                         </span>
                                                     </div>
                                                     <div className={cn(
-                                                        "px-3 py-2.5 rounded-lg flex items-center gap-1.5 text-[10px] font-semibold transition-all duration-200",
+                                                        "w-full sm:w-auto px-3 py-2.5 rounded-lg flex items-center justify-center gap-1.5 text-[10px] font-semibold transition-all duration-200 shrink-0",
                                                         step === 'running'
                                                             ? 'bg-primary/70 text-primary-foreground scale-95'
                                                             : 'bg-primary text-primary-foreground shadow-sm shadow-primary/20'
@@ -3496,7 +3969,7 @@ type LaunchPhase = 'idle' | 'entering' | 'reveal' | 'scrolling' | 'live' | 'exit
 
 function FlowLaunchCTA() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: true, margin: '-80px', amount: 0.3 })
+    const isInView = useInView(sectionRef, { once: true, margin: '-30px', amount: 0.1 })
     const [phase, setPhase] = useState<LaunchPhase>('idle')
     const [scrollY, setScrollY] = useState(0)
     const hasCompleted = useRef(false)
@@ -3603,7 +4076,7 @@ function FlowLaunchCTA() {
                             </div>
 
                             {/* Scrollable viewport */}
-                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(300px, 38vw, 440px)' }}>
+                            <div className="bg-[#0f1117] text-white/90 overflow-hidden" style={{ height: 'clamp(220px, 38vw, 440px)' }}>
                                 <div style={{ transform: `translateY(-${scrollY}px)`, transition: 'transform 0.08s linear' }}>
                                     {/* ── Navbar ── */}
                                     <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 sticky top-0 bg-[#0f1117]/95 backdrop-blur-sm z-10">
@@ -3760,7 +4233,7 @@ function FlowLaunchCTA() {
                             <p className="text-[11px] font-medium tracking-[0.2em] uppercase text-primary/45 mb-5">
                                 The complete platform
                             </p>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] mb-5">
                                 Build, launch, and scale —<br />
                                 <span className="text-muted-foreground/40">all in one place.</span>
                             </h2>
@@ -3806,12 +4279,12 @@ function FlowLaunchCTA() {
 
 function FlowAIChatSection() {
     const sectionRef = useRef<HTMLDivElement>(null)
-    const isInView = useInView(sectionRef, { once: false, margin: '-100px', amount: 0.4 })
+    const isInView = useInView(sectionRef, { once: false, margin: '-40px', amount: 0.15 })
 
     return (
-        <section ref={sectionRef} className="relative flex items-center px-6 pt-10 md:pt-14 pb-16 md:pb-20 overflow-hidden">
+        <section ref={sectionRef} className="relative flex items-center px-4 sm:px-6 pt-8 sm:pt-10 md:pt-14 pb-10 sm:pb-14 md:pb-20 overflow-hidden">
             <div className="max-w-6xl mx-auto w-full">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 sm:gap-10 md:gap-16 items-center">
                     {/* Text — staggered entrance */}
                     <div>
                         <motion.span
@@ -3897,6 +4370,34 @@ export default function LandingPage() {
         const t = setTimeout(clearMicError, 5000)
         return () => clearTimeout(t)
     }, [micError, clearMicError])
+
+    // Lenis smooth scroll — homepage only.
+    // Lenis intercepts wheel/touch events and animates scrollTop on the root,
+    // which fires real native scroll events so Framer Motion's useScroll and
+    // IntersectionObserver-based useInView both continue to work without changes.
+    useEffect(() => {
+        const lenis = new Lenis({
+            // lerp controls the smoothing factor (0 = instant, 1 = never arrives).
+            // 0.1 is snappy enough to not feel laggy while still ironing out chop.
+            lerp: 0.1,
+            // Don't smooth touch/trackpad on mobile — native momentum already feels
+            // good and double-smoothing causes perceptible lag on low-end devices.
+            smoothWheel: true,
+            touchMultiplier: 1.5,
+        })
+
+        let rafId: number
+        const raf = (time: number) => {
+            lenis.raf(time)
+            rafId = requestAnimationFrame(raf)
+        }
+        rafId = requestAnimationFrame(raf)
+
+        return () => {
+            cancelAnimationFrame(rafId)
+            lenis.destroy()
+        }
+    }, [])
 
     const { scrollYProgress } = useScroll({
         target: heroRef,
@@ -4010,7 +4511,7 @@ export default function LandingPage() {
             <motion.section
                 ref={heroRef}
                 style={{ opacity: heroOpacity, scale: heroScale }}
-               className="relative flex flex-col items-center justify-center px-6 pt-28 md:pt-36 pb-4 md:pb-6 overflow-hidden"
+               className="relative flex flex-col items-center justify-center px-4 sm:px-6 pt-20 sm:pt-24 md:pt-36 pb-4 md:pb-6 overflow-hidden"
             >
                 {/* Aurora mesh background */}
                 <div className="hero-aurora" />
@@ -4103,12 +4604,12 @@ export default function LandingPage() {
                     {/* Heading */}
                     <div className="space-y-1 mb-4">
                         <RevealText delay={0.4}>
-                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-shimmer">
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-shimmer">
                                 From idea to live
                             </h1>
                         </RevealText>
                         <RevealText delay={0.5}>
-                            <h1 className="text-[clamp(2rem,6vw,4rem)] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-[4rem] font-bold leading-[0.95] tracking-tighter text-muted-foreground/35">
                                 all in one place.
                             </h1>
                         </RevealText>
@@ -4120,7 +4621,7 @@ export default function LandingPage() {
                         initial="hidden"
                         animate="visible"
                         custom={0.7}
-                        className="text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-8 leading-[1.7]"
+                        className="text-xs sm:text-sm md:text-base text-muted-foreground/70 max-w-lg mx-auto mb-6 sm:mb-8 leading-[1.7] px-2 sm:px-0"
                     >
                         Plan, design, build, test, and launch production-ready apps with AI.
                     </motion.p>
@@ -4136,11 +4637,10 @@ export default function LandingPage() {
                     className="relative w-full mt-10 md:mt-14"
                 >
                     <div className="max-w-5xl mx-auto">
-                        <div className="relative">
-                            <div className="absolute top-5 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40 hidden md:block" />
-                            <div className="absolute top-0 bottom-0 left-5 w-px bg-border/40 md:hidden" />
-
-                            <div className="grid grid-cols-1 md:grid-cols-7 gap-3 md:gap-2">
+                        {/* Desktop flow — spacious 7-column grid */}
+                        <div className="relative hidden md:block">
+                            <div className="absolute top-6 left-[calc(100%/14)] right-[calc(100%/14)] h-px bg-border/40" />
+                            <div className="grid grid-cols-7 gap-3">
                                 {[
                                     { icon: MessageSquareText, title: 'AI Chat' },
                                     { icon: Palette, title: 'Studio' },
@@ -4150,21 +4650,51 @@ export default function LandingPage() {
                                     { icon: ScanEye, title: 'Accessibility' },
                                     { icon: Radio, title: 'Live' },
                                 ].map((step, index) => (
-                                    <div key={step.title} className="relative flex md:flex-col items-center md:items-center gap-3 md:gap-0">
-                                        <div className="relative z-10 size-10 rounded-lg border border-border/60 bg-background/80 backdrop-blur-sm flex items-center justify-center shrink-0">
-                                            <step.icon className="size-4 text-primary/60" />
+                                    <div key={step.title} className="relative flex flex-col items-center">
+                                        <div className="relative z-10 size-12 rounded-xl border border-border/70 bg-background flex items-center justify-center">
+                                            <step.icon className="size-[18px] text-primary/70" />
                                         </div>
                                         {index < 6 && (
-                                            <div className="absolute top-5 -right-[calc(50%-5px)] hidden md:flex items-center -translate-y-1/2 z-20 pointer-events-none">
-                                                <ArrowRight className="size-3 text-primary/40" />
+                                            <div className="absolute top-6 -right-[calc(50%-6px)] flex items-center -translate-y-1/2 z-20 pointer-events-none">
+                                                <ArrowRight className="size-3 text-muted-foreground/20" />
                                             </div>
                                         )}
-                                        <span className="md:mt-2 text-[11px] font-medium text-muted-foreground/60 text-center">
+                                        <span className="mt-3 text-sm font-medium text-foreground/80 text-center">
                                             {step.title}
                                         </span>
                                     </div>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* Mobile flow — compact single row */}
+                        <div className="flex items-center justify-center w-full md:hidden">
+                            {[
+                                { icon: MessageSquareText, short: 'AI' },
+                                { icon: Palette, short: 'Studio' },
+                                { icon: Code2, short: 'Build' },
+                                { icon: Rocket, short: 'Deploy' },
+                                { icon: FlaskConical, short: 'Test' },
+                                { icon: ScanEye, short: 'Access' },
+                                { icon: Radio, short: 'Live' },
+                            ].map((step, index) => (
+                                <div key={step.short} className="flex items-center">
+                                    <div className="flex flex-col items-center gap-0.5">
+                                        <div className="size-7 sm:size-8 rounded-md border border-border/50 bg-background/80 backdrop-blur-sm flex items-center justify-center">
+                                            <step.icon className="size-3 sm:size-3.5 text-primary/60" />
+                                        </div>
+                                        <span className="mt-0.5 text-[7px] sm:text-[8px] font-medium text-muted-foreground/55 text-center">
+                                            {step.short}
+                                        </span>
+                                    </div>
+                                    {index < 6 && (
+                                        <div className="flex items-center mx-0.5 sm:mx-1 -mt-3">
+                                            <div className="w-1.5 sm:w-2.5 h-px bg-border/30" />
+                                            <ArrowRight className="size-1.5 sm:size-2 text-muted-foreground/15 -ml-px" />
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </motion.div>
@@ -4175,11 +4705,11 @@ export default function LandingPage() {
                     initial="hidden"
                     animate="visible"
                     custom={1.1}
-                    className="mt-10 md:mt-12 flex justify-center"
+                    className="mt-8 sm:mt-10 md:mt-12 flex justify-center px-4 sm:px-0"
                 >
                     <button
                         onClick={() => router.push('/chat')}
-                        className="relative inline-flex items-center gap-2.5 rounded-xl h-12 px-9 text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
+                        className="relative inline-flex items-center gap-2 sm:gap-2.5 rounded-xl h-11 sm:h-12 px-6 sm:px-9 text-xs sm:text-sm font-semibold bg-[#0a0a0f] dark:bg-[#0e0e14] text-white border border-primary/30 shadow-[0_0_15px_rgba(59,130,246,0.1),0_0_30px_rgba(59,130,246,0.05)] hover:border-primary/60 hover:shadow-[0_0_20px_rgba(59,130,246,0.2),0_0_40px_rgba(59,130,246,0.08)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
                     >
                         Start Building
                         <ArrowRight className="size-4 text-white/70" />
@@ -4216,7 +4746,7 @@ export default function LandingPage() {
                                 variants={blurIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={i * 0.15}
                                 className="text-center"
                             >
@@ -4384,7 +4914,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.2}
                         >
                             <div className="flex items-baseline gap-3">
@@ -4399,7 +4929,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-8"
                             >
@@ -4465,7 +4995,7 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
@@ -4487,7 +5017,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0}
                                             className="feature-index inline-flex items-center gap-3 text-xs font-mono text-muted-foreground/40 mb-4"
                                         >
@@ -4503,7 +5033,7 @@ export default function LandingPage() {
                                             variants={blurIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.15}
                                             className="mt-4 text-[15px] text-muted-foreground leading-[1.7]"
                                         >
@@ -4513,7 +5043,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.25}
                                             className="mt-6 space-y-3"
                                         >
@@ -4536,7 +5066,7 @@ export default function LandingPage() {
                                             variants={fadeIn}
                                             initial="hidden"
                                             whileInView="visible"
-                                            viewport={{ once: true, margin: '-60px' }}
+                                            viewport={{ once: true, margin: '-20px' }}
                                             custom={0.45}
                                             className="mt-8"
                                         >
@@ -4571,6 +5101,49 @@ export default function LandingPage() {
                                 </div>
                             )
                         })}
+                    </div>
+                </div>
+            </section>
+
+            {/* ── Testimonials Section ── */}
+            <div className="section-divider" />
+            <section className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6 overflow-hidden">
+                <div className="max-w-6xl mx-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+                        {/* Left — heading */}
+                        <div>
+                            <SectionLabel>Stories</SectionLabel>
+                            <RevealText delay={0.1} className="mt-5">
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                                    Built by people,
+                                </h2>
+                            </RevealText>
+                            <RevealText delay={0.2}>
+                                <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                                    not just prompts.
+                                </h2>
+                            </RevealText>
+                            <motion.p
+                                variants={fadeIn}
+                                initial="hidden"
+                                whileInView="visible"
+                                viewport={{ once: true, margin: '-20px' }}
+                                custom={0.3}
+                                className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            >
+                                Real things people are already doing with Buildify.
+                            </motion.p>
+                        </div>
+
+                        {/* Right — auto-scrolling testimonials */}
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true, margin: '-20px' }}
+                            transition={{ duration: 0.6, delay: 0.2 }}
+                        >
+                            <TestimonialScroller />
+                        </motion.div>
                     </div>
                 </div>
             </section>
@@ -4655,7 +5228,7 @@ export default function LandingPage() {
                                         variants={blurIn}
                                         initial="hidden"
                                         whileInView="visible"
-                                        viewport={{ once: true, margin: '-60px' }}
+                                        viewport={{ once: true, margin: '-20px' }}
                                         custom={0.2 + i * 0.15}
                                         className="flex gap-5 group"
                                     >
@@ -4671,7 +5244,7 @@ export default function LandingPage() {
                                 variants={fadeIn}
                                 initial="hidden"
                                 whileInView="visible"
-                                viewport={{ once: true, margin: '-60px' }}
+                                viewport={{ once: true, margin: '-20px' }}
                                 custom={0.5}
                                 className="mt-10"
                             >
@@ -4691,7 +5264,7 @@ export default function LandingPage() {
                             variants={scaleIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-100px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
                             className="relative"
                         >
@@ -4740,17 +5313,17 @@ export default function LandingPage() {
 
             {/* ── Community Builds Section ── */}
             <div className="section-divider" />
-            <section id="community" className="relative py-20 md:py-28 px-6">
+            <section id="community" className="relative py-16 sm:py-20 md:py-28 px-4 sm:px-6">
                 <div className="max-w-6xl mx-auto">
-                    <div className="max-w-xl mb-20">
+                    <div className="max-w-xl mb-12 md:mb-16">
                         <SectionLabel>Community</SectionLabel>
                         <RevealText delay={0.1} className="mt-5">
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08]">
                                 Built by developers,
                             </h2>
                         </RevealText>
                         <RevealText delay={0.2}>
-                            <h2 className="text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
+                            <h2 className="text-2xl sm:text-3xl md:text-5xl font-bold tracking-tight leading-[1.08] text-muted-foreground/40">
                                 for developers.
                             </h2>
                         </RevealText>
@@ -4758,23 +5331,15 @@ export default function LandingPage() {
                             variants={fadeIn}
                             initial="hidden"
                             whileInView="visible"
-                            viewport={{ once: true, margin: '-80px' }}
+                            viewport={{ once: true, margin: '-20px' }}
                             custom={0.3}
-                            className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md"
+                            className="mt-5 text-sm md:text-[15px] text-muted-foreground leading-relaxed max-w-md"
                         >
-                            Explore what others are creating with Buildify. Get inspired, fork a project, and make it your own.
+                            Explore what people are creating with Buildify. Real outputs, real use cases.
                         </motion.p>
                     </div>
 
-                    <motion.div
-                        variants={fadeIn}
-                        initial="hidden"
-                        whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
-                        custom={0.2}
-                    >
-                        <CommunityBuildsGrid showHeader={false} />
-                    </motion.div>
+                    <CommunityShowcase />
                 </div>
             </section>
 
@@ -4795,7 +5360,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-80px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.3}
                         className="mt-6 text-[15px] text-muted-foreground leading-relaxed max-w-md mx-auto"
                     >
@@ -4805,7 +5370,7 @@ export default function LandingPage() {
                         variants={blurIn}
                         initial="hidden"
                         whileInView="visible"
-                        viewport={{ once: true, margin: '-60px' }}
+                        viewport={{ once: true, margin: '-20px' }}
                         custom={0.5}
                         className="mt-10"
                     >

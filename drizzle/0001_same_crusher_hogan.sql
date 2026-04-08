@@ -1,0 +1,2 @@
+ALTER TABLE "pg-drizzle_github_repos" DROP CONSTRAINT "github_repos_github_repo_id_unique";--> statement-breakpoint
+ALTER TABLE "pg-drizzle_github_repos" ADD CONSTRAINT "github_repos_chat_id_github_repo_id_unique" UNIQUE("chat_id","github_repo_id");

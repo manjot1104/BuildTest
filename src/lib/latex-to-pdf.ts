@@ -14,7 +14,7 @@ function sanitizeLatexForFastCompile(latexCode: string): string {
   // Drop heavy/slow packages that commonly trigger remote compile timeouts.
   out = out.replace(
     /\\usepackage(?:\[[^\]]*\])?\{(?:tikz|pgfplots|minted|fontspec|pst-all|svg|standalone|flowfram|fontawesome5?|firasans|xcharter|anyfontsize)\}\s*/gi,
-    ""
+    "",
   );
 
   // Remove shell-escape style commands if present in model output.
@@ -49,19 +49,19 @@ ${body}
 
 async function callLatexApi(latexCode: string): Promise<Response> {
   return fetch("https://latex.ytotech.com/builds/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        compiler: "pdflatex",
-        resources: [
-          {
-            main: true,
-            content: latexCode,
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      compiler: "pdflatex",
+      resources: [
+        {
+          main: true,
+          content: latexCode,
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(60_000),
+  });
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -125,10 +125,8 @@ export async function compileLaTeXToPDF(
 
       const retryError = await retryResponse.text().catch(() => "Unknown retry error");
       throw new Error(
-        `LaTeX compilation failed after retry (${retryResponse.status}): ${retryError.slice(0, 200)}`
+        `LaTeX compilation failed after retry (${retryResponse.status}): ${retryError.slice(0, 200)}`,
       );
-
-      throw new Error(`LaTeX compilation failed (${response.status}): ${errorText.slice(0, 200)}`);
     }
 
     const contentType = response.headers.get("content-type") ?? "";

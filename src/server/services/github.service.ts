@@ -1,3 +1,5 @@
+'use server'
+
 import { eq } from 'drizzle-orm'
 import { account } from '@/server/db/schema'
 import { db } from '@/server/db'
@@ -37,6 +39,18 @@ export interface PushFilesResult {
 export interface GithubFile {
   name: string
   content: string
+}
+
+// Shape of one repo returned by the /user/repos listing endpoint
+export interface GithubRepoListItem {
+  id: number
+  name: string
+  full_name: string
+  html_url: string
+  private: boolean
+  description: string | null
+  default_branch: string
+  updated_at: string
 }
 
 // ============================================================================
@@ -113,7 +127,10 @@ export async function getGithubConnectionStatus(userId: string): Promise<{
       return { connected: false, hasRepoScope: false }
     }
 
-    const hasRepoScope = githubAcc.scope?.includes('repo') ?? false
+    // Split on commas/spaces and match the exact 'repo' token — not 'public_repo',
+    // which also contains the string 'repo' and would cause .includes() to return true.
+    const scopes = githubAcc.scope?.split(/[,\s]+/) ?? []
+    const hasRepoScope = scopes.includes('repo')
 
     // Verify token is still valid by fetching user
     const ghUser = await getGithubUser(githubAcc.accessToken)
@@ -247,6 +264,27 @@ export async function checkRepoNameTaken(
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (msg.includes('404') || msg.includes('Not Found')) return false
+    return false
+  }
+}
+
+/**
+ * Returns true if a repository has no commits yet (is empty).
+ * Uses the repo branches list — an empty repo has no branches, so the
+ * endpoint returns an empty array. Combined with size=0 as a cross-check.
+ */
+export async function isRepoEmpty(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<boolean> {
+  try {
+    const [repoData, branches] = await Promise.all([
+      githubFetch<{ size: number }>(token, `/repos/${owner}/${repo}`),
+      githubFetch<unknown[]>(token, `/repos/${owner}/${repo}/branches?per_page=1`),
+    ])
+    return repoData.size === 0 && branches.length === 0
+  } catch {
     return false
   }
 }
@@ -690,7 +728,47 @@ export async function createGithubBranch(
 }
 
 /**
+ * Seeds an empty repository by pushing a temporary .gitkeep file via the
+ * Contents API (the only API that works on a zero-commit repo), then
+ * immediately deletes it in the same tree as the real files so it never
+ * appears in the final commit. The seeding commit will show the token
+ * owner as author — that's unavoidable — but the real Buildify commit
+ * follows immediately on top, so the repo history is clean from commit 2.
+ *
+ * Returns the SHA of the seed commit so the caller can build on top of it.
+ */
+async function seedEmptyRepo(
+  token: string,
+  owner: string,
+  repo: string,
+  branchName: string,
+): Promise<string> {
+  const response = await githubFetch<{ commit: { sha: string } }>(
+    token,
+    `/repos/${owner}/${repo}/contents/.gitkeep`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        message: 'chore: initialise repository',
+        // base64 of a single newline — smallest valid file
+        content: 'Cg==',
+        branch: branchName,
+      }),
+    },
+  )
+  return response.commit.sha
+}
+
+/**
  * Pushes multiple files to a branch in a single commit using the Git Tree API.
+ *
+ * Handles empty repos transparently: if the repo has no commits, the Git Data
+ * API is entirely unavailable (GitHub returns 409 on everything). We detect
+ * this by catching the 409 from step 1, seed the repo with a throwaway
+ * .gitkeep via the Contents API, then build the real Buildify commit on top.
+ * The .gitkeep is excluded from the tree so it never appears in the final
+ * state of the repo — only the initial seed commit (authored by the token
+ * owner) and the real Buildify commit (authored by Buildify) will exist.
  */
 export async function pushFilesToBranch(
   token: string,
@@ -704,19 +782,33 @@ export async function pushFilesToBranch(
 ): Promise<PushFilesResult> {
   const { owner, repo, branchName, files, commitMessage } = params
 
-  // Step 1: Get the latest commit SHA on the branch
-  const branchData = await githubFetch<{ object: { sha: string } }>(
-    token,
-    `/repos/${owner}/${repo}/git/refs/heads/${branchName}`,
-  )
-  const latestCommitSha = branchData.object.sha
+  const authorInfo = {
+    name: 'Buildify',
+    email: 'notifications@technotribes.org',
+    date: new Date().toISOString(),
+  }
+
+  // Step 1: Get the latest commit SHA on the branch.
+  // If this 409s, the repo is empty — seed it first then retry.
+  let latestCommitSha: string
+  try {
+    const branchData = await githubFetch<{ object: { sha: string } }>(
+      token,
+      `/repos/${owner}/${repo}/git/refs/heads/${branchName}`,
+    )
+    latestCommitSha = branchData.object.sha
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('409')) throw err
+    // Repo is empty — seed it with a .gitkeep, then re-fetch the branch SHA
+    latestCommitSha = await seedEmptyRepo(token, owner, repo, branchName)
+  }
 
   // Step 2: Get the tree SHA of the latest commit
   const commitData = await githubFetch<{ tree: { sha: string } }>(
     token,
     `/repos/${owner}/${repo}/git/commits/${latestCommitSha}`,
   )
-  const baseTreeSha = commitData.tree.sha
 
   // Step 3: Create blobs for each file
   const blobs = await Promise.all(
@@ -741,16 +833,15 @@ export async function pushFilesToBranch(
     }),
   )
 
-  // Step 4: Create a new tree with all the blobs
+  // Step 4: Create a new tree with all the blobs.
+  // No base_tree — clean slate, only our files. The .gitkeep from the seed
+  // commit is intentionally excluded so it never appears in the final repo state.
   const newTree = await githubFetch<{ sha: string }>(
     token,
     `/repos/${owner}/${repo}/git/trees`,
     {
       method: 'POST',
-      body: JSON.stringify({
-        base_tree: baseTreeSha,
-        tree: blobs,
-      }),
+      body: JSON.stringify({ tree: blobs }),
     },
   )
 
@@ -764,16 +855,8 @@ export async function pushFilesToBranch(
         message: commitMessage,
         tree: newTree.sha,
         parents: [latestCommitSha],
-        author: {
-          name: 'Buildify',
-          email: 'notifications@technotribes.org',
-          date: new Date().toISOString(),
-        },
-        committer: {
-          name: 'Buildify',
-          email: 'notifications@technotribes.org',
-          date: new Date().toISOString(),
-        },
+        author: authorInfo,
+        committer: authorInfo,
       }),
     },
   )
@@ -795,4 +878,320 @@ export async function pushFilesToBranch(
     commitSha: newCommit.sha,
     commitUrl: newCommit.html_url,
   }
+}
+
+// ============================================================================
+// Repo listing (for the "connect existing repo" picker)
+// ============================================================================
+
+/**
+ * Lists GitHub repositories the authenticated user has access to, sorted by
+ * most recently updated. Fetches up to 3 pages (300 repos) to cover most
+ * accounts without hammering the API.
+ *
+ * affiliation=owner,collaborator,organization_member includes org repos the
+ * user has write access to — the token enforces actual permissions at push time.
+ */
+export async function listUserRepos(token: string): Promise<GithubRepoListItem[]> {
+  const allRepos: GithubRepoListItem[] = []
+  const perPage = 100
+  const maxPages = 3
+
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const repos = await githubFetch<GithubRepoListItem[]>(
+        token,
+        `/user/repos?sort=updated&direction=desc&per_page=${perPage}&page=${page}&affiliation=owner,collaborator,organization_member`,
+      )
+      allRepos.push(...repos)
+      // Fewer results than requested means we've hit the last page
+      if (repos.length < perPage) break
+    } catch {
+      break
+    }
+  }
+
+  return allRepos
+}
+
+/**
+ * Fetches full details for a single repo by owner/name.
+ * Used during the connect flow to get id, visibility, and default branch.
+ */
+export async function getRepoDetails(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<{
+  id: number
+  name: string
+  full_name: string
+  html_url: string
+  private: boolean
+  default_branch: string
+}> {
+  return githubFetch(token, `/repos/${owner}/${repo}`)
+}
+
+// ============================================================================
+// PR types
+// ============================================================================
+
+export type MergeMethod = 'merge' | 'squash' | 'rebase'
+
+// Granular mergeable status — maps GitHub's mergeable_state to our own type
+// so the UI can show specific reasons instead of a generic "unknown"
+export type MergeableStatus =
+  | 'mergeable'   // clean, ready to merge
+  | 'conflicting' // has merge conflicts, must resolve on GitHub
+  | 'blocked'     // branch protection rule / required review / CI required
+  | 'behind'      // head branch is behind base, needs update but no conflicts
+  | 'unstable'    // CI checks pending or failing
+  | 'draft'       // PR is a draft
+  | 'unknown'     // GitHub still computing, or detail not yet fetched
+
+// Shape of one branch returned by /repos/:owner/:repo/branches
+export interface GithubBranch {
+  name: string
+  commit: { sha: string }
+  protected: boolean
+}
+
+// Raw PR shape from GitHub API
+// mergeable is null when GitHub hasn't computed it yet
+export interface GithubPullRequest {
+  number: number
+  node_id: string
+  title: string
+  body: string | null
+  state: 'open' | 'closed'
+  draft: boolean
+  merged: boolean
+  mergeable: boolean | null
+  mergeable_state: string  // 'clean' | 'dirty' | 'blocked' | 'behind' | 'unstable' | 'unknown' etc.
+  html_url: string
+  head: { ref: string; sha: string }
+  base: { ref: string; sha: string }
+  created_at: string
+  updated_at: string
+  user: { login: string; avatar_url: string }
+}
+
+// Normalised PR shape exposed to the controller and UI.
+// mergeableStatus is 'unknown' when returned from the list endpoint —
+// call getPullRequest() to get the real status for a specific PR.
+export interface NormalisedPR {
+  number: number
+  nodeId: string
+  title: string
+  body: string | null
+  state: 'open' | 'closed' | 'merged'
+  draft: boolean
+  mergeableStatus: MergeableStatus
+  prUrl: string
+  headBranch: string
+  baseBranch: string
+  createdAt: string
+  updatedAt: string
+  author: { login: string; avatarUrl: string }
+}
+
+// ============================================================================
+// PR helpers (internal)
+// ============================================================================
+
+/**
+ * Maps GitHub's raw mergeable + mergeable_state fields to our MergeableStatus.
+ *
+ * GitHub's mergeable_state values:
+ *   'clean'    → no conflicts, all checks pass, ready to merge
+ *   'dirty'    → has merge conflicts
+ *   'blocked'  → blocked by branch protection (required reviews, status checks etc.)
+ *   'behind'   → head branch is behind base but no conflicts — needs update/rebase
+ *   'unstable' → CI checks are pending or failing
+ *   'draft'    → PR is in draft state (also checked via pr.draft directly)
+ *   'unknown'  → GitHub is still computing mergeability
+ *
+ * We only return 'mergeable' when BOTH mergeable === true AND state === 'clean'
+ * to avoid enabling the merge button in any ambiguous state.
+ */
+function normaliseMergeableState(
+  mergeable: boolean | null,
+  mergeableState: string,
+  draft: boolean,
+): MergeableStatus {
+  // Draft check first — GitHub may return 'blocked' for drafts too,
+  // but we want to show the more specific 'draft' reason
+  if (draft) return 'draft'
+
+  // GitHub hasn't computed mergeability yet (lazy evaluation)
+  if (mergeable === null) return 'unknown'
+
+  switch (mergeableState) {
+    case 'clean':    return 'mergeable'
+    case 'dirty':    return 'conflicting'
+    case 'blocked':  return 'blocked'
+    case 'behind':   return 'behind'
+    case 'unstable': return 'unstable'
+    default:         return 'unknown'
+  }
+}
+
+/**
+ * Normalises a raw GitHub PR object into our cleaner NormalisedPR shape.
+ * When called from listPullRequests (list endpoint), mergeable is always null
+ * so mergeableStatus will always be 'unknown' — call getPullRequest() for real status.
+ */
+function normalisePR(pr: GithubPullRequest): NormalisedPR {
+  let state: NormalisedPR['state'] = 'open'
+  if (pr.merged) state = 'merged'
+  else if (pr.state === 'closed') state = 'closed'
+
+  return {
+    number: pr.number,
+    nodeId: pr.node_id,
+    title: pr.title,
+    body: pr.body,
+    state,
+    draft: pr.draft,
+    mergeableStatus: normaliseMergeableState(pr.mergeable, pr.mergeable_state, pr.draft),
+    prUrl: pr.html_url,
+    headBranch: pr.head.ref,
+    baseBranch: pr.base.ref,
+    createdAt: pr.created_at,
+    updatedAt: pr.updated_at,
+    author: { login: pr.user.login, avatarUrl: pr.user.avatar_url },
+  }
+}
+
+// ============================================================================
+// PR operations
+// ============================================================================
+
+/**
+ * Lists all branches for a repository.
+ * Used to populate the head/base branch selectors in the PR creation form.
+ * Fetches up to 100 branches — enough for almost all repos.
+ */
+export async function listRepoBranches(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<GithubBranch[]> {
+  try {
+    return await githubFetch<GithubBranch[]>(
+      token,
+      `/repos/${owner}/${repo}/branches?per_page=100`,
+    )
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Lists open PRs for a repository — fast path, single API call.
+ * All returned PRs have mergeableStatus: 'unknown' because GitHub does not
+ * include mergeable in list responses. Call getPullRequest() for a specific
+ * PR to get its real mergeability status.
+ */
+export async function listPullRequests(
+  token: string,
+  owner: string,
+  repo: string,
+): Promise<NormalisedPR[]> {
+  const rawList = await githubFetch<GithubPullRequest[]>(
+    token,
+    `/repos/${owner}/${repo}/pulls?state=open&per_page=30&sort=updated&direction=desc`,
+  )
+  // normalisePR will produce mergeableStatus: 'unknown' for all items here
+  // because the list endpoint always returns mergeable: null
+  return rawList.map(normalisePR)
+}
+
+/**
+ * Fetches a single PR with full detail including real mergeability status.
+ * Called lazily when the user expands/selects a PR in the UI — never on list load.
+ *
+ * GitHub computes mergeability lazily on first request. If mergeableStatus comes
+ * back as 'unknown' it means GitHub is still computing — the UI should retry
+ * after a short delay (3-5 seconds is usually enough).
+ */
+export async function getPullRequest(
+  token: string,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<NormalisedPR> {
+  const raw = await githubFetch<GithubPullRequest>(
+    token,
+    `/repos/${owner}/${repo}/pulls/${prNumber}`,
+  )
+  return normalisePR(raw)
+}
+
+/**
+ * Creates a new pull request.
+ * Returns the normalised PR on success.
+ *
+ * Common GitHub 422 errors we surface to the controller:
+ *   "A pull request already exists for {head}...{base}"
+ *   "No commits between {base} and {head}"
+ */
+export async function createPullRequest(
+  token: string,
+  params: {
+    owner: string
+    repo: string
+    title: string
+    body: string
+    head: string  // source branch
+    base: string  // target branch
+  },
+): Promise<NormalisedPR> {
+  const raw = await githubFetch<GithubPullRequest>(
+    token,
+    `/repos/${params.owner}/${params.repo}/pulls`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        title: params.title,
+        body: params.body,
+        head: params.head,
+        base: params.base,
+      }),
+    },
+  )
+  return normalisePR(raw)
+}
+
+/**
+ * Merges a pull request using the specified merge method.
+ * Only call this after confirming mergeableStatus === 'mergeable'.
+ *
+ * merge_method:
+ *   'merge'  → standard merge commit (preserves all commits, adds a merge commit)
+ *   'squash' → squash and merge (combines all commits into one clean commit)
+ *   'rebase' → rebase and merge (replays commits onto base, no merge commit)
+ */
+export async function mergePullRequest(
+  token: string,
+  params: {
+    owner: string
+    repo: string
+    prNumber: number
+    mergeMethod: MergeMethod
+    commitTitle?: string  // optional custom merge commit title (used for merge + squash)
+  },
+): Promise<{ merged: boolean; message: string; sha: string }> {
+  return githubFetch(
+    token,
+    `/repos/${params.owner}/${params.repo}/pulls/${params.prNumber}/merge`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        merge_method: params.mergeMethod,
+        ...(params.commitTitle ? { commit_title: params.commitTitle } : {}),
+      }),
+    },
+  )
 }

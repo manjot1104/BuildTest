@@ -712,8 +712,9 @@ export const github_repos = createTable(
       .notNull(),
   }),
   (t) => [
-    // A GitHub repo can only ever belong to one chat
-    unique("github_repos_github_repo_id_unique").on(t.github_repo_id),
+    // A chat can't link the same GitHub repo twice, but different chats/users
+    // can each independently link the same repo.
+    unique("github_repos_chat_id_github_repo_id_unique").on(t.chat_id, t.github_repo_id),
     index("github_repos_user_id_idx").on(t.user_id),
     index("github_repos_chat_id_idx").on(t.chat_id),
     // Composite index for the most common query: active repo for a given chat
