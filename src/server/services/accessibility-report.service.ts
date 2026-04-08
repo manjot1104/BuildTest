@@ -1,4 +1,5 @@
 import type { TestSummary, PageResult, ComplianceStandard } from '@/types/accessibility.types'
+import type { Browser } from 'puppeteer-core'
 
 interface ReportData {
   targetUrl: string
@@ -215,16 +216,14 @@ function generateHtmlReport(data: ReportData): string {
 </html>`
 }
 
-export async function generateAccessibilityReport(data: ReportData): Promise<string> {
+export async function generateAccessibilityReport(data: ReportData, browser: Browser): Promise<string> {
   const html = generateHtmlReport(data)
 
   console.log('\n📄 [A11Y] Generating PDF report...')
   console.log('   Pages in report:', data.pageResults.length)
   console.log('   Target URL     :', data.targetUrl)
 
-  const { launchBrowser } = await import('@/lib/browser')
-  const browser = await launchBrowser()
-
+  // no launchBrowser() call — reusing browser passed from runAccessibilityTest
   try {
     const page = await browser.newPage()
     // Use domcontentloaded — report HTML is self-contained, no external resources to wait for

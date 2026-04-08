@@ -148,7 +148,7 @@ async function crawlPages(
 export async function runAccessibilityTest(
   config: AccessibilityTestConfig,
   onEvent: (event: SSEEvent) => void,
-): Promise<{ summary: TestSummary; pageResults: PageResult[] }> {
+): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
   if (activeTests >= MAX_CONCURRENT_TESTS) {
     throw new Error('Too many concurrent tests. Please try again later.')
   }
@@ -418,9 +418,12 @@ export async function runAccessibilityTest(
     console.log('   Moderate :', summary.moderateCount)
     console.log('   Minor    :', summary.minorCount)
     console.log('========================================\n')
-    return { summary, pageResults }
+    return { summary, pageResults, browser }
   } finally {
     activeTests--
-    if (browser) void browser.close().catch(() => undefined)
+
+    //if (browser) void browser.close().catch(() => undefined)
+     // browser is NOT closed here anymore
+  // it is passed to generateAccessibilityReport and closed there
   }
 }
