@@ -266,21 +266,21 @@ export async function runAccessibilityTest(
         await new Promise((r) => setTimeout(r, 3000))
 
         // Step 3: Verify page is actually ready before handing to axe
-        const isReady = await page.evaluate(() => {
-          return document.readyState === 'complete' && document.body !== null
-        }).catch(() => false)
+       const isReady = await page.evaluate(() => {
+  return document.body !== null && document.body.children.length > 0
+}).catch(() => false)
 
-        console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
+console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
 
-        if (!isReady) {
-          console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
-          onEvent({
-            type: 'error',
-            message: `Skipping ${pageUrl}: page not ready for analysis`,
-            fatal: false,
-          })
-          continue
-        }
+if (!isReady) {
+  console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
+  onEvent({
+    type: 'error',
+    message: `Skipping ${pageUrl}: page not ready for analysis`,
+    fatal: false,
+  })
+  continue
+}
         console.log(`   Running axe-core analysis...`)
         const pageInfo = await page.evaluate(() => ({
           elementCount: document.querySelectorAll('*').length,
@@ -291,26 +291,39 @@ export async function runAccessibilityTest(
         console.log(`   Body preview : ${pageInfo.bodyText.replace(/\n/g, ' ').slice(0, 150)}`)
 
         let results
-        try {
-          console.log(`   Tags passed to axe:`, tags)
-          console.log(`   Standards received:`, config.standards)
-          console.log('   @axe-core/puppeteer imported:', !!AxePuppeteer)
+let retries = 0
+const maxRetries = 2
 
-          results = await Promise.race([
-            new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
-            ),
-          ])
-        } catch (axeErr) {
-          console.error(`   ❌ axe-core failed: ${axeErr instanceof Error ? axeErr.message : axeErr}`)
-          onEvent({
-            type: 'error',
-            message: `Skipping ${pageUrl}: ${axeErr instanceof Error ? axeErr.message : 'axe analysis failed'}`,
-            fatal: false,
-          })
-          continue
-        }
+while (retries <= maxRetries) {
+  try {
+    console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
+    results = await Promise.race([
+      new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
+      ),
+    ])
+    break // success — exit retry loop
+  } catch (axeErr) {
+    const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
+    if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
+      retries++
+      console.warn(`   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`)
+      await new Promise((r) => setTimeout(r, 3000 * retries)) // wait longer each retry
+      continue
+    }
+    // not retryable or max retries reached
+    console.error(`   ❌ axe-core failed: ${message}`)
+    onEvent({
+      type: 'error',
+      message: `Skipping ${pageUrl}: ${message}`,
+      fatal: false,
+    })
+    break
+  }
+}
+
+if (!results) continue // skip this page if all retries failed
 
         console.log(`   ✅ axe-core analysis complete`)
         console.log(`   Rules that ran:`, results.passes.map(p => p.id))
