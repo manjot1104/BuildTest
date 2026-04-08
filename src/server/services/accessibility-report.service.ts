@@ -218,6 +218,10 @@ function generateHtmlReport(data: ReportData): string {
 export async function generateAccessibilityReport(data: ReportData): Promise<string> {
   const html = generateHtmlReport(data)
 
+  console.log('\n📄 [A11Y] Generating PDF report...')
+  console.log('   Pages in report:', data.pageResults.length)
+  console.log('   Target URL     :', data.targetUrl)
+
   const { launchBrowser } = await import('@/lib/browser')
   const browser = await launchBrowser()
 
@@ -231,8 +235,17 @@ export async function generateAccessibilityReport(data: ReportData): Promise<str
       printBackground: true,
       margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' },
     })
+    const pdfBase64Local = Buffer.from(pdfBuffer).toString('base64')
+    const pdfSizeKB = Math.round(Buffer.byteLength(pdfBase64Local, 'utf8') / 1024)
+    const pdfSizeMB = (pdfSizeKB / 1024).toFixed(2)
+    const sizeWarning = pdfSizeKB > 4096
 
-    return Buffer.from(pdfBuffer).toString('base64')
+    console.log(`📦 [A11Y] PDF generated`)
+    console.log(`   Size: ${pdfSizeKB}KB (${pdfSizeMB}MB) ${sizeWarning ? '⚠️  TOO LARGE — DB write will fail' : '✅ OK'}`)
+
+    return pdfBase64Local
+
+    //return Buffer.from(pdfBuffer).toString('base64')
   } finally {
     await browser.close().catch(() => undefined)
   }
