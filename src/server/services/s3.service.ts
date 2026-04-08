@@ -39,6 +39,7 @@ function getClient(): S3Client {
 
 // ---------------------------------------------------------------------------
 // uploadScreenshot
+// (existing)
 //
 // Uploads a single base64-encoded PNG to S3.
 // Returns the public HTTPS URL on success, null if upload fails or S3 not configured.
@@ -136,5 +137,51 @@ export function urlToSlug(url: string): string {
       .slice(0, 60);
   } catch {
     return "page";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// uploadPdfReport
+//
+// Uploads a PDF report buffer to S3 and returns its public URL.
+// Key format: a11y-reports/{testRunId}/{hostname}.pdf
+// Returns null if AWS is not configured or upload fails.
+// ---------------------------------------------------------------------------
+
+export async function uploadPdfReport(params: {
+  buffer: Buffer;
+  testRunId: string;
+  hostname: string; // domain-safe segment for filename
+}): Promise<string | null> {
+  const { buffer, testRunId, hostname } = params;
+  if (!buffer || buffer.length === 0) return null;
+
+  try {
+    const client = getClient();
+    const safeHost = hostname
+      .toLowerCase()
+      .replace(/[^a-z0-9.-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "site";
+
+    const key = `a11y-reports/${testRunId}/${safeHost}.pdf`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket:      AWS_S3_BUCKET,
+        Key:         key,
+        Body:        buffer,
+        ContentType: "application/pdf",
+        // PDF reports are immutable; allow long cache
+        CacheControl: "public, max-age=31536000, immutable",
+      }),
+    );
+
+    const url = `https://${AWS_S3_BUCKET}.s3.${AWS_S3_REGION}.amazonaws.com/${key}`;
+    console.log(`[S3] ✓ Uploaded PDF report: ${url}`);
+    return url;
+  } catch (err) {
+    console.error("[S3] PDF upload failed:", err);
+    return null;
   }
 }
