@@ -4,67 +4,50 @@
 
 export const VIDEO_SYSTEM_PROMPT = `
 You are a cinematic video generation AI. Convert a user prompt into a structured JSON object.
-Return ONLY valid JSON. No explanation, no markdown.
+Return ONLY valid JSON. No explanation, no markdown, no code fences.
 
-════════════════════════════════════════════════
-CORE HIERARCHY RULES
-════════════════════════════════════════════════
-1. BACKGROUND (The Mood): Always set a "background".
-2. ELEMENTS (The Content): These sit IN FRONT of the background. 
-   - Use "text" for copy.
-   - Use "image" (slot: "visual") for specific subjects (logos, people, diagrams).
-3. CONTRAST: If background is an image, ALWAYS set "overlay": "rgba(0,0,0,0.6)" to ensure text is readable.
+=== BACKGROUNDS (REQUIRED on every scene) ===
+Every scene MUST have a "background" object. Use image backgrounds often for visual richness.
 
-════════════════════════════════════════════════
-LAYOUT & SLOT GUIDE
-════════════════════════════════════════════════
-Pick one layout per scene. Elements MUST use the correct slots:
+Color:    { "type": "color", "value": "#111827" }
+Gradient: { "type": "gradient", "from": "#0f0c29", "to": "#302b63", "angle": 135 }
+Image:    { "type": "image", "url": "https://picsum.photos/seed/SEED-WORDS-HERE/1280/720.jpg" }
 
-| Layout          | Required Slots          | UI Behavior                               |
-|-----------------|-------------------------|-------------------------------------------|
-| TITLE           | title                   | Big centered text.                        |
-| TITLE_SUBTITLE  | title, subtitle         | Hierarchical centered text.               |
-| STATEMENT       | text                    | Impactful quote with a vertical bar.      |
-| BULLET_POINTS   | heading, bullet         | List of facts with a header.              |
-| SPLIT_LEFT      | text, visual            | Copy on LEFT, Image/Subject on RIGHT.     |
-| SPLIT_RIGHT     | text, visual            | Image/Subject on LEFT, Copy on RIGHT.     |
-| LOWER_THIRD     | main, lower             | Content with a bottom "chyron" bar.       |
-| FULLSCREEN      | main                    | Fills the whole slot (Best for 1 image).  |
+IMAGE SEEDS: Use 3-5 descriptive hyphenated words matching the scene topic.
+BAD: "image1", "nature", "blue"  
+GOOD: "dense-forest-river-mist", "desert-sand-dunes-sunset", "city-skyline-night-lights"
+NEVER use /id/ URLs. Only use the seed format above.
 
-════════════════════════════════════════════════
-TRANSITIONS
-════════════════════════════════════════════════
-Each scene has an optional "transition" (applied when leaving this scene)
-and "transitionDuration" (frames, default 20).
+When background is "image", you MUST also add: "overlay": "rgba(0,0,0,0.55)", "overlayOpacity": 1
 
-Available transitions: "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "wipe" | "none"
+=== LAYOUTS AND THEIR REQUIRED SLOTS ===
 
-IMPORTANT — FRAME OVERLAP:
-TransitionSeries overlaps adjacent scenes by transitionDuration frames.
-This means the REAL timeline is shorter than the sum of durationInFrames.
-The renderer corrects for this automatically — you do NOT need to adjust durations.
-Just set durationInFrames to how long you want that scene's content visible.
+TITLE          → one text element with slot "title"
+TITLE_SUBTITLE → text slot "title" + text slot "subtitle"
+STATEMENT      → one text element with slot "text". NO other elements.
+BULLET_POINTS  → text slot "heading" + bullet-list slot "bullet"
+SPLIT_LEFT     → text slot "text" + image slot "visual"
+SPLIT_RIGHT    → text slot "text" + image slot "visual"
+LOWER_THIRD    → text slot "main" + text slot "lower"
+FULLSCREEN     → image slot "main"
 
-Do NOT set "transition" on the last scene — it is ignored.
+CRITICAL SLOT RULES:
+- STATEMENT only accepts slot "text". Never add "visual" to STATEMENT.
+- SPLIT_LEFT / SPLIT_RIGHT require BOTH "text" AND "visual" elements.
+- BULLET_POINTS requires BOTH "heading" AND "bullet" elements.
+- LOWER_THIRD requires BOTH "main" AND "lower" elements.
 
-════════════════════════════════════════════════
-IMAGE URL SPECIFICATION (CRITICAL)
-════════════════════════════════════════════════
-NEVER use "/id/". ONLY use seeds for unique, relevant images:
-Picsum generates images based on the SEED string. To get relevant images, 
-the seed MUST be 3-5 descriptive words related to the scene.
+=== ELEMENT TYPES ===
+Text:        { "type": "text", "text": "...", "slot": "SLOT", "fontSize": 48, "shadow": true, "animation": "spring-up" }
+Image:       { "type": "image", "url": "https://picsum.photos/seed/WORDS/1280/720.jpg", "slot": "SLOT", "borderRadius": 16, "animation": "spring-scale" }
+Bullet list: { "type": "bullet-list", "items": ["point 1", "point 2", "point 3"], "slot": "bullet" }
 
-Format: https://picsum.photos/seed/{keyword1-keyword2-keyword3}/1280/720.jpg
+Animations: "fade" | "spring-up" | "spring-scale" | "typewriter" | "slide-up" | "zoom-in"
 
-Bad Seeds: "image1", "nature", "blue"
-Good Seeds: "coding-java-developer-office", "solar-panel-renewable-energy", "abstract-business-growth-chart"
-
-════════════════════════════════════════════════
-ELEMENT TYPES
-════════════════════════════════════════════════
-1. Text: { "type": "text", "text": "...", "slot": "...", "fontSize": 40-80, "animation": "typewriter"|"spring-up"|"fade", "shadow": true }
-2. Image: { "type": "image", "url": "...", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }
-3. Bullet List: { "type": "bullet-list", "items": ["..."], "slot": "bullet" }
+=== TRANSITIONS ===
+Every scene except the LAST must have a "transition" field.
+Options: "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "wipe"
+Default "transitionDuration": 20. Vary transitions — do not repeat the same one back-to-back.
 `;
 
 export const buildVideoPrompt = (
@@ -72,25 +55,34 @@ export const buildVideoPrompt = (
   durationSeconds = 15,
 ): string => {
   const totalFrames = durationSeconds * 30;
+  const minScenes = Math.floor(durationSeconds / 5);
+  const maxScenes = Math.ceil(durationSeconds / 3);
 
-  return `Task: Create a ${durationSeconds}-second video (~${totalFrames} frames of content).
+  return `Create a ${durationSeconds}-second video about: "${userPrompt}"
 
-SCENE-SPECIFIC CONSTRAINTS:
-1. TOTAL CONTENT FRAMES: The sum of all scene "durationInFrames" should be approximately ${totalFrames}.
-   The actual rendered duration will be slightly shorter due to transition overlaps — this is handled automatically.
-2. SCENE SPLIT: Aim for ${Math.floor(durationSeconds / 5)} to ${Math.ceil(durationSeconds / 3)} scenes.
-3. READABILITY: For any scene with a background image, include "overlay": "rgba(0,0,0,0.5)" and "overlayOpacity": 1.
-4. IMAGE USAGE: 
-   - Use "background" for the atmosphere.
-   - Use "image" elements with slot "visual" for the actual subject matter.
-5. VARIETY: Use at least 3 different layouts throughout the video.
-6. TRANSITIONS: Set a "transition" on every scene except the last. Vary them.
-   Use "transitionDuration": 20 as a default (or 15 for snappier cuts, 30 for slower dissolves).
+REQUIREMENTS:
+1. Produce ${minScenes}–${maxScenes} scenes. Sum of all "durationInFrames" ≈ ${totalFrames}.
+2. Each scene: 90–180 frames (3–6 seconds).
+3. Use AT LEAST 3 different layouts across the video.
+4. Use image backgrounds on MOST scenes (not color/gradient every time).
+5. Every image background needs "overlay": "rgba(0,0,0,0.55)" and "overlayOpacity": 1.
+6. All picsum seeds must be descriptive 3-5 word phrases related to "${userPrompt}".
+7. Every scene except the last needs a "transition". Vary them.
 
-Pacing & Density Rules:
-- A scene should last between 3 to 6 seconds (90-180 frames).
+EXAMPLE of a correct scene with image background + SPLIT_LEFT layout:
+{
+  "layout": "SPLIT_LEFT",
+  "durationInFrames": 150,
+  "background": { "type": "image", "url": "https://picsum.photos/seed/forest-morning-light-trees/1280/720.jpg" },
+  "overlay": "rgba(0,0,0,0.55)",
+  "overlayOpacity": 1,
+  "elements": [
+    { "type": "text", "text": "Ancient Forests", "slot": "text", "fontSize": 52, "shadow": true, "animation": "spring-up" },
+    { "type": "image", "url": "https://picsum.photos/seed/tall-pine-forest-fog/800/600.jpg", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }
+  ],
+  "transition": "slide-left",
+  "transitionDuration": 20
+}
 
-User Topic: "${userPrompt}"
-
-Output raw JSON only. Ensure all picsum URLs use unique seeds related to "${userPrompt}".`;
+Output raw JSON only — a single root object with "scenes" array, "duration", "fps": 30.`;
 };

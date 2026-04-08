@@ -28,6 +28,9 @@ type Props = {
   videoJson: VideoJson;
 };
 
+// Destructure immediately so Webpack resolves them at module level
+const { Sequence: TSSequence, Transition: TSTransition } = TransitionSeries;
+
 /**
  * Returns the frame at which each scene's *content* starts in the final timeline,
  * accounting for transition overlaps. Use this to sync per-scene audio tracks.
@@ -119,15 +122,15 @@ export const VideoComposition: React.FC<Props> = ({ videoJson }) => {
             // React.Fragment with key is correct here — TransitionSeries
             // reads its children array and handles ordering internally.
             <React.Fragment key={scene.id ?? `scene-${i}`}>
-              <TransitionSeries.Sequence
+              <TSSequence
                 durationInFrames={scene.durationInFrames}
               >
                 <SceneRenderer scene={scene} />
-              </TransitionSeries.Sequence>
+              </TSSequence>
 
               {/* Transition goes AFTER its scene, BEFORE the next scene */}
               {!isLast && (
-                <TransitionSeries.Transition
+                <TSTransition
                   presentation={getPresentation(transitionType)}
                   timing={
                     transitionType === "none"

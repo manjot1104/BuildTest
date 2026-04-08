@@ -80,7 +80,7 @@ const defaultVideo: VideoJson = {
       elements: [
         {
           type: 'text',
-          slot: 'main',
+          slot: 'text',
           text: 'Transitions Sync With Audio',
           fontSize: 72,
           fontWeight: '700',
