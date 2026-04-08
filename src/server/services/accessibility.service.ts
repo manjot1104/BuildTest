@@ -9,7 +9,7 @@ import type {
   AxeViolation,
   ComplianceStandard,
 } from '@/types/accessibility.types'
-import path from 'path'
+import path from 'path/win32'
 
 let activeTests = 0
 const MAX_CONCURRENT_TESTS = 3
@@ -37,7 +37,7 @@ function normalizeUrl(raw: string, base: string): string | null {
   try {
     const url = new URL(raw, base)
     url.hash = ''
-    //url.search = '' // strip query params to avoid duplicates like ?ref=...
+    url.search = '' // strip query params to avoid duplicates like ?ref=...
     // Always strip trailing slash for dedup (including root "/")
     let normalized = url.href
     if (normalized.endsWith('/')) {
@@ -100,10 +100,6 @@ async function crawlPages(
     if (visited.has(item.url) || item.depth > maxDepth) continue
     visited.add(item.url)
     discovered.push(item.url)
-    if (visited.size > maxPages * 10) {
-      console.warn('⚠️ [A11Y] Visited set too large, stopping crawl early')
-      break
-    }
     console.log(`🔍 [A11Y] Crawled (${discovered.length}/${maxPages}): ${item.url}`)
 
     onEvent({ type: 'crawl:page_discovered', url: item.url, count: discovered.length })
@@ -113,61 +109,8 @@ async function crawlPages(
     let page: Page | null = null
     try {
       page = await browser.newPage()
-      page.setDefaultNavigationTimeout(20000)
-
-      await page.setRequestInterception(true)
-      page.on('request', (req) => {
-        if (['image', 'font', 'media'].includes(req.resourceType())) {
-          req.abort()
-        } else {
-          req.continue()
-        }
-      })
-
-      await page.goto(item.url, { waitUntil: 'networkidle2', timeout: 30000 })
-      // Universal bot-check detector — wait for it to resolve
-      const isBotCheck = await page.evaluate(() => {
-        const bodyText = document.body?.innerText?.toLowerCase() ?? ''
-        const indicators = [
-          'are you a human',
-          'confirming',
-          'captcha',
-          'verify you are human',
-          'checking your browser',
-          'please wait',
-          'just a moment',
-          'enable javascript',
-          'ddos protection',
-          'ray id',
-          'cloudflare',
-        ]
-        return indicators.some((i) => bodyText.includes(i))
-      })
-
-      if (isBotCheck) {
-        console.warn(`   ⚠️ [CRAWL] Bot check detected on ${item.url}, waiting for resolve...`)
-        await page.waitForFunction(
-          () => {
-            const text = document.body?.innerText?.toLowerCase() ?? ''
-            const indicators = [
-              'are you a human',
-              'confirming',
-              'captcha',
-              'verify you are human',
-              'checking your browser',
-              'please wait',
-              'just a moment',
-              'enable javascript',
-              'ddos protection',
-              'cloudflare',
-            ]
-            return !indicators.some((i) => text.includes(i))
-          },
-          { timeout: 20000, polling: 1000 }
-        ).catch(() => console.warn(`   ❌ [CRAWL] Bot check did not resolve for ${item.url}`))
-      }
-
-      await new Promise((r) => setTimeout(r, 3000))
+      page.setDefaultNavigationTimeout(10000)
+      await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 10000 })
 
       const links: string[] = await page.evaluate(() =>
         Array.from(document.querySelectorAll('a[href]'), (a) => a.getAttribute('href') ?? ''),
@@ -192,8 +135,8 @@ async function crawlPages(
       }
 
       await new Promise((r) => setTimeout(r, 500))
-    } catch (err) {
-      console.error(`❌ [CRAWL] Failed to load ${item.url}:`, err instanceof Error ? err.message : err)
+    } catch {
+      // Page failed to load — skip but continue crawling
     } finally {
       if (page) void page.close().catch(() => undefined)
     }
@@ -253,7 +196,7 @@ export async function runAccessibilityTest(
     // Phase 2: Test each page
     const { AxePuppeteer } = await import('@axe-core/puppeteer')
     const { readFileSync } = await import('fs')
-    //const { resolve, dirname } = await import('path')
+    const { resolve, dirname } = await import('path')
     let axeSource: string | undefined
     try {
       const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
@@ -271,9 +214,9 @@ export async function runAccessibilityTest(
       console.error('❌ [A11Y] axe-core failed to load — tests will return empty results')
     } else {
       console.log('✅ [A11Y] axe-core loaded successfully, size:', Math.round(axeSource.length / 1024), 'KB')
-      // Debug logs to verify axeSource content 
-      //console.log('   axeSource type:', typeof axeSource)
-      //console.log('   axeSource preview:', axeSource?.slice(0, 80))
+      // ADD THESE TWO LINES
+      console.log('   axeSource type:', typeof axeSource)
+      console.log('   axeSource preview:', axeSource?.slice(0, 80))
     }
     const pageResults: PageResult[] = []
     const summary: TestSummary = {
@@ -323,21 +266,21 @@ export async function runAccessibilityTest(
         await new Promise((r) => setTimeout(r, 3000))
 
         // Step 3: Verify page is actually ready before handing to axe
-        const isReady = await page.evaluate(() => {
-          return document.body !== null && document.body.children.length > 0
-        }).catch(() => false)
+       const isReady = await page.evaluate(() => {
+  return document.body !== null && document.body.children.length > 0
+}).catch(() => false)
 
-        console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
+console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
 
-        if (!isReady) {
-          console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
-          onEvent({
-            type: 'error',
-            message: `Skipping ${pageUrl}: page not ready for analysis`,
-            fatal: false,
-          })
-          continue
-        }
+if (!isReady) {
+  console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
+  onEvent({
+    type: 'error',
+    message: `Skipping ${pageUrl}: page not ready for analysis`,
+    fatal: false,
+  })
+  continue
+}
         console.log(`   Running axe-core analysis...`)
         const pageInfo = await page.evaluate(() => ({
           elementCount: document.querySelectorAll('*').length,
@@ -348,39 +291,39 @@ export async function runAccessibilityTest(
         console.log(`   Body preview : ${pageInfo.bodyText.replace(/\n/g, ' ').slice(0, 150)}`)
 
         let results
-        let retries = 0
-        const maxRetries = 2
+let retries = 0
+const maxRetries = 2
 
-        while (retries <= maxRetries) {
-          try {
-            console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
-            results = await Promise.race([
-              new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
-              ),
-            ])
-            break // success — exit retry loop
-          } catch (axeErr) {
-            const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
-            if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
-              retries++
-              console.warn(`   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`)
-              await new Promise((r) => setTimeout(r, 3000 * retries)) // wait longer each retry
-              continue
-            }
-            // not retryable or max retries reached
-            console.error(`   ❌ axe-core failed: ${message}`)
-            onEvent({
-              type: 'error',
-              message: `Skipping ${pageUrl}: ${message}`,
-              fatal: false,
-            })
-            break
-          }
-        }
+while (retries <= maxRetries) {
+  try {
+    console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
+    results = await Promise.race([
+      new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
+      ),
+    ])
+    break // success — exit retry loop
+  } catch (axeErr) {
+    const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
+    if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
+      retries++
+      console.warn(`   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`)
+      await new Promise((r) => setTimeout(r, 3000 * retries)) // wait longer each retry
+      continue
+    }
+    // not retryable or max retries reached
+    console.error(`   ❌ axe-core failed: ${message}`)
+    onEvent({
+      type: 'error',
+      message: `Skipping ${pageUrl}: ${message}`,
+      fatal: false,
+    })
+    break
+  }
+}
 
-        if (!results) continue // skip this page if all retries failed
+if (!results) continue // skip this page if all retries failed
 
         console.log(`   ✅ axe-core analysis complete`)
         console.log(`   Rules that ran:`, results.passes.map(p => p.id))
@@ -493,7 +436,7 @@ export async function runAccessibilityTest(
     activeTests--
 
     //if (browser) void browser.close().catch(() => undefined)
-    // browser is NOT closed here anymore
-    // it is passed to generateAccessibilityReport and closed there
+     // browser is NOT closed here anymore
+  // it is passed to generateAccessibilityReport and closed there
   }
 }
