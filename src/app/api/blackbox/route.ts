@@ -46,7 +46,16 @@ Every output should feel like a high-end product website.
 
 // ─── Route Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-const { prompt, systemPrompt, isFollowUp = false } = await req.json();
+let body: any = {}
+try {
+  body = await req.json()
+} catch {
+  return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+}
+const { prompt, systemPrompt, isFollowUp = false } = body
+if (!prompt) {
+  return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+}
 
   const messages: { role: string; content: string }[] = [];
 
@@ -110,7 +119,7 @@ try {
 
   data = await response.json()
 
-  if (data.error) throw new Error(data.error)
+ if (data.error) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error))
 
 } catch (err) {
   console.error("3D generation failed:", err)

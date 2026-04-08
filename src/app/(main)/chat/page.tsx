@@ -459,11 +459,16 @@ function SearchParamsHandler({ onReset, onChatIdChange, onAutoPrompt }: {
             const u = new URL(window.location.href); u.searchParams.delete('reset'); window.history.replaceState({}, '', u.pathname)
         }
     }, [searchParams])
-   useEffect(() => { 
-        const chatId = searchParams.get('chatId')
-        const mode = searchParams.get('mode') 
-        if (chatId !== null) onChatIdChange(chatId, mode)  
-    }, [searchParams, onChatIdChange])
+  const lastHandledRef = useRef<string>('')
+useEffect(() => { 
+    const chatId = searchParams.get('chatId')
+    const mode = searchParams.get('mode')
+    const key = `${chatId}-${mode}`
+    if (chatId !== null && key !== lastHandledRef.current) {
+        lastHandledRef.current = key
+        onChatIdChange(chatId, mode)
+    }
+}, [searchParams])
     const hasHandledRef = useRef(false)
     useEffect(() => {
         if (hasHandledRef.current) return
@@ -544,6 +549,7 @@ useEffect(() => {
     const autoPromptFiredRef = useRef(false)
     const handleReset = useCallback(() => {
         autoPromptFiredRef.current = false
+        handledChatIdRef.current = null
         setShowChatInterface(false); setChatMode(null); setMessage(''); setAttachments([])
         setIsLoading(false); setIsFullscreen(false); setUrlChatId(null)
         setThreeDHtml(''); setThreeDMessages([]); setThreeDLoading(false); setThreeDFullscreen(false); setThreeDSceneId('')
@@ -554,15 +560,22 @@ useEffect(() => {
         setTimeout(() => { if (textareaRef.current) textareaRef.current.focus() }, 0)
     }, [])
 
-    const handleChatIdChange = (chatId: string | null, mode?: string | null) => {
+  const handledChatIdRef = useRef<string | null>(null)
+
+const handleChatIdChange = useCallback((chatId: string | null, mode?: string | null) => {
     setUrlChatId(chatId)
     if (mode === '3d' && chatId) {
+        
+        if (handledChatIdRef.current === chatId) return
+        handledChatIdRef.current = chatId
+
         setChatMode('BUILDER')
         setShowChatInterface(true)
         setBuildMode('3D')
         fetch(`/api/chats/${chatId}`)
             .then(r => r.json())
             .then(data => {
+                
                 if (data?.prompt) {
                     setThreeDMessages([
                         { role: 'user', content: data.prompt },
@@ -570,12 +583,16 @@ useEffect(() => {
                     ])
                     lastUserPromptRef.current = data.prompt
                     setThreeDSceneId(chatId)
-                    generate3DScene(data.prompt)
+                    if (data.demo_html && data.demo_html.trim().length > 0) {
+                        setThreeDHtml(data.demo_html)
+                    } else {
+                        generate3DSceneRef.current(data.prompt)
+                    }
                 }
             })
             .catch(() => {})
     }
-}
+}, [])
 
     const [seoAuditResult, setSeoAuditResult] = useState<string | null>(null)
     const [seoAuditLoading, setSeoAuditLoading] = useState(false)
@@ -619,17 +636,25 @@ useEffect(() => {
     const handleRemoveAttachment = (id: string) => setAttachments(p => p.filter(a => a.id !== id))
 
     // ── 3D scene generation ───────────────────────────────────────────────────
-    const generate3DScene = async (userMessage: string, existingHtml?: string) => {
-        setThreeDLoading(true)
-        setThreeDHtml('')
+const generate3DScene = async (userMessage: string, existingHtml?: string): Promise<string> => {
+    if (threeDLoading) return '' 
+    setThreeDLoading(true)
+     
         setShowChatInterface(true)
         setActivePanel('preview')
         lastUserPromptRef.current = userMessage
 
-        if (!existingHtml) {
-            const newId = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
-            setThreeDSceneId(newId)
-        }
+      let localSceneId = threeDSceneId
+
+if (!localSceneId) {
+    localSceneId = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+    setThreeDSceneId(localSceneId)
+}
+        if (existingHtml) {
+  setThreeDHtml(existingHtml)
+  setThreeDLoading(false)
+  return existingHtml
+}
 
         const isFollowUp = !!existingHtml
 
@@ -671,11 +696,11 @@ No clutter.
             let output = data?.choices?.[0]?.message?.content || ''
 
             // Strip any markdown wrapping
-            output = output
-                .replace(/^```html\s*/i, '')
-                .replace(/^```\s*/i, '')
-                .replace(/```\s*$/i, '')
-                .trim()
+          output = output
+    .replace(/^```html[\r\n]*/i, '')
+    .replace(/^```[\r\n]*/i, '')
+    .replace(/[\r\n]*```\s*$/i, '')
+    .trim()
 
             // Graceful recovery if truncated at token limit
             if (finishReason === 'length' && output) {
@@ -684,13 +709,26 @@ No clutter.
             }
 
             setThreeDHtml(output)
-            const sceneIdToSave = threeDSceneId || (Math.random().toString(36).slice(2, 10))
+            
+            const sceneIdToSave = localSceneId
 try {
-  await fetch('/api/chat/ownership', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chatId: sceneIdToSave, prompt: userMessage , demoUrl: 'threed://'}),
-  })
+const savedHtml = output
+
+await fetch('/api/chat/ownership', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ 
+    chatId: sceneIdToSave, 
+    prompt: userMessage,
+    demoUrl: 'threed://',
+    demoHtml: savedHtml 
+  }),
+})
+const currentUrl = new URL(window.location.href)
+if (currentUrl.searchParams.get('chatId') !== sceneIdToSave) {
+    window.history.replaceState({}, '', `/chat?chatId=${sceneIdToSave}&mode=3d`)
+    handledChatIdRef.current = sceneIdToSave 
+}
 } catch { }
             setThreeDMessages(prev => [...prev, {
                 role: 'assistant',
@@ -700,12 +738,17 @@ try {
                         ? '✓ Changes applied to the scene.'
                         : '✓ Scene ready — move your mouse to rotate, scroll to zoom.',
             }])
+            setThreeDLoading(false) 
+            return output
         } catch (e) {
             console.error('3D generation failed', e)
             setThreeDMessages(prev => [...prev, { role: 'assistant', content: 'Generation failed. Please try again.' }])
         }
         setThreeDLoading(false)
+        return '' 
     }
+    const generate3DSceneRef = useRef(generate3DScene)
+    useEffect(() => { generate3DSceneRef.current = generate3DScene })
 
     const handle3DGenerate = async (userMessage: string) => {
         setThreeDMessages(prev => [...prev, { role: 'user', content: userMessage }])

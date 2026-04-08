@@ -401,6 +401,7 @@ if (localCheck && localCheck.demo_url?.startsWith('threed://')) {
     id: chatId,
     title: localCheck.title ?? chatId,
     prompt: localCheck.prompt ?? undefined,
+    demo_html: localCheck.demo_html ?? undefined,
     demo: undefined,
     isOwner: true,
   } as any
@@ -485,11 +486,11 @@ function generateSmartTitle(prompt: string): string {
 export async function createChatOwnershipHandler({
   body,
 }: {
-  body: { chatId: string; prompt?: string; demoUrl?: string }
+  body: { chatId: string; prompt?: string; demoUrl?: string; demoHtml?: string }
 }): Promise<CreateChatOwnershipResponse> {
   try {
     const session = await getSession()
-    const { chatId, prompt, demoUrl } = body
+   const { chatId, prompt, demoUrl, demoHtml } = body
 
     if (!chatId) {
       return { error: 'Chat ID is required' }
@@ -510,6 +511,7 @@ export async function createChatOwnershipHandler({
       await updateUserChat({
         v0ChatId: chatId,
         demoUrl: demoUrl ?? undefined,
+        demoHtml: demoHtml ?? undefined,
       })
     } else {
       // Create new chat record
@@ -519,6 +521,7 @@ export async function createChatOwnershipHandler({
         title: prompt ? generateSmartTitle(prompt) : undefined,
         prompt: prompt ?? undefined,
         demoUrl: demoUrl ?? undefined,
+        demoHtml: demoHtml ?? undefined,
       })
     }
 

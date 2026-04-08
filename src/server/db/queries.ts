@@ -67,6 +67,7 @@ export interface CreateUserChatParams {
   prompt?: string
   demoUrl?: string
   previewUrl?: string
+  demoHtml?: string
 }
 
 /** Parameters for updating an existing user chat */
@@ -75,6 +76,7 @@ export interface UpdateUserChatParams {
   title?: string
   demoUrl?: string
   previewUrl?: string
+  demoHtml?: string
 }
 
 // Legacy type alias for backward compatibility
@@ -95,6 +97,7 @@ export async function createUserChat({
   prompt,
   demoUrl,
   previewUrl,
+  demoHtml,
 }: CreateUserChatParams): Promise<void> {
   try {
     await db
@@ -107,6 +110,7 @@ export async function createUserChat({
         prompt: prompt ?? null,
         demo_url: demoUrl ?? null,
         preview_url: previewUrl ?? null,
+        demo_html: demoHtml ?? null,
       })
       .onConflictDoNothing({ target: user_chats.v0_chat_id })
   } catch (error: unknown) {
@@ -123,6 +127,7 @@ export async function updateUserChat({
   title,
   demoUrl,
   previewUrl,
+  demoHtml,
 }: UpdateUserChatParams): Promise<void> {
   try {
     const updates: Partial<UserChatInsert> = {
@@ -132,6 +137,7 @@ export async function updateUserChat({
     if (title !== undefined) updates.title = title
     if (demoUrl !== undefined) updates.demo_url = demoUrl
     if (previewUrl !== undefined) updates.preview_url = previewUrl
+    if (demoHtml !== undefined) updates.demo_html = demoHtml
 
     await db
       .update(user_chats)

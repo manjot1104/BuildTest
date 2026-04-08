@@ -250,6 +250,7 @@ export const user_chats = createTable(
     // V0 response data
     demo_url: d.text("demo_url"), // URL to the demo preview
     preview_url: d.text("preview_url"), // URL to preview image
+    demo_html: d.text("demo_html"),
     // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
