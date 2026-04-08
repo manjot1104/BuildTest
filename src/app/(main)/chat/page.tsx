@@ -188,6 +188,17 @@ function ThreeDToolbarBtn({ tooltip, onClick, disabled, children, active }: {
 function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId }: {
     html: string; loading: boolean; isFullscreen: boolean; setIsFullscreen: (v: boolean) => void; sceneId: string
 }) {
+    const loadingSteps = [
+  'Initializing 3D engine...',
+  'Crafting geometry...',
+  'Setting up lighting...',
+  'Adding depth & fog...',
+  'Animating the scene...',
+  'Almost ready...',
+]
+const [loadingStep, setLoadingStep] = useState(0)
+
+
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [codeOpen, setCodeOpen] = useState(false)
@@ -211,7 +222,13 @@ function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId }
         container.addEventListener('wheel', onWheel, { passive: false })
         return () => container.removeEventListener('wheel', onWheel)
     }, [html])
-
+useEffect(() => {
+  if (!loading) { setLoadingStep(0); return }
+  const interval = setInterval(() => {
+    setLoadingStep(prev => (prev + 1) % loadingSteps.length)
+  }, 4000)
+  return () => clearInterval(interval)
+}, [loading])
     // Reset scroll progress when new scene loads
     useEffect(() => { scrollProgressRef.current = 0 }, [html])
 
@@ -287,21 +304,24 @@ function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId }
 
             {/* ── Preview area ── */}
             <div ref={containerRef} className="relative flex-1 min-h-0 bg-[#0a0f1e] overflow-hidden">
-                {loading && (
-                    <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#0a0f1e]">
-                        <div className="flex flex-col items-center gap-4">
-                            <div className="relative w-12 h-12">
-                                <div className="absolute inset-0 rounded-full border-2 border-primary/10" />
-                                <div className="absolute inset-0 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                                <div className="absolute inset-2 rounded-full border border-primary/20 border-t-primary/60 animate-spin" style={{ animationDirection: 'reverse', animationDuration: '0.8s' }} />
-                            </div>
-                            <div className="text-center">
-                                <p className="text-xs font-medium text-foreground">Building 3D scene</p>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">May take 30–60 seconds</p>
-                            </div>
-                        </div>
-                    </div>
-                )}
+  {loading && (
+  <div className="absolute inset-0 flex items-center justify-center z-20 bg-[#0a0f1e]">
+<div className="flex flex-col items-center gap-2">
+  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+
+  <p className="text-sm text-muted-foreground">
+    {loadingSteps[loadingStep]}
+  </p>
+
+ <div className="animate-pulse text-xs text-muted-foreground">
+  Rendering 3D scene...
+</div>
+  <p className="text-[11px] text-muted-foreground/50">
+    This may take a few seconds
+  </p>
+</div>
+  </div>
+)}
 
                 {html && !loading && (
                     <iframe
@@ -427,7 +447,9 @@ function ThreeDChatHistory({
 
 // ─── SearchParamsHandler ──────────────────────────────────────────────────────
 function SearchParamsHandler({ onReset, onChatIdChange, onAutoPrompt }: {
-    onReset: () => void; onChatIdChange: (chatId: string | null) => void; onAutoPrompt?: (prompt: string, chatId: string) => void
+    onReset: () => void
+    onChatIdChange: (chatId: string | null, mode?: string | null) => void  
+    onAutoPrompt?: (prompt: string, chatId: string) => void
 }) {
     const searchParams = useSearchParams()
     useEffect(() => {
@@ -437,7 +459,11 @@ function SearchParamsHandler({ onReset, onChatIdChange, onAutoPrompt }: {
             const u = new URL(window.location.href); u.searchParams.delete('reset'); window.history.replaceState({}, '', u.pathname)
         }
     }, [searchParams])
-    useEffect(() => { const chatId = searchParams.get('chatId'); if (chatId !== null) onChatIdChange(chatId) }, [searchParams, onChatIdChange])
+   useEffect(() => { 
+        const chatId = searchParams.get('chatId')
+        const mode = searchParams.get('mode') 
+        if (chatId !== null) onChatIdChange(chatId, mode)  
+    }, [searchParams, onChatIdChange])
     const hasHandledRef = useRef(false)
     useEffect(() => {
         if (hasHandledRef.current) return
@@ -480,7 +506,12 @@ export default function ChatPage() {
     })
 
     useEffect(() => { if (chatMode === 'AI_CHAT' && !showChatInterface) setShowChatInterface(true) }, [chatMode])
-    useEffect(() => { if (urlChatId && chatMode === null) { setChatMode('BUILDER'); setShowChatInterface(true) } }, [urlChatId, chatMode])
+useEffect(() => { 
+    if (urlChatId && chatMode === null) { 
+        setChatMode('BUILDER')
+        setShowChatInterface(true)
+    } 
+}, [urlChatId, chatMode])
 
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -523,7 +554,28 @@ export default function ChatPage() {
         setTimeout(() => { if (textareaRef.current) textareaRef.current.focus() }, 0)
     }, [])
 
-    const handleChatIdChange = (chatId: string | null) => setUrlChatId(chatId)
+    const handleChatIdChange = (chatId: string | null, mode?: string | null) => {
+    setUrlChatId(chatId)
+    if (mode === '3d' && chatId) {
+        setChatMode('BUILDER')
+        setShowChatInterface(true)
+        setBuildMode('3D')
+        fetch(`/api/chats/${chatId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data?.prompt) {
+                    setThreeDMessages([
+                        { role: 'user', content: data.prompt },
+                        { role: 'assistant', content: '✓ Scene was generated. Hit Regenerate to rebuild it.' }
+                    ])
+                    lastUserPromptRef.current = data.prompt
+                    setThreeDSceneId(chatId)
+                    generate3DScene(data.prompt)
+                }
+            })
+            .catch(() => {})
+    }
+}
 
     const [seoAuditResult, setSeoAuditResult] = useState<string | null>(null)
     const [seoAuditLoading, setSeoAuditLoading] = useState(false)
@@ -608,7 +660,11 @@ No clutter.
             const res = await fetch('/api/blackbox', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: userPrompt, systemPrompt }),
+                body: JSON.stringify({ 
+  prompt: userPrompt, 
+  systemPrompt,
+  isFollowUp 
+}),
             })
             const data = await res.json()
             const finishReason = data?.choices?.[0]?.finish_reason
@@ -628,6 +684,14 @@ No clutter.
             }
 
             setThreeDHtml(output)
+            const sceneIdToSave = threeDSceneId || (Math.random().toString(36).slice(2, 10))
+try {
+  await fetch('/api/chat/ownership', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chatId: sceneIdToSave, prompt: userMessage , demoUrl: 'threed://'}),
+  })
+} catch { }
             setThreeDMessages(prev => [...prev, {
                 role: 'assistant',
                 content: finishReason === 'length'
@@ -666,6 +730,7 @@ No clutter.
         if (buildMode === '3D') {
             clearPromptFromStorage(); setMessage(''); setAttachments([])
             await handle3DGenerate(userMessage)
+           
             return
         }
 
@@ -790,12 +855,7 @@ No clutter.
                                                     </div>
                                                     <span className="text-xs font-semibold text-foreground">3D Builder</span>
                                                 </div>
-                                                {threeDLoading && (
-                                                    <div className="flex items-center gap-1.5 ml-auto">
-                                                        <div className="h-2.5 w-2.5 rounded-full border border-primary border-t-transparent animate-spin" />
-                                                        <span className="text-[10px] text-muted-foreground">Generating...</span>
-                                                    </div>
-                                                )}
+                                              
                                             </div>
                                             <ThreeDChatHistory messages={threeDMessages} onRegenerate={handleRegenerate} loading={threeDLoading} />
                                             <div className="border-t border-border/40 shrink-0">

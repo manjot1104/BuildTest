@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getSession } from '@/server/better-auth/server'
+import { deductCredits } from '@/server/services/credits.service'
+import { CREDIT_COSTS } from '@/config/credits.config'
 
 // ─── Expert Three.js r128 System Prompt ───────────────────────────────────────
 const THREEJS_EXPERT_SYSTEM_PROMPT = `
@@ -43,7 +46,7 @@ Every output should feel like a high-end product website.
 
 // ─── Route Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  const { prompt, systemPrompt } = await req.json();
+const { prompt, systemPrompt, isFollowUp = false } = await req.json();
 
   const messages: { role: string; content: string }[] = [];
 
@@ -68,9 +71,30 @@ Strong depth, smooth motion, realistic lighting.
 
 No clutter.
 `;
+const session = await getSession();
 
+let deducted = false
+let cost = 0
+
+if (session?.user?.id) {
+  cost = isFollowUp
+    ? CREDIT_COSTS.FOLLOW_UP_PROMPT * 3
+    : CREDIT_COSTS.NEW_PROMPT * 3
+
+  await deductCredits(
+    session.user.id,
+    cost,
+    '3d_builder',
+    undefined
+  )
+
+  deducted = true
+}
 messages.push({ role: "user", content: optimizedPrompt.trim() });
+ 
+let data
 
+try {
   const response = await fetch("https://api.blackbox.ai/chat/completions", {
     method: "POST",
     headers: {
@@ -79,18 +103,24 @@ messages.push({ role: "user", content: optimizedPrompt.trim() });
     },
     body: JSON.stringify({
       model: "blackboxai/anthropic/claude-opus-4.6",
-     max_tokens: 12000,
+      max_tokens: 12000,
       messages,
     }),
-  });
+  })
 
-  const data = await response.json();
-  console.log("finish_reason:", data?.choices?.[0]?.finish_reason);
-  console.log("is3D:", is3D);
+  data = await response.json()
 
-  if (data.error) {
-    return NextResponse.json({ error: data.error }, { status: 400 });
-  }
+  if (data.error) throw new Error(data.error)
 
-  return NextResponse.json(data);
+} catch (err) {
+  console.error("3D generation failed:", err)
+
+  return NextResponse.json(
+    { error: "3D generation failed. Please try again." },
+    { status: 500 }
+  )
+}
+
+return NextResponse.json(data);
+
 }

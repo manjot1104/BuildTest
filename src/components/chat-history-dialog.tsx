@@ -69,8 +69,11 @@ const [chatToDelete, setChatToDelete] = useState<string | null>(null)
     }, [filter])
 
     const handleChatClick = (chat: any) => {
-  if (chat.type === 'builder') {
-    router.push(`/chat?chatId=${chat.v0ChatId}`)
+if (chat.type === 'builder') {
+  const isThreeD = chat.demoUrl?.startsWith('threed://')
+  router.push(isThreeD 
+    ? `/chat?chatId=${chat.v0ChatId}&mode=3d`
+    : `/chat?chatId=${chat.v0ChatId}`)
   } else {
     router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
   }
@@ -322,15 +325,18 @@ const confirmDelete = async () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    if (chat.type === 'builder') {
-                                                        router.push(`/chat?chatId=${chat.v0ChatId}`)
-                                                    } else {
-                                                        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
-                                                    }
-                                                    toggleHistoryModal()
-                                                }}
+                                               onClick={(e) => {
+    e.stopPropagation()
+    if (chat.type === 'builder') {
+        const isThreeD = chat.demoUrl?.startsWith('threed://')
+        router.push(isThreeD 
+            ? `/chat?chatId=${chat.v0ChatId}&mode=3d`
+            : `/chat?chatId=${chat.v0ChatId}`)
+    } else {
+        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+    }
+    toggleHistoryModal()
+}}
                                                 className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
                                                 title="Open chat"
                                             >

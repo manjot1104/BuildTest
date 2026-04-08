@@ -395,6 +395,16 @@ export async function getChatDetailsHandler({
         isOwner = true
       }
     }
+const localCheck = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+if (localCheck && localCheck.demo_url?.startsWith('threed://')) {
+  return {
+    id: chatId,
+    title: localCheck.title ?? chatId,
+    prompt: localCheck.prompt ?? undefined,
+    demo: undefined,
+    isOwner: true,
+  } as any
+}
 
     // Fetch chat details from v0 API
     const v0 = await getV0Client()
@@ -457,6 +467,21 @@ return { ...chatDetails, demo: resolvedDemo, isOwner }
  * When streaming, the chat is created on the client side, so we need
  * to create the ownership record separately
  */
+function generateSmartTitle(prompt: string): string {
+  const stopWords = ['with', 'and', 'the', 'for', 'a', 'an', 'of', 'in']
+
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(' ')
+    .filter(w => w.length > 2 && !stopWords.includes(w))
+
+  const keywords = words.slice(0, 4) 
+
+  return keywords
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 export async function createChatOwnershipHandler({
   body,
 }: {
@@ -491,7 +516,7 @@ export async function createChatOwnershipHandler({
       await createUserChat({
         v0ChatId: chatId,
         userId: session.user.id,
-        title: prompt ? generateTitleFromPrompt(prompt) : undefined,
+        title: prompt ? generateSmartTitle(prompt) : undefined,
         prompt: prompt ?? undefined,
         demoUrl: demoUrl ?? undefined,
       })
