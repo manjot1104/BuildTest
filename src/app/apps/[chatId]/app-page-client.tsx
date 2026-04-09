@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { AlertCircle, ExternalLink, Loader2, Search } from 'lucide-react'
+import { AlertCircle, ExternalLink, Loader2, SearchCheckIcon } from 'lucide-react'
 
 type AppData = {
   demoUrl: string
+  demoHtml?: string
   title: string | null
 }
 
@@ -126,18 +127,18 @@ export default function AppPageClient() {
         </span>
       <div className="flex items-center gap-3">
   <Link
-    href={`/chat?chatId=${chatId}`}
+    href={`/chat?chatId=${chatId}${data.demoUrl?.startsWith('threed://') ? '&mode=3d' : ''}`}
     className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
   >
     Open Chat
     <ExternalLink className="h-3 w-3" />
   </Link>
   <Link
-    href={`/chat?chatId=${chatId}&prompt=seo-audit`}
+    href={`/chat?chatId=${chatId}&prompt=seo-audit${data.demoUrl?.startsWith('threed://') ? '&mode=3d' : ''}`}
     className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
   >
-    <Search className="h-3 w-3" />
-    SEO Audit
+    <SearchCheckIcon className="h-3 w-3" />
+   
   </Link>
 </div>
       </div>
@@ -154,20 +155,23 @@ export default function AppPageClient() {
             </div>
           </div>
         )}
-        <iframe
-          key={data.demoUrl}
-          src={data.demoUrl}
-          title={title}
-          className="h-full w-full border-0 bg-white"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-modals allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-downloads"
-          onLoad={() => setIframeLoading(false)}
-          onError={() => {
-            setIframeLoading(false)
-            setState({
-              status: 'error',
-              message: 'Failed to load the app preview. The demo may no longer be available.',
-            })
-          }}
+       <iframe
+  key={data.demoUrl}
+  {...(data.demoUrl?.startsWith('threed://')
+    ? { srcDoc: data.demoHtml || '' }  
+    : { src: data.demoUrl })}          
+  title={title}
+  className="h-full w-full border-0 bg-white"
+  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation allow-modals allow-popups-to-escape-sandbox allow-storage-access-by-user-activation allow-downloads"
+  onLoad={() => setIframeLoading(false)}
+  onError={() => {
+    setIframeLoading(false)
+    setState({
+      status: 'error',
+      message: 'Failed to load the app preview. The demo may no longer be available.',
+    })
+  }}
+
         />
       </div>
     </div>

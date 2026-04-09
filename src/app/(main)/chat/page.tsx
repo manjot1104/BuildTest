@@ -528,8 +528,15 @@ export default function ChatPage() {
     useEffect(() => { if (chatMode === 'AI_CHAT' && !showChatInterface) setShowChatInterface(true) }, [chatMode])
 useEffect(() => { 
     if (urlChatId && chatMode === null) { 
+        const params = new URLSearchParams(window.location.search)
+        const mode = params.get('mode')
+
         setChatMode('BUILDER')
         setShowChatInterface(true)
+
+        if (mode === '3d') {
+            setBuildMode('3D')   
+        }
     } 
 }, [urlChatId, chatMode])
 
@@ -578,9 +585,9 @@ useEffect(() => {
   const handledChatIdRef = useRef<string | null>(null)
 
 const handleChatIdChange = useCallback((chatId: string | null, mode?: string | null) => {
-    console.log('🟢 CHAT CHANGE TRIGGER', { chatId, mode })
+    
     setUrlChatId(chatId)
-    if (mode === '3d' && chatId) {
+    if ((mode === '3d' || window.location.search.includes('mode=3d')) && chatId) {
         setThreeDLoading(false)
         if (handledChatIdRef.current === chatId) return
         handledChatIdRef.current = chatId
@@ -757,7 +764,7 @@ const res = await fetch('/api/chat/ownership', {
   body: JSON.stringify({ 
     chatId: sceneIdToSave, 
     prompt: userMessage,
-    demoUrl: 'threed://',
+    demoUrl: `threed://${sceneIdToSave}`,
     demo_html: savedHtml
   }),
 })

@@ -370,12 +370,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     "/apps/:chatId",
     async ({ params, set }) => {
       try {
-        const result = await getChatDemoUrl({ v0ChatId: params.chatId });
+       const chat = await getUserChat({ v0ChatId: params.chatId });
 
-        if (!result) {
-          set.status = 404;
-          return { error: "App not found" };
-        }
+if (!chat) {
+  set.status = 404;
+  return { error: "App not found" };
+}
 
         // Visit logging (non-critical, fire-and-forget)
         try {
@@ -405,7 +405,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           // Visit logging is non-critical — silently ignore failures
         }
 
-        return result;
+        return {
+  demoUrl: chat.demo_url,
+  demoHtml: chat.demo_html, 
+  title: chat.title ?? null,
+};
       } catch {
         set.status = 500;
         return { error: "Failed to fetch app" };

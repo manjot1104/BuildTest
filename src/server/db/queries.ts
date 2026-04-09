@@ -327,6 +327,7 @@ export async function getCommunityChats({
     prompt: string | null
     demo_url: string | null
     preview_url: string | null
+    demo_html: string | null 
     created_at: Date
     updated_at: Date
     author_name: string
@@ -342,6 +343,7 @@ export async function getCommunityChats({
         prompt: user_chats.prompt,
         demo_url: user_chats.demo_url,
         preview_url: user_chats.preview_url,
+        demo_html: user_chats.demo_html,
         created_at: user_chats.created_at,
         updated_at: user_chats.updated_at,
         author_name: user.name,
@@ -374,6 +376,7 @@ export async function getFeaturedChats(
     prompt: string | null
     demo_url: string | null
     preview_url: string | null
+    demo_html: string | null
     created_at: Date
     updated_at: Date
     author_name: string
@@ -391,6 +394,7 @@ export async function getFeaturedChats(
         prompt: user_chats.prompt,
         demo_url: user_chats.demo_url,
         preview_url: user_chats.preview_url,
+        demo_html: user_chats.demo_html,
         created_at: user_chats.created_at,
         updated_at: user_chats.updated_at,
         author_name: user.name,
