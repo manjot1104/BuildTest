@@ -1,12 +1,6 @@
 // src/client-api/query-hooks/use-video-hooks.ts
-//
-// TanStack Query hooks for the video generation pipeline.
-// Follows the same patterns as use-testing-hooks.ts:
-//   - useQuery for reads, useMutation for writes
-//   - typed interfaces at the top
-//   - queryKey factories
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import type { VideoJson } from "@/remotion-src/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -20,6 +14,15 @@ export interface VideoMeta {
 export interface GenerateVideoResponse {
   videoJson: VideoJson;
   meta: VideoMeta;
+}
+
+export interface GenerateVideoOptions {
+  useTTS?: boolean;
+  voiceId?: string;
+  useMusic?: boolean;
+  musicGenre?: string;
+  ttsVolume?: number;
+  musicVolume?: number;
 }
 
 // ─── Query Keys ───────────────────────────────────────────────────────────────
@@ -41,8 +44,9 @@ export function useGenerateVideo() {
   return useMutation({
     mutationFn: async (input: {
       prompt: string;
-      /** Target duration in seconds (default 15, range 5–120) */
+      /** Target duration in seconds (default 15, range 5–40) */
       duration?: number;
+      options?: GenerateVideoOptions;
     }): Promise<GenerateVideoResponse> => {
       const res = await fetch("/api/video/generate", {
         method: "POST",

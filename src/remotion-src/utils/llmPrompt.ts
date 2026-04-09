@@ -48,6 +48,13 @@ Animations: "fade" | "spring-up" | "spring-scale" | "typewriter" | "slide-up" | 
 Every scene except the LAST must have a "transition" field.
 Options: "fade" | "slide-left" | "slide-right" | "slide-up" | "slide-down" | "wipe"
 Default "transitionDuration": 20. Vary transitions — do not repeat the same one back-to-back.
+
+=== NARRATION (REQUIRED on every scene) ===
+Every scene MUST have a "text" field — a 1-2 sentence spoken narration for that scene.
+This is what gets converted to voice audio. Write it as natural speech, not a title.
+
+BAD: "Photosynthesis"
+GOOD: "Photosynthesis is the process plants use to convert sunlight into food, producing oxygen as a byproduct."
 `;
 
 export const buildVideoPrompt = (
@@ -87,6 +94,7 @@ EXAMPLE of a correct scene with image background + SPLIT_LEFT layout:
   "background": { "type": "image", "url": "https://picsum.photos/seed/forest-morning-light-trees/1280/720.jpg" },
   "overlay": "rgba(0,0,0,0.55)",
   "overlayOpacity": 1,
+  text: "The ancient forests are home to countless species and have stood for millennia.",
   "elements": [
     { "type": "text", "text": "Ancient Forests", "slot": "text", "fontSize": 52, "shadow": true, "animation": "spring-up" },
     { "type": "image", "url": "https://picsum.photos/seed/tall-pine-forest-fog/800/600.jpg", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }

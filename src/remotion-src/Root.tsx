@@ -21,6 +21,13 @@ const defaultVideo: VideoJson = {
   fps: 30,
   width: 1280,
   height: 720,
+  
+  // --- NEW AUDIO DEFAULTS ---
+  bgmUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', // Placeholder
+  ttsVolume: 1,
+  musicVolume: 0.2,
+  // -------------------------
+
   globalColorScheme: {
     primary: '#ffffff',
     secondary: '#a5b4fc',
@@ -35,6 +42,7 @@ const defaultVideo: VideoJson = {
       durationInFrames: 150,
       transition: 'slide-left',
       transitionDuration: 20,
+      text: "Welcome to Buildify. Our pipeline is now fully integrated with a custom layout system.", // Narration text
       background: {
         type: 'image',
         url: 'https://picsum.photos/seed/build-dark-abstract/1280/720.jpg',
@@ -71,6 +79,7 @@ const defaultVideo: VideoJson = {
       durationInFrames: 150,
       transition: 'fade',
       transitionDuration: 20,
+      text: "Every transition is precisely synced with the narration audio for a professional feel.",
       background: {
         type: 'gradient',
         from: '#1e1b4b',
@@ -94,6 +103,7 @@ const defaultVideo: VideoJson = {
       layout: 'BULLET_POINTS',
       durationInFrames: 180,
       // No transition on last scene — VideoComposition ignores it automatically
+      text: "Here is how it works: we calculate real timeline length and use audio offsets to keep everything perfectly timed.",
       background: {
         type: 'color',
         value: '#111827',

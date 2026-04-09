@@ -196,6 +196,18 @@ export type Scene = {
   elements: SceneElement[];
 
   /**
+   * The actual text that will be spoken by TTS. 
+   * Having this at the scene level makes it easy for the TTS Engine to process.
+   */
+  text: string;
+
+  /**
+   * The URL to the generated MP3 from Smallest.ai.
+   * This is populated by the VideoService after the LLM generates the text.
+   */
+  ttsUrl?: string;
+
+  /**
    * Transition OUT of this scene (into the next).
    * Ignored on the last scene.
    */
@@ -226,6 +238,13 @@ export type VideoJson = {
   width?: number;            // default 1280
   height?: number;           // default 720
   scenes: Scene[];
+
+  bgmUrl?: string; // URL to the background music track.
+
+  // This is passed as a prop to Remotion for instant UI updates.
+  ttsVolume?: number; // Global volume for narration (0 to 1).
+  musicVolume?: number; // Global volume for background music (0 to 1).
+
   globalFontFamily?: string;
   globalColorScheme?: {
     primary: string;

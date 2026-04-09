@@ -2,25 +2,17 @@
 
 // src/app/video-gen/page.tsx
 //
-// Test page for the video generation pipeline.
-// Follows the same patterns as testing.page.tsx — font-mono labels,
-// font-sans headings, CSS variable colours, TanStack Query mutations.
+// Test page for the video generation pipeline..
 
 import { useState, useRef } from "react";
 import { Player } from "@remotion/player";
 import { toast } from "sonner";
 import {
-  Clapperboard,
-  Loader2,
-  RotateCcw,
-  Sparkles,
-  ChevronDown,
-  ChevronUp,
-  Clock,
-  Layers,
-  Film,
+  Clapperboard, Loader2, RotateCcw, Sparkles,
+  ChevronDown, ChevronUp, Clock, Layers, Film,
+  Mic, Music, Volume2,
 } from "lucide-react";
-import { useGenerateVideo, type VideoMeta } from "@/client-api/query-hooks/use-video-hooks";
+import { useGenerateVideo, type VideoMeta, type GenerateVideoOptions } from "@/client-api/query-hooks/use-video-hooks";
 import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
 
@@ -33,6 +25,13 @@ const DURATION_RANGES = [
 ] as const;
 
 type DurationRange = typeof DURATION_RANGES[number];
+
+const MUSIC_GENRES = [
+  { label: "Corporate", value: "corporate" },
+  { label: "Cinematic", value: "cinematic" },
+  { label: "Upbeat", value: "upbeat" },
+  { label: "Lo-fi", value: "lofi" },
+] as const;
 
 const EXAMPLE_PROMPTS = [
   "Explain photosynthesis in 3 scenes with a clean educational style",
@@ -49,6 +48,14 @@ export default function VideoGeneratorPage() {
   const [videoJson, setVideoJson] = useState<VideoJson | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  // Options state
+  const [useTTS, setUseTTS] = useState(true);
+  const [useMusic, setUseMusic] = useState(true);
+  const [musicGenre, setMusicGenre] = useState("corporate");
+  const [voiceId, setVoiceId] = useState("aravind");
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { mutate: generate, isPending: isGenerating } = useGenerateVideo();
@@ -59,8 +66,15 @@ export default function VideoGeneratorPage() {
     e.preventDefault();
     if (!prompt.trim() || isGenerating) return;
 
+    const options: GenerateVideoOptions = {
+      useTTS,
+      useMusic,
+      ...(useTTS && { voiceId }),
+      ...(useMusic && { musicGenre }),
+    };
+
     generate(
-      { prompt: prompt.trim(), duration: selectedRange.seconds },
+      { prompt: prompt.trim(), duration: selectedRange.seconds, options },
       {
         onSuccess: (data) => {
           setVideoJson(data.videoJson);
@@ -74,17 +88,13 @@ export default function VideoGeneratorPage() {
     );
   }
 
-  function handleExample(example: string) {
-    setPrompt(example);
-    textareaRef.current?.focus();
-  }
-
   function handleReset() {
     setVideoJson(null);
     setMeta(null);
     setPrompt("");
     setSelectedRange(DURATION_RANGES[1]);
     setJsonOpen(false);
+    setOptionsOpen(false);
   }
 
   return (
@@ -115,7 +125,7 @@ export default function VideoGeneratorPage() {
           )}
         </div>
 
-        {/* ══ INPUT ═════════════════════════════════════════════════════════════ */}
+        {/* ══ INPUT ═══════════════════════════════════════════════════════════ */}
         {!hasResult && (
           <div className="space-y-3">
 
@@ -150,8 +160,7 @@ export default function VideoGeneratorPage() {
                     aria-label="Video prompt"
                     className="w-full px-4 pt-4 pb-8 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40"
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
-                        handleSubmit(e);
+                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
                     }}
                   />
                   <span className="absolute bottom-3 right-4 text-[10px] font-mono text-muted-foreground/25 tabular-nums">
@@ -172,10 +181,11 @@ export default function VideoGeneratorPage() {
                           type="button"
                           onClick={() => setSelectedRange(range)}
                           aria-pressed={selectedRange.value === range.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                            }`}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${
+                            selectedRange.value === range.value
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                          }`}
                         >
                           {range.label}
                         </button>
@@ -199,6 +209,134 @@ export default function VideoGeneratorPage() {
                       </>
                     )}
                   </button>
+                </div>
+
+                {/* Collapsible options */}
+                <div className="border-t border-border">
+                  <button
+                    type="button"
+                    onClick={() => setOptionsOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Volume2 className="h-3 w-3 text-muted-foreground/50" />
+                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                        Audio options
+                      </span>
+                      {/* Active indicators */}
+                      <div className="flex gap-1">
+                        {useTTS && (
+                          <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
+                            TTS
+                          </span>
+                        )}
+                        {useMusic && (
+                          <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
+                            Music
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {optionsOpen
+                      ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+                    }
+                  </button>
+
+                  {optionsOpen && (
+                    <div className="px-4 pb-4 space-y-4 border-t border-border bg-muted/10">
+
+                      {/* TTS toggle + voice */}
+                      <div className="space-y-2 pt-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
+                            <span className="text-[11px] font-mono text-muted-foreground">
+                              Narration (TTS)
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUseTTS((v) => !v)}
+                            className={`relative h-5 w-9 rounded-full border transition-all ${
+                              useTTS
+                                ? "bg-primary border-primary"
+                                : "bg-muted border-border"
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                              useTTS ? "left-4" : "left-0.5"
+                            }`} />
+                          </button>
+                        </div>
+
+                        {useTTS && (
+                          <div className="flex items-center gap-2 pl-5">
+                            <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                              Voice
+                            </span>
+                            <input
+                              type="text"
+                              value={voiceId}
+                              onChange={(e) => setVoiceId(e.target.value)}
+                              placeholder="aravind"
+                              className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Music toggle + genre */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
+                            <span className="text-[11px] font-mono text-muted-foreground">
+                              Background music
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setUseMusic((v) => !v)}
+                            className={`relative h-5 w-9 rounded-full border transition-all ${
+                              useMusic
+                                ? "bg-primary border-primary"
+                                : "bg-muted border-border"
+                            }`}
+                          >
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                              useMusic ? "left-4" : "left-0.5"
+                            }`} />
+                          </button>
+                        </div>
+
+                        {useMusic && (
+                          <div className="flex items-center gap-2 pl-5">
+                            <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                              Genre
+                            </span>
+                            <div className="flex gap-1 flex-wrap">
+                              {MUSIC_GENRES.map((g) => (
+                                <button
+                                  key={g.value}
+                                  type="button"
+                                  onClick={() => setMusicGenre(g.value)}
+                                  className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${
+                                    musicGenre === g.value
+                                      ? "border-primary bg-primary/10 text-primary"
+                                      : "border-border text-muted-foreground hover:text-foreground"
+                                  }`}
+                                >
+                                  {g.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  )}
                 </div>
               </div>
             </form>
@@ -231,7 +369,8 @@ export default function VideoGeneratorPage() {
                   {[
                     "Analyzing your prompt",
                     "Composing scenes",
-                    "Building animations",
+                    ...(useTTS ? ["Generating narration audio"] : []),
+                    ...(useMusic ? ["Adding background music"] : []),
                   ].map((step, i) => (
                     <div key={step} className="flex items-center gap-2">
                       <Loader2
@@ -259,7 +398,7 @@ export default function VideoGeneratorPage() {
                     <button
                       key={ex}
                       type="button"
-                      onClick={() => handleExample(ex)}
+                      onClick={() => { setPrompt(ex); textareaRef.current?.focus(); }}
                       className="text-[10px] font-mono text-muted-foreground border border-border rounded-lg px-2.5 py-1.5 hover:border-border/60 hover:text-foreground hover:bg-muted/50 transition-all text-left"
                     >
                       {ex.length > 50 ? ex.slice(0, 50) + "…" : ex}
@@ -271,7 +410,7 @@ export default function VideoGeneratorPage() {
           </div>
         )}
 
-        {/* ══ RESULT ════════════════════════════════════════════════════════════ */}
+        {/* ══ RESULT ══════════════════════════════════════════════════════════ */}
         {hasResult && videoJson && (
           <div className="space-y-4">
 
@@ -280,11 +419,7 @@ export default function VideoGeneratorPage() {
               <div className="flex items-center gap-4 flex-wrap">
                 {[
                   { icon: Layers, label: "scenes", value: meta?.scenes },
-                  {
-                    icon: Clock,
-                    label: "seconds",
-                    value: meta?.durationSeconds.toFixed(1),
-                  },
+                  { icon: Clock, label: "seconds", value: meta?.durationSeconds.toFixed(1) },
                   { icon: Film, label: "frames", value: meta?.totalFrames },
                 ].map(({ icon: Icon, label, value }) => (
                   <div key={label} className="flex items-center gap-2">
@@ -301,6 +436,19 @@ export default function VideoGeneratorPage() {
                     </div>
                   </div>
                 ))}
+                {/* Audio badges */}
+                <div className="flex gap-1.5 ml-auto">
+                  {videoJson.scenes.some(s => s.ttsUrl) && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                      <Mic className="h-2.5 w-2.5" /> TTS
+                    </span>
+                  )}
+                  {videoJson.bgmUrl && (
+                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                      <Music className="h-2.5 w-2.5" /> Music
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -341,11 +489,10 @@ export default function VideoGeneratorPage() {
                 <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
                   Generated JSON
                 </span>
-                {jsonOpen ? (
-                  <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-                ) : (
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-                )}
+                {jsonOpen
+                  ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+                  : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+                }
               </button>
               {jsonOpen && (
                 <pre className="border-t border-border px-4 py-4 text-[10px] font-mono text-muted-foreground/50 overflow-auto max-h-72 leading-relaxed custom-scrollbar bg-background/50">

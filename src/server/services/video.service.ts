@@ -16,6 +16,9 @@ import {
   buildVideoPrompt,
 } from "@/remotion-src/utils/llmPrompt";
 import type { VideoJson } from "@/remotion-src/types";
+// Import your engines
+import { generateSmallestAITTS } from "../engines/video-gen-tts.engine";
+import { getMusicTrack } from "../engines/video-gen-music.engine";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -320,11 +323,84 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
   throw new Error(`All video models failed. Last error: ${lastError?.message}`);
 }
 
+async function enrichVideoWithAudio(
+  videoJson: VideoJson,
+  options: {
+    useTTS?: boolean;
+    useMusic?: boolean;
+    voiceId?: string;
+    musicGenre?: string;
+    ttsVolume?: number;
+    musicVolume?: number;
+  },
+): Promise<VideoJson> {
+  // 1. Handle Music (Global)
+  if (options.useMusic) {
+    const track = getMusicTrack(options.musicGenre || "corporate");
+    if (track) {
+      videoJson.bgmUrl = track.url;
+      videoJson.musicVolume = track.defaultVolume;
+    }
+  } else {
+    videoJson.musicVolume = 0;
+  }
+
+  // 2. Handle TTS (Per Scene)
+  if (options.useTTS) {
+    // FIX: Extract index 'i' using .entries()
+    for (const [i, scene] of videoJson.scenes.entries()) {
+      const originalFrames = scene.durationInFrames; // preserve before overwriting
+      try {
+        const { url, durationInSeconds } = await generateSmallestAITTS(
+          scene.text,
+          i,
+          options.voiceId,
+        );
+
+        scene.ttsUrl = url;
+
+        if (durationInSeconds > 0) {
+          // Audio is valid — let it drive the scene duration
+          scene.durationInFrames = Math.ceil(durationInSeconds * 30) + 5;
+        } else {
+          // TTS returned but duration is unusable — keep original LLM-assigned frames
+          console.warn(
+            `[VideoService] scene ${i}: TTS duration=0, keeping original durationInFrames=${originalFrames}`,
+          );
+          scene.durationInFrames = originalFrames;
+        }
+      } catch (err) {
+        console.error(`[VideoService] TTS failed for scene ${i}:`, err);
+        scene.durationInFrames = originalFrames; // same fallback on hard error
+      }
+    }
+  }
+
+  if (options.ttsVolume !== undefined) videoJson.ttsVolume = options.ttsVolume;
+  if (options.musicVolume !== undefined)
+    videoJson.musicVolume = options.musicVolume;
+
+  // 3. Recalculate Root Duration
+  videoJson.duration = videoJson.scenes.reduce((acc, s, i) => {
+    const isLast = i === videoJson.scenes.length - 1;
+    const overlap = s.transitionDuration ?? 20;
+    return acc + s.durationInFrames - (isLast ? 0 : overlap);
+  }, 0);
+
+  return videoJson;
+}
+
 // ── Public service API ────────────────────────────────────────────────────────
 
 export async function generateVideoJson(
   prompt: string,
   durationSeconds = 15,
+  options: {
+    useTTS?: boolean;
+    useMusic?: boolean;
+    voiceId?: string;
+    musicGenre?: string;
+  } = {},
 ): Promise<GenerateVideoResult | GenerateVideoError> {
   const messages: OpenRouterMessage[] = [
     { role: "system", content: VIDEO_SYSTEM_PROMPT },
@@ -421,15 +497,21 @@ export async function generateVideoJson(
         continue;
       }
 
-      const totalFrames = validation.data.duration;
-      const calculatedSeconds = totalFrames / (validation.data.fps || 30);
+      // TTS/Music ENRICHMENT PHASE ---
+      const enrichedJson = await enrichVideoWithAudio(
+        validation.data as VideoJson,
+        options,
+      );
+
+      const totalFrames = enrichedJson.duration;
+      const calculatedSeconds = totalFrames / (enrichedJson.fps || 30);
 
       console.log(
         `[VideoService] ✓ Generated ${validation.data.scenes.length} scenes, ` +
-        `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`
+          `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
       );
 
-      return { success: true, videoJson: validation.data as VideoJson };
+      return { success: true, videoJson: enrichedJson as VideoJson };
     } catch (err) {
       lastError = `Attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`;
       console.error(`[VideoService] ${lastError}`);

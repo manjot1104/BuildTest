@@ -2004,6 +2004,14 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       body: t.Object({
         prompt: t.String(),
         duration: t.Optional(t.Number()),
+        options: t.Optional(t.Object({
+          useTTS: t.Optional(t.Boolean()),
+          voiceId: t.Optional(t.String()),
+          useMusic: t.Optional(t.Boolean()),
+          musicGenre: t.Optional(t.String()),
+          ttsVolume: t.Optional(t.Number()),
+          musicVolume: t.Optional(t.Number()),
+        })),
       }),
     },
   )

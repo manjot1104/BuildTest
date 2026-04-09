@@ -1,5 +1,5 @@
 import React from 'react';
-import { AbsoluteFill } from 'remotion';
+import { AbsoluteFill, Audio } from 'remotion';
 import type { Scene } from '../types';
 import { BackgroundRenderer } from './BackgroundRenderer';
 import { LayoutRenderer } from './LayoutRenderer';
@@ -12,9 +12,10 @@ import { LayoutRenderer } from './LayoutRenderer';
 
 type Props = {
   scene: Scene;
+  ttsVolume?: number;
 };
 
-export const SceneRenderer: React.FC<Props> = ({ scene }) => {
+export const SceneRenderer: React.FC<Props> = ({ scene, ttsVolume = 1 }) => {
   const layout = scene.layout ?? 'TITLE';
 
   return (
@@ -32,6 +33,16 @@ export const SceneRenderer: React.FC<Props> = ({ scene }) => {
         layout={layout}
         elements={scene.elements}
       />
+
+      {/* TTS audio for this scene — starts at frame 0 of this scene's Sequence */}
+      {scene.ttsUrl && (
+        <Audio
+          src={scene.ttsUrl}
+          volume={ttsVolume}
+          // Strip the ?t= cache-buster — Remotion needs a clean path
+          // If your ttsUrl already has ?t=..., pass it through staticFile or strip it:
+        />
+      )}
     </AbsoluteFill>
   );
 };

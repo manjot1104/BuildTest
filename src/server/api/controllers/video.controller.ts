@@ -19,6 +19,14 @@ export async function generateVideoHandler({
   body: {
     prompt: string
     duration?: number  // seconds, default 15
+    options?: {
+      useTTS?: boolean;
+      voiceId?: string;
+      useMusic?: boolean;
+      musicGenre?: string;
+      ttsVolume?: number; // 0 to 1
+      musicVolume?: number; // 0 to 1
+    }
   }
 }): Promise<
   | { videoJson: VideoJson; meta: { scenes: number; totalFrames: number; durationSeconds: number } }
@@ -35,7 +43,12 @@ export async function generateVideoHandler({
     if (prompt.length > 2000) return { error: 'Prompt is too long — maximum 2000 characters', status: 400 }
     if (duration < 5 || duration > 120) return { error: 'Duration must be between 5 and 120 seconds', status: 400 }
 
-    const result = await generateVideoJson(prompt.trim(), duration)
+    const result = await generateVideoJson(prompt.trim(), duration, {
+      useTTS: body.options?.useTTS ?? true,
+      useMusic: body.options?.useMusic ?? true,
+      voiceId: body.options?.voiceId,
+      musicGenre: body.options?.musicGenre,
+    })
 
     if (!result.success) {
       console.error(`[VideoController] generateVideoJson failed: ${result.details}`)
@@ -49,7 +62,7 @@ export async function generateVideoHandler({
       meta: {
         scenes: result.videoJson.scenes.length,
         totalFrames: totalFrames,
-        durationSeconds: Math.round(totalFrames / fps),
+        durationSeconds: parseFloat((totalFrames / fps).toFixed(1)),
       },
     }
 
