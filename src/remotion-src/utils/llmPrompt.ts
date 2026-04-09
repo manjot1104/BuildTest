@@ -54,20 +54,31 @@ export const buildVideoPrompt = (
   userPrompt: string,
   durationSeconds = 15,
 ): string => {
-  const totalFrames = durationSeconds * 30;
+  const fps = 30;
+  const targetFrames = durationSeconds * fps;
   const minScenes = Math.floor(durationSeconds / 5);
   const maxScenes = Math.ceil(durationSeconds / 3);
+
+  // Each scene (except last) loses ~20 frames to transition overlap.
+  // We need to over-provision so after subtraction we hit the target.
+  // estimatedScenes ≈ midpoint of range, transitions = scenes - 1
+  const estimatedScenes = Math.round((minScenes + maxScenes) / 2);
+  const estimatedTransitionFrames = (estimatedScenes - 1) * 20;
+  const provisionalFrames = targetFrames + estimatedTransitionFrames;
 
   return `Create a ${durationSeconds}-second video about: "${userPrompt}"
 
 REQUIREMENTS:
-1. Produce ${minScenes}–${maxScenes} scenes. Sum of all "durationInFrames" ≈ ${totalFrames}.
-2. Each scene: 90–180 frames (3–6 seconds).
-3. Use AT LEAST 3 different layouts across the video.
-4. Use image backgrounds on MOST scenes (not color/gradient every time).
-5. Every image background needs "overlay": "rgba(0,0,0,0.55)" and "overlayOpacity": 1.
-6. All picsum seeds must be descriptive 3-5 word phrases related to "${userPrompt}".
-7. Every scene except the last needs a "transition". Vary them.
+1. Produce ${minScenes}–${maxScenes} scenes.
+2. Sum of ALL "durationInFrames" values MUST equal approximately ${provisionalFrames} frames total.
+   (This accounts for transition overlaps: each transition removes ~20 frames from the final render.)
+   Final rendered length = sum(durationInFrames) - sum(transitionDurations) ≈ ${targetFrames} frames = ${durationSeconds}s.
+3. Each scene: 90–180 frames (3–6 seconds) of its own durationInFrames.
+4. Use AT LEAST 3 different layouts across the video.
+5. Use image backgrounds on MOST scenes (not color/gradient every time).
+6. Every image background needs "overlay": "rgba(0,0,0,0.55)" and "overlayOpacity": 1.
+7. All picsum seeds must be descriptive 3-5 word phrases related to "${userPrompt}".
+8. Every scene except the last needs a "transition". Vary them.
 
 EXAMPLE of a correct scene with image background + SPLIT_LEFT layout:
 {
@@ -84,5 +95,5 @@ EXAMPLE of a correct scene with image background + SPLIT_LEFT layout:
   "transitionDuration": 20
 }
 
-Output raw JSON only — a single root object with "scenes" array, "duration", "fps": 30.`;
+Output raw JSON only — a single root object with "scenes" array, "duration": ${targetFrames}, "fps": 30.`;
 };
