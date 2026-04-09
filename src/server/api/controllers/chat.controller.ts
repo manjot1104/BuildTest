@@ -14,6 +14,9 @@ import {
   getCommunityChatsCount,
   getFeaturedChats,
 } from '@/server/db/queries'
+import { db } from '@/server/db'
+import { user_chats } from '@/server/db/schema'
+import { eq } from 'drizzle-orm'
 import {
   deductCreditsForPrompt,
   hasActiveSubscription,
@@ -76,7 +79,9 @@ type CreateChatResponse =
   | InsufficientCreditsResponse
 
 /** Response type for getChatDetailsHandler */
-type GetChatDetailsResponse = (ChatDetail & { isOwner?: boolean }) | ErrorResponse
+type GetChatDetailsResponse =
+  (ChatDetail & { isOwner?: boolean; demo_html?: string }) |
+  ErrorResponse
 
 /** Response type for createChatOwnershipHandler */
 type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
@@ -395,8 +400,15 @@ export async function getChatDetailsHandler({
         isOwner = true
       }
     }
-const localCheck = await getUserChat({ v0ChatId: chatId }).catch(() => null)
-if (localCheck && localCheck.demo_url?.startsWith('threed://')) {
+let localCheck = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+
+
+if (!localCheck) {
+  localCheck = await db.query.user_chats.findFirst({
+    where: eq(user_chats.id, chatId),
+  })
+}
+if (localCheck && (localCheck.demo_html || localCheck.demo_url?.startsWith('threed://'))) {
   return {
     id: chatId,
     title: localCheck.title ?? chatId,
@@ -451,9 +463,20 @@ if (localCheck && localCheck.demo_url?.startsWith('threed://')) {
       throw error
     }
 
-    const localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+   let localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+
+if (!localChat) {
+  localChat = await db.query.user_chats.findFirst({
+    where: eq(user_chats.id, chatId),
+  })
+}
 const resolvedDemo = chatDetails.demo ?? localChat?.demo_url ?? undefined
-return { ...chatDetails, demo: resolvedDemo, isOwner }
+return {
+  ...chatDetails,
+  demo: resolvedDemo,
+  demo_html: localChat?.demo_html ?? undefined,   
+  isOwner
+}
   } catch {
     return {
       error: 'Failed to fetch chat details',
@@ -486,11 +509,12 @@ function generateSmartTitle(prompt: string): string {
 export async function createChatOwnershipHandler({
   body,
 }: {
-  body: { chatId: string; prompt?: string; demoUrl?: string; demoHtml?: string }
+  body: { chatId: string; prompt?: string; demoUrl?: string; demoHtml?: string; demo_html?: string }
 }): Promise<CreateChatOwnershipResponse> {
   try {
     const session = await getSession()
-   const { chatId, prompt, demoUrl, demoHtml } = body
+  const { chatId, prompt, demoUrl, demoHtml, demo_html } = body
+const resolvedDemoHtml = demoHtml ?? demo_html
 
     if (!chatId) {
       return { error: 'Chat ID is required' }
@@ -511,7 +535,7 @@ export async function createChatOwnershipHandler({
       await updateUserChat({
         v0ChatId: chatId,
         demoUrl: demoUrl ?? undefined,
-        demoHtml: demoHtml ?? undefined,
+        demoHtml: resolvedDemoHtml ?? undefined,
       })
     } else {
       // Create new chat record
@@ -521,7 +545,7 @@ export async function createChatOwnershipHandler({
         title: prompt ? generateSmartTitle(prompt) : undefined,
         prompt: prompt ?? undefined,
         demoUrl: demoUrl ?? undefined,
-        demoHtml: demoHtml ?? undefined,
+        demoHtml: resolvedDemoHtml ?? undefined,
       })
     }
 

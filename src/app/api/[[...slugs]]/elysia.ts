@@ -675,11 +675,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return result;
     },
     {
-      body: t.Object({
-        chatId: t.String(),
-        prompt: t.Optional(t.String()),
-        demoUrl: t.Optional(t.String()),
-      }),
+    body: t.Object({
+  chatId: t.String(),
+  prompt: t.Optional(t.String()),
+  demoUrl: t.Optional(t.String()),
+  demo_html: t.Optional(t.String()),
+}),
     },
   )
   // Chat history endpoint - GET /api/chats

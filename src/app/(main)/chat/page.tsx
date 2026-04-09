@@ -419,16 +419,31 @@ function ThreeDChatHistory({
                     </div>
                 </div>
             )}
-            {messages.map((m, i) => (
-                <div key={i} className={cn(
-                    'rounded-xl px-3 py-2 text-xs max-w-[88%] leading-relaxed',
-                    m.role === 'user'
-                        ? 'bg-primary/10 border border-primary/20 text-foreground self-end'
-                        : 'bg-muted/30 border border-border/20 text-muted-foreground self-start'
-                )}>
-                    {m.content}
+        {messages.map((m, i) => {
+    if (m.content === '__service_down__') {
+        return (
+            <div key={i} className="self-start max-w-[88%] rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2.5 text-xs">
+                <div className="flex items-center gap-1.5 mb-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse shrink-0" />
+                    <span className="font-medium text-orange-400">Our systems are currently down</span>
                 </div>
-            ))}
+                <p className="text-muted-foreground leading-relaxed">
+                    Our 3D generation service is temporarily unavailable. We'll get back to you shortly.
+                </p>
+            </div>
+        )
+    }
+    return (
+        <div key={i} className={cn(
+            'rounded-xl px-3 py-2 text-xs max-w-[88%] leading-relaxed',
+            m.role === 'user'
+                ? 'bg-primary/10 border border-primary/20 text-foreground self-end'
+                : 'bg-muted/30 border border-border/20 text-muted-foreground self-start'
+        )}>
+            {m.content}
+        </div>
+    )
+})}
             {messages.length > 0 && !loading && (
                 <div className="self-start mt-1">
                     <button
@@ -563,19 +578,21 @@ useEffect(() => {
   const handledChatIdRef = useRef<string | null>(null)
 
 const handleChatIdChange = useCallback((chatId: string | null, mode?: string | null) => {
+    console.log('🟢 CHAT CHANGE TRIGGER', { chatId, mode })
     setUrlChatId(chatId)
     if (mode === '3d' && chatId) {
-        
+        setThreeDLoading(false)
         if (handledChatIdRef.current === chatId) return
         handledChatIdRef.current = chatId
 
         setChatMode('BUILDER')
         setShowChatInterface(true)
         setBuildMode('3D')
+     
         fetch(`/api/chats/${chatId}`)
             .then(r => r.json())
             .then(data => {
-                
+                console.log('📦 API RESPONSE', data)
                 if (data?.prompt) {
                     setThreeDMessages([
                         { role: 'user', content: data.prompt },
@@ -583,11 +600,20 @@ const handleChatIdChange = useCallback((chatId: string | null, mode?: string | n
                     ])
                     lastUserPromptRef.current = data.prompt
                     setThreeDSceneId(chatId)
-                    if (data.demo_html && data.demo_html.trim().length > 0) {
-                        setThreeDHtml(data.demo_html)
-                    } else {
-                        generate3DSceneRef.current(data.prompt)
-                    }
+                   const hasHtml =
+  typeof data.demo_html === 'string' &&
+  data.demo_html.trim().length > 20
+console.log('🧠 HTML CHECK', {
+  hasHtml,
+  length: data?.demo_html?.length,
+  preview: data?.demo_html?.slice(0, 30)
+})
+if (hasHtml) {
+    setThreeDHtml(data.demo_html)
+    setThreeDLoading(false)  
+    return                    
+}
+// No auto-generate , user can click Regenerate manually if needed
                 }
             })
             .catch(() => {})
@@ -637,6 +663,11 @@ const handleChatIdChange = useCallback((chatId: string | null, mode?: string | n
 
     // ── 3D scene generation ───────────────────────────────────────────────────
 const generate3DScene = async (userMessage: string, existingHtml?: string): Promise<string> => {
+    console.log('🔥 GENERATE CALLED', {
+  userMessage,
+  existingHtml,
+  hasHtmlAlready: !!threeDHtml
+})
     if (threeDLoading) return '' 
     setThreeDLoading(true)
      
@@ -650,11 +681,7 @@ if (!localSceneId) {
     localSceneId = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
     setThreeDSceneId(localSceneId)
 }
-        if (existingHtml) {
-  setThreeDHtml(existingHtml)
-  setThreeDLoading(false)
-  return existingHtml
-}
+     
 
         const isFollowUp = !!existingHtml
 
@@ -692,8 +719,18 @@ No clutter.
 }),
             })
             const data = await res.json()
-            const finishReason = data?.choices?.[0]?.finish_reason
-            let output = data?.choices?.[0]?.message?.content || ''
+           
+if (data?.error === 'service_unavailable') {
+  setThreeDMessages(prev => [...prev, {
+    role: 'assistant',
+    content: '🔴 service_down',  
+  }])
+  setThreeDLoading(false)
+  return ''
+}
+
+const finishReason = data?.choices?.[0]?.finish_reason
+let output = data?.choices?.[0]?.message?.content || ''
 
             // Strip any markdown wrapping
           output = output
@@ -714,16 +751,19 @@ No clutter.
 try {
 const savedHtml = output
 
-await fetch('/api/chat/ownership', {
+const res = await fetch('/api/chat/ownership', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ 
     chatId: sceneIdToSave, 
     prompt: userMessage,
     demoUrl: 'threed://',
-    demoHtml: savedHtml 
+    demo_html: savedHtml
   }),
 })
+
+const result = await res.json()
+console.log('💾 SAVE RESPONSE', result)
 const currentUrl = new URL(window.location.href)
 if (currentUrl.searchParams.get('chatId') !== sceneIdToSave) {
     window.history.replaceState({}, '', `/chat?chatId=${sceneIdToSave}&mode=3d`)
@@ -747,15 +787,19 @@ if (currentUrl.searchParams.get('chatId') !== sceneIdToSave) {
         setThreeDLoading(false)
         return '' 
     }
-    const generate3DSceneRef = useRef(generate3DScene)
-    useEffect(() => { generate3DSceneRef.current = generate3DScene })
+   const generate3DSceneRef = useRef(generate3DScene)
 
-    const handle3DGenerate = async (userMessage: string) => {
-        setThreeDMessages(prev => [...prev, { role: 'user', content: userMessage }])
-        await generate3DScene(userMessage, threeDHtml || undefined)
-    }
+useEffect(() => {
+    generate3DSceneRef.current = generate3DScene
+}, [generate3DScene])   
 
+   const handle3DGenerate = async (userMessage: string) => {
+    console.log('👤 USER TRIGGERED GENERATE')
+    setThreeDMessages(prev => [...prev, { role: 'user', content: userMessage }])
+    await generate3DScene(userMessage) 
+}
     const handleRegenerate = async () => {
+        console.log('🔁 REGENERATE CLICKED')
         if (!lastUserPromptRef.current || threeDLoading) return
         setThreeDMessages(prev => [...prev, { role: 'user', content: 'Regenerate' }])
         await generate3DScene(lastUserPromptRef.current)

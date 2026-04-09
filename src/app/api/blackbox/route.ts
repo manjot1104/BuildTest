@@ -119,11 +119,17 @@ try {
 
   data = await response.json()
 
- if (data.error) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error))
+if (data.error) {
+  const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
+  const isBudgetError = errMsg.includes('ExceededBudget') || errMsg.includes('budget_exceeded') || errMsg.includes('over budget')
+  if (isBudgetError) {
+    return NextResponse.json({ error: "service_unavailable" }, { status: 503 })
+  }
+  throw new Error(errMsg)
+}
 
 } catch (err) {
   console.error("3D generation failed:", err)
-
   return NextResponse.json(
     { error: "3D generation failed. Please try again." },
     { status: 500 }
