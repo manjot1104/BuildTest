@@ -63,12 +63,15 @@ export interface ResumeTemplateCardProps {
   template: ResumeTemplate
   onSelect: () => void
   onPreview: () => void
+  /** When set (e.g. first LaTeX rows), PDF thumbs use eager loading for faster first paint. */
+  prioritizeLatexPreview?: boolean
 }
 
 export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
   template,
   onSelect,
   onPreview,
+  prioritizeLatexPreview = false,
 }: ResumeTemplateCardProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const thumbWrapRef = useRef<HTMLDivElement>(null)
@@ -202,7 +205,7 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
                   src={`${thumbState.kind === 'pdf' ? thumbState.pdfUrl : ''}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
                   className="block border-0 bg-white"
                   style={{ width: A4_W, height: A4_H }}
-                  loading="lazy"
+                  loading={prioritizeLatexPreview ? 'eager' : 'lazy'}
                 />
               </div>
             )}

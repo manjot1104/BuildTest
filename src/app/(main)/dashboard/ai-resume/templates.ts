@@ -14,6 +14,12 @@ export interface ResumeTemplate {
   preview: string // Description of the template style
   styleGuide: string // Instructions for AI to generate in this style
   format?: 'latex' | 'html' | 'both' // Template format - defaults to 'both' for backward compatibility
+  /** Optional first-page preview URL. Defaults to `/templates/{id}-1.jpg` (JPEG). */
+  previewImage?: string
+  /** Optional second-page preview URL. Defaults to `/templates/{id}-2.jpg` (JPEG). */
+  previewImage2?: string
+  /** When set, overrides both pages (e.g. custom paths or WebP). */
+  previewImages?: readonly [string, string]
 }
 
 // ─── Resume Templates ─────────────────────────────────────────────────────
@@ -112,41 +118,51 @@ RULES:
 - Below: light contact strip with 4 items.
 - Body uses two columns: narrow left (About, Education, Skills, Language) and wide right (Experience timeline, References).
 - Section titles uppercase with thin dividers; tight bullets.
+- PDF/print: use the EXACT column CSS from the sample (flex .grid, not CSS grid columns) so Puppeteer/Chromium does not push the whole body to page 2 with a blank first page.
 
 MANDATORY STRUCTURE (HTML):
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#f2f2f2;color:#222;font-family:Arial,Helvetica,sans-serif}
-.page{width:794px;min-height:1123px;margin:0 auto;background:#fff;border:1px solid #e3e3e3;border-radius:12px;overflow:hidden;position:relative}
-.header{background:#2c2e31;color:#fff;height:122px;position:relative;display:flex;align-items:center;padding-left:28px;padding-right:28px;z-index:1}
+/* min-height only for on-screen preview; fixed full-page min-height breaks Chromium PDF (grid row jumps to page 2, huge blank on page 1) */
+.page{width:794px;min-height:1123px;margin:0 auto;background:#fff;border:1px solid #e3e3e3;border-radius:12px;overflow:visible;position:relative}
+.header{background:#2c2e31;color:#fff;height:122px;position:relative;display:flex;align-items:center;padding-left:28px;padding-right:28px;z-index:1;break-inside:avoid;page-break-inside:avoid}
 .name{font-size:26px;font-weight:800;letter-spacing:2px}
 .role{margin-top:6px;font-size:12px;letter-spacing:3px;text-transform:uppercase;color:#d0d0d0}
-.contact{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 26px;border-bottom:1px solid #ececec;position:relative;z-index:1}
+.contact{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:12px 26px;border-bottom:1px solid #ececec;position:relative;z-index:1;break-inside:avoid;page-break-inside:avoid}
 .c-item{display:flex;align-items:center;gap:8px;font-size:11px;color:#444}
 .c-ico{width:18px;height:18px;border-radius:3px;background:#2c2e31}
-.content{padding:18px 22px 24px;position:relative;z-index:1}
-.grid{display:grid;grid-template-columns:0.35fr 0.65fr;gap:20px}
-.section{margin-bottom:16px}
+.content{padding:18px 22px 24px;position:relative;z-index:1;break-inside:auto;page-break-inside:auto}
+/* Flex columns fragment across PDF pages; CSS Grid often moves the whole row to the next page in print */
+.grid{display:flex;flex-direction:row;align-items:flex-start;gap:20px;break-inside:auto;page-break-inside:auto}
+.grid>div:first-child{width:35%;min-width:0;flex-shrink:0;break-inside:auto;page-break-inside:auto}
+.grid>div:last-child{width:65%;min-width:0;flex:1;break-inside:auto;page-break-inside:auto}
+.section{margin-bottom:16px;break-inside:auto;page-break-inside:auto}
 .s-title{font-size:12px;letter-spacing:2px;text-transform:uppercase;font-weight:800;color:#2c2e31;display:flex;align-items:center;gap:10px;margin-bottom:8px}
 .s-title::after{content:"";flex:1;height:1px;background:#2c2e31;opacity:.2}
 p{font-size:11px;line-height:1.5;color:#2a2a2a}
 small{color:#666}
 ul{padding-left:16px;margin-top:4px}
 li{font-size:11px;line-height:1.42;margin-bottom:3px}
-.exp{position:relative}
+.exp{position:relative;break-inside:auto;page-break-inside:auto}
 .exp::before{content:"";position:absolute;left:7px;top:2px;bottom:2px;width:2px;background:#e2e2e2}
-.exp-item{position:relative;padding-left:22px;margin-bottom:14px}
+.exp-item{position:relative;padding-left:22px;margin-bottom:14px;break-inside:avoid;page-break-inside:avoid}
 .dot{position:absolute;left:0;top:2px;width:12px;height:12px;border-radius:50%;background:#2c2e31}
-.e-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
-.e-role{font-weight:700;font-size:12px}
-.e-date{font-size:10px;color:#666;white-space:nowrap}
-.e-org{font-size:11px;color:#555;margin-top:2px}
+.e-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;min-width:0;max-width:100%}
+.e-role{font-weight:700;font-size:12px;flex:1 1 0%;min-width:0;overflow-wrap:break-word;word-break:break-word}
+.e-date{font-size:10px;color:#666;white-space:nowrap;flex-shrink:0;max-width:42%}
+.edu-block{min-width:0;max-width:100%;margin-bottom:10px}
+.e-org{font-size:11px;color:#555;margin-top:2px;min-width:0;max-width:100%;overflow-wrap:break-word;word-break:break-word}
 .refs{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .ref-card{border:1px solid #ededed;padding:8px 10px;border-radius:6px}
 .ref-name{font-weight:700;font-size:11.5px}
 .ref-role{font-size:10.5px;color:#666}
-@media print{body{background:#fff}.page{border-radius:0}}
+@media print{
+body{background:#fff}
+.page{min-height:0!important;height:auto!important;border-radius:0;overflow:visible;border:none;box-shadow:none}
+.grid{display:flex}
+}
 </style></head><body><div class="page">
   <div class="header">
     <div><div class="name">LORNA ALVARADO</div><div class="role">MARKETING MANAGER</div></div>
@@ -162,9 +178,11 @@ li{font-size:11px;line-height:1.42;margin-bottom:3px}
       <div>
         <div class="section"><div class="s-title">About Me</div><p>Detail-focused marketing leader with strong execution and stakeholder communication. Blends creative strategy with data-driven experiments to deliver measurable growth.</p></div>
         <div class="section"><div class="s-title">Education</div>
-          <div class="e-head"><div class="e-role">B.B.A. in Marketing</div><div class="e-date">2015 — 2019</div></div>
-          <div class="e-org">University of Business, Any City</div>
-          <small>Concentration: Brand Strategy and Analytics</small>
+          <div class="edu-block">
+            <div class="e-head"><div class="e-role">B.B.A. in Marketing</div><div class="e-date">2015 — 2019</div></div>
+            <div class="e-org">University of Business, Any City</div>
+            <small>Concentration: Brand Strategy and Analytics</small>
+          </div>
 </div>
         <div class="section"><div class="s-title">Skills</div><ul><li>Campaign strategy</li><li>Digital analytics</li><li>Content marketing</li><li>Cross-functional leadership</li></ul></div>
         <div class="section"><div class="s-title">Language</div><ul><li>English</li><li>Spanish</li></ul></div>

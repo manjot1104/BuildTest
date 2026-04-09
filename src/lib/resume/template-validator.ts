@@ -83,10 +83,12 @@ const incomingResumeSchema = z.object({
   achievements: z.union([z.array(z.string()), z.string().max(MAX_TEXT)]).optional(),
   languagesKnown: z.union([z.array(z.string()), z.string().max(MAX_TEXT)]).optional(),
 
-  additionalInstructions: z.string().max(5000).optional(),
+  /** Long JD pastes + AI instructions (raw JD fallback can be ~12k+ chars) */
+  additionalInstructions: z.string().max(100_000).optional(),
   model: z.string().max(100).optional(),
   templateId: z.string().max(100).optional(),
-  templateStyleGuide: z.string().max(120000).optional(),
+  /** Large LaTeX/HTML template bundles from `templates.ts` */
+  templateStyleGuide: z.string().max(500_000).optional(),
 })
 
 /**

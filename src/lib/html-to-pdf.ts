@@ -48,13 +48,13 @@ export async function generatePDFFromHtml(
     })
     
     // Set content with proper styling for print
-    await page.setContent(htmlContent, { 
-      waitUntil: 'networkidle0',
-      timeout: 30000,
+    // `networkidle0` waits for all network to go idle — very slow for resumes with no real network.
+    await page.setContent(htmlContent, {
+      waitUntil: 'load',
+      timeout: 25_000,
     })
 
-    // Wait a bit for any dynamic content to render (using Promise-based delay)
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 120))
 
     // Generate PDF with minimal margins to avoid blank first page
     const pdfBuffer = await page.pdf({

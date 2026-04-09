@@ -6,16 +6,23 @@ import { generateHtmlTemplateFallback } from '@/lib/resume/template-fallback-gen
 import { pruneGeneratedSections } from '@/lib/resume/section-pruner'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
-import { normalizedResumeInputToResumeData } from '@/lib/text-layout/normalized-to-resume-data'
-import {
-  appendLayoutHintToAdditionalInstructions,
-  computeResumeLayoutStats,
-  TEXT_LAYOUT_SERVER_OPTIONS,
-} from '@/lib/text-layout/layout-stats'
 
-// Configure runtime for longer operations
-export const maxDuration = 120 // 2 minutes for AI generation
-const AI_PROVIDER_TIMEOUT_MS = 70000
+export const maxDuration = 120
+
+function localFallbackResponse(validatedData: ReturnType<typeof normalizeResumeInput>, warning: string) {
+  const html = pruneGeneratedSections(
+    generateHtmlTemplateFallback(validatedData),
+    'html',
+    validatedData,
+  )
+  return NextResponse.json({
+    html,
+    model: 'local-template-fallback',
+    isFallback: true,
+    success: true,
+    warning,
+  })
+}
 
 /**
  * Generate HTML code only (without compiling to PDF)
@@ -32,37 +39,18 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     validatedData = normalizeResumeInput(body)
 
-    const layoutStats = computeResumeLayoutStats(
-      normalizedResumeInputToResumeData(validatedData),
-      TEXT_LAYOUT_SERVER_OPTIONS,
-    )
-    validatedData = {
-      ...validatedData,
-      additionalInstructions: appendLayoutHintToAdditionalInstructions(
-        validatedData.additionalInstructions,
-        layoutStats,
-      ),
-    }
-
-    if (!env.OPENROUTER_API_KEY) {
-      return NextResponse.json(
-        { error: 'Resume generation service is not configured.' },
-        { status: 503 }
+    const hasOpenRouterKey = Boolean(env.OPENROUTER_API_KEY?.trim())
+    if (!hasOpenRouterKey) {
+      return localFallbackResponse(
+        validatedData,
+        'OPENROUTER_API_KEY is not set. Generated with local template (no AI).',
       )
     }
 
-    const result = await Promise.race([
-      generateHtmlResume(validatedData),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('AI_PROVIDER_TIMEOUT')), AI_PROVIDER_TIMEOUT_MS)
-      ),
-    ])
+    const result = await generateHtmlResume(validatedData)
 
     if (!result?.cleaned?.trim()) {
-      return NextResponse.json(
-        { error: 'Failed to generate HTML code from AI' },
-        { status: 500 }
-      )
+      return localFallbackResponse(validatedData, 'AI returned empty output. Generated with local template fallback.')
     }
 
     const prunedHtml = pruneGeneratedSections(result.cleaned, 'html', validatedData)
@@ -79,52 +67,20 @@ export async function POST(request: NextRequest) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Invalid request data', details: error.issues },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
-    if (error instanceof Error) {
-      const message = error.message || 'Failed to generate HTML code'
-      const lower = message.toLowerCase()
-      const isRateLimit = lower.includes('rate limit') || lower.includes('429')
-      const isProviderPolicy = lower.includes('no endpoints available') || lower.includes('guardrail')
-      const isProviderTimeout = message.includes('AI_PROVIDER_TIMEOUT') || lower.includes('timed out')
-
-      // Local fallback so users can still generate a resume even when OpenRouter is unavailable.
-      if ((isRateLimit || isProviderPolicy || isProviderTimeout) && validatedData) {
-        const html = pruneGeneratedSections(
-          generateHtmlTemplateFallback(validatedData),
-          'html',
-          validatedData
-        )
-        return NextResponse.json({
-          html,
-          model: 'local-template-fallback',
-          isFallback: true,
-          success: true,
-          warning: isProviderTimeout
-            ? 'AI provider timed out. Generated with local template fallback.'
-            : isRateLimit
-            ? 'OpenRouter rate limit reached. Generated with local template fallback.'
-            : 'OpenRouter endpoint policy blocked. Generated with local template fallback.',
-        })
-      }
-
-      return NextResponse.json(
-        {
-          error: isRateLimit
-            ? 'OpenRouter rate limit reached for available models. Please retry later or add credits.'
-            : isProviderPolicy
-              ? 'No OpenRouter endpoints are available under current privacy/guardrail settings. Please adjust OpenRouter settings.'
-              : message,
-        },
-        { status: isRateLimit ? 429 : 500 }
+    // After input is valid, never return a hard failure — user always gets usable HTML.
+    if (validatedData) {
+      const hint =
+        error instanceof Error ? error.message.slice(0, 280) : 'Unknown error'
+      return localFallbackResponse(
+        validatedData,
+        `AI generation failed (${hint}). Generated with local template fallback.`,
       )
     }
 
-    return NextResponse.json(
-      { error: 'Failed to generate HTML code' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to generate HTML code' }, { status: 500 })
   }
 }
