@@ -26,12 +26,13 @@ import type { VideoJson } from "@/remotion-src/types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DURATION_OPTIONS = [
-  { label: "10s", value: 10 },
-  { label: "15s", value: 15 },
-  { label: "20s", value: 20 },
-  { label: "30s", value: 30 },
+const DURATION_RANGES = [
+  { label: "0–10s", value: 10, seconds: 7 },
+  { label: "10–20s", value: 20, seconds: 16 },
+  { label: "20–30s", value: 30, seconds: 25 },
 ] as const;
+
+type DurationRange = typeof DURATION_RANGES[number];
 
 const EXAMPLE_PROMPTS = [
   "Explain photosynthesis in 3 scenes with a clean educational style",
@@ -44,7 +45,7 @@ const EXAMPLE_PROMPTS = [
 
 export default function VideoGeneratorPage() {
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(15);
+  const [selectedRange, setSelectedRange] = useState<DurationRange>(DURATION_RANGES[1]);
   const [videoJson, setVideoJson] = useState<VideoJson | null>(null);
   const [meta, setMeta] = useState<VideoMeta | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
@@ -59,7 +60,7 @@ export default function VideoGeneratorPage() {
     if (!prompt.trim() || isGenerating) return;
 
     generate(
-      { prompt: prompt.trim(), duration },
+      { prompt: prompt.trim(), duration: selectedRange.seconds },
       {
         onSuccess: (data) => {
           setVideoJson(data.videoJson);
@@ -82,6 +83,7 @@ export default function VideoGeneratorPage() {
     setVideoJson(null);
     setMeta(null);
     setPrompt("");
+    setSelectedRange(DURATION_RANGES[1]);
     setJsonOpen(false);
   }
 
@@ -164,19 +166,18 @@ export default function VideoGeneratorPage() {
                       Duration
                     </span>
                     <div className="flex gap-1" role="group">
-                      {DURATION_OPTIONS.map((opt) => (
+                      {DURATION_RANGES.map((range) => (
                         <button
-                          key={opt.value}
+                          key={range.value}
                           type="button"
-                          onClick={() => setDuration(opt.value)}
-                          aria-pressed={duration === opt.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${
-                            duration === opt.value
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                          }`}
+                          onClick={() => setSelectedRange(range)}
+                          aria-pressed={selectedRange.value === range.value}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                            }`}
                         >
-                          {opt.label}
+                          {range.label}
                         </button>
                       ))}
                     </div>
@@ -204,11 +205,46 @@ export default function VideoGeneratorPage() {
 
             {/* Generating state */}
             {isGenerating && (
-              <div className="rounded-xl border border-border bg-muted/20 p-4 flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-primary shrink-0 animate-pulse" />
-                <p className="text-xs font-mono text-muted-foreground">
-                  AI is composing your video…
-                </p>
+              <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
+
+                {/* Spinner */}
+                <div className="relative h-14 w-14">
+                  <div className="absolute inset-0 rounded-full border-2 border-border" />
+                  <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Film className="h-5 w-5 text-primary" />
+                  </div>
+                </div>
+
+                {/* Text */}
+                <div className="text-center space-y-1">
+                  <p className="text-sm font-sans font-semibold text-foreground">
+                    Generating your video…
+                  </p>
+                  <p className="text-[11px] font-mono text-muted-foreground/60">
+                    AI is composing {selectedRange.label} of scenes
+                  </p>
+                </div>
+
+                {/* Animated steps */}
+                <div className="flex flex-col gap-1.5 w-full max-w-xs">
+                  {[
+                    "Analyzing your prompt",
+                    "Composing scenes",
+                    "Building animations",
+                  ].map((step, i) => (
+                    <div key={step} className="flex items-center gap-2">
+                      <Loader2
+                        className="h-3 w-3 text-primary animate-spin shrink-0"
+                        style={{ animationDelay: `${i * 300}ms` }}
+                      />
+                      <span className="text-[10px] font-mono text-muted-foreground/50">
+                        {step}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
               </div>
             )}
 
