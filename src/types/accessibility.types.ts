@@ -16,7 +16,7 @@ export type SSEEvent =
   | { type: 'test:page_complete'; url: string; violationCount: number; passCount: number; incompleteCount: number }
   | { type: 'test:complete'; summary: TestSummary }
   | { type: 'report:generating' }
-  | { type: 'report:complete'; testRunId: string; storedAsUrl?: boolean }
+  | { type: 'report:complete'; testRunId: string }
   | { type: 'error'; message: string; fatal: boolean }
   | { type: 'progress'; phase: string; current: number; total: number; percentage: number }
 

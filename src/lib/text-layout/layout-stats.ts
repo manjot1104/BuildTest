@@ -1,7 +1,6 @@
 import { generateResumeLayout } from "./engine"
 import type { ResumeData, ResumeLayoutOptions } from "./types"
-
-export type { ResumeLayoutOptions }
+export type { ResumeLayoutOptions } from "./types"
 
 /** Browser + server use the same stack string so page estimates stay comparable. */
 export const TEXT_LAYOUT_ENGINE_FONT_STACK = "Inter, ui-sans-serif, system-ui, sans-serif"
@@ -43,8 +42,8 @@ export function computeResumeLayoutStats(
   }
 }
 
-/** Matches `incomingResumeSchema` in `template-validator.ts`. */
-export const RESUME_ADDITIONAL_INSTRUCTIONS_MAX = 5000
+/** Matches `incomingResumeSchema` additionalInstructions cap in `template-validator.ts`. */
+export const RESUME_ADDITIONAL_INSTRUCTIONS_MAX = 100_000
 
 /** Matches follow-up `prompt` max in `code-validator.ts`. */
 export const RESUME_FOLLOW_UP_PROMPT_MAX = 2000

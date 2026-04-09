@@ -5,10 +5,9 @@ import { useInView } from 'framer-motion'
 import { ArrowRight, Eye, FileText, Loader2 } from 'lucide-react'
 import { renderTemplate, DUMMY_RESUME_DATA } from '@/lib/resume/template-renderer'
 import {
-  ensureLatexDummyPdfUrl,
-  getCachedLatexDummyPdfUrl,
-  prefetchLatexDummyPdf,
-} from './latex-dummy-pdf-cache'
+  getLatexTemplatePreviewImageCandidates,
+  LATEX_PREVIEW_PLACEHOLDER,
+} from '@/lib/resume/template-preview-assets'
 import { cn } from '@/lib/utils'
 import type { ResumeTemplate, ResumeTemplateCategory } from '../templates'
 
@@ -20,12 +19,14 @@ type ThumbState =
   | { kind: 'idle' }
   | { kind: 'loading' }
   | { kind: 'html'; html: string }
-  | { kind: 'pdf'; pdfUrl: string }
   | { kind: 'error'; message: string }
 
 const htmlThumbCache = new Map<string, string>()
 
-function useThumbScale(containerRef: React.RefObject<HTMLDivElement | null>) {
+function useThumbScale(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  pagesWide: 1 | 2 = 1,
+) {
   const [scale, setScale] = useState(0.14)
 
   const measure = useCallback(() => {
@@ -33,10 +34,10 @@ function useThumbScale(containerRef: React.RefObject<HTMLDivElement | null>) {
     if (!el) return
     const w = el.clientWidth
     if (w < 8) return
-    // Fit by width so thumbnail fills the full card width.
-    const s = w / A4_W
+    const logicalWidth = pagesWide === 2 ? A4_W * 2 : A4_W
+    const s = w / logicalWidth
     setScale(s)
-  }, [containerRef])
+  }, [containerRef, pagesWide])
 
   useEffect(() => {
     measure()
@@ -63,7 +64,6 @@ export interface ResumeTemplateCardProps {
   template: ResumeTemplate
   onSelect: () => void
   onPreview: () => void
-  /** When set (e.g. first LaTeX rows), PDF thumbs use eager loading for faster first paint. */
   prioritizeLatexPreview?: boolean
 }
 
@@ -76,34 +76,24 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
   const containerRef = useRef<HTMLDivElement>(null)
   const thumbWrapRef = useRef<HTMLDivElement>(null)
   const isInView = useInView(thumbWrapRef, { once: true, margin: '120px', amount: 0.05 })
-  const scale = useThumbScale(containerRef)
+  const isLatex = template.format === 'latex'
+  const scale = useThumbScale(containerRef, 1)
   const [thumbState, setThumbState] = useState<ThumbState>({ kind: 'idle' })
+  const [latexThumbCandidateIndex, setLatexThumbCandidateIndex] = useState<0 | 1>(0)
+  const [latexThumbUsePlaceholder, setLatexThumbUsePlaceholder] = useState(false)
+
+  useEffect(() => {
+    setLatexThumbCandidateIndex(0)
+    setLatexThumbUsePlaceholder(false)
+  }, [template.id, template.previewImage, template.previewImage2, template.previewImages])
 
   useEffect(() => {
     if (!isInView) return
+    if (template.format === 'latex') return
+
     let cancelled = false
 
     const run = async () => {
-      if (template.format === 'latex') {
-        const cachedPdf = getCachedLatexDummyPdfUrl(template.id)
-        if (cachedPdf) {
-          if (!cancelled) setThumbState({ kind: 'pdf', pdfUrl: cachedPdf })
-          return
-        }
-
-        if (!cancelled) setThumbState({ kind: 'loading' })
-        try {
-          const pdfUrl = await ensureLatexDummyPdfUrl(template)
-          if (!cancelled) setThumbState({ kind: 'pdf', pdfUrl })
-          return
-        } catch {
-          if (!cancelled) {
-            setThumbState({ kind: 'error', message: 'Could not load exact dummy output' })
-          }
-          return
-        }
-      }
-
       const cachedHtml = htmlThumbCache.get(template.id)
       if (cachedHtml) {
         if (!cancelled) setThumbState({ kind: 'html', html: cachedHtml })
@@ -127,15 +117,14 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
     }
   }, [isInView, template.id, template.format, template.styleGuide])
 
-  const isLatex = template.format === 'latex'
-  const isLoading = !isInView || thumbState.kind === 'idle' || thumbState.kind === 'loading'
-  const showHtml = thumbState.kind === 'html'
-  const showPdf = thumbState.kind === 'pdf'
-  const showError = thumbState.kind === 'error'
-
-  const warmLatexPdf = useCallback(() => {
-    prefetchLatexDummyPdf(template)
-  }, [template])
+  const isHtmlLoading =
+    !isLatex && (!isInView || thumbState.kind === 'idle' || thumbState.kind === 'loading')
+  const showHtml = !isLatex && thumbState.kind === 'html'
+  const showError = !isLatex && thumbState.kind === 'error'
+  const [page1Candidates] = getLatexTemplatePreviewImageCandidates(template)
+  const display1 = latexThumbUsePlaceholder
+    ? LATEX_PREVIEW_PLACEHOLDER
+    : (page1Candidates[latexThumbCandidateIndex] ?? LATEX_PREVIEW_PLACEHOLDER)
 
   return (
     <article
@@ -144,7 +133,6 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
         'shadow-sm transition-all duration-300',
         'hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg hover:shadow-primary/5',
       )}
-      onMouseEnter={warmLatexPdf}
     >
       <div ref={thumbWrapRef} className="relative border-b border-border/40 bg-muted/40">
         <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
@@ -165,7 +153,42 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
             className="relative overflow-hidden rounded-t-lg bg-white shadow-inner ring-1 ring-black/5"
             style={{ height: THUMB_MAX_H }}
           >
-            {isLoading && (
+            {isLatex && !isInView && (
+              <div className="h-full bg-linear-to-b from-muted/60 to-muted/30" aria-hidden />
+            )}
+
+            {isLatex && isInView && (
+              <div
+                className="pointer-events-none absolute left-0 top-0 flex origin-top-left will-change-transform"
+                style={{
+                  width: A4_W,
+                  height: A4_H,
+                  transform: `scale(${scale})`,
+                }}
+              >
+                <img
+                  src={display1}
+                  alt=""
+                  width={A4_W}
+                  height={A4_H}
+                  loading={prioritizeLatexPreview ? 'eager' : 'lazy'}
+                  decoding="async"
+                  fetchPriority={prioritizeLatexPreview ? 'high' : 'auto'}
+                  draggable={false}
+                  onError={() => {
+                    if (latexThumbCandidateIndex === 0 && page1Candidates[1] !== page1Candidates[0]) {
+                      setLatexThumbCandidateIndex(1)
+                      return
+                    }
+                    setLatexThumbUsePlaceholder(true)
+                  }}
+                  className="block shrink-0 bg-white object-cover object-top"
+                  style={{ width: A4_W, height: A4_H }}
+                />
+              </div>
+            )}
+
+            {isHtmlLoading && (
               <div className="flex h-full items-center justify-center bg-linear-to-b from-muted/80 to-muted/40">
                 <Loader2 className="size-6 animate-spin text-muted-foreground/50" aria-hidden />
               </div>
@@ -187,25 +210,6 @@ export const ResumeTemplateCard = React.memo(function ResumeTemplateCard({
                   style={{ width: A4_W, height: A4_H }}
                   sandbox="allow-same-origin"
                   loading="lazy"
-                />
-              </div>
-            )}
-
-            {showPdf && (
-              <div
-                className="pointer-events-none absolute left-0 top-0 origin-top-left will-change-transform"
-                style={{
-                  width: A4_W,
-                  height: A4_H,
-                  transform: `scale(${scale})`,
-                }}
-              >
-                <iframe
-                  title={`${template.name} dummy PDF preview`}
-                  src={`${thumbState.kind === 'pdf' ? thumbState.pdfUrl : ''}#view=FitH&toolbar=0&navpanes=0&scrollbar=0`}
-                  className="block border-0 bg-white"
-                  style={{ width: A4_W, height: A4_H }}
-                  loading={prioritizeLatexPreview ? 'eager' : 'lazy'}
                 />
               </div>
             )}
