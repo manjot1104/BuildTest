@@ -4,13 +4,18 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { X, Code, Loader2, LayoutGrid } from 'lucide-react'
 import { type ResumeTemplate } from '../templates'
 import { renderTemplate, DUMMY_RESUME_DATA } from '@/lib/resume/template-renderer'
-import { ensureLatexDummyPdfUrl, getCachedLatexDummyPdfUrl } from './latex-dummy-pdf-cache'
+import {
+  getLatexTemplatePreviewImageCandidates,
+  getLatexTemplatePreviewImageSources,
+  LATEX_PREVIEW_PLACEHOLDER,
+} from '@/lib/resume/template-preview-assets'
 import { resumeRenderDataToResumeData } from '@/lib/text-layout/render-data-to-resume-data'
 import { ResumeLayoutPreview } from './resume-layout-preview'
 
 // ── A4 Page Dimensions at 96 DPI ──────────────────────────────────────────────
 const A4_WIDTH = 794
 const A4_MIN_HEIGHT = 1123
+const LATEX_PAGE_GAP = 24
 
 /** Same dummy profile as HTML/LaTeX preview, converted for the text-layout engine. */
 const DUMMY_RESUME_FOR_TEXT_LAYOUT = resumeRenderDataToResumeData(DUMMY_RESUME_DATA)
@@ -25,16 +30,9 @@ interface ResumeTemplatePreviewModalProps {
 /**
  * Preview modal for resume templates.
  *
- * CRITICAL: This uses the EXACT same `renderTemplate()` function as the
- * fallback generator. The only difference is that preview passes
- * DUMMY_RESUME_DATA while generation passes real user data.
- * This guarantees preview ≡ final output in layout & structure.
- *
- * RENDERING PIPELINE:
- *   HTML templates → renderTemplate('html') → srcdoc iframe (same as generated HTML)
- *   LaTeX templates → renderTemplate('latex') → compile-pdf → PDF iframe (same as generated PDF)
- *
- * Text layout tab: {@link ResumeLayoutPreview} on structured dummy data (prepare + layout, no template HTML).
+ * HTML templates → `renderTemplate('html')` → srcdoc iframe (same as generated HTML).
+ * LaTeX templates → two static JPEGs `public/templates/{id}-1.jpg` and `-2.jpg` (fast; no compile).
+ * PDF is produced only when the user generates/downloads the resume.
  */
 export function ResumeTemplatePreviewModal({
   open,
@@ -46,11 +44,16 @@ export function ResumeTemplatePreviewModal({
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const [previewHtml, setPreviewHtml] = useState<string>('')
-  const [previewPdfUrl, setPreviewPdfUrl] = useState<string>('')
   const [previewError, setPreviewError] = useState<string>('')
   const [scale, setScale] = useState(1)
   const [iframeHeight, setIframeHeight] = useState(A4_MIN_HEIGHT)
   const [modalView, setModalView] = useState<'template' | 'textlayout'>('template')
+  const [latexImageCandidateIndex, setLatexImageCandidateIndex] = useState<[0 | 1, 0 | 1]>([0, 0])
+  const [latexImageFallback, setLatexImageFallback] = useState<[boolean, boolean]>([false, false])
+
+  const isStaticLatexPreview =
+    !!template &&
+    (template.format === 'latex' || (template.format === 'both' && defaultFormat === 'latex'))
 
   // ── Calculate scale to fit paper in container ────────────────────────────
   const updateScale = useCallback(() => {
@@ -64,6 +67,8 @@ export function ResumeTemplatePreviewModal({
   useEffect(() => {
     if (!open || !template) return
     setIframeHeight(A4_MIN_HEIGHT)
+    setLatexImageCandidateIndex([0, 0])
+    setLatexImageFallback([false, false])
     // Calculate scale after modal opens and DOM is ready
     requestAnimationFrame(() => {
       requestAnimationFrame(updateScale)
@@ -94,45 +99,30 @@ export function ResumeTemplatePreviewModal({
     }
   }, [])
 
-  // ── Generate preview content (LaTeX -> compiled PDF, HTML -> iframe HTML) ──
+  // ── Generate HTML preview only (LaTeX uses static image) ─────────────────
   useEffect(() => {
     if (!open || !template) return
     let cancelled = false
     setPreviewError('')
     setPreviewHtml('')
-    setPreviewPdfUrl('')
 
-    const isLatexPreview = defaultFormat === 'latex' || template.format === 'latex'
+    if (isStaticLatexPreview) {
+      return () => {
+        cancelled = true
+      }
+    }
 
     const run = async () => {
-      if (!isLatexPreview) {
+      try {
         const htmlContent = renderTemplate(template.styleGuide, 'html', DUMMY_RESUME_DATA)
         if (!cancelled) {
           setPreviewHtml(htmlContent || '')
           setIframeHeight(A4_MIN_HEIGHT)
         }
-        return
-      }
-
-      // Instant paint when card hover / thumbnail already compiled this session
-      const cachedPdf = getCachedLatexDummyPdfUrl(template.id)
-      if (cachedPdf) {
-        setPreviewPdfUrl(cachedPdf)
-        setIframeHeight(A4_MIN_HEIGHT)
-      }
-
-      // LaTeX: shared cache + single in-flight compile per template (same dummy PDF as export)
-      try {
-        const url = await ensureLatexDummyPdfUrl(template)
-        if (!cancelled) {
-          setPreviewPdfUrl(url)
-          setIframeHeight(A4_MIN_HEIGHT)
-        }
-        return
       } catch (err) {
-        console.warn('[ResumePreview] LaTeX preview compile failed:', err)
+        console.warn('[ResumePreview] HTML preview failed:', err)
         if (!cancelled) {
-          setPreviewError(`LaTeX preview compile failed for "${template.name}".`)
+          setPreviewError(`Preview failed for "${template.name}".`)
         }
       }
     }
@@ -142,7 +132,7 @@ export function ResumeTemplatePreviewModal({
     return () => {
       cancelled = true
     }
-  }, [open, template, defaultFormat])
+  }, [open, template, isStaticLatexPreview])
 
   useEffect(() => {
     if (open) setModalView('template')
@@ -160,12 +150,20 @@ export function ResumeTemplatePreviewModal({
 
   if (!open || !template) return null
 
-  const showHtmlContent = !!previewHtml.trim()
-  const showPdfContent = !!previewPdfUrl
-  const isPreviewLoading = !showPdfContent && !showHtmlContent && !previewError
+  const showHtmlContent = !isStaticLatexPreview && !!previewHtml.trim()
+  const isPreviewLoading = !isStaticLatexPreview && !showHtmlContent && !previewError
 
-  // The HTML content to render — always available for both formats
   const iframeHtml = previewHtml
+
+  const [latexModalSrc1, latexModalSrc2] = getLatexTemplatePreviewImageSources(template)
+  const [page1Candidates, page2Candidates] = getLatexTemplatePreviewImageCandidates(template)
+  const latexDisplay1 = latexImageFallback[0]
+    ? LATEX_PREVIEW_PLACEHOLDER
+    : (page1Candidates[latexImageCandidateIndex[0]] ?? latexModalSrc1)
+  const latexDisplay2 = latexImageFallback[1]
+    ? LATEX_PREVIEW_PLACEHOLDER
+    : (page2Candidates[latexImageCandidateIndex[1]] ?? latexModalSrc2)
+  const latexStackHeight = A4_MIN_HEIGHT * 2 + LATEX_PAGE_GAP
 
   // Scaled container dimensions
   const scaledWidth = A4_WIDTH * scale
@@ -258,14 +256,14 @@ export function ResumeTemplatePreviewModal({
         <div
           style={{
             width: `${scaledWidth}px`,
-            height: `${scaledHeight}px`,
+            height: `${isStaticLatexPreview ? latexStackHeight * scale : scaledHeight}px`,
             flexShrink: 0,
           }}
         >
           <div
             style={{
               width: `${A4_WIDTH}px`,
-              minHeight: `${currentHeight}px`,
+              minHeight: `${isStaticLatexPreview ? latexStackHeight : currentHeight}px`,
               transform: `scale(${scale})`,
               transformOrigin: 'top left',
               background: '#ffffff',
@@ -275,23 +273,70 @@ export function ResumeTemplatePreviewModal({
               position: 'relative',
             }}
           >
-            {/* ── PDF preview for LaTeX templates (compiled from same source) ─── */}
-            {showPdfContent && (
-              <iframe
-                ref={iframeRef}
-                src={previewPdfUrl}
+            {isStaticLatexPreview && (
+              <div
                 style={{
-                  width: `${A4_WIDTH}px`,
-                  height: `${A4_MIN_HEIGHT}px`,
-                  border: 'none',
-                  display: 'block',
-                  background: '#ffffff',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: `${LATEX_PAGE_GAP}px`,
+                  background: '#eef0f3',
                 }}
-                title="Resume Preview PDF"
-              />
+              >
+                <img
+                  src={latexDisplay1}
+                  alt=""
+                  width={A4_WIDTH}
+                  height={A4_MIN_HEIGHT}
+                  loading="eager"
+                  decoding="async"
+                  draggable={false}
+                  onError={() =>
+                    {
+                      if (latexImageCandidateIndex[0] === 0 && page1Candidates[1] !== page1Candidates[0]) {
+                        setLatexImageCandidateIndex((prev) => [1, prev[1]])
+                        return
+                      }
+                      setLatexImageFallback((prev) => [true, prev[1]])
+                    }
+                  }
+                  style={{
+                    width: `${A4_WIDTH}px`,
+                    height: `${A4_MIN_HEIGHT}px`,
+                    display: 'block',
+                    objectFit: 'contain',
+                    objectPosition: 'top center',
+                    background: '#ffffff',
+                  }}
+                />
+                <img
+                  src={latexDisplay2}
+                  alt=""
+                  width={A4_WIDTH}
+                  height={A4_MIN_HEIGHT}
+                  loading="lazy"
+                  decoding="async"
+                  draggable={false}
+                  onError={() =>
+                    {
+                      if (latexImageCandidateIndex[1] === 0 && page2Candidates[1] !== page2Candidates[0]) {
+                        setLatexImageCandidateIndex((prev) => [prev[0], 1])
+                        return
+                      }
+                      setLatexImageFallback((prev) => [prev[0], true])
+                    }
+                  }
+                  style={{
+                    width: `${A4_WIDTH}px`,
+                    height: `${A4_MIN_HEIGHT}px`,
+                    display: 'block',
+                    objectFit: 'contain',
+                    objectPosition: 'top center',
+                    background: '#ffffff',
+                  }}
+                />
+              </div>
             )}
 
-            {/* ── HTML preview fallback ───────────────────────────────────── */}
             {showHtmlContent && (
               <>
                 {iframeHtml?.trim() ? (
@@ -369,16 +414,16 @@ export function ResumeTemplatePreviewModal({
 
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: '#4c1d95' }}>
-                    Preparing LaTeX preview
+                    Preparing HTML preview
                 </div>
                   <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
-                    Compiling layout... this may take a few seconds.
+                    Rendering sample layout…
                   </div>
                   </div>
                 </div>
               )}
 
-            {!showPdfContent && !showHtmlContent && previewError && (
+            {!isStaticLatexPreview && !showHtmlContent && previewError && (
               <div
                 style={{
                   display: 'flex',
@@ -410,7 +455,9 @@ export function ResumeTemplatePreviewModal({
           <span className="text-xs text-white/40">
             {modalView === "textlayout"
               ? "Text layout tab: A4 wrap from the text engine (dummy data). Switch to Template for HTML/PDF styling."
-              : "Preview with sample data. Your resume will use the same layout with your information."}
+              : isStaticLatexPreview
+                ? "Static preview (page 1 & 2). PDF is built when you generate your resume."
+                : "Preview with sample data. Your resume will use the same layout with your information."}
           </span>
         </div>
         <div className="flex items-center gap-2">

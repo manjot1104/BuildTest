@@ -1,19 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/env'
-import { plainResumeTextToResumeData } from '@/lib/text-layout/plain-text-to-resume-data'
-import {
-  computeResumeLayoutStats,
-  TEXT_LAYOUT_SERVER_OPTIONS,
-} from '@/lib/text-layout/layout-stats'
-import {
-  applyPlaintextReconcileIfMonolith,
-  extractFirstJsonObject,
-  extractTextFromDocxArrayBuffer,
-  mergeAiResumeWithFallback,
-  normalizeAiResumeRecord,
-  rerouteMisplacedResumeSections,
-  type ParsedResumeShape,
-} from '@/lib/resume/parse-resume-helpers'
 
 // Type declaration for require (needed for CommonJS modules)
 declare const require: (id: string) => any
@@ -21,12 +7,6 @@ declare const require: (id: string) => any
 // Ensure Node.js runtime for pdf-parse
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
-
-type ResumeLayoutEstimate = {
-  pageCount: number
-  lineCount: number
-  exceedsTwoPages: boolean
-}
 
 type ParsedResumeData = {
   fullName: string
@@ -45,96 +25,6 @@ type ParsedResumeData = {
   certifications?: string
   achievements?: string
   languagesKnown?: string
-}
-
-function normalizeLineKey(line: string): string {
-  return line
-    .trim()
-    .toLowerCase()
-    .replace(/[:.\-–—]+$/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
-/** True when this line starts a new resume section (not job bullets like "Project lead…"). */
-function isResumeSectionBoundary(line: string): boolean {
-  const t = line.trim()
-  if (!t || t.length > 88) return false
-  if (/^#{1,3}\s+\S/.test(t)) return true
-  const n = normalizeLineKey(t)
-  const sections = new Set([
-    'experience',
-    'work experience',
-    'professional experience',
-    'employment',
-    'employment history',
-    'education',
-    'academic',
-    'academic background',
-    'qualifications',
-    'projects',
-    'personal projects',
-    'selected projects',
-    'skills',
-    'technical skills',
-    'core competencies',
-    'core skills',
-    'professional summary',
-    'career summary',
-    'executive summary',
-    'summary',
-    'objective',
-    'profile',
-    'about',
-    'about me',
-    'certifications',
-    'certificates',
-    'achievements',
-    'awards',
-    'honors',
-    'recognition',
-    'recognitions',
-    'languages',
-    'language skills',
-    'publications',
-    'volunteer',
-    'interests',
-    'contact',
-  ])
-  if (sections.has(n)) return true
-  return false
-}
-
-function sliceSection(lines: string[], startMarkers: string[]): string {
-  const startIdx = lines.findIndex((raw) => {
-    const n = normalizeLineKey(raw)
-    return startMarkers.some((m) => n === m || n.startsWith(`${m} `) || n.startsWith(`${m}:`))
-  })
-  if (startIdx === -1) return ''
-  const out: string[] = []
-  for (let i = startIdx + 1; i < lines.length; i++) {
-    const raw = lines[i]!
-    if (isResumeSectionBoundary(raw) && out.length > 0) break
-    out.push(raw)
-    if (out.join('\n').length > 8000) break
-  }
-  return out.length > 0 ? out.join('\n') : ''
-}
-
-async function extractPlainTextFromResumeFile(file: File): Promise<string> {
-  const name = file.name.toLowerCase()
-  if (file.type === 'application/pdf' || name.endsWith('.pdf')) {
-    return extractTextFromPDF(file)
-  }
-  if (
-    name.endsWith('.docx') ||
-    file.type ===
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-  ) {
-    const buf = await file.arrayBuffer()
-    return extractTextFromDocxArrayBuffer(buf)
-  }
-  return file.text()
 }
 
 // Test endpoint to verify route is working
@@ -257,24 +147,16 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
     .filter(Boolean)
 
   const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)
-  const phoneMatch = text.match(
-    /(\+?\d[\d\s\-().]{7,}\d|\(\d{3}\)\s*\d{3}[-.\s]?\d{4})/,
-  )
+  const phoneMatch = text.match(/(\+?\d[\d\s\-()]{7,}\d)/)
   const linkedinMatch = text.match(/linkedin\.com\/in\/[\w-]+/i)
   const githubMatch = text.match(/github\.com\/[\w-]+/i)
-  const portfolioMatch = text.match(
-    /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+\.(?:dev|io|com|me|xyz|tech))\b/i,
-  )
+  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+\.(?:dev|io|com|me|xyz|tech))\b/i)
 
   let fullName = ''
-  for (const line of lines.slice(0, 16)) {
-    if (
-      line.length > 2 &&
-      line.length < 70 &&
-      /^[\p{L}][\p{L}\s.'-]+$/u.test(line)
-    ) {
+  for (const line of lines.slice(0, 12)) {
+    if (line.length > 2 && line.length < 60 && /^[A-Za-z][A-Za-z\s.'-]+$/.test(line)) {
       const words = line.split(/\s+/).filter(Boolean)
-      if (words.length >= 2 && words.length <= 5) {
+      if (words.length >= 2 && words.length <= 4) {
         fullName = line
         break
       }
@@ -282,69 +164,46 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
   }
 
   const skillKeywords = [
-    'react',
-    'next.js',
-    'node.js',
-    'typescript',
-    'javascript',
-    'python',
-    'java',
-    'sql',
-    'mongodb',
-    'postgresql',
-    'aws',
-    'docker',
-    'kubernetes',
-    'html',
-    'css',
-    'tailwind',
-    'communication',
-    'leadership',
-    'problem solving',
-    'go',
-    'rust',
-    'c++',
-    'flutter',
+    'react', 'next.js', 'node.js', 'typescript', 'javascript', 'python', 'java', 'sql',
+    'mongodb', 'postgresql', 'aws', 'docker', 'kubernetes', 'html', 'css', 'tailwind',
+    'communication', 'leadership', 'problem solving', 'go', 'rust', 'c++', 'flutter',
   ]
   const lowerText = text.toLowerCase()
   const foundSkills = skillKeywords.filter((s) => lowerText.includes(s)).slice(0, 15)
   const skills = foundSkills.length > 0 ? foundSkills.join(', ') : ''
 
-  const experience = sliceSection(lines, [
-    'experience',
-    'work experience',
-    'professional experience',
-    'employment history',
-    'employment',
-  ])
-  const education = sliceSection(lines, ['education', 'academic', 'academic background'])
-  const projects = sliceSection(lines, ['projects', 'personal projects', 'selected projects'])
-  const summary = sliceSection(lines, [
-    'professional summary',
-    'career summary',
-    'executive summary',
-    'summary',
-    'objective',
-    'profile',
-    'about me',
-    'about',
-  ])
-  const certifications = sliceSection(lines, ['certifications', 'certificates', 'licenses'])
-  const achievements = sliceSection(lines, [
-    'achievements',
-    'awards',
-    'honors',
-    'recognition',
-    'recognitions',
-    'awards & recognition',
-  ])
-  const languagesKnown = sliceSection(lines, ['languages', 'language skills'])
+  const sectionText = (markers: string[]): string => {
+    const lowerLines = lines.map((l) => l.toLowerCase())
+    const startIdx = lowerLines.findIndex((l) => markers.some((m) => l.includes(m)))
+    if (startIdx === -1) return ''
+    const out: string[] = []
+    for (let i = startIdx + 1; i < lines.length; i++) {
+      const cur = lowerLines[i]!
+      if (
+        ['experience', 'education', 'project', 'skills', 'summary', 'certification', 'achievement', 'language', 'award'].some(
+          (h) => cur.startsWith(h)
+        ) && out.length > 0
+      ) {
+        break
+      }
+      out.push(lines[i]!)
+      if (out.join('\n').length > 1200) break
+    }
+    return out.length > 0 ? out.join('\n') : ''
+  }
+
+  const experience = sectionText(['experience', 'work history', 'employment'])
+  const education = sectionText(['education', 'academic'])
+  const projects = sectionText(['projects', 'project'])
+  const summary = sectionText(['summary', 'objective', 'profile'])
+  const certifications = sectionText(['certification', 'certificate'])
+  const achievements = sectionText(['achievement', 'award', 'accomplishment', 'honor'])
+  const languagesKnown = sectionText(['language'])
 
   return {
     fullName,
-    title: '',
     email: emailMatch?.[0] || '',
-    phone: phoneMatch?.[0]?.replace(/\s+/g, ' ').trim() || '',
+    phone: phoneMatch?.[0] || '',
     linkedin: linkedinMatch?.[0] || '',
     github: githubMatch?.[0] || '',
     portfolio: portfolioMatch?.[0] || '',
@@ -356,6 +215,22 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
     certifications,
     achievements,
     languagesKnown,
+  }
+}
+
+/**
+ * When OpenRouter returns 429 / errors, we still have plain JD text from the PDF.
+ * Shape matches AI JSON so the client can append to additionalInstructions the same way.
+ */
+function buildJdRequirementsFromRawText(jdText: string): Record<string, string | string[] | undefined> {
+  const excerpt = jdText.trim().substring(0, 12_000)
+  return {
+    requiredSkills: [],
+    /** Keep short — full JD is only under keyRequirements (avoids reading the same text twice). */
+    qualifications:
+      'AI summary unavailable (rate limit / quota). Use Key Requirements below for the full job description.',
+    responsibilities: '',
+    keyRequirements: excerpt,
   }
 }
 
@@ -384,20 +259,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const resumeName = resumeFile?.name.toLowerCase() ?? ''
-    if (
-      resumeFile &&
-      (resumeName.endsWith('.doc') && !resumeName.endsWith('.docx'))
-    ) {
-      return NextResponse.json(
-        {
-          error:
-            'Legacy Word .doc is not supported. Save as .docx or PDF and upload again.',
-        },
-        { status: 400 },
-      )
-    }
-
     // Extract text from files in parallel for faster processing
     let resumeText = ''
     let jdText = ''
@@ -406,16 +267,23 @@ export async function POST(request: NextRequest) {
     try {
       const extractionPromises = []
       
-      // Extract resume text (PDF / DOCX / plain text)
+      // Extract resume text
       if (resumeFile) {
-        extractionPromises.push(
-          extractPlainTextFromResumeFile(resumeFile).catch((error) => {
-            console.error('[parse-files] Resume extraction failed:', error)
-            throw new Error(
-              `Resume extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-            )
-          }),
-        )
+        if (resumeFile.type === 'application/pdf') {
+          extractionPromises.push(
+            extractTextFromPDF(resumeFile).catch((error) => {
+              console.error('[parse-files] Resume PDF extraction failed:', error)
+              throw new Error(`Resume PDF extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            })
+          )
+        } else {
+          extractionPromises.push(
+            resumeFile.text().catch((error) => {
+              console.error('[parse-files] Resume text extraction failed:', error)
+              throw new Error(`Resume text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+            })
+          )
+        }
       } else {
         extractionPromises.push(Promise.resolve(''))
       }
@@ -546,47 +414,19 @@ export async function POST(request: NextRequest) {
         jdRequirements: null,
         resumeText: '',
         jdText: '',
-        resumeLayoutEstimate: null,
         // Don't include error field - this is not an error, just info
       })
     }
 
-    const fallbackResume =
-      resumeText.trim().length > 0 ? buildFallbackResumeData(resumeText) : null
-
-    // AI resume + JD + local layout estimate in parallel (layout avoids waiting on OpenRouter).
-    console.log('[parse-files] Starting AI parsing + layout estimate...')
-    const layoutEstimatePromise: Promise<ResumeLayoutEstimate | null> =
-      resumeText.trim().length >= 50
-        ? Promise.resolve().then(() => {
-            try {
-              const layoutStats = computeResumeLayoutStats(
-                plainResumeTextToResumeData(resumeText),
-                TEXT_LAYOUT_SERVER_OPTIONS,
-              )
-              if (layoutStats.lineCount > 0) {
-                return {
-                  pageCount: layoutStats.pageCount,
-                  lineCount: layoutStats.lineCount,
-                  exceedsTwoPages: layoutStats.exceedsTwoPages,
-                }
-              }
-            } catch {
-              // non-fatal
-            }
-            return null
-          })
-        : Promise.resolve(null)
-
-    const [aiExtractedResumeData, jdRequirements, resumeLayoutEstimate] = await Promise.all([
+    // Use AI to extract structured data - process in parallel for faster results
+    // Only process if we have text
+    console.log('[parse-files] Starting AI parsing...')
+    const [aiExtractedResumeData, jdRequirements] = await Promise.all([
       resumeText && resumeText.trim().length > 0
         ? (async () => {
             try {
-              if (!fallbackResume) {
-                return null
-              }
               const controller = new AbortController()
-              const timeoutId = setTimeout(() => controller.abort(), 45_000)
+              const timeoutId = setTimeout(() => controller.abort(), 30000) // 30s timeout
 
               const parseResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -597,33 +437,37 @@ export async function POST(request: NextRequest) {
                   'X-Title': 'Buildify AI Resume Builder',
                 },
                 body: JSON.stringify({
-                  model: 'google/gemma-3-12b-it:free',
+                  model: 'google/gemma-3-12b-it:free', // Fast and reliable model
                   messages: [
                     {
-                      role: 'system',
-                      content:
-                        'You extract resume data into ONE JSON object only. No markdown fences, no commentary. Use \\n inside strings for line breaks. Never put the whole resume into one field: you MUST split content across experience, education, projects, skills, summary, achievements, etc. Use "" for missing fields.',
-                    },
-                    {
                       role: 'user',
-                      content: `Extract structured data from this resume text. Return ONLY valid JSON with these exact keys:
-fullName, title, email, phone, location, linkedin, github, portfolio, summary, skills, experience, education, projects, certifications, achievements, languagesKnown
+                      content: `Extract structured data from this resume text. Return ONLY valid JSON with these exact fields:
+- fullName: string (full name)
+- title: string (current job title / professional headline, e.g. "Senior Software Engineer")
+- email: string
+- phone: string
+- location: string (city, state/country)
+- linkedin: string (LinkedIn URL or username if found)
+- github: string (GitHub URL or username if found)
+- portfolio: string (personal website/portfolio URL if found)
+- summary: string (professional summary / objective if present)
+- skills: comma-separated string (e.g. "React, Node.js, Python")
+- experience: formatted string with all work experience (use "Role | Company | Dates" format, then bullet points)
+- education: formatted string with all degrees, institutions, and graduation dates
+- projects: formatted string with all projects, technologies used, and key features
+- certifications: comma-separated string of certifications
+- achievements: comma-separated string of awards / achievements
+- languagesKnown: comma-separated string of spoken languages
 
-Rules:
-- skills: comma-separated string
-- experience: ONLY jobs/internships/employment. "Role | Company | Dates" per job then bullets. NEVER put Academic Projects, PROJECTS, Achievements, Certificates, or Education sections here — map them to projects, achievements, certifications, or education.
-- education: degrees and schools only
-- projects: academic/personal/side projects (content under ACADEMIC PROJECTS, PROJECTS, etc.)
-- achievements: awards, DSA counts, honors, bullets under "Achievements / Certificates" when not a degree
-- certifications: formal certs when listed alone; if merged with achievements, use achievements for the combined list
-- certifications / achievements / languagesKnown: comma-separated or "" if none
+IMPORTANT: Include ALL fields. If a field is not found, use empty string "".
 
-Resume text:
-${resumeText.substring(0, 10_000)}`,
+Return ONLY valid JSON, no markdown, no explanations, no code blocks.
+
+Resume text:\n${resumeText.substring(0, 6000)}`,
                     },
                   ],
-                  max_tokens: 2800,
-                  temperature: 0.05,
+                  max_tokens: 2000,
+                  temperature: 0.1,
                 }),
                 signal: controller.signal,
               })
@@ -635,28 +479,38 @@ ${resumeText.substring(0, 10_000)}`,
                 const parsedContent = parseResult.choices?.[0]?.message?.content || ''
                 console.log('[parse-files] Raw AI response:', parsedContent.substring(0, 500))
                 try {
-                  const stripped = parsedContent
-                    .replace(/```json\n?/gi, '')
-                    .replace(/```\n?/g, '')
-                  const jsonBlob =
-                    extractFirstJsonObject(stripped) ?? extractFirstJsonObject(parsedContent)
-                  if (!jsonBlob) {
-                    console.error('[parse-files] No JSON object found in model response')
+                  // Try to extract JSON from response (handle markdown code blocks)
+                  let jsonStr = parsedContent
+                  
+                  // Remove markdown code blocks if present
+                  jsonStr = jsonStr.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+                  
+                  // Extract JSON object
+                  const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+                  if (jsonMatch) {
+                    const extractedData = JSON.parse(jsonMatch[0])
+                    console.log('[parse-files] Parsed extracted data:', extractedData)
+                    
+                    // Ensure education and projects are always present
+                    if (!extractedData.education || extractedData.education.trim() === '') {
+                      extractedData.education = 'Not specified'
+                      console.log('[parse-files] ⚠️ Education field missing, setting to "Not specified"')
+                    }
+                    if (!extractedData.projects || extractedData.projects.trim() === '') {
+                      extractedData.projects = 'Not specified'
+                      console.log('[parse-files] ⚠️ Projects field missing, setting to "Not specified"')
+                    }
+                    
+                    console.log('[parse-files] ✅ Final extracted data with all fields:', {
+                      hasEducation: !!extractedData.education,
+                      hasProjects: !!extractedData.projects,
+                      educationLength: extractedData.education?.length || 0,
+                      projectsLength: extractedData.projects?.length || 0,
+                    })
+                    
+                    return extractedData
                   } else {
-                    const extractedData = JSON.parse(jsonBlob) as Record<string, unknown>
-                    console.log('[parse-files] Parsed extracted data keys:', Object.keys(extractedData))
-                    let merged = mergeAiResumeWithFallback(
-                      normalizeAiResumeRecord(extractedData),
-                      fallbackResume,
-                    )
-                    if (!merged.education?.trim()) {
-                      merged = { ...merged, education: 'Not specified' }
-                    }
-                    if (!merged.projects?.trim()) {
-                      merged = { ...merged, projects: 'Not specified' }
-                    }
-                    console.log('[parse-files] ✅ Merged AI + heuristic fallback')
-                    return merged
+                    console.error('[parse-files] No JSON found in AI response')
                   }
                 } catch (error) {
                   console.error('[parse-files] Error parsing extracted JSON:', error)
@@ -680,7 +534,7 @@ ${resumeText.substring(0, 10_000)}`,
         ? (async () => {
             try {
               const controller = new AbortController()
-              const timeoutId = setTimeout(() => controller.abort(), 30_000)
+              const timeoutId = setTimeout(() => controller.abort(), 25000) // 25s timeout
 
               const jdParseResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -691,20 +545,15 @@ ${resumeText.substring(0, 10_000)}`,
                   'X-Title': 'Buildify AI Resume Builder',
                 },
                 body: JSON.stringify({
-                  model: 'google/gemma-3-12b-it:free',
+                  model: 'google/gemma-3-12b-it:free', // Fast and reliable model
                   messages: [
                     {
-                      role: 'system',
-                      content:
-                        'Reply with one JSON object only: requiredSkills (array of strings), qualifications, responsibilities, keyRequirements. No markdown.',
-                    },
-                    {
                       role: 'user',
-                      content: `Job description:\n${jdText.substring(0, 4500)}`,
+                      content: `Extract key requirements from this job description. Return ONLY valid JSON with fields: requiredSkills (array), qualifications (string), responsibilities (string), keyRequirements (string). No markdown, no explanations.\n\nJob description:\n${jdText.substring(0, 4000)}`,
                     },
                   ],
-                  max_tokens: 1200,
-                  temperature: 0.05,
+                  max_tokens: 1500,
+                  temperature: 0.1,
                 }),
                 signal: controller.signal,
               })
@@ -715,13 +564,9 @@ ${resumeText.substring(0, 10_000)}`,
                 const jdParseResult = await jdParseResponse.json()
                 const jdParsedContent = jdParseResult.choices?.[0]?.message?.content || ''
                 try {
-                  const stripped = jdParsedContent
-                    .replace(/```json\n?/gi, '')
-                    .replace(/```\n?/g, '')
-                  const jsonBlob =
-                    extractFirstJsonObject(stripped) ?? extractFirstJsonObject(jdParsedContent)
-                  if (jsonBlob) {
-                    return JSON.parse(jsonBlob)
+                  const jsonMatch = jdParsedContent.match(/\{[\s\S]*\}/)
+                  if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0])
                   }
                 } catch (error) {
                   console.error('Error parsing JD JSON:', error)
@@ -740,26 +585,21 @@ ${resumeText.substring(0, 10_000)}`,
             return null
           })()
         : Promise.resolve(null),
-      layoutEstimatePromise,
     ])
 
     console.log('[parse-files] AI parsing complete')
-    let extractedResumeData: ParsedResumeData | null =
-      aiExtractedResumeData ?? fallbackResume
-    if (extractedResumeData) {
-      let shaped = rerouteMisplacedResumeSections(
-        extractedResumeData as ParsedResumeShape,
-      ) as ParsedResumeData
-      if (resumeText.trim().length >= 80) {
-        shaped = applyPlaintextReconcileIfMonolith(
-          shaped as ParsedResumeShape,
-          resumeText,
-        ) as ParsedResumeData
-      }
-      extractedResumeData = shaped
-    }
+    const extractedResumeData =
+      aiExtractedResumeData || (resumeText && resumeText.trim().length > 0 ? buildFallbackResumeData(resumeText) : null)
     console.log('[parse-files] Extracted resume data:', extractedResumeData)
-    console.log('[parse-files] JD requirements:', jdRequirements)
+    console.log('[parse-files] JD requirements (AI):', jdRequirements)
+
+    let jdRequirementsOut = jdRequirements
+    let jdUsedRawFallback = false
+    if (!jdRequirementsOut && jdText.trim().length > 0) {
+      jdRequirementsOut = buildJdRequirementsFromRawText(jdText)
+      jdUsedRawFallback = true
+      console.log('[parse-files] JD: using raw-text fallback (AI parse failed or rate limited)')
+    }
 
     // Ensure we return the data even if AI parsing failed
     const response = {
@@ -767,13 +607,15 @@ ${resumeText.substring(0, 10_000)}`,
       resumeText: resumeText.substring(0, 5000), // Limit response size
       jdText: jdText.substring(0, 3000),
       extractedResumeData: extractedResumeData || null,
-      jdRequirements: jdRequirements || null,
-      resumeLayoutEstimate,
+      jdRequirements: jdRequirementsOut || null,
+      /** True when structured AI JD parse failed but raw JD text was folded into jdRequirements */
+      jdUsedRawFallback,
     }
-    
+
     console.log('[parse-files] Final response:', {
       hasResumeData: !!response.extractedResumeData,
       hasJdRequirements: !!response.jdRequirements,
+      jdUsedRawFallback: response.jdUsedRawFallback,
       resumeDataKeys: response.extractedResumeData ? Object.keys(response.extractedResumeData) : [],
     })
     

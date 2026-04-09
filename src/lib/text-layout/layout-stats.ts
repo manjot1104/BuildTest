@@ -1,6 +1,8 @@
 import { generateResumeLayout } from "./engine"
 import type { ResumeData, ResumeLayoutOptions } from "./types"
 
+export type { ResumeLayoutOptions }
+
 /** Browser + server use the same stack string so page estimates stay comparable. */
 export const TEXT_LAYOUT_ENGINE_FONT_STACK = "Inter, ui-sans-serif, system-ui, sans-serif"
 

@@ -39,14 +39,14 @@ export async function generatePDFFromHtml(
     const browser = await launchBrowser()
 
     const page = await browser.newPage()
-
+    
     // Set viewport for consistent rendering
     await page.setViewport({
       width: 1200,
       height: 1600,
       deviceScaleFactor: 1,
     })
-
+    
     // Set content with proper styling for print
     // `networkidle0` waits for all network to go idle — very slow for resumes with no real network.
     await page.setContent(htmlContent, {
@@ -85,17 +85,21 @@ export async function generatePDFFromHtml(
           '   - For Edge: `set PUPPETEER_EXECUTABLE_PATH=C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe`',
           '3. Or reinstall Puppeteer to download Chromium: `bun remove puppeteer && bun install puppeteer`',
         ]
-
+        
         throw new Error(
           `Failed to launch browser for PDF generation.\n\n` +
-            `Troubleshooting steps:\n${troubleshootingSteps.join('\n')}\n\n` +
-            (chromePath ? `Found Chrome at: ${chromePath}\n` : 'Could not auto-detect Chrome/Edge installation.\n') +
-            `Original error: ${error.message}\n\n` +
-            `For more help, visit: https://pptr.dev/troubleshooting`,
+          `Troubleshooting steps:\n${troubleshootingSteps.join('\n')}\n\n` +
+          (chromePath ? `Found Chrome at: ${chromePath}\n` : 'Could not auto-detect Chrome/Edge installation.\n') +
+          `Original error: ${error.message}\n\n` +
+          `For more help, visit: https://pptr.dev/troubleshooting`
         )
       }
-      throw new Error(`Failed to generate PDF from HTML: ${error.message}`)
+      throw new Error(
+        `Failed to generate PDF from HTML: ${error.message}`
+      )
     }
-    throw new Error(`Failed to generate PDF from HTML: Unknown error occurred`)
+    throw new Error(
+      `Failed to generate PDF from HTML: Unknown error occurred`
+    )
   }
 }

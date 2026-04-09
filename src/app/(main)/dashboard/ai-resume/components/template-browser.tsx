@@ -1,10 +1,11 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { FileText, Briefcase, GraduationCap, Sparkles, Palette, User } from 'lucide-react'
 import { RESUME_TEMPLATES, type ResumeTemplate, type ResumeTemplateCategory } from '../templates'
 import { ResumeTemplatePreviewModal } from './template-preview-modal'
 import { ResumeTemplateCard } from './resume-template-card'
+import { preloadLatexTemplatePreviewFirstPage } from '@/lib/resume/template-preview-assets'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -43,6 +44,13 @@ export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: Resu
   const filtered = useMemo(() => {
     return activeCategory === 'all' ? formatFiltered : formatFiltered.filter((t) => t.category === activeCategory)
   }, [formatFiltered, activeCategory])
+
+  useEffect(() => {
+    const topLatex = filtered.filter((t) => t.format === 'latex').slice(0, 6)
+    for (const template of topLatex) {
+      preloadLatexTemplatePreviewFirstPage(template)
+    }
+  }, [filtered])
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 sm:px-6 lg:gap-10 lg:py-10">
@@ -83,6 +91,7 @@ export function ResumeTemplateBrowser({ onSelect, defaultFormat = 'html' }: Resu
             template={template}
             onSelect={() => onSelect(template)}
             onPreview={() => setPreviewTemplate(template)}
+            prioritizeLatexPreview={template.format === 'latex'}
           />
         ))}
       </div>

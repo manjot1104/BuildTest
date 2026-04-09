@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo } from 'react'
-import { useForm, useWatch } from 'react-hook-form'
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { motion } from 'framer-motion'
@@ -121,14 +121,20 @@ function getModelName(modelId: string): string {
   return modelId.replace(/^[^/]+\//, '').replace(/:free$/, '')
 }
 
+/** Strips the block appended after JD parse (re-parse / new JD must not stack duplicates). */
+function stripJobDescriptionInstructions(text: string): string {
+  return text.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '').trimEnd()
+}
+
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
   templateType: z.enum(['latex', 'html']),
-  fullName: z.string().min(1, 'Full name is required').max(100),
+  fullName: z.string().trim().min(1, 'Full name is required').max(100),
   title: z.string().max(200).optional(),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(1, 'Phone number is required').max(20),
+  email: z.string().trim().min(1, 'Email is required').email('Invalid email address'),
+  /** International numbers + spaces — was max(20), too tight for many users */
+  phone: z.string().trim().min(1, 'Phone number is required').max(40),
   location: z.string().max(200).optional(),
   linkedin: z.string().max(300).optional(),
   github: z.string().max(300).optional(),
@@ -141,7 +147,7 @@ const resumeSchema = z.object({
   certifications: z.string().optional(),
   achievements: z.string().optional(),
   languagesKnown: z.string().optional(),
-  additionalInstructions: z.string().optional(),
+  additionalInstructions: z.string().max(100_000).optional(),
 })
 
 type ResumeFormData = z.infer<typeof resumeSchema>
@@ -233,6 +239,20 @@ export default function AIResumeBuilderPage() {
   const currentModelInfo = RESUME_MODELS.find((m) => m.id === selectedModel)
 
   // Generate Resume code (LaTeX or HTML)
+  const onGenerateInvalid = (errors: FieldErrors<ResumeFormData>) => {
+    const keys = Object.keys(errors) as (keyof ResumeFormData)[]
+    const first = keys[0]
+    const fieldErr = first ? errors[first] : undefined
+    const msg =
+      fieldErr && typeof fieldErr === 'object' && 'message' in fieldErr && typeof fieldErr.message === 'string'
+        ? fieldErr.message
+        : 'Please fix the highlighted fields. Name, email, and phone are required.'
+    if (first) {
+      void form.setFocus(first)
+    }
+    toast.error(msg, { duration: 6000, id: 'resume-generate' })
+  }
+
   const onGenerateResume = async (data: ResumeFormData) => {
     setIsGenerating(true)
     const isLaTeX = data.templateType === 'latex'
@@ -247,15 +267,17 @@ export default function AIResumeBuilderPage() {
         TEXT_LAYOUT_CLIENT_OPTIONS,
       )
 
-      // Create AbortController for timeout
+      // Server: one OpenRouter attempt (~42s) + fallback; 2 min is plenty (was 5 min when 2 models ran).
+      const GENERATE_FETCH_MS = 120_000
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes timeout
+      const timeoutId = setTimeout(() => controller.abort(), GENERATE_FETCH_MS)
 
       let response: Response
       try {
         response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             ...data,
             model: selectedModel,
@@ -270,7 +292,9 @@ export default function AIResumeBuilderPage() {
         clearTimeout(timeoutId)
         
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error('Request timed out. Please try again with a smaller template or simpler data.')
+          throw new Error(
+            'Generation took too long (over 2 minutes). Try again or use a lighter template.',
+          )
         }
         
         if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
@@ -281,18 +305,35 @@ export default function AIResumeBuilderPage() {
       }
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ 
-          error: `Server returned error: ${response.status} ${response.statusText}` 
-        }))
-        const message = error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        const error = (await response.json().catch(() => ({
+          error: `Server returned error: ${response.status} ${response.statusText}`,
+        }))) as {
+          error?: string
+          details?: Array<{ path?: (string | number)[]; message?: string }>
+        }
+        let message =
+          response.status === 401
+            ? 'Please sign in to generate a resume.'
+            : error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        if (response.status === 400 && Array.isArray(error.details) && error.details[0]?.message) {
+          const d = error.details[0]
+          const path = Array.isArray(d.path) ? d.path.join('.') : ''
+          message = path ? `${path}: ${d.message}` : (d.message ?? message)
+        }
         toast.error(message, {
           id: 'resume-generate',
-          duration: 7000,
+          duration: 9000,
         })
         return
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        latex?: string
+        html?: string
+        model?: string
+        isFallback?: boolean
+        warning?: string
+      }
       const generatedCode = isLaTeX ? result.latex : result.html
       const rawResponse = ''
 
@@ -312,7 +353,9 @@ export default function AIResumeBuilderPage() {
       setIsFallback(result.isFallback || false)
       setCurrentStep('preview')
 
-      if (result.isFallback && result.model) {
+      if (typeof result.warning === 'string' && result.warning.trim()) {
+        toast.warning(result.warning, { id: 'resume-generate', duration: 8000 })
+      } else if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
       } else {
         toast.success(
@@ -660,6 +703,8 @@ export default function AIResumeBuilderPage() {
         details?: string
         extractedResumeData?: Record<string, string | string[] | undefined> | null
         jdRequirements?: Record<string, string | string[] | undefined> | null
+        /** Server set when AI JD parse failed (e.g. 429) but raw JD text was attached */
+        jdUsedRawFallback?: boolean
         resumeLayoutEstimate?: {
           pageCount: number
           lineCount: number
@@ -708,8 +753,8 @@ export default function AIResumeBuilderPage() {
       }
       
       setParsedData({
-        resumeData: result.extractedResumeData,
-        jdRequirements: result.jdRequirements,
+        resumeData: result.extractedResumeData ?? undefined,
+        jdRequirements: result.jdRequirements ?? undefined,
         resumeLayoutEstimate: result.resumeLayoutEstimate ?? null,
       })
 
@@ -718,32 +763,39 @@ export default function AIResumeBuilderPage() {
       if (result.extractedResumeData) {
         const data = result.extractedResumeData
         console.log('[parse-files] Auto-filling form with data:', data)
-        
+
+        const apiToFormString = (v: string | string[] | undefined): string | undefined => {
+          if (v == null) return undefined
+          const s = Array.isArray(v) ? v.filter(Boolean).join(', ') : v
+          const t = s.trim()
+          return t || undefined
+        }
+
         // Simple string fields — set if present
         const fieldMap: Array<[keyof ResumeFormData, string | undefined]> = [
-          ['fullName', data.fullName],
-          ['title', data.title],
-          ['email', data.email],
-          ['phone', data.phone],
-          ['location', data.location],
-          ['linkedin', data.linkedin],
-          ['github', data.github],
-          ['portfolio', data.portfolio],
-          ['summary', data.summary],
-          ['skills', data.skills],
-          ['experience', data.experience],
-          ['education', data.education],
-          ['projects', data.projects],
-          ['certifications', data.certifications],
-          ['achievements', data.achievements],
-          ['languagesKnown', data.languagesKnown],
+          ['fullName', apiToFormString(data.fullName)],
+          ['title', apiToFormString(data.title)],
+          ['email', apiToFormString(data.email)],
+          ['phone', apiToFormString(data.phone)],
+          ['location', apiToFormString(data.location)],
+          ['linkedin', apiToFormString(data.linkedin)],
+          ['github', apiToFormString(data.github)],
+          ['portfolio', apiToFormString(data.portfolio)],
+          ['summary', apiToFormString(data.summary)],
+          ['skills', apiToFormString(data.skills)],
+          ['experience', apiToFormString(data.experience)],
+          ['education', apiToFormString(data.education)],
+          ['projects', apiToFormString(data.projects)],
+          ['certifications', apiToFormString(data.certifications)],
+          ['achievements', apiToFormString(data.achievements)],
+          ['languagesKnown', apiToFormString(data.languagesKnown)],
         ]
-        
+
         for (const [field, value] of fieldMap) {
-          if (value?.trim()) {
+          if (value) {
             form.setValue(field, value)
-          fieldsFilled++
-        }
+            fieldsFilled++
+          }
         }
         
         console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
@@ -756,8 +808,8 @@ export default function AIResumeBuilderPage() {
         const jdReqs = result.jdRequirements as Record<string, string | string[] | undefined>
         const requiredSkills = Array.isArray(jdReqs.requiredSkills) ? jdReqs.requiredSkills.join(', ') : (jdReqs.requiredSkills || 'N/A')
         const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${requiredSkills}\n- Qualifications: ${jdReqs.qualifications || 'N/A'}\n- Key Requirements: ${jdReqs.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
-        const currentInstructions = form.getValues('additionalInstructions') || ''
-        form.setValue('additionalInstructions', currentInstructions + jdInstructions)
+        const base = stripJobDescriptionInstructions(form.getValues('additionalInstructions') || '')
+        form.setValue('additionalInstructions', base + jdInstructions)
         console.log('[parse-files] Added JD requirements to instructions')
       }
 
@@ -769,14 +821,24 @@ export default function AIResumeBuilderPage() {
       if (fieldsFilled > 0) {
         toast.success(
           `Files parsed successfully! ${fieldsFilled} form fields auto-filled.${layoutNote}`,
-          { id: 'parse-files' },
+          {
+            id: 'parse-files',
+            description: result.jdUsedRawFallback
+              ? 'JD added as full text (AI summarization hit rate limit).'
+              : undefined,
+          },
         )
       } else if (result.extractedResumeData) {
         toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', {
           id: 'parse-files',
         })
       } else {
-        toast.success(`Files parsed successfully!${layoutNote}`, { id: 'parse-files' })
+        toast.success(`Files parsed successfully!${layoutNote}`, {
+          id: 'parse-files',
+          description: result.jdUsedRawFallback
+            ? 'JD added as full text (AI summarization hit rate limit).'
+            : undefined,
+        })
       }
     } catch (error) {
       if (aiProgressTimer) {
@@ -1417,7 +1479,11 @@ export default function AIResumeBuilderPage() {
       </motion.div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onGenerateResume)} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit(onGenerateResume, onGenerateInvalid)}
+          noValidate
+          className="space-y-6"
+        >
           {/* File Upload Section */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -1498,9 +1564,9 @@ export default function AIResumeBuilderPage() {
                               e.stopPropagation()
                               setJdFile(null)
                               if (parsedData) {
-                                const currentInstructions = form.getValues('additionalInstructions') || ''
-                                // Remove JD instructions if they exist
-                                const cleaned = currentInstructions.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '')
+                                const cleaned = stripJobDescriptionInstructions(
+                                  form.getValues('additionalInstructions') || '',
+                                )
                                 form.setValue('additionalInstructions', cleaned)
                               }
                             }}

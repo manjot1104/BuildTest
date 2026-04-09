@@ -758,6 +758,24 @@ function sliceBalancedDivFrom(html: string, sectionStart: number): number {
   return -1
 }
 
+/** Replace outer `<div class="…token…">…</div>` without stopping at nested `</div>` (e.g. `.c-ico`). */
+function replaceBalancedDivByClassToken(
+  html: string,
+  classToken: string,
+  replacement: string,
+): string {
+  const openRe = new RegExp(
+    `<div[^>]*\\bclass=["'][^"']*\\b${classToken}\\b[^"']*["'][^>]*>`,
+    'i',
+  )
+  const m = openRe.exec(html)
+  if (!m || m.index === undefined) return html
+  const start = m.index
+  const end = sliceBalancedDivFrom(html, start)
+  if (end < 0) return html
+  return html.slice(0, start) + replacement + html.slice(end)
+}
+
 function findSlateSectionByTitle(
   html: string,
   title: string,
@@ -811,7 +829,11 @@ function replaceSlateHeaderAndContact(html: string, data: ResumeRenderData): str
         return `<div class="c-item"><div class="c-ico"></div><span>${t ? safeHtml(t) : '—'}</span></div>`
       })
       .join('\n    ')
-    out = out.replace(/<div class="contact">[\s\S]*?<\/div>/i, `<div class="contact">\n    ${row}\n  </div>`)
+    out = replaceBalancedDivByClassToken(
+      out,
+      'contact',
+      `<div class="contact">\n    ${row}\n  </div>`,
+    )
   }
   return out
 }
@@ -834,8 +856,10 @@ function buildHtmlEducationSlate(entries: EducationEntry[]): string {
   if (entries.length === 0) return ''
   return entries
     .map((e) => {
-      return `\n          <div class="e-head"><div class="e-role">${safeHtml(e.degree)}</div><div class="e-date">${safeHtml(e.year)}</div></div>
-          <div class="e-org">${safeHtml(e.college)}</div>`
+      return `\n          <div class="edu-block">
+            <div class="e-head"><div class="e-role">${safeHtml(e.degree)}</div><div class="e-date">${safeHtml(e.year)}</div></div>
+            <div class="e-org">${safeHtml(e.college)}</div>
+          </div>`
     })
     .join('\n')
 }
@@ -921,7 +945,25 @@ function renderHtmlSlateSections(block: string, data: ResumeRenderData): string 
   out = removeHtmlSection(out, SECTION_HEADING_ALIASES.volunteer)
   out = removeHtmlSection(out, SECTION_HEADING_ALIASES.interests)
 
+  out = injectSlateColumnOverflowCss(out)
+
   return out.replace(/\n{3,}/g, '\n\n')
+}
+
+/** Long degree/school lines + flex .e-head otherwise spill into the 65% column (min-width:auto). */
+function injectSlateColumnOverflowCss(html: string): string {
+  const patch = `<style data-slate-col-fix>
+.grid>div:first-child,.grid>div:first-child .section{min-width:0!important;max-width:100%!important}
+.e-head{min-width:0!important;max-width:100%!important}
+.e-role{flex:1 1 0%!important;min-width:0!important;overflow-wrap:break-word!important;word-break:break-word!important}
+.e-date{flex-shrink:0!important;max-width:42%!important}
+.edu-block{min-width:0!important;max-width:100%!important}
+.e-org{min-width:0!important;max-width:100%!important;overflow-wrap:break-word!important;word-break:break-word!important}
+</style>`
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${patch}</head>`)
+  }
+  return `${patch}${html}`
 }
 
 // ── Core render functions ────────────────────────────────────────────────────
