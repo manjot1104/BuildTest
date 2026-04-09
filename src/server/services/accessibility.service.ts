@@ -9,7 +9,7 @@ import type {
   AxeViolation,
   ComplianceStandard,
 } from '@/types/accessibility.types'
-import path from 'path/win32'
+import path from 'path'
 
 let activeTests = 0
 const MAX_CONCURRENT_TESTS = 3
@@ -37,7 +37,7 @@ function normalizeUrl(raw: string, base: string): string | null {
   try {
     const url = new URL(raw, base)
     url.hash = ''
-    url.search = '' // strip query params to avoid duplicates like ?ref=...
+    // url.search = '' // strip query params to avoid duplicates like ?ref=...
     // Always strip trailing slash for dedup (including root "/")
     let normalized = url.href
     if (normalized.endsWith('/')) {

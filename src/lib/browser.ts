@@ -20,7 +20,6 @@ export async function launchBrowser(): Promise<Browser> {
   const { default: StealthPlugin } = await import('puppeteer-extra-plugin-stealth')
 
   puppeteerExtra.use(StealthPlugin())
-  console.log('🕵️ [STEALTH] Plugins loaded:', puppeteerExtra.plugins.map((p: any) => p.name))
 
   const browser = await puppeteerExtra.launch({
     headless: true,
