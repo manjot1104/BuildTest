@@ -762,6 +762,12 @@ const FEATURED_CHAT_IDS = [
   's9a45Mv5S5h',
   'pwAhgqhDp0K',
   'BiZl3MMj1fB',
+  '9145ad97-7a57-4c07-ae7c-35a6a2eb1d6b',
+  'bec47c32-97b6-4c91-9e79-e5f892450e76',
+  '65cb201b-53cf-4d29-b9d4-935ac14e8658',
+  'de225313-7cec-41ec-875c-c0d316d22a22',
+  '4a7d2b19-369f-4e99-b801-a54ea6b50385',
+  '2d0dd28c-f316-4c0e-bf2f-ddaa26a27756'
 ]
 
 /**
@@ -775,10 +781,10 @@ export async function getFeaturedBuildsHandler(): Promise<
     const chats = await getFeaturedChats(FEATURED_CHAT_IDS)
 
     const data: CommunityBuildItem[] = chats
-  .filter((chat) => chat.v0_chat_id)
+  .filter((chat) => chat.v0_chat_id || chat.demo_html)
   .map((chat) => ({
     id: chat.id,
-    v0ChatId: chat.v0_chat_id!,
+   v0ChatId: chat.v0_chat_id ?? chat.id,
     title: chat.title,
     prompt: chat.prompt,
     demoUrl: chat.demo_url,

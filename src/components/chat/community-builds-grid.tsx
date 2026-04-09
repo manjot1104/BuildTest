@@ -297,11 +297,12 @@ function CommunityBuildCard({
     {build.title ?? 'Untitled'}
   </h3>
 
-  {build.demoUrl?.startsWith('threed://') && (
+{(build.demoUrl?.startsWith('threed://') || build.demoHtml) && (
   <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-  3D
-</span>
-  )}
+    3D
+  </span>
+)}
+ 
 </div>
 
         {/* Prompt excerpt */}

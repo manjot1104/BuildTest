@@ -730,7 +730,7 @@ No clutter.
 if (data?.error === 'service_unavailable') {
   setThreeDMessages(prev => [...prev, {
     role: 'assistant',
-    content: '🔴 service_down',  
+    content: '__service_down__'
   }])
   setThreeDLoading(false)
   return ''
