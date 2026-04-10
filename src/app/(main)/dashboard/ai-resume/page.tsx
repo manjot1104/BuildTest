@@ -267,41 +267,58 @@ export default function AIResumeBuilderPage() {
         TEXT_LAYOUT_CLIENT_OPTIONS,
       )
 
-      // Server: one OpenRouter attempt (~42s) + fallback; 2 min is plenty (was 5 min when 2 models ran).
-      const GENERATE_FETCH_MS = 120_000
+      // Server: up to 3 OpenRouter attempts × ~78s + JSON/processing — must exceed that budget.
+      const GENERATE_FETCH_MS = 260_000
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), GENERATE_FETCH_MS)
 
+      const buildGenerateBody = (forceLocalOnly: boolean) =>
+        JSON.stringify({
+          ...data,
+          model: selectedModel,
+          templateId: selectedTemplate?.id,
+          // Keep generation format-specific to avoid mixed HTML/LaTeX outputs.
+          templateStyleGuide: selectedTemplate?.styleGuide,
+          ...(forceLocalOnly ? { forceLocalOnly: true as const } : {}),
+        })
+
+      let usedLocalTimeoutFallback = false
       let response: Response
       try {
         response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            ...data,
-            model: selectedModel,
-            templateId: selectedTemplate?.id,
-            // Keep generation format-specific to avoid mixed HTML/LaTeX outputs.
-            templateStyleGuide: selectedTemplate?.styleGuide,
-          }),
+          body: buildGenerateBody(false),
           signal: controller.signal,
         })
         clearTimeout(timeoutId)
       } catch (fetchError) {
         clearTimeout(timeoutId)
-        
+
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error(
-            'Generation took too long (over 2 minutes). Try again or use a lighter template.',
-          )
-        }
-        
-        if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
+          usedLocalTimeoutFallback = true
+          toast.loading('AI took too long — generating with local template...', { id: 'resume-generate' })
+          try {
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: buildGenerateBody(true),
+            })
+          } catch (retryErr) {
+            if (retryErr instanceof TypeError && retryErr.message === 'Failed to fetch') {
+              throw new Error(
+                'Unable to connect to server. Please check your internet connection and try again.',
+              )
+            }
+            throw retryErr
+          }
+        } else if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
           throw new Error('Unable to connect to server. Please check your internet connection and try again.')
+        } else {
+          throw fetchError
         }
-        
-        throw fetchError
       }
 
       if (!response.ok) {
@@ -354,7 +371,12 @@ export default function AIResumeBuilderPage() {
       setCurrentStep('preview')
 
       if (typeof result.warning === 'string' && result.warning.trim()) {
-        toast.warning(result.warning, { id: 'resume-generate', duration: 8000 })
+        toast.warning(
+          usedLocalTimeoutFallback
+            ? 'AI timed out — your resume was generated with the local template.'
+            : result.warning,
+          { id: 'resume-generate', duration: 8000 },
+        )
       } else if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
       } else {
@@ -1198,7 +1220,7 @@ export default function AIResumeBuilderPage() {
                   {previewLayoutStats.lineCount > 0 && (
                     <span
                       className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/60"
-                      title="Approximate A4 text-layout from current HTML/LaTeX when enough text is present, otherwise from your form (not exact PDF pagination)"
+                      title="A4 estimate from your HTML/LaTeX (plain-text model): margins & type scale aligned with PDF export; complex template layouts may still differ slightly"
                     >
                       ~{previewLayoutStats.pageCount} pg
                     </span>

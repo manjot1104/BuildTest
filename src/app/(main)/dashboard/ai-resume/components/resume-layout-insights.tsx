@@ -21,9 +21,7 @@ export function ResumeLayoutInsights({ formValues, className }: ResumeLayoutInsi
   const snapshot = JSON.stringify(formValues)
   const stats = useMemo(() => {
     const data = resumeFormToResumeData(JSON.parse(snapshot) as ResumeFormLike)
-    return computeResumeLayoutStats(data, {
-      fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-    })
+    return computeResumeLayoutStats(data, TEXT_LAYOUT_CLIENT_OPTIONS)
   }, [snapshot])
 
   const hasContent = stats.lineCount > 0
@@ -74,8 +72,9 @@ export function ResumeLayoutInsights({ formValues, className }: ResumeLayoutInsi
       </div>
       {!hasContent && (
         <p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
-          Updates as you type (canvas in browser). AI generation merges a matching length hint on the server
-          (approximate metrics).
+          Updates as you type (canvas <code className="rounded bg-muted px-0.5">measureText</code> in the browser).
+          Typography and margins match HTML PDF export (10mm + 20px inset); the server uses deterministic width
+          heuristics when canvas is unavailable.
         </p>
       )}
     </div>

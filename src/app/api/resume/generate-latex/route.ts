@@ -7,7 +7,7 @@ import { pruneGeneratedSections } from '@/lib/resume/section-pruner'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
 
-export const maxDuration = 120
+export const maxDuration = 260
 
 function localFallbackResponse(validatedData: ReturnType<typeof normalizeResumeInput>, warning: string) {
   const latex = pruneGeneratedSections(
@@ -38,6 +38,13 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     validatedData = normalizeResumeInput(body)
+
+    if (validatedData.forceLocalOnly) {
+      return localFallbackResponse(
+        validatedData,
+        'Generated with local template (AI skipped — fast path).',
+      )
+    }
 
     const hasOpenRouterKey = Boolean(env.OPENROUTER_API_KEY?.trim())
     if (!hasOpenRouterKey) {

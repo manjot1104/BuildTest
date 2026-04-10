@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const maxDuration = 260
 import { z } from 'zod'
 import { followUpHtml } from '@/lib/openrouter'
 import { validateHtmlFollowUpInput } from '@/lib/resume/code-validator'

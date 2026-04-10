@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+/** LaTeX AI + remote compile can exceed 120s on slow providers. */
+export const maxDuration = 260
 import { z } from 'zod'
 import { generateLaTeXResume } from '@/lib/openrouter'
 import { compileLaTeXToPDF } from '@/lib/latex-to-pdf'

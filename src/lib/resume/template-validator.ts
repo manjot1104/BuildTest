@@ -89,6 +89,8 @@ const incomingResumeSchema = z.object({
   templateId: z.string().max(100).optional(),
   /** Large LaTeX/HTML template bundles from `templates.ts` */
   templateStyleGuide: z.string().max(500_000).optional(),
+  /** Skip OpenRouter; return local `renderTemplate` output only (used after client timeout / offline AI). */
+  forceLocalOnly: z.boolean().optional(),
 })
 
 /**
@@ -116,6 +118,8 @@ export type NormalizedResumeInput = {
   model?: string
   templateId?: string
   templateStyleGuide?: string
+  /** When true, API routes skip AI and use template renderer only. */
+  forceLocalOnly?: boolean
   missingSections: string[]
 }
 
@@ -223,6 +227,7 @@ export function normalizeResumeInput(payload: unknown): NormalizedResumeInput {
     model: cleanText(parsed.model) || undefined,
     templateId: cleanText(parsed.templateId) || undefined,
     templateStyleGuide: cleanText(parsed.templateStyleGuide) || undefined,
+    forceLocalOnly: parsed.forceLocalOnly === true,
     missingSections,
   }
 }

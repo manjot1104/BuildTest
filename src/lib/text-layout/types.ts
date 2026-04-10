@@ -80,7 +80,12 @@ export type PreparedSegments = {
 }
 
 export type ResumeLayoutOptions = {
-  /** Uniform margin on all sides, in mm. Default 18. */
+  /**
+   * Uniform inset from page edge to text, in mm (all sides).
+   * When omitted, uses HTML PDF export: `RESUME_PDF_MARGIN_MM` + inner resume padding (20px),
+   * aligned with `html-to-pdf` + design-system `.resume` padding.
+   * Set explicitly for LaTeX-style estimates (e.g. 0.75in margin only).
+   */
   marginMm?: number
   /** Base stack used in canvas `font` and approximate metrics. */
   fontFamily?: string
@@ -88,4 +93,9 @@ export type ResumeLayoutOptions = {
   forceApproximateMetrics?: boolean
   /** Passed to `Intl.Segmenter` for word boundaries. */
   locale?: string
+  /**
+   * When true, logs page count, line count, content box, and used height to console.
+   * Or set env `DEBUG_RESUME_LAYOUT=1` (Node/server only).
+   */
+  debugLayout?: boolean
 }

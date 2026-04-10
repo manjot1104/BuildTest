@@ -1,4 +1,5 @@
 import { env } from '@/env'
+import { applyResumeDesignSystemToHtml } from '@/lib/resume/resume-design-system'
 
 export interface ResumeData {
   fullName: string
@@ -60,6 +61,18 @@ type OpenRouterCallOptions = {
   maxTokens?: number
   /** Abort fetch after this many ms (default 90000). */
   timeoutMs?: number
+  /**
+   * Max models to try (requested model first, then fallbacks). Limits total wall time when
+   * several providers time out in sequence.
+   */
+  maxChainLength?: number
+}
+
+/** HTML/LaTeX resume generation: bounded chain so client + route timeouts can stay aligned. */
+const RESUME_OPENROUTER_CALL_OPTIONS: OpenRouterCallOptions = {
+  maxTokens: 3600,
+  timeoutMs: 78_000,
+  maxChainLength: 3,
 }
 
 async function callOpenRouterSingle(
@@ -129,12 +142,16 @@ async function callOpenRouter(
   requestedModel: string,
   callOptions?: OpenRouterCallOptions,
 ): Promise<{ content: string; model: string; isFallback: boolean }> {
-  const chain = buildModelChain(requestedModel)
+  const { maxChainLength, ...singleCallOptions } = callOptions ?? {}
+  let chain = buildModelChain(requestedModel)
+  if (typeof maxChainLength === "number" && maxChainLength >= 1) {
+    chain = chain.slice(0, maxChainLength)
+  }
 
   for (let i = 0; i < chain.length; i++) {
     const model = chain[i]!
     try {
-      const content = await callOpenRouterSingle(messages, model, callOptions)
+      const content = await callOpenRouterSingle(messages, model, singleCallOptions)
       return {
         content,
         model,
@@ -636,7 +653,7 @@ You are NOT a designer. You are a code copier. Copy the template structure exact
       { role: 'user', content: prompt },
     ],
     model,
-    { maxTokens: 3600, timeoutMs: 72_000 },
+    RESUME_OPENROUTER_CALL_OPTIONS,
   )
 
   return {
@@ -730,6 +747,7 @@ Return the complete modified LaTeX document code now. Return ONLY the LaTeX code
       { role: 'user', content: followUpPrompt },
     ],
     selectedModel,
+    RESUME_OPENROUTER_CALL_OPTIONS,
   )
 
   const cleaned = cleanLatexResponse(result.content)
@@ -1263,12 +1281,14 @@ You are NOT a designer. You are NOT an instructor. You are a code copier. Copy t
       { role: 'user', content: prompt },
     ],
     model,
-    { maxTokens: 3600, timeoutMs: 72_000 },
+    RESUME_OPENROUTER_CALL_OPTIONS,
   )
+
+  const cleaned = cleanHtmlResponse(result.content)
 
   return {
     raw: result.content,
-    cleaned: cleanHtmlResponse(result.content),
+    cleaned: applyResumeDesignSystemToHtml(cleaned),
     model: result.model,
     isFallback: result.isFallback,
   }
@@ -1357,6 +1377,7 @@ Return the complete modified HTML document code now. Return ONLY the HTML code, 
       { role: 'user', content: followUpPrompt },
     ],
     selectedModel,
+    RESUME_OPENROUTER_CALL_OPTIONS,
   )
 
   const cleaned = cleanHtmlResponse(result.content)
@@ -1366,7 +1387,7 @@ Return the complete modified HTML document code now. Return ONLY the HTML code, 
 
   return {
     raw: result.content,
-    cleaned,
+    cleaned: applyResumeDesignSystemToHtml(cleaned),
     model: result.model,
     isFallback: result.isFallback,
   }
