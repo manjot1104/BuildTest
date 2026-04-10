@@ -51,7 +51,7 @@ interface PreviewPanelProps {
   isFullscreen: boolean
   setIsFullscreen: (fullscreen: boolean) => void
   isBuilding?: boolean
-  onSeoAudit?: (prompt: string, chatId: string) => void  
+onSeoAudit?: (prompt: string, chatId: string, mode?: string) => void 
 }
 
 type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
@@ -188,7 +188,13 @@ value={
   tooltip="Run SEO Audit"
  onClick={() => {
   if (!currentChat?.id) return
- onSeoAudit?.("seo-audit", currentChat.id)
+ onSeoAudit?.(
+  "seo-audit",
+  currentChat.id,
+  currentChat?.demo?.includes("three") || currentChat?.demo?.includes("webgl")
+    ? "3d"
+    : "2d"
+)
 }}
 >
   <SearchCheckIcon className="h-4 w-4" />

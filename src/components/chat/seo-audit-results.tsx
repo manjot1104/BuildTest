@@ -628,36 +628,38 @@ function AiAnalysis({ result }: { result: string }) {
               <td className="px-3.5 py-2.5 border-b border-border/6 text-[11.5px] text-muted-foreground/55 last:border-0">{children}</td>
             ),
 
-            code: ({ children, className }) => {
-              if (className?.includes('language-'))
-                return <code className={className}>{children}</code>
-              return (
-                <code className="bg-muted/20 text-foreground/65 rounded-md px-1.5 py-[2px] text-[10.5px] font-mono border border-border/12">
-                  {children}
-                </code>
-              )
-            },
+          code: ({ children, className }) => {
+  const match = /language-(\w+)/.exec(className || '')
 
-          pre: ({ children }) => {
-  const code = extractText(children)
-
-  return (
-    <div className="relative mb-4 rounded-2xl overflow-hidden border border-white/10">
+  if (match) {
+    return (
       <SyntaxHighlighter
-        language="html"
         style={vscDarkPlus}
+        language={match[1]}
+        PreTag="div"
         customStyle={{
           margin: 0,
           padding: '16px',
-          background: 'transparent',
           fontSize: '11px',
-          borderRadius: '0px',
+          borderRadius: '12px',
         }}
       >
-        {code}
+        {String(children).replace(/\n$/, '')}
       </SyntaxHighlighter>
+    )
+  }
 
-      <CopyButton text={code} />
+  return (
+    <code className="bg-muted/20 text-foreground/65 rounded-md px-1.5 py-[2px] text-[10.5px] font-mono border border-border/12">
+      {children}
+    </code>
+  )
+},
+
+        pre: ({ children }) => {
+  return (
+    <div className="relative mb-4 rounded-2xl overflow-hidden border border-white/10">
+      {children}
     </div>
   )
 },

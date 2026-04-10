@@ -124,7 +124,7 @@ section += desktopData
 
 export async function POST(req: Request) {
   try {
-    const { appUrl } = await req.json()
+    const { appUrl, mode } = await req.json()
 
     if (!appUrl || typeof appUrl !== 'string' || !appUrl.startsWith('http')) {
       return NextResponse.json({ result: 'Invalid URL provided' }, { status: 400 })
@@ -157,6 +157,7 @@ export async function POST(req: Request) {
     const hasCanonical = html.includes('rel="canonical"')
     const hasRobotsMeta = html.includes('name="robots"')
     const hasH1        = html.includes('<h1')
+    const is3D = mode === '3d'
     const hasAlt       = html.includes('alt=')
     const hasFavicon   = html.includes('rel="icon"')
     const hasViewport  = html.includes('name="viewport"')
@@ -178,10 +179,17 @@ export async function POST(req: Request) {
 - Viewport Meta: ${hasViewport ? '✅ Present' : '❌ Missing'}
 - Favicon: ${hasFavicon ? '✅ Present' : '❌ Missing'}
 
+${is3D ? `
+## 🎮 3D Experience Notes
+
+- Traditional content SEO not applicable
+- Focus is on performance & rendering
+` : `
 ## 🧱 Structure & Content
 
 - H1 Tag: ${hasH1 ? '✅ Present' : '❌ Missing'}
 - Image Alt Text: ${hasAlt ? '✅ Present' : '❌ Missing'}
+`}
 `
 
     // AI SEO analysis
@@ -198,7 +206,66 @@ export async function POST(req: Request) {
             messages: [
               {
                 role: 'user',
-                content: `
+               content: mode === '3d' ? `
+You are an expert in 3D WebGL performance, Three.js optimization, and modern web experience.
+
+Analyze performance and SEO for a 3D WebGL website.
+
+IMPORTANT:
+- Focus on performance, not traditional SEO
+- Ignore content SEO (headings, keywords, blog structure)
+- Think like a frontend + graphics engineer
+
+---
+
+URL:
+${appUrl}
+
+${mobileData ? `PageSpeed Mobile:
+- Performance: ${mobileData.scores.performance}/100` : ''}
+
+${desktopData ? `PageSpeed Desktop:
+- Performance: ${desktopData.scores.performance}/100` : ''}
+
+---
+
+## OUTPUT FORMAT (STRICT)
+
+### 🔢 Experience Score (0–100)
+- Based on performance + smoothness + UX
+
+### 🚨 Critical Issues
+- Heavy scene
+- High GPU load
+- Large JS bundle
+- Long load time
+
+### ⚡ Performance Analysis
+- LCP / TBT impact
+- render blocking
+- JS execution time
+
+### 🎮 3D-Specific Issues
+- Too many objects / meshes
+- Unoptimized textures
+- No lazy loading
+- No level of detail (LOD)
+
+### 🛠 Fixes (MOST IMPORTANT)
+- Give REAL dev fixes
+
+Example:
+❌ Large textures
+✅ Fix:
+Use compressed textures (KTX2 / Basis)
+
+### 🎯 Priority
+- High / Medium / Low
+
+Be practical.
+Think like a Three.js performance expert.
+`
+:`
 You are a senior SEO expert with deep knowledge of technical SEO, performance, and modern AI search (Google + ChatGPT + Perplexity).
 
 Perform a DETAILED and PRACTICAL SEO audit.

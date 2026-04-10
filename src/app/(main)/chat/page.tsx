@@ -1,7 +1,8 @@
 'use client'
 import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { SeoAuditResults } from '@/components/chat/seo-audit-results'
-
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { ModeSelection } from "./components/mode-selection"
 import { KeyRound, SearchCheckIcon, Maximize2, Minimize2, Layout,
     CheckSquare,
@@ -185,8 +186,8 @@ function ThreeDToolbarBtn({ tooltip, onClick, disabled, children, active }: {
 }
 
 // ─── ThreeDPreview ────────────────────────────────────────────────────────────
-function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId }: {
-    html: string; loading: boolean; isFullscreen: boolean; setIsFullscreen: (v: boolean) => void; sceneId: string
+function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId, onSeoAudit }: {
+    html: string; loading: boolean; isFullscreen: boolean; setIsFullscreen: (v: boolean) => void; sceneId: string; onSeoAudit: (prompt: string, chatId: string, mode?: string) => void
 }) {
     const loadingSteps = [
   'Initializing 3D engine...',
@@ -318,9 +319,19 @@ useEffect(() => {
                 />
 
                 <div className="flex items-center gap-0.5 shrink-0">
+                    <ThreeDToolbarBtn
+  tooltip="Run SEO Audit"
+  onClick={() => {
+    if (!sceneId) return
+    onSeoAudit?.("seo-audit", sceneId, "3d")
+  }}
+>
+  <SearchCheckIcon className="h-4 w-4" />
+</ThreeDToolbarBtn>
                     <ThreeDToolbarBtn tooltip="View source HTML" disabled={!html} onClick={() => setCodeOpen(true)}>
                         <Code className="h-4 w-4" />
                     </ThreeDToolbarBtn>
+
                     <ThreeDToolbarBtn
                         tooltip={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                         disabled={!html}
@@ -458,9 +469,31 @@ useEffect(() => {
                                 <button onClick={() => setCodeOpen(false)} className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-xs">✕</button>
                             </div>
                         </div>
-                        <pre className="flex-1 overflow-auto p-4 text-[11px] font-mono text-muted-foreground leading-relaxed whitespace-pre-wrap break-all">
-                            {html}
-                        </pre>
+                      <div className="flex-1 overflow-auto bg-black">
+  <SyntaxHighlighter
+    language="html"
+    wrapLines={false}
+    style={{
+      ...oneDark,
+      'pre[class*="language-"]': {
+        ...oneDark['pre[class*="language-"]'],
+        background: '#000000',
+      },
+      'code[class*="language-"]': {
+        ...oneDark['code[class*="language-"]'],
+        background: '#000000',
+      }
+    }}
+    customStyle={{
+      margin: 0,
+      padding: '16px',
+      background: '#000000',
+      fontSize: '11px',
+    }}
+  >
+    {html}
+  </SyntaxHighlighter>
+</div>
                     </div>
                 </div>
             )}
@@ -706,13 +739,16 @@ if (hasHtml) {
     const [mobileData, setMobileData] = useState<any>(null)
     const [desktopData, setDesktopData] = useState<any>(null)
 
-    const handleAutoPrompt = useCallback((prompt: string, chatId: string) => {
+  const handleAutoPrompt = useCallback((prompt: string, chatId: string, mode?: string) => {
         if (autoPromptFiredRef.current) return
         autoPromptFiredRef.current = true
-        if (prompt === 'seo-audit') {
+       if (prompt.startsWith('seo-audit')) {
             const appUrl = `${window.location.origin}/apps/${chatId}`
             setSeoAuditLoading(true); setSeoAuditResult(null)
-            fetch('/api/seo-audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appUrl }) })
+            fetch('/api/seo-audit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ 
+  appUrl,
+  mode 
+}) })
                 .then(r => r.json())
                 .then(data => { setSeoAuditResult(data.result ?? 'No result received'); setMobileData(data.mobileData ?? null); setDesktopData(data.desktopData ?? null); setSeoAuditLoading(false) })
                 .catch(() => { setSeoAuditResult('SEO audit failed. Please try again.'); setSeoAuditLoading(false) })
@@ -1046,7 +1082,14 @@ useEffect(() => {
                             }
                             rightPanel={
                                 buildMode === '3D' ? (
-                                    <ThreeDPreview html={threeDHtml} loading={threeDLoading} isFullscreen={threeDFullscreen} setIsFullscreen={setThreeDFullscreen} sceneId={threeDSceneId} />
+                                   <ThreeDPreview
+  html={threeDHtml}
+  loading={threeDLoading}
+  isFullscreen={threeDFullscreen}
+  setIsFullscreen={setThreeDFullscreen}
+  sceneId={threeDSceneId}
+  onSeoAudit={handleAutoPrompt}
+/>
                                 ) : shouldShowPreview ? (
                                     <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt} />
                                 ) : null
