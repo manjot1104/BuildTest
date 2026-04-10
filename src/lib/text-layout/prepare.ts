@@ -58,9 +58,10 @@ function getWidthCache(fontKey: string): Map<string, number> {
 
 /** Deterministic fallback when canvas/`measureText` is unavailable (Node, workers without canvas). */
 export function approximateTextWidth(text: string, fontSize: number, fontWeight: string | undefined): number {
-  const w = fontWeight === "bold" || fontWeight === "700" || fontWeight === "600" ? 1.06 : 1
-  const avgChar = fontSize * 0.52 * w
-  const space = fontSize * 0.28
+  const boldish = fontWeight === "bold" || fontWeight === "700" || fontWeight === "600"
+  /** Slightly wide vs old 0.52 so line breaks track Segoe/canvas a bit better (fewer phantom extra lines). */
+  const avgChar = fontSize * (boldish ? 0.57 : 0.535)
+  const space = fontSize * 0.3
   let total = 0
   for (const ch of text) {
     total += ch === " " ? space : avgChar

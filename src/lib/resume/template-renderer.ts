@@ -13,6 +13,12 @@
 
 import { z } from 'zod'
 
+import {
+  applyResumeDesignSystemToHtml,
+  RESUME_DESIGN_SYSTEM_CSS,
+  RESUME_DS_MARKER,
+} from './resume-design-system'
+
 // ── Canonical Structured Schema ──────────────────────────────────────────────
 
 export const resumeDataSchema = z.object({
@@ -368,18 +374,18 @@ function replaceContactPlaceholders(block: string, data: ResumeRenderData): stri
   const portfolio = data.portfolio || ''
   const gitHub = data.github || ''
 
-  // Name
-  out = out.replace(/\bNAME\b/g, name)
-  out = out.replace(/\bTITLE\b/g, data.title || '')
-  out = out.replace(/\bSUMMARY\b/g, data.summary || '')
+  // Name (use function replacers — user text can contain `$10` etc.; string replacement interprets `$n`)
+  out = out.replace(/\bNAME\b/g, () => name)
+  out = out.replace(/\bTITLE\b/g, () => data.title || '')
+  out = out.replace(/\bSUMMARY\b/g, () => data.summary || '')
 
   // Standalone contact tokens (for templates that print one field per line)
-  out = out.replace(/\bEMAIL\b/g, data.email || '')
-  out = out.replace(/\bPHONE\b/g, data.phone || '')
-  out = out.replace(/\bLOCATION\b/g, loc)
-  out = out.replace(/\bLINKEDIN\b/g, linkedIn)
-  out = out.replace(/\bGITHUB\b/g, gitHub)
-  out = out.replace(/\bPORTFOLIO\b/g, portfolio)
+  out = out.replace(/\bEMAIL\b/g, () => data.email || '')
+  out = out.replace(/\bPHONE\b/g, () => data.phone || '')
+  out = out.replace(/\bLOCATION\b/g, () => loc)
+  out = out.replace(/\bLINKEDIN\b/g, () => linkedIn)
+  out = out.replace(/\bGITHUB\b/g, () => gitHub)
+  out = out.replace(/\bPORTFOLIO\b/g, () => portfolio)
 
   // Multi-part contact patterns (most specific first) — pipe separator
   out = out.replace(
@@ -447,10 +453,10 @@ function replaceContactPlaceholders(block: string, data: ResumeRenderData): stri
 function buildHtmlExperience(entries: ExperienceEntry[]): string {
   return entries
     .map(
-      (e) => `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${safeHtml(e.role)}</span><span class="entry-date">${safeHtml(e.duration)}</span></div>
-    <div class="entry-sub">${safeHtml(e.company)}</div>
-    <ul>
+      (e) => `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${safeHtml(e.role)}</span><span class="entry-date rs-entry-date">${safeHtml(e.duration)}</span></div>
+    <div class="entry-sub rs-entry-meta">${safeHtml(e.company)}</div>
+    <ul class="rs-list">
 ${e.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
     </ul>
   </div>`
@@ -461,10 +467,10 @@ ${e.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
 function buildHtmlProjects(entries: ProjectEntry[]): string {
   return entries
     .map((p) => {
-      const techLine = p.tech ? `\n    <div class="entry-sub">${safeHtml(p.tech)}</div>` : ''
-      return `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${safeHtml(p.name)}</span></div>${techLine}
-    <ul>
+      const techLine = p.tech ? `\n    <div class="entry-sub rs-entry-meta">${safeHtml(p.tech)}</div>` : ''
+      return `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${safeHtml(p.name)}</span></div>${techLine}
+    <ul class="rs-list">
 ${p.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
     </ul>
   </div>`
@@ -476,9 +482,9 @@ function buildHtmlEducation(entries: EducationEntry[]): string {
   return entries
     .map((e) => {
       const degreeLine = e.year ? `${safeHtml(e.degree)} (${safeHtml(e.year)})` : safeHtml(e.degree)
-      return `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${degreeLine}</span></div>
-    <div class="entry-sub">${safeHtml(e.college)}</div>
+      return `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${degreeLine}</span></div>
+    <div class="entry-sub rs-entry-meta">${safeHtml(e.college)}</div>
   </div>`
     })
     .join('\n')
@@ -491,18 +497,39 @@ function buildHtmlSkills(skillsStr: string): string {
     .filter(Boolean)
     .filter((s) => s.includes(':'))
   if (grouped.length > 0) {
-    return `  <div class="skills-text">\n${grouped.map((line) => `    <div>${safeHtml(line)}</div>`).join('\n')}\n  </div>`
+    return `  <div class="skills-text rs-body">\n${grouped.map((line) => `    <div>${safeHtml(line)}</div>`).join('\n')}\n  </div>`
   }
-  return `  <div class="skills-text">${safeHtml(skillsStr)}</div>`
+  return `  <div class="skills-text rs-body">${safeHtml(skillsStr)}</div>`
 }
 
 function buildHtmlSummary(summary: string): string {
-  return `  <p style="font-size:10.5px;line-height:1.6;margin-bottom:4px">${safeHtml(summary)}</p>`
+  return `  <p class="rs-body">${safeHtml(summary)}</p>`
+}
+
+/** Teal Split Blocks: Profile uses a plain `<p>` under `.bar`, not rs-body */
+function buildHtmlProfileParagraph(summary: string): string {
+  return `  <p>${safeHtml(summary)}</p>`
+}
+
+/** Teal Split Blocks: `<ul class="skills">` with colored `<li>` items */
+function buildHtmlSkillsTealUl(skillsStr: string): string {
+  const parts = skillsStr
+    .split(/[,|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  const items = parts.map((p) => `        <li>${safeHtml(p)}</li>`).join('\n')
+  return `\n        <ul class="skills">\n${items}\n      </ul>`
+}
+
+/** Teal-style bar strips (`.section` > `.bar` / `.bar dark`) — not matched by h2 / section-title */
+function isTealSplitBarLayout(html: string): boolean {
+  return html.includes('contact-line') && /\bbar\s+dark\b/.test(html) && /\bclass=["'][^"']*\bbar\b/.test(html)
 }
 
 function buildHtmlList(items: string[]): string {
   if (items.length === 0) return ''
-  return `  <ul>\n${items.map((i) => `    <li>${safeHtml(i)}</li>`).join('\n')}\n  </ul>`
+  return `  <ul class="rs-list">\n${items.map((i) => `    <li>${safeHtml(i)}</li>`).join('\n')}\n  </ul>`
 }
 
 // ── LaTeX Section Builders ───────────────────────────────────────────────────
@@ -607,7 +634,14 @@ const SECTION_HEADING_ALIASES = {
   interests: ['Interests', 'Hobbies', 'INTERESTS'],
 } as const satisfies Record<string, readonly string[]>
 
+/** `String#replace` replacement treats `$10` etc. as capture groups — escape user HTML bodies */
+function escapeForRegexpReplacement(s: string): string {
+  // Replacement must be a function: a string `'$$'` would be interpreted as one literal `$`, not two.
+  return s.replace(/\$/g, () => '$$')
+}
+
 function replaceHtmlSection(html: string, headingTexts: readonly string[], newContent: string): string {
+  const safeNew = escapeForRegexpReplacement(newContent)
   let out = html
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -617,7 +651,7 @@ function replaceHtmlSection(html: string, headingTexts: readonly string[], newCo
       'i'
     )
     if (patternH.test(out)) {
-      out = out.replace(patternH, `$1\n${newContent}\n`)
+      out = out.replace(patternH, `$1\n${safeNew}\n`)
       break
     }
 
@@ -628,7 +662,17 @@ function replaceHtmlSection(html: string, headingTexts: readonly string[], newCo
       'i'
     )
     if (patternSection.test(out)) {
-      out = out.replace(patternSection, `$1\n${newContent}\n$3`)
+      out = out.replace(patternSection, `$1\n${safeNew}\n$3`)
+      break
+    }
+
+    // Pattern C: Teal Split Blocks — `.section` > `.bar` or `.bar dark` strip headings
+    const patternBarSection = new RegExp(
+      `(<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*\\bclass=["'][^"']*\\bbar(?:\\s+dark)?\\b[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>)([\\s\\S]*?)(<\\/div>\\s*)(?=<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'i',
+    )
+    if (patternBarSection.test(out)) {
+      out = out.replace(patternBarSection, `$1\n${safeNew}\n$3`)
       break
     }
   }
@@ -636,6 +680,7 @@ function replaceHtmlSection(html: string, headingTexts: readonly string[], newCo
 }
 
 function replaceLatexSection(latex: string, headingTexts: readonly string[], newContent: string): string {
+  const safeNew = escapeForRegexpReplacement(newContent)
   let out = latex
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -645,7 +690,7 @@ function replaceLatexSection(latex: string, headingTexts: readonly string[], new
     )
     if (patternStandard.test(out)) {
       // Force content onto a fresh paragraph after section macros.
-      out = out.replace(patternStandard, `$1\n\\par\n${newContent}\n`)
+      out = out.replace(patternStandard, `$1\n\\par\n${safeNew}\n`)
       break
     }
 
@@ -656,7 +701,7 @@ function replaceLatexSection(latex: string, headingTexts: readonly string[], new
     )
     if (patternIconSection.test(out)) {
       // Icon-based custom sections often render inline; \par ensures next-line content.
-      out = out.replace(patternIconSection, `$1\n\\par\n${newContent}\n`)
+      out = out.replace(patternIconSection, `$1\n\\par\n${safeNew}\n`)
       break
     }
   }
@@ -680,6 +725,12 @@ function removeHtmlSection(html: string, headingTexts: readonly string[]): strin
       'gi'
     )
     out = out.replace(patternSection, '\n')
+
+    const patternBarRemove = new RegExp(
+      `\\s*<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*\\bclass=["'][^"']*\\bbar(?:\\s+dark)?\\b[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>[\\s\\S]*?<\\/div>\\s*(?=<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'gi',
+    )
+    out = out.replace(patternBarRemove, '\n')
   }
   return out
 }
@@ -974,6 +1025,7 @@ function renderHtmlSections(block: string, data: ResumeRenderData): string {
   }
 
   let out = block
+  const tealBar = isTealSplitBarLayout(block)
 
   const expEntries = normalizeExperience(data.experience)
   const projEntries = normalizeProjects(data.projects)
@@ -994,24 +1046,31 @@ function renderHtmlSections(block: string, data: ResumeRenderData): string {
 
   // Replace or remove each section
   if (hasSummary) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.summary, buildHtmlSummary(data.summary!))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.summary,
+      tealBar ? buildHtmlProfileParagraph(data.summary!) : buildHtmlSummary(data.summary!),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.summary)
   }
 
   const contactItems = [data.phone, data.email, data.location, data.linkedin, data.github, data.portfolio].filter(Boolean)
   if (contactItems.length > 0) {
-    out = replaceHtmlSection(
-      out,
-      SECTION_HEADING_ALIASES.contact,
-      `  <p class="kv">${contactItems.map((v) => safeHtml(v!)).join('<br>')}</p>`
-    )
+    const contactHtml = tealBar
+      ? contactItems.map((v) => `      <p class="contact-line">${safeHtml(v!)}</p>`).join('\n')
+      : `  <p class="kv">${contactItems.map((v) => safeHtml(v!)).join('<br>')}</p>`
+    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.contact, contactHtml)
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.contact)
   }
 
   if (hasSkills) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.skills, buildHtmlSkills(skillsStr))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.skills,
+      tealBar ? buildHtmlSkillsTealUl(skillsStr) : buildHtmlSkills(skillsStr),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.skills)
   }
@@ -1035,7 +1094,11 @@ function renderHtmlSections(block: string, data: ResumeRenderData): string {
   }
 
   if (hasCerts) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.certifications, buildHtmlList(certs))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.certifications,
+      tealBar ? `  <p>${certs.map((c) => safeHtml(c)).join('<br>')}</p>` : buildHtmlList(certs),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.certifications)
   }
@@ -1175,34 +1238,23 @@ function defaultHtml(data: ResumeRenderData): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<style ${RESUME_DS_MARKER}="true">
+${RESUME_DESIGN_SYSTEM_CSS}
+</style>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; padding: 20px; }
-.resume { max-width: 794px; margin: 0 auto; padding: 30px; }
-h1 { font-size: 22px; margin-bottom: 4px; }
-h2 { font-size: 12px; margin: 16px 0 8px; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 3px; }
-.contact { font-size: 10.5px; color: #444; margin-bottom: 12px; }
-.entry { margin-bottom: 14px; }
-.entry-header { display: flex; justify-content: space-between; align-items: baseline; }
-.entry-title { font-weight: 600; font-size: 11px; }
-.entry-date { font-size: 10px; color: #666; }
-.entry-sub { font-size: 10px; color: #666; margin-top: 1px; }
-.skills-text { font-size: 10.5px; line-height: 1.5; }
-ul { margin: 4px 0 0 18px; }
-li { font-size: 10.5px; line-height: 1.6; margin-bottom: 2px; }
-p { font-size: 10.5px; line-height: 1.6; }
+.resume h2 { border-bottom: 1px solid #333; padding-bottom: 4px; }
 </style>
 </head>
 <body>
-<div class="resume">
-  <h1>${safeHtml(data.fullName)}</h1>
-  <div class="contact">${safeHtml(data.email)} | ${safeHtml(data.phone)}${data.location ? ` | ${safeHtml(data.location)}` : ''}</div>
-${!isPlaceholder(data.summary) ? `  <h2>Summary</h2>\n  <p>${safeHtml(data.summary!)}</p>` : ''}
-${skillsStr ? `  <h2>Skills</h2>\n  <div class="skills-text">${safeHtml(skillsStr)}</div>` : ''}
-${expEntries.length > 0 ? `  <h2>Experience</h2>\n${buildHtmlExperience(expEntries)}` : ''}
-${projEntries.length > 0 ? `  <h2>Projects</h2>\n${buildHtmlProjects(projEntries)}` : ''}
-${eduEntries.length > 0 ? `  <h2>Education</h2>\n${buildHtmlEducation(eduEntries)}` : ''}
-${certs.length > 0 ? `  <h2>Certifications</h2>\n${buildHtmlList(certs)}` : ''}
+<div class="resume rs-root">
+  <h1 class="rs-name">${safeHtml(data.fullName)}</h1>
+  <div class="contact rs-contact">${safeHtml(data.email)} | ${safeHtml(data.phone)}${data.location ? ` | ${safeHtml(data.location)}` : ''}</div>
+${!isPlaceholder(data.summary) ? `  <h2 class="rs-section-title">Summary</h2>\n  <p class="rs-body">${safeHtml(data.summary!)}</p>` : ''}
+${skillsStr ? `  <h2 class="rs-section-title">Skills</h2>\n  <div class="skills-text rs-body">${safeHtml(skillsStr)}</div>` : ''}
+${expEntries.length > 0 ? `  <h2 class="rs-section-title">Experience</h2>\n${buildHtmlExperience(expEntries)}` : ''}
+${projEntries.length > 0 ? `  <h2 class="rs-section-title">Projects</h2>\n${buildHtmlProjects(projEntries)}` : ''}
+${eduEntries.length > 0 ? `  <h2 class="rs-section-title">Education</h2>\n${buildHtmlEducation(eduEntries)}` : ''}
+${certs.length > 0 ? `  <h2 class="rs-section-title">Certifications</h2>\n${buildHtmlList(certs)}` : ''}
 </div>
 </body>
 </html>`
@@ -1280,6 +1332,7 @@ export function renderTemplate(
     if (!out.toLowerCase().includes('<!doctype html')) {
       out = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n</head>\n<body>\n${out}\n</body>\n</html>`
     }
+    out = applyResumeDesignSystemToHtml(out)
   } else {
     if (!out.includes('\\begin{document}')) {
       out = `\\documentclass[10pt]{article}\n\\usepackage[margin=0.75in]{geometry}\n\\usepackage{enumitem}\n\\usepackage{titlesec}\n\n\\begin{document}\n${out}\n\\end{document}`

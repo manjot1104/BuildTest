@@ -1,4 +1,5 @@
 import { resumeCodeToPlainTextForLayout } from "./code-to-plain-text-for-layout"
+import { RESUME_LATEX_MARGIN_MM } from "./constants"
 import {
   appendLayoutHintToFollowUpPrompt,
   computeResumeLayoutStats,
@@ -25,7 +26,13 @@ export function computeResumeLayoutStatsFromResumeCode(
   }
   try {
     const data = plainResumeTextToResumeData(plain)
-    const stats = computeResumeLayoutStats(data, options)
+    const merged: ResumeLayoutOptions = {
+      ...options,
+      marginMm:
+        options?.marginMm ??
+        (format === "latex" ? RESUME_LATEX_MARGIN_MM : undefined),
+    }
+    const stats = computeResumeLayoutStats(data, merged)
     return stats.lineCount > 0 ? stats : null
   } catch {
     return null

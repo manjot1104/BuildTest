@@ -12,8 +12,9 @@ function sanitizeLatexForFastCompile(latexCode: string): string {
     .replace(/\s*```$/i, "");
 
   // Drop heavy/slow packages that commonly trigger remote compile timeouts.
+  // Keep `fontawesome` when possible — retry preamble loads it; stripping breaks \\fa* in body.
   out = out.replace(
-    /\\usepackage(?:\[[^\]]*\])?\{(?:tikz|pgfplots|minted|fontspec|pst-all|svg|standalone|flowfram|fontawesome5?|firasans|xcharter|anyfontsize)\}\s*/gi,
+    /\\usepackage(?:\[[^\]]*\])?\{(?:tikz|pgfplots|minted|fontspec|pst-all|svg|standalone|flowfram|fontawesome5|firasans|xcharter|anyfontsize)\}\s*/gi,
     ""
   );
 
@@ -31,14 +32,48 @@ function extractDocumentBody(latexCode: string): string {
   return latexCode.trim();
 }
 
+/**
+ * Load `bookmark` immediately after `hyperref` so auxiliary files match on the first pass.
+ * Without it, rerunfilecheck often asks for a second run; remote APIs may return 400 even when a PDF was written.
+ */
+function ensureBookmarkAfterHyperref(latexCode: string): string {
+  if (/\\usepackage(?:\[[^\]]*\])?\{bookmark\}/i.test(latexCode)) {
+    return latexCode;
+  }
+  const re = /(\\usepackage(?:\[[^\]]*\])?\{hyperref\}\s*\n?)/i;
+  if (re.test(latexCode)) {
+    return latexCode.replace(re, "$1\\usepackage{bookmark}\n");
+  }
+  return latexCode;
+}
+
+/**
+ * Fallback preamble when the original document fails to compile. Must cover common resume
+ * packages — the extracted body often still contains `paracol`, `tabularx`, `mdframed`, etc.
+ * A too-minimal preamble makes the retry fail with undefined control sequences.
+ */
 function toMinimalCompileDocument(latexCode: string): string {
   const body = extractDocumentBody(latexCode);
   return `\\documentclass[10pt]{article}
+\\usepackage[utf8]{inputenc}
+\\usepackage[T1]{fontenc}
 \\usepackage[margin=0.75in]{geometry}
+\\usepackage{calc}
+\\usepackage{array}
+\\usepackage{booktabs}
 \\usepackage{enumitem}
 \\usepackage{titlesec}
 \\usepackage{xcolor}
+\\usepackage{graphicx}
+\\usepackage{multicol}
+\\usepackage{paracol}
+\\usepackage{tabularx}
+\\usepackage{mdframed}
+\\usepackage{fontawesome}
+\\usepackage{mathptmx}
 \\usepackage[hidelinks]{hyperref}
+\\usepackage{bookmark}
+\\pagestyle{empty}
 \\setlist[itemize]{leftmargin=*,topsep=0.15em,itemsep=0.08em}
 \\setlength{\\parskip}{0.3em}
 \\setlength{\\parindent}{0pt}
@@ -68,6 +103,24 @@ async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Pull a short pdflatex excerpt from YTO JSON errors for debugging */
+function summarizeLatexApiFailure(body: string): string {
+  try {
+    const j = JSON.parse(body) as {
+      error?: string
+      log_files?: Record<string, string>
+    }
+    const log = j.log_files?.["__main_document__.log"]
+    if (log && log.length > 0) {
+      const tail = log.trim().split(/\r?\n/).slice(-25).join("\n")
+      return `${j.error ?? "error"}: ${tail.slice(-1800)}`
+    }
+    return j.error ?? body.slice(0, 400)
+  } catch {
+    return body.slice(0, 400)
+  }
+}
+
 async function callLatexApiWithServerRetries(latexCode: string): Promise<Response> {
   let lastResponse: Response | null = null;
   const maxAttempts = 3;
@@ -95,7 +148,8 @@ export async function compileLaTeXToPDF(
   const startTime = Date.now();
 
   try {
-    const response = await callLatexApiWithServerRetries(latexCode);
+    const prepared = ensureBookmarkAfterHyperref(latexCode);
+    const response = await callLatexApiWithServerRetries(prepared);
 
     const compileTime = Date.now() - startTime;
 
@@ -125,7 +179,7 @@ export async function compileLaTeXToPDF(
 
       const retryError = await retryResponse.text().catch(() => "Unknown retry error");
       throw new Error(
-        `LaTeX compilation failed after retry (${retryResponse.status}): ${retryError.slice(0, 200)}`,
+        `LaTeX compilation failed after retry (${retryResponse.status}): ${summarizeLatexApiFailure(retryError).slice(0, 1200)}`,
       );
     }
 

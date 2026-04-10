@@ -7,25 +7,14 @@ import type {
   ResumeProjectEntry,
   TypographyStyle,
 } from "./types"
+import { mmToPx, RESUME_A4_MM, resumeLayoutInsetPx } from "./constants"
 import { layoutParagraph, type TextLine } from "./layout"
 import { clearPrepareCaches, prepareText } from "./prepare"
-
-const MM_TO_PX = 96 / 25.4
-
-const A4_MM = { width: 210, height: 297 }
-
-/** Vertical rhythm (px) — fixed scale for deterministic spacing. */
-const space = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-} as const
-
-function mmToPx(mm: number): number {
-  return mm * MM_TO_PX
-}
+import {
+  RESUME_LAYOUT_FONT_STACK,
+  RESUME_LAYOUT_SPACE_PX as space,
+  RESUME_LAYOUT_TYPOGRAPHY,
+} from "./resume-layout-tokens"
 
 type ResumeTextStyles = {
   name: TypographyStyle
@@ -38,14 +27,15 @@ type ResumeTextStyles = {
 }
 
 function buildStyles(fontFamily: string): ResumeTextStyles {
+  const t = RESUME_LAYOUT_TYPOGRAPHY
   return {
-    name: { fontSize: 24, fontWeight: "700", lineHeight: 1.15, fontFamily },
-    contact: { fontSize: 9.5, fontWeight: "400", lineHeight: 1.3, fontFamily },
-    sectionTitle: { fontSize: 11, fontWeight: "700", lineHeight: 1.2, fontFamily },
-    body: { fontSize: 10, fontWeight: "400", lineHeight: 1.35, fontFamily },
-    bodyStrong: { fontSize: 10, fontWeight: "600", lineHeight: 1.35, fontFamily },
-    meta: { fontSize: 9.5, fontWeight: "400", lineHeight: 1.3, fontFamily },
-    bullet: { fontSize: 10, fontWeight: "400", lineHeight: 1.35, fontFamily },
+    name: { ...t.name, fontFamily },
+    contact: { ...t.contact, fontFamily },
+    sectionTitle: { ...t.sectionTitle, fontFamily },
+    body: { ...t.body, fontFamily },
+    bodyStrong: { ...t.bodyStrong, fontFamily },
+    meta: { ...t.meta, fontFamily },
+    bullet: { ...t.bullet, fontFamily },
   }
 }
 
@@ -142,22 +132,30 @@ function pushParagraph(st: FlowState, text: string, style: TypographyStyle, page
 /**
  * Builds paginated, positioned elements from resume content using the two-phase text pipeline.
  */
+function shouldLogLayout(options?: ResumeLayoutOptions): boolean {
+  if (options?.debugLayout === true) return true
+  if (typeof process !== "undefined" && process.env?.DEBUG_RESUME_LAYOUT === "1") {
+    return true
+  }
+  return false
+}
+
 export function generateResumeLayout(
   resumeData: ResumeData,
   options?: ResumeLayoutOptions,
 ): ResumeLayoutResult {
-  const marginMm = options?.marginMm ?? 18
-  const fontFamily = options?.fontFamily ?? "ui-sans-serif, system-ui, sans-serif"
+  const fontFamily = options?.fontFamily ?? RESUME_LAYOUT_FONT_STACK
   const forceApprox = options?.forceApproximateMetrics === true
   const locale = options?.locale
 
-  const marginPx = mmToPx(marginMm)
-  const pageWidthPx = mmToPx(A4_MM.width)
-  const pageHeightPx = mmToPx(A4_MM.height)
-  const contentWidth = pageWidthPx - 2 * marginPx
+  const insetPx = resumeLayoutInsetPx(options?.marginMm)
+  const pageWidthPx = mmToPx(RESUME_A4_MM.width)
+  const pageHeightPx = mmToPx(RESUME_A4_MM.height)
+  const contentWidth = pageWidthPx - 2 * insetPx
+  const contentHeightPx = pageHeightPx - 2 * insetPx
 
   const styles = buildStyles(fontFamily)
-  const st = newFlowState(marginPx, pageHeightPx, contentWidth, forceApprox, locale)
+  const st = newFlowState(insetPx, pageHeightPx, contentWidth, forceApprox, locale)
 
   if (hasText(resumeData.header.name)) {
     pushParagraph(st, resumeData.header.name, styles.name, pageHeightPx)
@@ -285,6 +283,26 @@ export function generateResumeLayout(
     pushParagraph(st, "LANGUAGES", styles.sectionTitle, pageHeightPx)
     pushGap(st, space.sm, pageHeightPx)
     pushParagraph(st, resumeData.languagesLine!, styles.body, pageHeightPx)
+  }
+
+  if (shouldLogLayout(options)) {
+    const lineCount = st.pages.reduce((n, p) => n + p.elements.length, 0)
+    const lastPage = st.pages[st.pages.length - 1]
+    const lastEl = lastPage?.elements[lastPage.elements.length - 1]
+    const bottomExtent = lastEl ? lastEl.y + lastEl.height : st.y
+    console.info(
+      "[resume-layout]",
+      JSON.stringify({
+        pageCount: st.pages.length,
+        lineCount,
+        contentWidthPx: Math.round(contentWidth),
+        contentHeightPx: Math.round(contentHeightPx),
+        usedHeightPx: Math.round(bottomExtent),
+        insetPx: Math.round(insetPx),
+        forceApproximateMetrics: forceApprox,
+        fontFamily,
+      }),
+    )
   }
 
   return { pages: st.pages }

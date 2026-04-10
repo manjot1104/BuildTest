@@ -8,8 +8,6 @@ import { resumeFormToResumeData, type ResumeFormLike } from "@/lib/text-layout/f
 import type { ResumeData } from "@/lib/text-layout/types"
 import { cn } from "@/lib/utils"
 
-const DEFAULT_FONT = "Inter, ui-sans-serif, system-ui, sans-serif"
-
 export type ResumeLayoutPreviewProps = {
   /** AI builder form fields → structured data internally */
   formValues?: ResumeFormLike
@@ -94,6 +92,7 @@ export function ResumeLayoutPreview({
                 transform: `scale(${scale})`,
                 transformOrigin: "top left",
                 position: "relative",
+                fontFamily: TEXT_LAYOUT_CLIENT_OPTIONS.fontFamily,
               }}
             >
               {page.elements.map((el, i) => (

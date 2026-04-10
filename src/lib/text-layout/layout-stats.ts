@@ -1,9 +1,10 @@
 import { generateResumeLayout } from "./engine"
+import { RESUME_LAYOUT_FONT_STACK } from "./resume-layout-tokens"
 import type { ResumeData, ResumeLayoutOptions } from "./types"
 export type { ResumeLayoutOptions } from "./types"
 
-/** Browser + server use the same stack string so page estimates stay comparable. */
-export const TEXT_LAYOUT_ENGINE_FONT_STACK = "Inter, ui-sans-serif, system-ui, sans-serif"
+/** Same stack as HTML resume design system + Pretext engine default. */
+export const TEXT_LAYOUT_ENGINE_FONT_STACK = RESUME_LAYOUT_FONT_STACK
 
 /** Deterministic metrics on Node (generate API). */
 export const TEXT_LAYOUT_SERVER_OPTIONS: ResumeLayoutOptions = {
@@ -51,7 +52,7 @@ export const RESUME_FOLLOW_UP_PROMPT_MAX = 2000
 export function buildLayoutHintBlock(stats: ResumeLayoutStats): string {
   return [
     "---",
-    "LAYOUT_LENGTH_HINT (app text-layout engine; approximate A4 at default margins):",
+    "LAYOUT_LENGTH_HINT (A4 text-layout engine; aligned with HTML PDF 10mm margin + 20px resume inset + design-system type scale):",
     `Pages: ~${stats.pageCount}. Laid-out lines: ~${stats.lineCount}.`,
     "Prefer concise HTML/LaTeX that typically fits 1–2 PDF pages when reasonable; keep roles, dates, and quantified achievements unless the user asked to shorten.",
     "---",
@@ -114,7 +115,7 @@ export function formatLayoutContextForScoring(stats: ResumeLayoutStats): string 
     ? "Content is long vs a typical 1–2 page resume; weigh scannability and density in readability/ATS feedback."
     : "Length is in a typical resume range for this measurement."
   return [
-    "SCR_LAYOUT_CONTEXT (internal A4 text-layout engine; approximate):",
+    "SCR_LAYOUT_CONTEXT (A4 engine; metrics aligned with HTML export typography + PDF margins):",
     `~${stats.pageCount} page(s), ~${stats.lineCount} laid-out lines.`,
     lengthNote,
   ].join(" ")
