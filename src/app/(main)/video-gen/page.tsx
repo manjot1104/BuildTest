@@ -55,6 +55,8 @@ export default function VideoGeneratorPage() {
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
   const [voiceId, setVoiceId] = useState("aravind");
+  const [ttsVolume, setTtsVolume] = useState(0.8);
+  const [musicVolume, setMusicVolume] = useState(0.3);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -69,6 +71,8 @@ export default function VideoGeneratorPage() {
     const options: GenerateVideoOptions = {
       useTTS,
       useMusic,
+      ttsVolume,
+      musicVolume,
       ...(useTTS && { voiceId }),
       ...(useMusic && { musicGenre }),
     };
@@ -95,6 +99,8 @@ export default function VideoGeneratorPage() {
     setSelectedRange(DURATION_RANGES[1]);
     setJsonOpen(false);
     setOptionsOpen(false);
+    setTtsVolume(0.8);
+    setMusicVolume(0.3);
   }
 
   return (
@@ -181,11 +187,10 @@ export default function VideoGeneratorPage() {
                           type="button"
                           onClick={() => setSelectedRange(range)}
                           aria-pressed={selectedRange.value === range.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${
-                            selectedRange.value === range.value
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                          }`}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                            }`}
                         >
                           {range.label}
                         </button>
@@ -258,31 +263,53 @@ export default function VideoGeneratorPage() {
                           <button
                             type="button"
                             onClick={() => setUseTTS((v) => !v)}
-                            className={`relative h-5 w-9 rounded-full border transition-all ${
-                              useTTS
-                                ? "bg-primary border-primary"
-                                : "bg-muted border-border"
-                            }`}
+                            className={`relative h-5 w-9 rounded-full border transition-all ${useTTS
+                              ? "bg-primary border-primary"
+                              : "bg-muted border-border"
+                              }`}
                           >
-                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
-                              useTTS ? "left-4" : "left-0.5"
-                            }`} />
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"
+                              }`} />
                           </button>
                         </div>
 
                         {useTTS && (
-                          <div className="flex items-center gap-2 pl-5">
-                            <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
-                              Voice
-                            </span>
-                            <input
-                              type="text"
-                              value={voiceId}
-                              onChange={(e) => setVoiceId(e.target.value)}
-                              placeholder="aravind"
-                              className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
-                            />
-                          </div>
+                          <>
+                            <div className="flex items-center gap-2 pl-5">
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                                Voice
+                              </span>
+                              <input
+                                type="text"
+                                value={voiceId}
+                                onChange={(e) => setVoiceId(e.target.value)}
+                                placeholder="aravind"
+                                className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
+                              />
+                            </div>
+                            {/* ADD VOLUME SLIDER HERE */}
+                            <div className="flex items-center gap-2 pl-5">
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                                Volume
+                              </span>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={ttsVolume}
+                                onChange={(e) => {
+                                  const newVolume = parseFloat(e.target.value);
+                                  setTtsVolume(newVolume);
+                                  setVideoJson(prev => prev ? { ...prev, ttsVolume: newVolume } : null);
+                                }}
+                                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                                {Math.round(ttsVolume * 100)}%
+                              </span>
+                            </div>
+                          </>
                         )}
                       </div>
 
@@ -298,40 +325,61 @@ export default function VideoGeneratorPage() {
                           <button
                             type="button"
                             onClick={() => setUseMusic((v) => !v)}
-                            className={`relative h-5 w-9 rounded-full border transition-all ${
-                              useMusic
-                                ? "bg-primary border-primary"
-                                : "bg-muted border-border"
-                            }`}
+                            className={`relative h-5 w-9 rounded-full border transition-all ${useMusic
+                              ? "bg-primary border-primary"
+                              : "bg-muted border-border"
+                              }`}
                           >
-                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
-                              useMusic ? "left-4" : "left-0.5"
-                            }`} />
+                            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"
+                              }`} />
                           </button>
                         </div>
 
                         {useMusic && (
-                          <div className="flex items-center gap-2 pl-5">
-                            <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
-                              Genre
-                            </span>
-                            <div className="flex gap-1 flex-wrap">
-                              {MUSIC_GENRES.map((g) => (
-                                <button
-                                  key={g.value}
-                                  type="button"
-                                  onClick={() => setMusicGenre(g.value)}
-                                  className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${
-                                    musicGenre === g.value
+                          <>
+                            <div className="flex items-center gap-2 pl-5">
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                                Genre
+                              </span>
+                              <div className="flex gap-1 flex-wrap">
+                                {MUSIC_GENRES.map((g) => (
+                                  <button
+                                    key={g.value}
+                                    type="button"
+                                    onClick={() => setMusicGenre(g.value)}
+                                    className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value
                                       ? "border-primary bg-primary/10 text-primary"
                                       : "border-border text-muted-foreground hover:text-foreground"
-                                  }`}
-                                >
-                                  {g.label}
-                                </button>
-                              ))}
+                                      }`}
+                                  >
+                                    {g.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
-                          </div>
+                            {/* ADD VOLUME SLIDER HERE */}
+                            <div className="flex items-center gap-2 pl-5">
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">
+                                Volume
+                              </span>
+                              <input
+                                type="range"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={musicVolume}
+                                onChange={(e) => {
+                                  const newVolume = parseFloat(e.target.value);
+                                  setMusicVolume(newVolume);
+                                  setVideoJson(prev => prev ? { ...prev, musicVolume: newVolume } : null);
+                                }}
+                                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                              />
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                                {Math.round(musicVolume * 100)}%
+                              </span>
+                            </div>
+                          </>
                         )}
                       </div>
 
@@ -467,6 +515,63 @@ export default function VideoGeneratorPage() {
                 loop
               />
             </div>
+            {/* ADD POST-GENERATION VOLUME CONTROLS HERE */}
+            <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+              <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                Adjust volumes
+              </p>
+
+              {videoJson.scenes.some(s => s.ttsUrl) && (
+                <div className="flex items-center gap-3">
+                  <Mic className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  <span className="text-[11px] font-mono text-muted-foreground w-20 shrink-0">
+                    Narration
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={ttsVolume}
+                    onChange={(e) => {
+                      const newVolume = parseFloat(e.target.value);
+                      setTtsVolume(newVolume);
+                      setVideoJson(prev => prev ? { ...prev, ttsVolume: newVolume } : null);
+                    }}
+                    className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground/50 w-10 text-right tabular-nums">
+                    {Math.round(ttsVolume * 100)}%
+                  </span>
+                </div>
+              )}
+
+              {videoJson.bgmUrl && (
+                <div className="flex items-center gap-3">
+                  <Music className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                  <span className="text-[11px] font-mono text-muted-foreground w-20 shrink-0">
+                    Music
+                  </span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={musicVolume}
+                    onChange={(e) => {
+                      const newVolume = parseFloat(e.target.value);
+                      setMusicVolume(newVolume);
+                      setVideoJson(prev => prev ? { ...prev, musicVolume: newVolume } : null);
+                    }}
+                    className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                  />
+                  <span className="text-[10px] font-mono text-muted-foreground/50 w-10 text-right tabular-nums">
+                    {Math.round(musicVolume * 100)}%
+                  </span>
+                </div>
+              )}
+            </div>
+
 
             {/* Prompt used */}
             <div className="px-4 py-3 bg-muted/30 rounded-xl border border-border">

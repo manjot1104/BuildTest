@@ -164,7 +164,7 @@ function repairTruncatedJson(raw: string): string {
   try {
     JSON.parse(raw);
     return raw;
-  } catch {}
+  } catch { }
 
   let text = raw.trim();
   // Strip trailing incomplete key or value
@@ -339,12 +339,12 @@ async function enrichVideoWithAudio(
     const track = getMusicTrack(options.musicGenre || "corporate");
     if (track) {
       videoJson.bgmUrl = track.url;
-      videoJson.musicVolume = track.defaultVolume;
+      // Use user-provided volume or fall back to track default
+      videoJson.musicVolume = options.musicVolume ?? track.defaultVolume;
     }
   } else {
     videoJson.musicVolume = 0;
   }
-
   // 2. Handle TTS (Per Scene)
   if (options.useTTS) {
     // FIX: Extract index 'i' using .entries()
@@ -376,9 +376,9 @@ async function enrichVideoWithAudio(
     }
   }
 
-  if (options.ttsVolume !== undefined) videoJson.ttsVolume = options.ttsVolume;
-  if (options.musicVolume !== undefined)
-    videoJson.musicVolume = options.musicVolume;
+  // Set TTS volume (default to 0.8 if not provided)
+  videoJson.ttsVolume = options.ttsVolume ?? 0.8;
+  // musicVolume already set above in the music block
 
   // 3. Recalculate Root Duration
   videoJson.duration = videoJson.scenes.reduce((acc, s, i) => {
@@ -400,6 +400,8 @@ export async function generateVideoJson(
     useMusic?: boolean;
     voiceId?: string;
     musicGenre?: string;
+    ttsVolume?: number;      
+    musicVolume?: number; 
   } = {},
 ): Promise<GenerateVideoResult | GenerateVideoError> {
   const messages: OpenRouterMessage[] = [
@@ -417,18 +419,18 @@ export async function generateVideoJson(
         attempt === 1
           ? messages
           : [
-              ...messages,
-              {
-                role: "assistant",
-                content:
-                  lastError || "Previous attempt failed with invalid JSON.",
-              },
-              {
-                role: "user",
-                content:
-                  'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
-              },
-            ];
+            ...messages,
+            {
+              role: "assistant",
+              content:
+                lastError || "Previous attempt failed with invalid JSON.",
+            },
+            {
+              role: "user",
+              content:
+                'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
+            },
+          ];
 
       const raw = await callOpenRouter(attemptMessages);
 
@@ -449,7 +451,7 @@ export async function generateVideoJson(
         const repaired = repairTruncatedJson(jsonString);
         console.warn(
           `[VideoService] JSON parse failed on attempt ${attempt} — trying repair ` +
-            `(${jsonString.length} chars → ${repaired.length} chars)`,
+          `(${jsonString.length} chars → ${repaired.length} chars)`,
         );
         try {
           parsed = JSON.parse(repaired);
@@ -467,7 +469,7 @@ export async function generateVideoJson(
       // ── DEBUG: dump the full parsed object so we can see exactly what came back
       console.log(
         `[VideoService] DEBUG parsed JSON (attempt ${attempt}):\n` +
-          JSON.stringify(parsed, null, 2),
+        JSON.stringify(parsed, null, 2),
       );
 
       // ── DEBUG: surface any null/undefined fields before Zod sees them
@@ -475,7 +477,7 @@ export async function generateVideoJson(
       if (undefinedFields.length > 0) {
         console.warn(
           `[VideoService] DEBUG null/undefined fields:\n` +
-            undefinedFields.map((f) => `  ${f}`).join("\n"),
+          undefinedFields.map((f) => `  ${f}`).join("\n"),
         );
       }
 
@@ -508,7 +510,7 @@ export async function generateVideoJson(
 
       console.log(
         `[VideoService] ✓ Generated ${validation.data.scenes.length} scenes, ` +
-          `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
+        `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
       );
 
       return { success: true, videoJson: enrichedJson as VideoJson };

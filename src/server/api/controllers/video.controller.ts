@@ -48,6 +48,8 @@ export async function generateVideoHandler({
       useMusic: body.options?.useMusic ?? true,
       voiceId: body.options?.voiceId,
       musicGenre: body.options?.musicGenre,
+      ttsVolume: body.options?.ttsVolume ?? 0.8,
+      musicVolume: body.options?.musicVolume ?? 0.3,
     })
 
     if (!result.success) {
