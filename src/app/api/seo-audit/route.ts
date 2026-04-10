@@ -11,7 +11,7 @@ const FALLBACK_MODELS = [
 // ─── PageSpeed Insights fetch ─────────────────────────────────────────────
 async function fetchPageSpeedData(url: string, strategy: 'mobile' | 'desktop' = 'mobile') {
   const apiKey = process.env.PAGESPEED_API_KEY
-  console.log("API KEY:", process.env.PAGESPEED_API_KEY)
+ 
   if (!apiKey) return null
 
   try {

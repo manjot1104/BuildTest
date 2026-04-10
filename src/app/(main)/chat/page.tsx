@@ -204,24 +204,50 @@ const [loadingStep, setLoadingStep] = useState(0)
     const [codeOpen, setCodeOpen] = useState(false)
     const [urlBarFocused, setUrlBarFocused] = useState(false)
     const scrollProgressRef = useRef(0)
+    const iframeReadyRef = useRef(false)
+    const pendingScrollRef = useRef<number | null>(null)
 
-    // Wheel → send SCROLL message into the iframe
-    useEffect(() => {
-        const container = containerRef.current
-        if (!container) return
-        const onWheel = (e: WheelEvent) => {
-            e.preventDefault()
-            scrollProgressRef.current = Math.max(0, Math.min(1,
-                scrollProgressRef.current + e.deltaY * 0.0008
-            ))
-            iframeRef.current?.contentWindow?.postMessage(
-                { type: 'SCROLL', progress: scrollProgressRef.current },
-                '*'
-            )
+    // Post message to iframe — queues if not ready yet
+    const postToIframe = useCallback((msg: object) => {
+        const win = iframeRef.current?.contentWindow
+        if (win) {
+            try { win.postMessage(msg, '*') } catch { }
         }
-        container.addEventListener('wheel', onWheel, { passive: false })
-        return () => container.removeEventListener('wheel', onWheel)
-    }, [html])
+    }, [])
+
+    // Wheel → send SCROLL message into the iframe (always attached, no html dep)
+    useEffect(() => {
+        const onWheel = (e: WheelEvent) => {
+            const container = containerRef.current
+            if (!container) return
+            // Only intercept when mouse is over the preview container
+            if (!container.contains(e.target as Node)) return
+            e.preventDefault()
+            e.stopPropagation()
+            scrollProgressRef.current = Math.max(0, Math.min(1,
+                scrollProgressRef.current + e.deltaY * 0.001
+            ))
+            postToIframe({ type: 'SCROLL', progress: scrollProgressRef.current })
+        }
+        // Attach to window so it always fires even when iframe steals pointer
+        window.addEventListener('wheel', onWheel, { passive: false })
+        return () => window.removeEventListener('wheel', onWheel)
+    }, [postToIframe])
+
+    // Mouse move → relay to iframe for parallax
+    useEffect(() => {
+        const onMouseMove = (e: MouseEvent) => {
+            const container = containerRef.current
+            if (!container) return
+            if (!container.contains(e.target as Node) && !iframeRef.current?.contains(e.target as Node)) return
+            const rect = container.getBoundingClientRect()
+            const x = (e.clientX - rect.left) / rect.width   // 0-1
+            const y = (e.clientY - rect.top) / rect.height    // 0-1
+            postToIframe({ type: 'MOUSEMOVE', x, y, nx: x * 2 - 1, ny: -(y * 2 - 1) })
+        }
+        window.addEventListener('mousemove', onMouseMove)
+        return () => window.removeEventListener('mousemove', onMouseMove)
+    }, [postToIframe])
 useEffect(() => {
   if (!loading) { setLoadingStep(0); return }
   const interval = setInterval(() => {
@@ -230,7 +256,10 @@ useEffect(() => {
   return () => clearInterval(interval)
 }, [loading])
     // Reset scroll progress when new scene loads
-    useEffect(() => { scrollProgressRef.current = 0 }, [html])
+    useEffect(() => { 
+        scrollProgressRef.current = 0
+        iframeReadyRef.current = false
+    }, [html])
 
     // Download the generated HTML as a file
     const handleDownload = () => {
@@ -326,25 +355,70 @@ useEffect(() => {
                 {html && !loading && (
                     <iframe
                         ref={iframeRef}
-                        srcDoc={html.includes('</body>') 
-                            ? html.replace('</body>', `<script>
-                                document.addEventListener('click', e => {
-                                    const a = e.target.closest('a');
+                        srcDoc={(() => {
+                            // Bootstrap script injected into every generated scene:
+                            // 1. Sends READY ping to parent so host knows iframe is live
+                            // 2. Re-registers MOUSEMOVE/SCROLL listeners inside iframe
+                            //    as a fallback (in case AI forgot or used wrong syntax)
+                            const bootstrap = `<script>
+(function() {
+  // Notify parent that iframe is loaded and ready
+  window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+
+  // Internal mouse tracker for parallax (fallback if AI used window.onmousemove)
+  var _nx = 0, _ny = 0;
+  document.addEventListener('mousemove', function(e) {
+    _nx = (e.clientX / window.innerWidth)  * 2 - 1;
+    _ny = -((e.clientY / window.innerHeight) * 2 - 1);
+    // Dispatch to any listeners that used the normalized form
+    window._mouseNX = _nx; window._mouseNY = _ny;
+  });
+
+  // Relay SCROLL and MOUSEMOVE from parent
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === 'MOUSEMOVE') {
+      window._mouseNX = e.data.nx;
+      window._mouseNY = e.data.ny;
+      // Fire a synthetic mousemove so Three.js listeners inside also fire
+      var me = new MouseEvent('mousemove', {
+        clientX: e.data.x * window.innerWidth,
+        clientY: e.data.y * window.innerHeight,
+        bubbles: true
+      });
+      document.dispatchEvent(me);
+    }
+    // SCROLL is handled by AI's own listener; this just ensures it exists
+  });
+})();
+<\/script>`;
+                            const injected = html.includes('</body>') 
+                                ? html.replace('</body>', bootstrap + `<script>
+                                document.addEventListener('click', function(e) {
+                                    var a = e.target.closest('a');
                                     if (a) {
-                                        const href = a.getAttribute('href');
+                                        var href = a.getAttribute('href');
                                         if (href && (href === '#' || href === '/' || href.startsWith('#'))) {
                                             e.preventDefault();
                                             if (href.startsWith('#') && href.length > 1) {
-                                                const el = document.querySelector(href);
+                                                var el = document.querySelector(href);
                                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
                                             }
                                         }
                                     }
                                 });
-                            </script></body>`)
-                            : html}
+                            <\/script></body>`)
+                                : bootstrap + html;
+                            return injected;
+                        })()}
                         className="absolute inset-0 w-full h-full border-none"
                         sandbox="allow-scripts allow-same-origin"
+                        style={{ pointerEvents: 'auto' }}
+                        onLoad={() => {
+                            iframeReadyRef.current = true
+                            // Re-send current scroll position so scene starts at right depth
+                            postToIframe({ type: 'SCROLL', progress: scrollProgressRef.current })
+                        }}
                     />
                 )}
 
