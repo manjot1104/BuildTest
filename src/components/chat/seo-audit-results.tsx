@@ -628,7 +628,7 @@ function AiAnalysis({ result }: { result: string }) {
               <td className="px-3.5 py-2.5 border-b border-border/6 text-[11.5px] text-muted-foreground/55 last:border-0">{children}</td>
             ),
 
-          code: ({ children, className }) => {
+        code: ({ children, className }) => {
   const match = /language-(\w+)/.exec(className || '')
 
   if (match) {
@@ -656,9 +656,11 @@ function AiAnalysis({ result }: { result: string }) {
   )
 },
 
-        pre: ({ children }) => {
+   pre: ({ children }) => {
+  const text = extractText(children)
   return (
-    <div className="relative mb-4 rounded-2xl overflow-hidden border border-white/10">
+    <div className="relative mb-4 rounded-2xl overflow-hidden border border-white/10 group">
+      <CopyButton text={text} />
       {children}
     </div>
   )
