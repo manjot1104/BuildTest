@@ -302,10 +302,6 @@ export interface TestExecutionResult {
   consoleLogs: string[];
   networkLogs: NetworkLogEntry[];
   jobId: string | null;
-  // Raw TinyFish output preserved for AI fix suggestion generation.
-  // Contains everything TinyFish returned (step logs, error fields, rawText)
-  // so the AI can reason about partial failures without losing signal.
-  tinyfishRaw: string | null;
 }
 
 export interface NetworkLogEntry {
@@ -937,25 +933,46 @@ function buildDiscoveryGoal(
   rootUrl: string,
   allowedHostname: string,
   maxPages: number,
+  // crawlContext is appended to the discovery prompt when present so
+  // TinyFish knows how to handle login screens or interaction barriers.
   crawlContext?: string,
 ): string {
   const safeContext = sanitiseCrawlContext(crawlContext);
+  // Build the optional context block that is injected near the top of
+  // the discovery prompt. When absent the prompt is identical to before.
   const contextBlock = safeContext
     ? `\nUSER-PROVIDED CONTEXT (follow these instructions before doing anything else):\n${safeContext}\n`
     : "";
 
-  return `You are a website URL sampler, NOT a crawler. Your job is to collect a SMALL LIMITED set of URLs and STOP EARLY. You MUST NOT explore the full site. Hard limit: stop as soon as you have ${maxPages} unique URLs OR after 25 navigation clicks, whichever happens first. Exceeding this limit is a failure.
+  return `You are a website URL discoverer. Your ONLY job is to find all unique page URLs on this website.
 
 START URL: ${rootUrl}
 ${contextBlock}
-STEP 1: Navigate to the start URL and wait for full load. If <div id="root"> or <div id="app"> or React is detected, wait 4 extra seconds.
+STEP 1 — Navigate and wait:
+Go to the start URL. Wait for full page load.
+If you see <div id="root">, <div id="app">, or window.React exists — this is a JavaScript SPA. Wait an EXTRA 4 seconds for JS rendering.
 
-STEP 2: Collect passive links without clicking: all <a href>, data-href, data-to, data-url, and any routes from window.__NEXT_DATA__ or window.__NUXT__.
+STEP 2 — Collect passive links (no clicking):
+- Every <a href="..."> tag — resolve relative URLs to absolute
+- data-href, data-to, data-url attributes on any element
+- Any route paths in window.__NEXT_DATA__ (Next.js) if it exists
+- Any route paths in window.__NUXT__ (Nuxt.js) if it exists
 
-STEP 3: Click navigation items ONLY UNTIL LIMIT IS REACHED. For each nav item: click, wait up to 3 seconds, if URL changes and hostname matches "${allowedHostname}" then record it, go back, continue. The MOMENT you reach ${maxPages} URLs OR 25 clicks you MUST STOP ALL ACTIONS immediately. Do NOT continue exploring.
+STEP 3 — Click navigation items to discover SPA routes:
+Look for navigation elements in <nav>, <header>, role="navigation", or sidebar menus.
+For EACH clickable nav item (links, buttons, divs with cursor:pointer in nav areas):
+  a) Click it
+  b) Wait up to 3 seconds
+  c) Check window.location.href — if it changed AND hostname is still "${allowedHostname}", record the new URL
+  d) Click browser Back button, wait for page to reload
+  e) Continue to next nav item
+Stop when you have collected ${maxPages} URLs OR clicked 25 nav items, whichever comes first.
 
-STEP 4: Return ONLY JSON with collected URLs — no markdown, no explanation, start with { end with }:
-{"urls":["https://${allowedHostname}/","https://${allowedHostname}/example"]}`;
+STEP 4 — Return results:
+Return ONLY valid JSON as a single object. No markdown. No explanation. Start with { end with }.
+The "urls" field must be an array of absolute URL strings.
+
+{"urls":["https://${allowedHostname}/","https://${allowedHostname}/about","https://${allowedHostname}/games"]}`;
 }
 
 // ─── Stage 2: Extraction prompt ───────────────────────────────────────────────
@@ -1762,233 +1779,9 @@ export async function measurePagePerformance(
 
 // ─── Test execution ───────────────────────────────────────────────────────────
 
-// buildExecuteTestGoal constructs the TinyFish prompt for a single test.
-// The prompt instructs TinyFish to produce one structured log object per step
-// and never stop early — the only format that reliably gets step-level signal
-// back from TinyFish given its current non-deterministic output behaviour.
-// The step count is injected so TinyFish knows exactly how many logs to emit.
-function buildExecuteTestGoal(url: string, steps: string[]): string {
-  const stepCount = steps.length;
-  const numberedSteps = steps.map((s, i) => `STEP ${i + 1}: ${s}`).join("\n");
-
-  return `Go to ${url} and complete these steps in order.
-
-BEFORE starting any step:
-- Wait for the page to fully load
-- If you detect a React/Next.js/Vue SPA (div#root, div#app, __NEXT_DATA__, or __nuxt__), wait an extra 4 seconds for hydration
-- If a cookie/GDPR banner is visible, click its dismiss or accept button ONCE, then wait 1 second
-- Do NOT log in or create accounts unless a step explicitly tells you to
-
-STEPS TO EXECUTE:
-${numberedSteps}
-
-After completing all steps, output ONLY this JSON. No explanation, no markdown, no text before or after:
-{"logs":[{"id":1,"status":"PASSED","data":null}]}
-
-Rules for the JSON:
-- One entry per step, in order, id matches step number
-- status is exactly one of: "PASSED", "FAILED"
-  - PASSED: action was performed and the observable result matched, OR the element was found and behaved correctly
-  - FAILED: element was not found, action could not be completed, or result did not match expectations
-- data: null when PASSED, or a short plain-text reason (max 120 chars) when FAILED
-- The array must have exactly ${stepCount} entries
-- Do not include any field other than id, status, data`;
-}
-
-// buildFallbackExecuteTestGoal is the simpler, more resilient prompt used
-// when TinyFish returns a platform-level error (Case B) on the primary prompt.
-//
-// WHY THIS EXISTS:
-//   TinyFish periodically enters a degraded state where it rejects normal
-//   detailed prompts with its own error response (e.g. { status: "FAILED",
-//   error: "...", help_url: "..." }) before executing any steps. When this
-//   happens the primary buildExecuteTestGoal prompt fails immediately.
-//
-//   During one such outage we discovered a minimal, imperative prompt style
-//   that TinyFish accepted reliably. This function encodes that style as a
-//   dedicated fallback so we can auto-retry with it instead of surfacing a
-//   confusing "browser agent error" to the user.
-//
-//   The key differences vs the primary prompt:
-//     - No preamble paragraphs — opens directly with the task statement
-//     - Explicit "do NOT stop early / always continue" directives
-//     - Inline fallback data values ("Element not found", "Page requires login")
-//     - Minimal JSON example inline rather than after a rules block
-//
-// This prompt is ONLY used on the fallback retry triggered by a TinyFish-own
-// error response. Normal execution always uses buildExecuteTestGoal first.
-function buildFallbackExecuteTestGoal(steps: string[]): string {
-  const stepCount = steps.length;
-  const numberedSteps = steps.map((s, i) => `STEP ${i + 1}: ${s}`).join("\n");
-
-  return `You are a browser test agent. Your task is to execute ALL steps and produce ${stepCount} structured logs. The task is NOT complete until all ${stepCount} logs are produced. Do NOT stop early. Always continue execution even if a step fails. If element not found set data=Element not found. If login required set data=Page requires login. If previous step failed set data=Previous step failed. STEPS:\n${numberedSteps}
-Return ONLY this exact JSON shape, no other text:
-{"logs":[{"id":1,"status":"PASSED","data":null},{"id":2,"status":"FAILED","data":"Element not found"}]}`;
-}
-
-// isTinyFishOwnError returns true when the TinyFishResult represents a
-// platform-level error emitted by TinyFish itself — as opposed to a test
-// step failure or a missing/malformed result.
-//
-// TinyFish-own errors look like:
-//   { status: "FAILED", error: "...", help_url: "...", run_id: "..." }
-// They have an error string and a status field but NO step-log arrays
-// (logs / steps / results). We use this shape to decide whether to retry
-// with the fallback prompt rather than immediately surfacing the failure.
-function isTinyFishOwnError(result: TinyFishResult): boolean {
-  if (!result.resultJson) return false;
-  const rj = result.resultJson as Record<string, unknown>;
-  const hasErrorField =
-    typeof rj["error"] === "string" && (rj["error"] as string).length > 0;
-  const hasStatusField = typeof rj["status"] === "string";
-  const hasStepLogs =
-    Array.isArray(rj["logs"]) ||
-    Array.isArray(rj["steps"]) ||
-    Array.isArray(rj["results"]);
-  return hasErrorField && hasStatusField && !hasStepLogs;
-}
-
-// parseExecuteTestResult interprets TinyFish's non-deterministic output.
-// TinyFish may return:
-//   A) A structured result with step logs — parsed from resultJson or rawText
-//   B) A TinyFish-own error event — { type, run_id, status, error, help_url, ... }
-//   C) Nothing useful — timeout, credits exhausted, network error
-//
-// For (A) we walk the step logs: the test passes only if ALL steps have
-// status PASSED. The first FAILED log becomes the errorDetails.
-// For (B) and (C) we mark the test as failed and surface whatever signal
-// TinyFish gave us so the AI fix suggestion has something to work with.
-function parseExecuteTestResult(
-  result: TinyFishResult,
-  durationMs: number,
-): Pick<TestExecutionResult, "passed" | "actualResult" | "errorDetails" | "consoleLogs" | "networkLogs"> {
-
-  // ── Case B: TinyFish-own error event (no step logs) ──────────────────────
-  if (result.resultJson) {
-    const rj = result.resultJson as Record<string, unknown>;
-    const hasErrorField = typeof rj["error"] === "string" && (rj["error"] as string).length > 0;
-    const hasStatusField = typeof rj["status"] === "string";
-    const hasStepLogs =
-      Array.isArray(rj["logs"]) ||
-      Array.isArray(rj["steps"]) ||
-      Array.isArray(rj["results"]);
-
-    if (hasErrorField && hasStatusField && !hasStepLogs) {
-      const tfError = rj["error"] as string;
-      const tfStatus = rj["status"] as string;
-      console.error(`[TestExecution] TinyFish agent error — status: ${tfStatus}, error: ${tfError}`);
-      return {
-        passed: false,
-        actualResult: `Browser agent encountered an error`,
-        errorDetails: tfError,
-        consoleLogs: [],
-        networkLogs: [],
-      };
-    }
-  }
-
-  // ── Case A: structured JSON logs (resultJson or rawText) ──────────────────
-  const raw = result.resultJson ?? tryParseRawText(result.rawText);
-  if (raw) {
-    const rr = raw as Record<string, unknown>;
-
-    // Accept flat array or nested under logs / steps / results
-    const logArray: unknown[] = Array.isArray(raw)
-      ? raw
-      : Array.isArray(rr["logs"])
-        ? (rr["logs"] as unknown[])
-        : Array.isArray(rr["steps"])
-          ? (rr["steps"] as unknown[])
-          : Array.isArray(rr["results"])
-            ? (rr["results"] as unknown[])
-            : [];
-
-    if (logArray.length > 0) {
-      const stepLogs = logArray.filter(
-        (entry): entry is { id: number | string; status: string; data: unknown } =>
-          typeof entry === "object" &&
-          entry !== null &&
-          "status" in (entry as object),
-      );
-
-      if (stepLogs.length > 0) {
-        // Any step that is not explicitly PASSED is a failure.
-        // This covers FAILED, SKIPPED, ERROR, or any unknown status —
-        // we never silently pass a test with unattempted or failed steps.
-        const firstNonPassed = stepLogs.find(
-          (s) => s.status?.toString().toUpperCase() !== "PASSED",
-        );
-        const allPassed = !firstNonPassed;
-
-        const actualResult = allPassed
-          ? `All ${stepLogs.length} steps passed`
-          : `Step ${firstNonPassed!.id} ${firstNonPassed!.status.toLowerCase()}: ${
-              firstNonPassed!.data ?? "element not found or action could not be completed"
-            }`;
-
-        const errorDetails = firstNonPassed
-          ? `Step ${firstNonPassed.id} — ${firstNonPassed.data ?? firstNonPassed.status}`
-          : null;
-
-        console.log(
-          `[TestExecution] ${allPassed ? "✓ PASSED" : "✗ FAILED"} — ` +
-            `${stepLogs.filter((s) => s.status?.toString().toUpperCase() === "PASSED").length}` +
-            `/${stepLogs.length} steps passed` +
-            (firstNonPassed
-              ? ` — first issue: step ${firstNonPassed.id} (${firstNonPassed.status}): ${firstNonPassed.data ?? "no detail"}`
-              : ""),
-        );
-
-        return {
-          passed: allPassed,
-          actualResult,
-          errorDetails,
-          consoleLogs: [],
-          networkLogs: [],
-        };
-      }
-    }
-
-    // resultJson present but no recognisable step logs
-    const summary = JSON.stringify(raw).slice(0, 500);
-    console.error(`[TestExecution] Unrecognised result structure:`, summary);
-    return {
-      passed: false,
-      actualResult: `Unexpected response from browser agent`,
-      errorDetails: `Raw result: ${summary}`,
-      consoleLogs: [],
-      networkLogs: [],
-    };
-  }
-
-  // ── Case C: nothing returned at all ──────────────────────────────────────
-  console.error(
-    `[TestExecution] TinyFish returned nothing. error=${result.error} success=${result.success}`,
-  );
-  return {
-    passed: false,
-    actualResult: result.error?.includes("timeout")
-      ? `Test timed out — the page took too long`
-      : `No result returned from the browser agent`,
-    errorDetails: result.error ?? "Empty response",
-    consoleLogs: [],
-    networkLogs: [],
-  };
-}
-
 // executeTest now accepts an optional timeouts argument so the
 // controller can pass user-requested timeout overrides into individual test
 // execution calls. When omitted the module-level TIMEOUTS defaults apply.
-//
-// TinyFish-own error fallback retry:
-//   If the primary prompt triggers a TinyFish platform-level error (Case B in
-//   parseExecuteTestResult — isTinyFishOwnError returns true), we automatically
-//   retry ONCE using buildFallbackExecuteTestGoal before giving up. This handles
-//   TinyFish degraded states where the detailed primary prompt is rejected but
-//   the simpler fallback prompt is accepted. The fallback retry always uses
-//   stealth profile since it is already a recovery path, and does not consume
-//   one of the caller's MAX_TEST_RETRIES slots (those are for test-step failures,
-//   not platform errors).
 export async function executeTest(
   url: string,
   goal: string,
@@ -2002,33 +1795,34 @@ export async function executeTest(
   // Resolve timeouts for this execution call.
   const resolvedTimeouts = resolveTimeouts(timeoutOverrides);
 
-  // Parse the goal string back into individual steps so we can inject
-  // the step count into the TinyFish prompt. The goal is formatted by
-  // buildTestGoal in testing.controller.ts as:
-  //   "Step 1: <action>\nStep 2: <action>\n...\n\nExpected result: <result>"
-  const stepLines = goal
-    .split("\n")
-    .filter((line) => /^Step \d+:/i.test(line.trim()))
-    .map((line) => line.replace(/^Step \d+:\s*/i, "").trim())
-    .filter(Boolean);
+  const fullGoal = `You are a QA test automation agent. Execute these test steps in a real browser.
 
-  // If we couldn't parse steps (unexpected format), fall back to the full
-  // goal text as a single step so the prompt is always well-formed.
-  const steps = stepLines.length > 0 ? stepLines : [goal];
+TEST URL: ${url}
 
-  const fullGoal = buildExecuteTestGoal(url, steps);
+STEPS:
+${goal}
+
+EXECUTION RULES:
+1. Navigate to the URL first.
+2. If SPA (React/Vue/Next.js — check for <div id="root">), wait 3 extra seconds after load for hydration.
+3. Execute each step in strict order.
+4. "passed" = true ONLY if you EXPLICITLY confirmed the expected result in the browser.
+5. "passed" = false if any step failed, threw an error, or the expected result was NOT observed.
+6. If uncertain, set passed = false.
+7. Record 4xx/5xx errors in networkLogs. Record JS console errors in consoleLogs.
+
+Return ONLY this JSON, no markdown, start with { end with }:
+If PASSED: {"passed":true,"actualResult":"<what you observed>","errorDetails":null,"consoleLogs":[],"networkLogs":[]}
+If FAILED: {"passed":false,"actualResult":"<what you observed>","errorDetails":"<specific error>","consoleLogs":[],"networkLogs":[]}`;
 
   // Use resolved EXECUTE_TEST_BASE_MS instead of the module constant.
-  const timeoutMs =
-    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
-    attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS;
-
   const result = await withTimeout(
     runTinyFish(
       { url, goal: fullGoal, browser_profile: stealth ? "stealth" : "lite" },
       ctx,
     ),
-    timeoutMs,
+    resolvedTimeouts.EXECUTE_TEST_BASE_MS +
+      attempt * resolvedTimeouts.EXECUTE_TEST_RETRY_BONUS_MS,
     {
       success: false,
       resultJson: null,
@@ -2039,79 +1833,39 @@ export async function executeTest(
     `executeTest(${url}) attempt=${attempt + 1}`,
   );
 
-  // ── TinyFish-own error fallback retry ─────────────────────────────────────
-  // When TinyFish returns a platform-level error (not a test-step failure),
-  // retry once with the simpler fallback prompt before giving up.
-  // This is separate from the MAX_TEST_RETRIES logic in testing.controller.ts,
-  // which retries on test-step failures. This retry is specifically for the case
-  // where TinyFish rejects our prompt entirely with its own error response.
-  if (isTinyFishOwnError(result)) {
-    const tfError = (result.resultJson as Record<string, unknown>)["error"] as string;
-    console.warn(
-      `[TestExecution] TinyFish-own error on primary prompt — retrying with fallback prompt. ` +
-        `url=${url} attempt=${attempt + 1} tfError="${tfError}"`,
-    );
+  const durationMs = Date.now() - startTime;
+  const raw = result.resultJson ?? tryParseRawText(result.rawText);
 
-    const fallbackGoal = buildFallbackExecuteTestGoal(steps);
-    const fallbackResult = await withTimeout(
-      runTinyFish(
-        { url, goal: fallbackGoal, browser_profile: "stealth" },
-        ctx,
-      ),
-      timeoutMs,
-      {
-        success: false,
-        resultJson: null,
-        rawText: null,
-        error: "timeout",
-        jobId: null,
-      },
-      `executeTest(${url}) fallback attempt=${attempt + 1}`,
-    );
-
-    const fallbackDurationMs = Date.now() - startTime;
-
-    const fallbackTinyfishRaw = JSON.stringify({
-      success: fallbackResult.success,
-      error: fallbackResult.error,
-      resultJson: fallbackResult.resultJson,
-      rawText: fallbackResult.rawText,
-      // Tag the raw snapshot so we know which prompt path was used —
-      // useful when debugging AI fix suggestions for this result.
-      _promptPath: "fallback",
-    });
-
-    const fallbackParsed = parseExecuteTestResult(fallbackResult, fallbackDurationMs);
-
+  if (!raw) {
     return {
-      ...fallbackParsed,
+      passed: false,
+      actualResult: "TinyFish execution failed or timed out",
+      errorDetails: result.error,
       screenshotUrl: null,
-      durationMs: fallbackDurationMs,
-      jobId: fallbackResult.jobId,
-      tinyfishRaw: fallbackTinyfishRaw,
+      durationMs,
+      consoleLogs: [],
+      networkLogs: [],
+      jobId: result.jobId,
     };
   }
 
-  const durationMs = Date.now() - startTime;
-
-  // Build a serialised snapshot of everything TinyFish returned.
-  // Stored on the result so testing.controller can pass it straight to
-  // generateBugFixSuggestion without any further DB round-trips.
-  const tinyfishRaw = JSON.stringify({
-    success: result.success,
-    error: result.error,
-    resultJson: result.resultJson,
-    rawText: result.rawText,
-  });
-
-  const parsed = parseExecuteTestResult(result, durationMs);
+  const r = raw as {
+    passed?: boolean;
+    actualResult?: string;
+    errorDetails?: string | null;
+    consoleLogs?: string[];
+    networkLogs?: NetworkLogEntry[];
+  };
 
   return {
-    ...parsed,
+    passed: r.passed === true,
+    actualResult: r.actualResult ?? "No result returned",
+    errorDetails: r.errorDetails ?? null,
     screenshotUrl: null,
     durationMs,
+    consoleLogs: r.consoleLogs ?? [],
+    networkLogs: r.networkLogs ?? [],
     jobId: result.jobId,
-    tinyfishRaw,
   };
 }
 

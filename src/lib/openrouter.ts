@@ -32,22 +32,6 @@ export interface OpenRouterResult {
 
 const DEFAULT_MODEL = 'google/gemma-3-12b-it:free'
 
-/** Follow-up “edit code” calls: try a second model if the first errors. */
-const OPENROUTER_DEFAULT_SINGLE_TIMEOUT_MS = 55_000
-const OPENROUTER_DEFAULT_MAX_MODELS = 2
-
-/**
- * Initial Generate (HTML/LaTeX): **one** model attempt, shorter wait — then API uses local template fallback.
- * Avoids 2×55s sequential calls that made generation feel “stuck”.
- */
-const OPENROUTER_GENERATE_SINGLE_TIMEOUT_MS = 42_000
-const OPENROUTER_GENERATE_MAX_MODELS = 1
-
-export type CallOpenRouterOptions = {
-  maxModels?: number
-  singleTimeoutMs?: number
-}
-
 /** Fallback chain — tried in order when the requested model fails */
 const FALLBACK_CHAIN = [
   'google/gemma-3-12b-it:free',
@@ -64,25 +48,35 @@ const FALLBACK_CHAIN = [
 /**
  * Builds an ordered model chain: requested model first, then fallbacks
  */
-function buildModelChain(requested: string, maxModels: number): string[] {
-  return [requested, ...FALLBACK_CHAIN.filter((m) => m !== requested)].slice(0, maxModels)
+function buildModelChain(requested: string): string[] {
+  return [requested, ...FALLBACK_CHAIN.filter((m) => m !== requested)]
 }
 
 /**
  * Calls OpenRouter chat completions API for a single model (no retry)
  */
+type OpenRouterCallOptions = {
+  /** Default 4000; lower speeds up provider completion for typical single-file resumes. */
+  maxTokens?: number
+  /** Abort fetch after this many ms (default 90000). */
+  timeoutMs?: number
+}
+
 async function callOpenRouterSingle(
   messages: { role: string; content: string }[],
   model: string,
-  singleTimeoutMs: number,
+  options?: OpenRouterCallOptions,
 ): Promise<string> {
   const apiKey = env.OPENROUTER_API_KEY
   if (!apiKey) {
     throw new Error('OPENROUTER_API_KEY is not configured.')
   }
 
+  const timeoutMs = options?.timeoutMs ?? 90_000
+  const max_tokens = options?.maxTokens ?? 4000
+
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), singleTimeoutMs)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -97,7 +91,7 @@ async function callOpenRouterSingle(
       model,
       messages,
       temperature: 0.3,
-      max_tokens: 4000,
+      max_tokens,
     }),
       signal: controller.signal,
   })
@@ -121,30 +115,26 @@ async function callOpenRouterSingle(
   } catch (error) {
     clearTimeout(timeoutId)
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error(
-        `Request timeout after ${Math.round(singleTimeoutMs / 1000)} seconds for model: ${model}`,
-      )
+      throw new Error(`Request timeout after ${Math.round(timeoutMs / 1000)} seconds for model: ${model}`)
     }
     throw error
   }
 }
 
 /**
- * Calls OpenRouter with optional fallback chain — tries each model until one succeeds
+ * Calls OpenRouter with fallback chain — tries each model until one succeeds
  */
 async function callOpenRouter(
   messages: { role: string; content: string }[],
   requestedModel: string,
-  options?: CallOpenRouterOptions,
+  callOptions?: OpenRouterCallOptions,
 ): Promise<{ content: string; model: string; isFallback: boolean }> {
-  const maxModels = options?.maxModels ?? OPENROUTER_DEFAULT_MAX_MODELS
-  const singleTimeoutMs = options?.singleTimeoutMs ?? OPENROUTER_DEFAULT_SINGLE_TIMEOUT_MS
-  const chain = buildModelChain(requestedModel, maxModels)
+  const chain = buildModelChain(requestedModel)
 
   for (let i = 0; i < chain.length; i++) {
     const model = chain[i]!
     try {
-      const content = await callOpenRouterSingle(messages, model, singleTimeoutMs)
+      const content = await callOpenRouterSingle(messages, model, callOptions)
       return {
         content,
         model,
@@ -646,10 +636,7 @@ You are NOT a designer. You are a code copier. Copy the template structure exact
       { role: 'user', content: prompt },
     ],
     model,
-    {
-      maxModels: OPENROUTER_GENERATE_MAX_MODELS,
-      singleTimeoutMs: OPENROUTER_GENERATE_SINGLE_TIMEOUT_MS,
-    },
+    { maxTokens: 3600, timeoutMs: 72_000 },
   )
 
   return {
@@ -1276,10 +1263,7 @@ You are NOT a designer. You are NOT an instructor. You are a code copier. Copy t
       { role: 'user', content: prompt },
     ],
     model,
-    {
-      maxModels: OPENROUTER_GENERATE_MAX_MODELS,
-      singleTimeoutMs: OPENROUTER_GENERATE_SINGLE_TIMEOUT_MS,
-    },
+    { maxTokens: 3600, timeoutMs: 72_000 },
   )
 
   return {

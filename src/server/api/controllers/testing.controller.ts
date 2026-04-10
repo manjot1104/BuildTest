@@ -62,13 +62,6 @@ function normaliseUrl(url: string): string {
   return url;
 }
 
-// Strips trailing slash for consistent URL comparison (e.g. trend queries).
-// Does NOT modify the stored value — only used for WHERE clauses that need
-// to match runs regardless of whether the URL was stored with/without a slash.
-function normaliseUrlForComparison(url: string): string {
-  return normaliseUrl(url).replace(/\/$/, "");
-}
-
 function calculateScore(passed: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((passed / total) * 100);
@@ -117,7 +110,7 @@ interface PlanLimits {
 // "free" is the fallback for users with no active subscription.
 // ---------------------------------------------------------------------------
 const DAILY_RUN_LIMITS: Record<string, number> = {
-  free:       0,
+  free:       2,
   starter:    5,
   pro:        15,
   enterprise: 50,
@@ -542,7 +535,7 @@ async function runPipelineStages(
         `(plan="${planId ?? "free"}" planMax=${planLimits.maxTests} budgetMax=${siteData.testBudget.totalTests})`,
     );
   }
-  // ── End plan limit enforcement ────────────────────────────────────────────
+  // ── End plan-limit enforcement ────────────────────────────────────────────
 
   // Await stage3 so Puppeteer perf metrics are fully populated before we insert
   await siteData.stage3Promise.catch((err) => {
@@ -706,7 +699,7 @@ async function runPipelineStages(
           attempt++
         ) {
           // Pass userTimeouts into retry calls as well.
-          const retryResult = await executeTest(testUrl, goal, true, attempt, userTimeouts);
+          const retryResult = await executeTest(testUrl, goal, false, attempt, userTimeouts);
           retryCount = attempt;
           if (retryResult.passed) {
             isFlaky = true;
@@ -811,8 +804,18 @@ async function runPipelineStages(
               testTitle: tc.title ?? "",
               category,
               steps,
+              actualResult: result.actualResult,
+              errorDetails: result.errorDetails,
               expectedResult: tc.expected_result ?? "",
-              tinyfishRaw: result.tinyfishRaw,
+              consoleLogs: result.consoleLogs,
+              networkErrors: result.networkLogs
+                .filter((l) => l.status !== null && l.status >= 400)
+                .map((l) => ({
+                  url: l.url,
+                  method: l.method,
+                  status: l.status,
+                  error: l.error,
+                })),
             },
           });
 
@@ -1150,7 +1153,7 @@ export async function startTestRunHandler({
       session.user.id,
       effectiveMaxPages,
       effectiveMaxTests,
-      effectiveConcurrency,      // plan-clamped
+      effectiveConcurrency,      // now plan-clamped, not just hard-capped
       timeouts,                  // raw from body — resolveTimeouts clamps inside crawlSite/executeTest
       effectiveGithubOwner,      // [GITHUB]
       effectiveGithubRepo,       // [GITHUB]
@@ -1186,404 +1189,6 @@ export async function startTestRunHandler({
     console.error("Error in startTestRunHandler:", err);
     return { error: "Internal server error", status: 500 };
   }
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/test/run/from-cases
-// ---------------------------------------------------------------------------
-
-export async function runFromCasesHandler({
-  body,
-}: {
-  body: {
-    targetUrl: string;
-    cases: {
-      title: string;
-      category: string;
-      steps: string[];
-      expected_result: string;
-      priority: "P0" | "P1" | "P2";
-      description?: string | null;
-      tags?: string[] | null;
-      estimated_duration?: number | null;
-    }[];
-  };
-}): Promise<{ testRunId: string } | ApiErrorResponse> {
-  try {
-    const session = await getSession();
-    if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
-
-    const { targetUrl, cases } = body;
-    if (!targetUrl) return { error: "targetUrl is required", status: 400 };
-    if (!cases || cases.length === 0)
-      return { error: "At least one test case is required", status: 400 };
-
-    const normalisedUrl = normaliseUrl(targetUrl);
-
-    const planId = await getUserPlanId(session.user.id);
-    const planLimits = getServerPlanLimits(planId);
-
-    if (cases.length > planLimits.maxTests) {
-      return {
-        error: `Your ${planId ?? "free"} plan allows a maximum of ${planLimits.maxTests} test cases per run. You supplied ${cases.length}.`,
-        status: 403,
-      };
-    }
-
-    const runsToday = await countTestRunsTodayByUserId(session.user.id);
-    if (runsToday >= planLimits.dailyRuns) {
-      return {
-        error: `Daily limit reached. Your ${planId ?? "free"} plan allows ${planLimits.dailyRuns} test run${planLimits.dailyRuns === 1 ? "" : "s"} per day. Resets at midnight UTC.`,
-        status: 429,
-      };
-    }
-
-    const testRunId = nanoid();
-
-    await db.insert(test_runs).values({
-      id: testRunId,
-      user_id: session.user.id,
-      target_url: normalisedUrl,
-      project_id: null,
-      status: "generating",
-      total_tests: cases.length,
-      passed: 0,
-      failed: 0,
-      skipped: 0,
-      running: 0,
-    });
-
-    const testCaseRecords = cases.map((tc) => ({
-      id: nanoid(),
-      test_run_id: testRunId,
-      category: tc.category,
-      title: tc.title,
-      description: tc.description ?? null,
-      steps: tc.steps,
-      expected_result: tc.expected_result,
-      priority: tc.priority,
-      tags: tc.tags ?? null,
-      estimated_duration: tc.estimated_duration ?? null,
-    }));
-    await insertTestCases(testCaseRecords);
-
-    activePipelines.add(testRunId);
-
-    void runFromCasesPipeline(testRunId, normalisedUrl, testCaseRecords)
-      .catch(async (err) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.startsWith("CANCELLED:")) {
-          await updateTestRunStatus(testRunId, "cancelled" as typeof test_runs.$inferInsert.status, {
-            completed_at: new Date(), running: 0,
-          });
-        } else {
-          console.error(`[Testing/FromCases] Pipeline failed for ${testRunId}:`, err);
-          await updateTestRunStatus(testRunId, "failed");
-        }
-      })
-      .finally(() => {
-        activePipelines.delete(testRunId);
-        cancelledPipelines.delete(testRunId);
-        reviewResolvers.delete(testRunId);
-        pipelineEmitters.delete(testRunId);
-        crawlProgressBuffers.delete(testRunId);
-        executionBuffers.delete(testRunId);
-      });
-
-    return { testRunId };
-  } catch (err) {
-    console.error("Error in runFromCasesHandler:", err);
-    return { error: "Internal server error", status: 500 };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// runFromCasesPipeline — skips crawl+generation, jumps straight to review.
-//
-// Performance fix: because the full crawlSite pipeline is skipped, we run a
-// lightweight single-page crawl of the targetUrl (maxPages: 1) in parallel
-// with the review wait so Puppeteer perf metrics are available for the report.
-//
-// IMPORTANT — the perf crawl is fully fire-and-forget relative to the pipeline
-// control flow. It is kicked off before the review pause and we never await it
-// before proceeding to execution. Instead, we collect whatever metrics it has
-// produced by the time the report phase begins. This means:
-//   - The pipeline NEVER blocks waiting for the perf crawl to finish.
-//   - If the user confirms review before the perf crawl completes, execution
-//     starts immediately — the perf crawl finishes in the background.
-//   - If the perf crawl completes before the user confirms, its metrics are
-//     persisted to the DB as soon as they are ready (also fire-and-forget).
-//   - The report phase reads persisted metrics directly from the DB so it
-//     benefits from whatever was collected without waiting for the crawl itself.
-// ---------------------------------------------------------------------------
-
-async function runFromCasesPipeline(
-  testRunId: string,
-  targetUrl: string,
-  testCaseRecords: {
-    id: string;
-    test_run_id: string;
-    category: string | null;
-    title: string | null;
-    description: string | null;
-    steps: unknown;
-    expected_result: string | null;
-    priority: string | null;
-    tags: unknown;
-    estimated_duration: number | null;
-  }[],
-): Promise<void> {
-  const send = (event: PipelineSSEEvent) =>
-    broadcastToRun(testRunId, buildSSELine(event));
-
-  send({
-    type: "tests_generated",
-    testCases: testCaseRecords.map((tc) => ({
-      id: tc.id,
-      title: tc.title ?? "",
-      category: tc.category ?? "navigation",
-      priority: (tc.priority ?? "P1") as "P0" | "P1" | "P2",
-      steps: (tc.steps as string[]) ?? [],
-      expected_result: tc.expected_result ?? "",
-      target_url: targetUrl,
-    })),
-  } as PipelineSSEEvent);
-
-  checkCancelled(testRunId);
-  await updateTestRunStatus(testRunId, "awaiting_review");
-  send({ type: "status", status: "awaiting_review", percent: 40 });
-
-  // ── Kick off a lightweight perf-only crawl fully asynchronously ───────────
-  // We crawl just the root URL (maxPages: 1) for Puppeteer perf metrics.
-  // This promise is intentionally NOT awaited at any point in the pipeline
-  // control flow — it runs entirely in the background regardless of how
-  // quickly the user confirms or cancels review.
-  //
-  // Once the crawl + stage3 resolve, we immediately persist the metrics to
-  // the DB. The report phase then queries the DB directly so it picks up
-  // whatever was collected without any coupling to this promise.
-  void crawlSite(targetUrl, {
-    testRunId,
-    budget: { maxPages: 1, maxTests: 0 }, // maxTests:0 → no test budget needed
-    // No onProgress callback — we don't need to stream crawl events for a
-    // perf-only crawl triggered from the from-cases path.
-  })
-    .then(async (siteData) => {
-      // Wait for stage3 (Puppeteer screenshots + perf metrics collection)
-      await siteData.stage3Promise.catch((err) => {
-        console.warn("[FromCases] stage3 perf collection failed (non-fatal):", err);
-      });
-      const perfMetrics = siteData.performanceMetrics;
-      if (perfMetrics.length > 0) {
-        try {
-          await insertPerformanceMetrics(
-            perfMetrics.map((pm) => ({
-              id: nanoid(),
-              test_run_id: testRunId,
-              page_url: pm.pageUrl,
-              lcp_ms: pm.lcpMs,
-              fid_ms: pm.fidMs,
-              cls: pm.cls,
-              ttfb_ms: pm.ttfbMs,
-              raw_metrics: pm.rawMetrics,
-            })),
-          );
-          console.log(`[FromCases] Inserted ${perfMetrics.length} perf metric row(s) for run ${testRunId}`);
-        } catch (err) {
-          console.warn("[FromCases] Failed to persist perf metrics (non-fatal):", err);
-        }
-      }
-    })
-    .catch((err) => {
-      console.warn("[FromCases] Perf crawl failed (non-fatal):", err);
-    });
-
-  // ── Await review confirmation — perf crawl is running in background ───────
-  const confirmed = await new Promise<boolean>((resolve) => {
-    reviewResolvers.set(testRunId, resolve);
-  });
-  reviewResolvers.delete(testRunId);
-
-  if (!confirmed) throw new Error(`CANCELLED:${testRunId}`);
-
-  const finalTestCaseRows = await getTestCasesByRunId(testRunId);
-
-  await db
-    .update(test_runs)
-    .set({ total_tests: finalTestCaseRows.length })
-    .where(eq(test_runs.id, testRunId));
-
-  // ─── EXECUTE ─────────────────────────────────────────────────────────────
-  checkCancelled(testRunId);
-  await updateTestRunStatus(testRunId, "executing");
-  send({ type: "status", status: "executing", percent: 50 });
-
-  for (const row of finalTestCaseRows) {
-    send({ type: "test_update", testResultId: "", testCaseId: row.id, title: row.title ?? "", status: "pending" });
-  }
-
-  const pairs = finalTestCaseRows.map((row) => ({ tc: row, dbId: row.id }));
-  const counters = { passed: 0, failed: 0, running: 0, skipped: 0, total: finalTestCaseRows.length };
-  const sendCounters = () => send({ type: "counter", ...counters });
-
-  const failedTestsForSuggestions: { testResultId: string; ctx: import("@/server/services/openRouter.service").BugContext }[] = [];
-  const bugsToInsertBase: Omit<typeof bug_reports.$inferInsert, "ai_fix_suggestion">[] = [];
-  const categoryResults: Record<string, { passed: number; failed: number; total: number }> = {};
-
-  for (const [batchIndex, batch] of chunk(pairs, 50).entries()) {
-    checkCancelled(testRunId);
-    console.log(`[FromCases] Batch ${batchIndex + 1}: ${batch.length} tests`);
-
-    counters.running += batch.length;
-    await updateTestRunCounters(testRunId, { running: counters.running });
-
-    for (const { tc, dbId } of batch) {
-      send({ type: "test_update", testResultId: "", testCaseId: dbId, title: tc.title ?? "", status: "running" });
-    }
-    sendCounters();
-
-    const batchOutcomes = await Promise.allSettled(
-      batch.map(async ({ tc, dbId }) => {
-        const steps = (tc.steps as string[] | null) ?? [];
-        const numberedSteps = steps.map((step, i) => `Step ${i + 1}: ${step}`).join("\n");
-        const goal = `${numberedSteps}\n\nExpected result: ${tc.expected_result ?? ""}`;
-
-        let result = await executeTest(targetUrl, goal, false, 0);
-        let retryCount = 0;
-        let isFlaky = false;
-
-        for (let attempt = 1; attempt <= MAX_TEST_RETRIES && !result.passed; attempt++) {
-          const retryResult = await executeTest(targetUrl, goal, true, attempt);
-          retryCount = attempt;
-          if (retryResult.passed) { isFlaky = true; result = retryResult; break; }
-          result = retryResult;
-        }
-
-        const status = isFlaky ? "flaky" : result.passed ? "passed" : "failed";
-        const testResultId = nanoid();
-
-        let screenshotUrl: string | null = null;
-        if (status === "failed") {
-          try {
-            const { runTinyFishScreenshot } = await import("@/server/services/tinyfish.service");
-            const ssBase64 = await runTinyFishScreenshot(targetUrl);
-            if (ssBase64) screenshotUrl = await uploadScreenshot({ base64Png: ssBase64, testRunId, pageSlug: urlToSlug(targetUrl), viewport: "test" });
-          } catch (err) { console.warn(`[FromCases] Screenshot failed:`, err); }
-        }
-
-        await db.insert(test_results).values({
-          id: testResultId, test_case_id: dbId, test_run_id: testRunId, status,
-          actual_result: result.actualResult, duration_ms: result.durationMs,
-          screenshot_url: screenshotUrl, error_details: result.errorDetails,
-          console_logs: result.consoleLogs, network_logs: result.networkLogs,
-          retry_count: retryCount, tinyfish_job_id: result.jobId ?? null,
-        });
-
-        counters.running = Math.max(0, counters.running - 1);
-        if (status === "passed" || status === "flaky") counters.passed++;
-        else counters.failed++;
-
-        void updateTestRunCounters(testRunId, { passed: counters.passed, failed: counters.failed, running: counters.running });
-        sendCounters();
-        send({ type: "test_update", testResultId, testCaseId: dbId, title: tc.title ?? "", status, durationMs: result.durationMs });
-
-        const category = (tc as { category?: string | null }).category ?? "other";
-        if (!categoryResults[category]) categoryResults[category] = { passed: 0, failed: 0, total: 0 };
-        categoryResults[category]!.total++;
-        if (status === "passed" || status === "flaky") categoryResults[category]!.passed++;
-        else if (status === "failed") categoryResults[category]!.failed++;
-
-        if (status === "failed") {
-          const bugId = nanoid();
-          const priority = (tc as { priority?: string | null }).priority ?? "P2";
-          const severity = priority === "P0" ? "critical" : priority === "P1" ? "high" : "medium";
-          failedTestsForSuggestions.push({ testResultId: bugId, ctx: { pageUrl: targetUrl, testTitle: tc.title ?? "", category, steps, expectedResult: tc.expected_result ?? "", tinyfishRaw: result.tinyfishRaw } });
-          bugsToInsertBase.push({ id: bugId, test_run_id: testRunId, test_result_id: testResultId, severity, category, title: `${tc.title ?? ""} — FAILED`, description: result.actualResult, reproduction_steps: steps, screenshot_url: screenshotUrl, annotation_box: null, page_url: targetUrl, status: "open" });
-          send({ type: "bug_found", bug: { id: bugId, title: `${tc.title ?? ""} — FAILED`, severity, category, pageUrl: targetUrl, screenshotUrl } });
-        }
-      }),
-    );
-
-    for (const outcome of batchOutcomes) {
-      if (outcome.status === "rejected") {
-        counters.skipped++;
-        counters.running = Math.max(0, counters.running - 1);
-        sendCounters();
-      }
-    }
-    await updateTestRunCounters(testRunId, { passed: counters.passed, failed: counters.failed, skipped: counters.skipped, running: counters.running });
-    sendCounters();
-  }
-
-  // AI fix suggestions
-  let aiSuggestions = new Map<string, string | null>();
-  if (failedTestsForSuggestions.length > 0) {
-    try { aiSuggestions = await generateBugFixSuggestions(failedTestsForSuggestions); }
-    catch (err) { console.warn("[FromCases] AI suggestions failed (non-fatal):", err); }
-  }
-  if (bugsToInsertBase.length > 0) {
-    await db.insert(bug_reports).values(bugsToInsertBase.map(bug => ({ ...bug, ai_fix_suggestion: aiSuggestions.get(bug.id) ?? null })));
-  }
-
-  // ─── REPORT ───────────────────────────────────────────────────────────────
-  checkCancelled(testRunId);
-  await updateTestRunStatus(testRunId, "reporting");
-  send({ type: "status", status: "reporting", percent: 90 });
-
-  const overallScore = calculateScore(counters.passed, counters.passed + counters.failed + counters.skipped);
-
-  // Read persisted perf metrics from the DB — the background perf crawl may
-  // have already written them while tests were executing, giving us real data
-  // without ever blocking the pipeline on the crawl finishing.
-  const persistedPerfMetrics = await db
-    .select()
-    .from(performance_metrics)
-    .where(eq(performance_metrics.test_run_id, testRunId));
-
-  let aiSummary = "";
-  try {
-    aiSummary = await generateAISummary({
-      targetUrl,
-      overallScore,
-      totalTests: finalTestCaseRows.length,
-      passed: counters.passed,
-      failed: counters.failed,
-      skipped: counters.skipped,
-      bugs: bugsToInsertBase.map(b => ({
-        severity: (b.severity ?? "medium") as "critical" | "high" | "medium" | "low",
-        title: b.title ?? "",
-        pageUrl: b.page_url ?? "",
-        category: b.category ?? "",
-      })),
-      categoryResults,
-      // Use DB-persisted metrics so the AI summary includes perf insights if
-      // the background crawl completed in time, gracefully empty otherwise.
-      performanceSummary: persistedPerfMetrics.map((pm) => ({
-        pageUrl: pm.page_url,
-        lcpMs: pm.lcp_ms,
-        cls: pm.cls,
-        ttfbMs: pm.ttfb_ms,
-      })),
-    });
-  } catch {
-    aiSummary = `Test run complete. Score: ${overallScore}/100. ${counters.passed} passed, ${counters.failed} failed.`;
-  }
-
-  const embedBadgeToken = nanoid(32);
-  const shareableSlug = nanoid(10);
-
-  await db.insert(report_exports).values({
-    id: nanoid(), test_run_id: testRunId, format: "json", file_url: null,
-    ai_summary: aiSummary, shareable_slug: shareableSlug, is_public: true, embed_badge_token: embedBadgeToken,
-  });
-
-  await db.update(test_runs).set({
-    status: "complete", overall_score: overallScore,
-    passed: counters.passed, failed: counters.failed,
-    skipped: counters.skipped, running: 0, completed_at: new Date(),
-  }).where(eq(test_runs.id, testRunId));
-
-  send({ type: "complete", overallScore, passed: counters.passed, failed: counters.failed, skipped: counters.skipped, total: finalTestCaseRows.length, aiSummary, shareableSlug });
 }
 
 // ---------------------------------------------------------------------------
@@ -2338,39 +1943,22 @@ async function buildTestReport(run: NonNullable<Awaited<ReturnType<typeof db.que
     };
   });
 
-  // ── Trend query: normalise the target URL before matching ─────────────────
-  // Runs started via POST /api/test/run store the URL as-is from normaliseUrl()
-  // which may include a trailing slash. Runs started via POST /api/test/run/from-cases
-  // store the URL with trailing slash stripped (the frontend's groupByUrl helper
-  // strips it before passing targetUrl). A naive eq() match on target_url would
-  // therefore split the trend into two separate series.
-  //
-  // Fix: query all runs for the same user and filter in JS after stripping
-  // trailing slashes from both sides so "https://example.com" and
-  // "https://example.com/" are treated as the same site.
-  const normalisedTargetUrl = normaliseUrlForComparison(run.target_url);
-
-  const allUserRuns = await db.query.test_runs.findMany({
-    where: eq(test_runs.user_id, run.user_id),
+  const trendRuns = await db.query.test_runs.findMany({
+    where: eq(test_runs.target_url, run.target_url),
     orderBy: [desc(test_runs.started_at)],
-    columns: { id: true, overall_score: true, started_at: true, status: true, target_url: true },
+    limit: 10,
+    columns: { id: true, overall_score: true, started_at: true, status: true },
   });
 
-  const trendData = allUserRuns
-    .filter(
-      (r) =>
-        normaliseUrlForComparison(r.target_url) === normalisedTargetUrl &&
-        r.status === "complete" &&
-        r.overall_score !== null,
-    )
-    .slice(0, 10) // cap at 10 most recent (already sorted desc)
+  const trendData = trendRuns
+    .filter((r) => r.status === "complete" && r.overall_score !== null)
     .map((r) => ({
       runId: r.id,
       score: r.overall_score,
       date: r.started_at,
       isCurrent: r.id === run.id,
     }))
-    .reverse(); // chronological order for the chart
+    .reverse();
 
   const export0 = run.reportExports?.[0];
 

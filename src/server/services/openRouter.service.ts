@@ -120,23 +120,22 @@ export interface TestRunSummaryInput {
 /**
  * Context about a single failed test, used to generate an AI fix suggestion.
  * Collected during execution in testing.controller.ts and passed here in batch.
- *
- * tinyfishRaw holds the full serialised TinyFish output (resultJson, rawText,
- * error) so the AI can reason about partial step failures, TinyFish-own errors,
- * and any other signal present — even when the structured fields are empty.
- * It is always passed through but the AI prompt degrades gracefully when null.
  */
 export interface BugContext {
   pageUrl: string;
   testTitle: string;
   category: string;
   steps: string[];
+  actualResult: string;
+  errorDetails: string | null;
   expectedResult: string;
-  // tinyfishRaw replaces the previous actualResult / errorDetails / consoleLogs
-  // / networkErrors fields. The AI suggestion prompt now receives the full raw
-  // TinyFish output and the original steps, and derives the failure reason
-  // itself — this is more robust than pre-parsing non-deterministic output.
-  tinyfishRaw: string | null;
+  consoleLogs: string[];
+  networkErrors: {
+    url: string;
+    method: string;
+    status: number | null;
+    error: string | null;
+  }[];
 }
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -370,9 +369,7 @@ CRITICAL RULES FOR WRITING STEPS:
 7. Verify steps MUST say: Verify that <specific observable condition in the browser>
 8. NEVER say vague things like "go to the about page" — say "Click the link with text \\"About\\""
 9. Keep tests to 3–6 steps maximum. Shorter is better.
-10. NEVER use exact placeholder text to identify input fields — use descriptive references like "the email input field" or "the first input field on the page" instead
-11. NEVER add a Navigate step if the target URL is already where the test starts — only add Navigate steps when going to a DIFFERENT page mid-test
-12. NEVER add standalone "Wait for the page to fully load" steps between every action — only add a wait step after a form submission or a navigation that changes the URL
+10. target_url must be an exact URL from the crawl data.
 
 CATEGORIES:
 - navigation (P0): clicking nav links, verifying correct page loads, breadcrumbs, back/forward
@@ -719,86 +716,20 @@ Write 3–4 sentences. Lead with the score, highlight critical bugs with specifi
  * generateBugFixSuggestion
  *
  * Given the context of a single failed test, returns a plain-text fix suggestion.
- * The suggestion is derived from the original test steps and whatever TinyFish
- * returned (tinyfishRaw), which may be structured step logs, a TinyFish-own error
- * event, or nothing at all. The AI is asked to reason about what went wrong from
- * all available signal rather than relying on pre-parsed fields.
  * Returns null if the OpenRouter call fails — bugs are still saved without it.
  */
 export async function generateBugFixSuggestion(ctx: BugContext): Promise<string | null> {
-  // Parse tinyfishRaw to extract whatever signal is available.
-  // We pass it to the AI as a readable summary rather than raw JSON to keep
-  // the prompt concise and model-agnostic.
-  let tinyfishSection = "";
-  if (ctx.tinyfishRaw) {
-    try {
-      const parsed = JSON.parse(ctx.tinyfishRaw) as {
-        success?: boolean;
-        error?: string | null;
-        resultJson?: unknown;
-        rawText?: string | null;
-      };
+  const networkSection =
+    ctx.networkErrors.length > 0
+      ? `\nNetwork errors:\n${ctx.networkErrors
+          .map((e) => `  ${e.method} ${e.url} → ${e.status ?? "ERR"} ${e.error ?? ""}`)
+          .join("\n")}`
+      : "";
 
-      const lines: string[] = [];
-
-      // Surface the top-level error string if present (covers timeouts,
-      // TinyFish-own FAILED events, network errors, etc.).
-      if (typeof parsed.error === "string" && parsed.error) {
-        lines.push(`TinyFish error: ${parsed.error}`);
-      }
-
-      // Surface step log results if resultJson contains them.
-      if (parsed.resultJson && typeof parsed.resultJson === "object") {
-        const rj = parsed.resultJson as Record<string, unknown>;
-
-        // TinyFish-own error event shape: {type, run_id, status, error, ...}
-        if (typeof rj["error"] === "string" && typeof rj["status"] === "string") {
-          lines.push(`TinyFish status: ${rj["status"]}`);
-          lines.push(`TinyFish error detail: ${rj["error"]}`);
-          if (typeof rj["help_message"] === "string") {
-            lines.push(`Help: ${rj["help_message"]}`);
-          }
-        }
-
-        // Step log array shape: [{id, status, data}, ...]
-        const logArray: unknown[] = Array.isArray(rj)
-          ? rj
-          : Array.isArray(rj["logs"])
-            ? (rj["logs"] as unknown[])
-            : Array.isArray(rj["steps"])
-              ? (rj["steps"] as unknown[])
-              : Array.isArray(rj["results"])
-                ? (rj["results"] as unknown[])
-                : [];
-
-        if (logArray.length > 0) {
-          lines.push("Step execution log:");
-          for (const entry of logArray) {
-            if (typeof entry === "object" && entry !== null && "status" in (entry as object)) {
-              const e = entry as { id?: unknown; status?: unknown; data?: unknown };
-              lines.push(`  Step ${e.id ?? "?"}: ${e.status ?? "?"} — ${e.data ?? "no detail"}`);
-            }
-          }
-        }
-      }
-
-      // Include a snippet of rawText as last-resort signal.
-      if (typeof parsed.rawText === "string" && parsed.rawText && lines.length === 0) {
-        lines.push(`Raw output snippet: ${parsed.rawText.slice(0, 300)}`);
-      }
-
-      if (lines.length > 0) {
-        tinyfishSection = `\nBrowser agent output:\n${lines.join("\n")}`;
-      }
-    } catch {
-      // tinyfishRaw was not valid JSON — include it raw (truncated).
-      tinyfishSection = `\nBrowser agent output (unparsed): ${ctx.tinyfishRaw.slice(0, 400)}`;
-    }
-  }
-
-  const stepsSection = ctx.steps.length > 0
-    ? `\nTest steps:\n${ctx.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}`
-    : "";
+  const consoleSection =
+    ctx.consoleLogs.length > 0
+      ? `\nConsole errors:\n${ctx.consoleLogs.slice(0, 5).map((l) => `  ${l}`).join("\n")}`
+      : "";
 
   try {
     return await callOpenRouter(
@@ -809,9 +740,7 @@ export async function generateBugFixSuggestion(ctx: BugContext): Promise<string 
             "You are a senior software engineer reviewing a QA test failure. " +
             "Write a concise, actionable fix suggestion in plain text (no markdown headers, no bullet points). " +
             "3–5 sentences max. Focus on the most likely root cause and the exact code/config change needed. " +
-            "Be specific — name the element, route, or API endpoint involved. " +
-            "If the browser agent output shows which step failed, use that to pinpoint the issue. " +
-            "If the output is missing or unclear, reason from the test steps and expected result alone.",
+            "Be specific — name the element, route, or API endpoint involved.",
         },
         {
           role: "user",
@@ -821,7 +750,13 @@ export async function generateBugFixSuggestion(ctx: BugContext): Promise<string 
 Page URL: ${ctx.pageUrl}
 Test: ${ctx.testTitle}
 Category: ${ctx.category}
-Expected result: ${ctx.expectedResult}${stepsSection}${tinyfishSection}
+
+Steps executed:
+${ctx.steps.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+
+Expected: ${ctx.expectedResult}
+Actual: ${ctx.actualResult}
+${ctx.errorDetails ? `Error: ${ctx.errorDetails}` : ""}${networkSection}${consoleSection}
 
 What is the most likely root cause and how should a developer fix it?`,
         },

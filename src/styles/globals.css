@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -213,7 +213,7 @@ body {
   background: var(--muted-foreground);
 }
 
-/* ─── Buildify Studio animations ─────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇ Buildify Studio animations ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 @keyframes pb-fadein    { from { opacity: 0 }                                     to { opacity: 1 } }
 @keyframes pb-slideup   { from { opacity: 0; transform: translateY(28px) }        to { opacity: 1; transform: translateY(0) } }
 @keyframes pb-slidedown { from { opacity: 0; transform: translateY(-28px) }       to { opacity: 1; transform: translateY(0) } }
@@ -242,7 +242,7 @@ body {
 .pb-anim-hoverscale { transition: transform 0.2s ease; }
 .pb-anim-hoverscale:hover { transform: scale(1.05); }
 
-/* ─── Hacker / Cyber / Neon animations ───────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇ Hacker / Cyber / Neon animations ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 
 /* Neon color vars */
 :root {
@@ -298,9 +298,9 @@ body {
   to   { transform: scaleX(1); }
 }
 
-/* ─── Landing page — ambient effects ────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇ Landing page ΓÇö ambient effects ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 
-/* Hero aurora mesh — large animated gradient background (the main atmosphere) */
+/* Hero aurora mesh ΓÇö large animated gradient background (the main atmosphere) */
 .hero-aurora {
   position: absolute;
   inset: 0;
@@ -338,7 +338,7 @@ body {
   75% { transform: translate(30px, 10px) rotate(0.5deg) scale(1.01); }
 }
 
-/* Hero grid lines — perspective grid */
+/* Hero grid lines ΓÇö perspective grid */
 .hero-grid {
   position: absolute;
   inset: 0;
@@ -403,7 +403,7 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-/* Pill badge shimmer — inspired by CodeWiki's shine effect */
+/* Pill badge shimmer ΓÇö inspired by CodeWiki's shine effect */
 @keyframes pillShimmer {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
@@ -445,7 +445,7 @@ body {
   animation: pillShimmer 4s ease-in-out infinite;
 }
 
-/* ─── Capability cards ───────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇ Capability cards ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 .cap-card {
   position: relative;
   padding: 32px 36px;
@@ -466,7 +466,7 @@ body {
 .cap-card:nth-child(4) { border-radius: 0 0 0 16px; }
 .cap-card:last-child { border-radius: 0 0 16px 0; }
 
-/* Top glow line — hidden by default, shown on hover + auto cycle */
+/* Top glow line ΓÇö hidden by default, shown on hover + auto cycle */
 .cap-card::after {
   content: '';
   position: absolute;
@@ -495,7 +495,7 @@ body {
   box-shadow: 0 0 20px rgba(96, 165, 250, 0.06);
 }
 
-/* ── Auto-glow cycle: each card glows one at a time ── */
+/* ΓöÇΓöÇ Auto-glow cycle: each card glows one at a time ΓöÇΓöÇ */
 /* 6 cards, each glows for ~2s, full cycle = 12s */
 .cap-card-glow-1 { animation: capGlow 12s ease-in-out infinite; animation-delay: 0s; }
 .cap-card-glow-2 { animation: capGlow 12s ease-in-out infinite; animation-delay: 2s; }
@@ -540,7 +540,7 @@ body {
   18%, 100% { opacity: 0; }
 }
 
-/* ── Floating glow orb behind the grid ── */
+/* ΓöÇΓöÇ Floating glow orb behind the grid ΓöÇΓöÇ */
 .cap-glow-orb {
   position: absolute;
   width: 500px;
@@ -665,7 +665,7 @@ body {
   background-size: 32px 32px;
 }
 
-/* ─── Code Wall (Free Tier section — CodeWiki style) ─────────────────────── */
+/* ΓöÇΓöÇΓöÇ Code Wall (Free Tier section ΓÇö CodeWiki style) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 .code-wall {
   position: absolute;
   inset: 0;
@@ -709,14 +709,14 @@ body {
   color: inherit;
 }
 
-/* ── Blue-only syntax palette (barely visible watermark) ── */
+/* ΓöÇΓöÇ Blue-only syntax palette (barely visible watermark) ΓöÇΓöÇ */
 .cw-kw { color: rgba(59, 130, 246, 0.06); font-weight: 600; }
 .cw-str { color: rgba(56, 189, 248, 0.05); }
 .cw-fn  { color: rgba(59, 130, 246, 0.07); }
 .cw-cm  { color: rgba(59, 130, 246, 0.03); font-style: italic; }
 .cw-num { color: rgba(99, 102, 241, 0.05); }
 
-/* ── Dark theme ── */
+/* ΓöÇΓöÇ Dark theme ΓöÇΓöÇ */
 .dark .cw-kw { color: rgba(96, 165, 250, 0.05); }
 .dark .cw-str { color: rgba(125, 211, 252, 0.04); }
 .dark .cw-fn  { color: rgba(96, 165, 250, 0.06); }
@@ -773,7 +773,7 @@ body {
   }
 }
 
-/* ─── Free Tier 3D Cube ──────────────────────────────────────────────────── */
+/* ΓöÇΓöÇΓöÇ Free Tier 3D Cube ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 .cube-scene {
   position: relative;
   height: 340px;
@@ -839,7 +839,7 @@ body {
 .cube-bg-panel-7 { width: 115px; height: 68px; bottom: 0%; left: 15%; transform: rotate(5deg); }
 .cube-bg-panel-8 { width: 135px; height: 78px; bottom: 2%; right: 15%; transform: rotate(-2deg); }
 
-/* 3D Cube — perspective on the wrapper, preserve-3d on the rotating element */
+/* 3D Cube ΓÇö perspective on the wrapper, preserve-3d on the rotating element */
 .cube-wrapper {
   position: relative;
   z-index: 2;
@@ -918,7 +918,7 @@ body {
   .cube-bg-panel { display: none; }
 }
 
-/* ─── Feature demo — soft moving light around video ──────────────────────── */
+/* ΓöÇΓöÇΓöÇ Feature demo ΓÇö soft moving light around video ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ */
 @property --glow-angle {
   syntax: "<angle>";
   initial-value: 0deg;
@@ -929,14 +929,14 @@ body {
   to { --glow-angle: 360deg; }
 }
 
-/* Outer wrapper — same radius as inner, just adds space for glow */
+/* Outer wrapper ΓÇö same radius as inner, just adds space for glow */
 .feature-video-outer {
   padding: 3px;
   border-radius: 20px;
   position: relative;
 }
 
-/* Soft rotating light — two streaks on opposite sides */
+/* Soft rotating light ΓÇö two streaks on opposite sides */
 .feature-video-glow-track {
   position: absolute;
   inset: -6px;
@@ -960,7 +960,7 @@ body {
   transition: all 0.5s ease;
 }
 
-/* Inner video container — identical radius, clips everything */
+/* Inner video container ΓÇö identical radius, clips everything */
 .feature-video-inner {
   position: relative;
   z-index: 1;
@@ -973,7 +973,7 @@ body {
   box-shadow: 0 20px 60px rgba(0,0,0,0.08), 0 4px 20px rgba(59,130,246,0.06);
 }
 
-/* Hover — noticeably brighter */
+/* Hover ΓÇö noticeably brighter */
 .feature-video-outer:hover .feature-video-glow-track {
   inset: -8px;
   border-radius: 26px;
@@ -992,7 +992,7 @@ body {
   filter: blur(30px);
 }
 
-/* Light theme — boost glow visibility */
+/* Light theme ΓÇö boost glow visibility */
 :root:not(.dark) .feature-video-glow-track {
   inset: -8px;
   border-radius: 26px;
@@ -1035,7 +1035,7 @@ body {
   display: none;
 }
 
-/* Reduced motion — skip animations, show final state */
+/* Reduced motion ΓÇö skip animations, show final state */
 @media (prefers-reduced-motion: reduce) {
   * {
     animation-duration: 0.01ms !important;

@@ -979,45 +979,6 @@ export function useCancelTestRun() {
   });
 }
 
-// ─── useRunFromCases ──────────────────────────────────────────────────────────
-// Starts a new test run pre-seeded with caller-supplied test cases.
-// The server skips crawling and AI generation and goes straight to
-// awaiting_review so the user can confirm (or edit) before execution.
-export function useRunFromCases() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      /** Original target URL — locked, cannot be changed. */
-      targetUrl: string;
-      /** Test cases to pre-seed (from a previous run). */
-      cases: {
-        title: string;
-        category: string;
-        steps: string[];
-        expected_result: string;
-        priority: "P0" | "P1" | "P2";
-        description?: string | null;
-        tags?: string[] | null;
-        estimated_duration?: number | null;
-      }[];
-    }): Promise<{ testRunId: string }> => {
-      const res = await fetch("/api/test/run/from-cases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const data = (await res.json()) as { testRunId?: string; error?: string };
-      if (!res.ok || !data.testRunId)
-        throw new Error(data.error ?? "Failed to start run from cases");
-      return { testRunId: data.testRunId };
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: testingKeys.history() });
-      void queryClient.invalidateQueries({ queryKey: testingKeys.usage() });
-    },
-  });
-}
-
 // ── Review phase mutations ────────────────────────────────────────────────────
 
 /**
