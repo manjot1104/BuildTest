@@ -115,7 +115,8 @@ import {
 import {
   generateVideoHandler,
   renderVideoHandler,
-} from '@/server/api/controllers/video.controller';
+} from '@/server/api/controllers/video-gen.controller';
+import { uploadUserImagesHandler } from '@/server/api/controllers/video-upload.controller'
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
 
@@ -1966,7 +1967,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // ADDED: GET /api/badge/:token/svg — returns an actual SVG image (not JSON).
+  // GET /api/badge/:token/svg — returns an actual SVG image (not JSON).
   // This is what the "Copy Badge" button points to as the image src in the
   // markdown string: [![Tested by Buildify](.../svg)](report-link).
   // IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
@@ -1987,12 +1988,36 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   // ============================================
   // Video Generation Endpoints
   // ============================================
+
+  // POST /api/video/upload-images
+  //   Content-Type: multipart/form-data
+  //   Body: { images: File[], descriptions: string[] }
+  //
+  //   Returns: { images: UploadedUserImage[], sessionId: string }
+ 
+  .post(
+    '/video/upload-images',
+    async ({ body, set }: any) => {
+      const result = await uploadUserImagesHandler({ body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      body: t.Object({
+        images: t.Files({ maxSize: '5m', type: ['image/jpeg', 'image/png', 'image/webp'] }),
+        descriptions: t.Union([t.Array(t.String()), t.String()]), // Elysia sends single string when array has 1 item
+      }),
+    },
+  )
  
   // POST /api/video/generate — prompt → VideoJson
   // Returns validated VideoJson ready to pass to the Remotion Player.
   .post(
     '/video/generate',
-    async ({ body, set }) => {
+    async ({ body, set }: any) => {
       const result = await generateVideoHandler({ body })
       if ('status' in result && 'error' in result) {
         set.status = result.status
@@ -2012,6 +2037,13 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           ttsVolume: t.Optional(t.Number()),
           musicVolume: t.Optional(t.Number()),
         })),
+        userImages: t.Optional(t.Array(t.Object({
+          index: t.Number(),
+          url: t.String(),
+          description: t.String(),
+          filename: t.String(),
+        }))),
+        imageSessionId: t.Optional(t.String()),
       }),
     },
   )

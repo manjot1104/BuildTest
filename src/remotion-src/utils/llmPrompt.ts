@@ -2,6 +2,8 @@
 // LLM SYSTEM PROMPT
 // ============================================================
 
+import type { UserImage } from "@/server/engines/video-gen-images.engine";
+
 export const VIDEO_SYSTEM_PROMPT = `
 You are a cinematic video generation AI. Convert a user prompt into a structured JSON object.
 Return ONLY valid JSON. No explanation, no markdown, no code fences.
@@ -11,14 +13,24 @@ Every scene MUST have a "background" object. Use image backgrounds often for vis
 
 Color:    { "type": "color", "value": "#111827" }
 Gradient: { "type": "gradient", "from": "#0f0c29", "to": "#302b63", "angle": 135 }
-Image:    { "type": "image", "url": "https://picsum.photos/seed/SEED-WORDS-HERE/1280/720.jpg" }
+Image:    { "type": "image", "url": "seed:SEED-WORDS-HERE" }
 
 IMAGE SEEDS: Use 3-5 descriptive hyphenated words matching the scene topic.
-BAD: "image1", "nature", "blue"  
-GOOD: "dense-forest-river-mist", "desert-sand-dunes-sunset", "city-skyline-night-lights"
-NEVER use /id/ URLs. Only use the seed format above.
+BAD:  "seed:image1", "seed:nature", "seed:blue"
+GOOD: "seed:dense-forest-river-mist", "seed:desert-sand-dunes-sunset", "seed:city-skyline-night-lights"
+
+CRITICAL: Always use the "seed:words-here" format for all non-user images.
+NEVER output full URLs like "https://picsum.photos/..." or any other image CDN URL.
+The system will automatically find the best photo from Pexels, or fall back to a placeholder.
 
 When background is "image", you MUST also add: "overlay": "rgba(0,0,0,0.55)", "overlayOpacity": 1
+
+=== USER-PROVIDED IMAGES (HIGHEST PRIORITY) ===
+When the user has provided their own images, you MUST use them wherever they are relevant.
+User images are referenced as: "user://image-0", "user://image-1", etc.
+These can be used as BOTH scene backgrounds AND element images (type: "image").
+ALWAYS prefer user images over seed URLs when a user image matches the scene topic.
+Only fall back to seed URLs for scenes where no user image is relevant.
 
 === LAYOUTS AND THEIR REQUIRED SLOTS ===
 
@@ -39,8 +51,11 @@ CRITICAL SLOT RULES:
 
 === ELEMENT TYPES ===
 Text:        { "type": "text", "text": "...", "slot": "SLOT", "fontSize": 48, "shadow": true, "animation": "spring-up" }
-Image:       { "type": "image", "url": "https://picsum.photos/seed/WORDS/1280/720.jpg", "slot": "SLOT", "borderRadius": 16, "animation": "spring-scale" }
+Image:       { "type": "image", "url": "seed:WORDS", "slot": "SLOT", "borderRadius": 16, "animation": "spring-scale" }
 Bullet list: { "type": "bullet-list", "items": ["point 1", "point 2", "point 3"], "slot": "bullet" }
+
+For image elements, user images can also be used: { "type": "image", "url": "user://image-0", "slot": "visual", ... }
+For image elements using seeds: { "type": "image", "url": "seed:tall-pine-forest-fog", "slot": "visual", ... }
 
 Animations: "fade" | "spring-up" | "spring-scale" | "typewriter" | "slide-up" | "zoom-in"
 
@@ -57,9 +72,38 @@ BAD: "Photosynthesis"
 GOOD: "Photosynthesis is the process plants use to convert sunlight into food, producing oxygen as a byproduct."
 `;
 
+// ── Build user images block for prompt injection ──────────────────────────────
+
+function buildUserImagesBlock(userImages: UserImage[]): string {
+  if (!userImages.length) return "";
+
+  const lines = userImages.map(
+    (img) =>
+      `  - user://image-${img.index}: "${img.description}"`,
+  );
+
+  return `
+=== YOUR AVAILABLE USER IMAGES ===
+The user has uploaded the following images. Use them wherever they fit the scene content.
+ALWAYS prefer these over seed URLs for matching scenes.
+Reference them exactly as shown (e.g. "user://image-0") in background.url or element.url fields.
+
+${lines.join("\n")}
+
+USAGE RULES:
+- For a scene that matches a user image description, use that image as the background OR as a visual element.
+- You may use the same user image in multiple scenes if it fits.
+- For scenes where no user image fits, use seed URLs (e.g. "seed:mountain-sunrise-mist") as normal.
+- In SPLIT_LEFT / SPLIT_RIGHT layouts, user images work great as the "visual" slot element.
+- In FULLSCREEN layout, use the user image as the "main" slot element.
+- As a background: { "type": "image", "url": "user://image-0" } (still add overlay + overlayOpacity).
+`;
+}
+
 export const buildVideoPrompt = (
   userPrompt: string,
   durationSeconds = 15,
+  userImages: UserImage[] = [],
 ): string => {
   const fps = 30;
   const targetFrames = durationSeconds * fps;
@@ -73,8 +117,10 @@ export const buildVideoPrompt = (
   const estimatedTransitionFrames = (estimatedScenes - 1) * 20;
   const provisionalFrames = targetFrames + estimatedTransitionFrames;
 
-  return `Create a ${durationSeconds}-second video about: "${userPrompt}"
+  const userImagesBlock = buildUserImagesBlock(userImages);
 
+  return `Create a ${durationSeconds}-second video about: "${userPrompt}"
+${userImagesBlock}
 REQUIREMENTS:
 1. Produce ${minScenes}–${maxScenes} scenes.
 2. Sum of ALL "durationInFrames" values MUST equal approximately ${provisionalFrames} frames total.
@@ -84,20 +130,22 @@ REQUIREMENTS:
 4. Use AT LEAST 3 different layouts across the video.
 5. Use image backgrounds on MOST scenes (not color/gradient every time).
 6. Every image background needs "overlay": "rgba(0,0,0,0.55)" and "overlayOpacity": 1.
-7. All picsum seeds must be descriptive 3-5 word phrases related to "${userPrompt}".
+7. All image seeds must use the format "seed:descriptive-3-to-5-word-phrase" related to "${userPrompt}".
+   NEVER output full URLs. ONLY use "seed:words-here" or "user://image-N" for image urls.
 8. Every scene except the last needs a "transition". Vary them.
+${userImages.length > 0 ? `9. You have ${userImages.length} user image(s) available — use them in scenes where they are relevant. Prioritize user images over seed URLs.` : ""}
 
 EXAMPLE of a correct scene with image background + SPLIT_LEFT layout:
 {
   "layout": "SPLIT_LEFT",
   "durationInFrames": 150,
-  "background": { "type": "image", "url": "https://picsum.photos/seed/forest-morning-light-trees/1280/720.jpg" },
+  "background": { "type": "image", "url": "seed:forest-morning-light-trees" },
   "overlay": "rgba(0,0,0,0.55)",
   "overlayOpacity": 1,
-  text: "The ancient forests are home to countless species and have stood for millennia.",
+  "text": "The ancient forests are home to countless species and have stood for millennia.",
   "elements": [
     { "type": "text", "text": "Ancient Forests", "slot": "text", "fontSize": 52, "shadow": true, "animation": "spring-up" },
-    { "type": "image", "url": "https://picsum.photos/seed/tall-pine-forest-fog/800/600.jpg", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }
+    { "type": "image", "url": "seed:tall-pine-forest-fog", "slot": "visual", "borderRadius": 16, "animation": "spring-scale" }
   ],
   "transition": "slide-left",
   "transitionDuration": 20

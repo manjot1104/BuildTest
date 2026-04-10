@@ -1,4 +1,4 @@
-// server/services/video.service.ts
+// server/services/video-gen.service.ts
 //
 // Self-contained LLM service for video JSON generation.
 // Zero imports from other services in this codebase.
@@ -19,6 +19,10 @@ import type { VideoJson } from "@/remotion-src/types";
 // Import your engines
 import { generateSmallestAITTS } from "../engines/video-gen-tts.engine";
 import { getMusicTrack } from "../engines/video-gen-music.engine";
+import {
+  resolveAllImageUrls,
+  type UserImage,
+} from "../engines/video-gen-images.engine";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -149,7 +153,7 @@ function extractJson(raw: string): string {
       0,
     );
     const wrapped = {
-      duration: totalFrames, // Keep it as total frames
+      duration: totalFrames,
       fps: 30,
       scenes: bareScenes,
     };
@@ -164,7 +168,7 @@ function repairTruncatedJson(raw: string): string {
   try {
     JSON.parse(raw);
     return raw;
-  } catch { }
+  } catch {}
 
   let text = raw.trim();
   // Strip trailing incomplete key or value
@@ -339,17 +343,16 @@ async function enrichVideoWithAudio(
     const track = getMusicTrack(options.musicGenre || "corporate");
     if (track) {
       videoJson.bgmUrl = track.url;
-      // Use user-provided volume or fall back to track default
       videoJson.musicVolume = options.musicVolume ?? track.defaultVolume;
     }
   } else {
     videoJson.musicVolume = 0;
   }
+
   // 2. Handle TTS (Per Scene)
   if (options.useTTS) {
-    // FIX: Extract index 'i' using .entries()
     for (const [i, scene] of videoJson.scenes.entries()) {
-      const originalFrames = scene.durationInFrames; // preserve before overwriting
+      const originalFrames = scene.durationInFrames;
       try {
         const { url, durationInSeconds } = await generateSmallestAITTS(
           scene.text,
@@ -360,10 +363,8 @@ async function enrichVideoWithAudio(
         scene.ttsUrl = url;
 
         if (durationInSeconds > 0) {
-          // Audio is valid — let it drive the scene duration
           scene.durationInFrames = Math.ceil(durationInSeconds * 30) + 5;
         } else {
-          // TTS returned but duration is unusable — keep original LLM-assigned frames
           console.warn(
             `[VideoService] scene ${i}: TTS duration=0, keeping original durationInFrames=${originalFrames}`,
           );
@@ -371,14 +372,12 @@ async function enrichVideoWithAudio(
         }
       } catch (err) {
         console.error(`[VideoService] TTS failed for scene ${i}:`, err);
-        scene.durationInFrames = originalFrames; // same fallback on hard error
+        scene.durationInFrames = originalFrames;
       }
     }
   }
 
-  // Set TTS volume (default to 0.8 if not provided)
   videoJson.ttsVolume = options.ttsVolume ?? 0.8;
-  // musicVolume already set above in the music block
 
   // 3. Recalculate Root Duration
   videoJson.duration = videoJson.scenes.reduce((acc, s, i) => {
@@ -400,13 +399,20 @@ export async function generateVideoJson(
     useMusic?: boolean;
     voiceId?: string;
     musicGenre?: string;
-    ttsVolume?: number;      
-    musicVolume?: number; 
+    ttsVolume?: number;
+    musicVolume?: number;
+    /** User-uploaded images to pass into the LLM prompt and resolve post-generation */
+    userImages?: UserImage[];
   } = {},
 ): Promise<GenerateVideoResult | GenerateVideoError> {
+  const { userImages = [], ...audioOptions } = options;
+
   const messages: OpenRouterMessage[] = [
     { role: "system", content: VIDEO_SYSTEM_PROMPT },
-    { role: "user", content: buildVideoPrompt(prompt, durationSeconds) },
+    {
+      role: "user",
+      content: buildVideoPrompt(prompt, durationSeconds, userImages),
+    },
   ];
 
   let lastError = "";
@@ -419,27 +425,25 @@ export async function generateVideoJson(
         attempt === 1
           ? messages
           : [
-            ...messages,
-            {
-              role: "assistant",
-              content:
-                lastError || "Previous attempt failed with invalid JSON.",
-            },
-            {
-              role: "user",
-              content:
-                'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
-            },
-          ];
+              ...messages,
+              {
+                role: "assistant",
+                content:
+                  lastError || "Previous attempt failed with invalid JSON.",
+              },
+              {
+                role: "user",
+                content:
+                  'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
+              },
+            ];
 
       const raw = await callOpenRouter(attemptMessages);
 
-      // Debug: show what the model actually ended with
       console.log(`[VideoService] raw tail: ...${raw.trimEnd().slice(-120)}`);
 
       const jsonString = extractJson(raw);
 
-      // Debug: show what extractJson produced
       console.log(
         `[VideoService] extracted tail: ...${jsonString.trimEnd().slice(-120)}`,
       );
@@ -451,7 +455,7 @@ export async function generateVideoJson(
         const repaired = repairTruncatedJson(jsonString);
         console.warn(
           `[VideoService] JSON parse failed on attempt ${attempt} — trying repair ` +
-          `(${jsonString.length} chars → ${repaired.length} chars)`,
+            `(${jsonString.length} chars → ${repaired.length} chars)`,
         );
         try {
           parsed = JSON.parse(repaired);
@@ -466,18 +470,16 @@ export async function generateVideoJson(
         }
       }
 
-      // ── DEBUG: dump the full parsed object so we can see exactly what came back
       console.log(
         `[VideoService] DEBUG parsed JSON (attempt ${attempt}):\n` +
-        JSON.stringify(parsed, null, 2),
+          JSON.stringify(parsed, null, 2),
       );
 
-      // ── DEBUG: surface any null/undefined fields before Zod sees them
       const undefinedFields = findUndefinedFields(parsed);
       if (undefinedFields.length > 0) {
         console.warn(
           `[VideoService] DEBUG null/undefined fields:\n` +
-          undefinedFields.map((f) => `  ${f}`).join("\n"),
+            undefinedFields.map((f) => `  ${f}`).join("\n"),
         );
       }
 
@@ -499,10 +501,20 @@ export async function generateVideoJson(
         continue;
       }
 
-      // TTS/Music ENRICHMENT PHASE ---
-      const enrichedJson = await enrichVideoWithAudio(
+      // ── IMAGE RESOLUTION PHASE ────────────────────────────────────────────
+      // Resolve all image URLs: user:// refs → actual URLs, picsum seeds → Pexels/picsum
+      console.log(
+        `[VideoService] Resolving image URLs (${userImages.length} user images available)…`,
+      );
+      const imageResolvedJson = await resolveAllImageUrls(
         validation.data as VideoJson,
-        options,
+        userImages,
+      );
+
+      // ── AUDIO ENRICHMENT PHASE ────────────────────────────────────────────
+      const enrichedJson = await enrichVideoWithAudio(
+        imageResolvedJson,
+        audioOptions,
       );
 
       const totalFrames = enrichedJson.duration;
@@ -510,7 +522,7 @@ export async function generateVideoJson(
 
       console.log(
         `[VideoService] ✓ Generated ${validation.data.scenes.length} scenes, ` +
-        `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
+          `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
       );
 
       return { success: true, videoJson: enrichedJson as VideoJson };
