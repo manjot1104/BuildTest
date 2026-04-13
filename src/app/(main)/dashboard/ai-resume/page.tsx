@@ -40,6 +40,7 @@ import {
   type ParsedResumeLayoutEstimate,
 } from './components/parsed-resume-layout-strip'
 import { ScoreLayoutInsights } from './components/score-layout-insights'
+import { JobFitEvaluationPanel } from './components/job-fit-evaluation-panel'
 import {
   pickAiResumeLayoutFields,
   resumeFormToResumeData,
@@ -197,6 +198,8 @@ export default function AIResumeBuilderPage() {
   const [scoreFormat, setScoreFormat] = useState<'html' | 'latex' | 'text'>('text')
   const [scoreFile, setScoreFile] = useState<File | null>(null)
   const [isExtractingText, setIsExtractingText] = useState(false)
+  /** JD text for optional job-fit panel only — not wired to generate resume. */
+  const [jobFitJdDraft, setJobFitJdDraft] = useState('')
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -223,6 +226,24 @@ export default function AIResumeBuilderPage() {
   })
 
   const watchedResumeFields = useWatch({ control: form.control }) as ResumeFormData
+
+  const resumeContextForJobFit = useMemo(() => {
+    const w = watchedResumeFields
+    if (!w) return ''
+    const parts = [
+      w.fullName && `Name: ${w.fullName}`,
+      w.title && `Target title: ${w.title}`,
+      w.summary && `Summary: ${w.summary}`,
+      w.skills && `Skills: ${w.skills}`,
+      w.experience && `Experience:\n${w.experience}`,
+      w.education && `Education:\n${w.education}`,
+      w.projects && `Projects:\n${w.projects}`,
+      w.certifications && `Certifications:\n${w.certifications}`,
+      w.achievements && `Achievements:\n${w.achievements}`,
+      w.languagesKnown && `Languages: ${w.languagesKnown}`,
+    ].filter(Boolean) as string[]
+    return parts.join('\n\n').slice(0, 12_000)
+  }, [watchedResumeFields])
 
   const layoutPreviewForm = pickAiResumeLayoutFields(watchedResumeFields ?? {})
 
@@ -734,6 +755,8 @@ export default function AIResumeBuilderPage() {
         details?: string
         extractedResumeData?: Record<string, string | string[] | undefined> | null
         jdRequirements?: Record<string, string | string[] | undefined> | null
+        /** Raw JD excerpt from upload — for optional job-fit panel only */
+        jdText?: string
         /** Server set when AI JD parse failed (e.g. 429) but raw JD text was attached */
         jdUsedRawFallback?: boolean
         resumeLayoutEstimate?: {
@@ -788,6 +811,10 @@ export default function AIResumeBuilderPage() {
         jdRequirements: result.jdRequirements ?? undefined,
         resumeLayoutEstimate: result.resumeLayoutEstimate ?? null,
       })
+
+      if (result.jdText?.trim()) {
+        setJobFitJdDraft((prev) => (prev.trim().length > 0 ? prev : result.jdText!.trim()))
+      }
 
       // Auto-fill form if resume data is extracted
       let fieldsFilled = 0
@@ -1631,6 +1658,19 @@ export default function AIResumeBuilderPage() {
                 Upload your existing resume to auto-fill the form, or upload a job description to tailor your resume to specific requirements.
               </p>
             </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.015, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <JobFitEvaluationPanel
+              jobDescription={jobFitJdDraft}
+              onJobDescriptionChange={setJobFitJdDraft}
+              resumeContext={resumeContextForJobFit}
+              selectedModel={selectedModel}
+            />
           </motion.div>
 
           {/* Selected Template & Format Display */}
