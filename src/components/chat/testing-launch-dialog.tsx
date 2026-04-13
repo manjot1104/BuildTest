@@ -134,7 +134,7 @@ export function TestingLaunchDialog({
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -164,7 +164,7 @@ export function TestingLaunchDialog({
   if (!isGithubConnected) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-       <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -182,15 +182,11 @@ export function TestingLaunchDialog({
               <StepRow
                 number={1}
                 label="Test target"
-           description={
-  demoUrl ? (
-    <span className="break-all text-xs">
-      Will crawl {demoUrl.replace(/^https?:\/\//, '')}
-    </span>
-  ) : (
-    'No demo URL yet — you can enter one on the testing page.'
-  )
-}
+                description={
+                  demoUrl
+                    ? `Will crawl ${demoUrl.replace(/^https?:\/\//, '')}`
+                    : 'No demo URL yet — you can enter one on the testing page.'
+                }
                 status="done"
               />
               <StepRow
@@ -254,7 +250,7 @@ export function TestingLaunchDialog({
   if (isGithubConnected && !hasRepo) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -339,7 +335,7 @@ export function TestingLaunchDialog({
   // Shows both URL and repo, with a toggleable source inclusion card.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-   <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="size-5" />
