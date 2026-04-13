@@ -116,6 +116,11 @@ import {
   generateVideoHandler,
   renderVideoHandler,
 } from '@/server/api/controllers/video-gen.controller';
+import {
+  getVideoChatsHandler,
+  getVideoChatHandler,
+  deleteVideoChatHandler,
+} from '@/server/api/controllers/video-chat.controller'
 import { uploadUserImagesHandler } from '@/server/api/controllers/video-upload.controller'
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
@@ -2071,5 +2076,53 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           globalFontFamily: t.Optional(t.String()),
         }),
       }),
+    },
+  )
+  // GET /api/video/chats — list all video chats for the authenticated user
+  // Used by useVideoChats() in the history panel to populate the sidebar/drawer.
+  // IMPORTANT: declared before /video/chats/:chatId to avoid route collision.
+  .get(
+    '/video/chats',
+    async ({ set }) => {
+      const result = await getVideoChatsHandler()
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+  )
+
+  // GET /api/video/chats/:chatId — single video chat by id
+  // Used by useVideoChat(chatId) to resume a past generation.
+  .get(
+    '/video/chats/:chatId',
+    async ({ params, set }) => {
+      const result = await getVideoChatHandler({ params })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // DELETE /api/video/chats/:chatId — delete a video chat by id
+  // Called if you add a delete button to the history panel in future.
+  .delete(
+    '/video/chats/:chatId',
+    async ({ params, set }) => {
+      const result = await deleteVideoChatHandler({ params })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
     },
   )

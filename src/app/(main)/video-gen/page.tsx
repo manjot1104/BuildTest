@@ -9,15 +9,17 @@ import {
   Clapperboard, Loader2, RotateCcw, Sparkles,
   ChevronDown, ChevronUp, Clock, Layers, Film,
   Mic, Music, Volume2, ImagePlus, X, Upload,
-  CheckCircle2, AlertCircle,
+  CheckCircle2, AlertCircle, History,
 } from "lucide-react";
 import {
   useGenerateVideo,
   useUploadUserImages,
+  useVideoChats,
   type VideoMeta,
   type GenerateVideoOptions,
   type UserImageEntry,
   type UploadedUserImage,
+  type VideoChatSummary,
 } from "@/client-api/query-hooks/use-video-hooks";
 import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
@@ -203,6 +205,219 @@ function UserImageUploader({
   );
 }
 
+// ─── VideoHistoryPanel ────────────────────────────────────────────────────────
+
+function formatRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function HistoryChatRow({
+  chat,
+  isActive,
+  onClick,
+}: {
+  chat: VideoChatSummary;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors mb-0.5 border ${
+        isActive
+          ? "bg-primary/10 border-primary/20"
+          : "hover:bg-muted/50 border-transparent hover:border-border/50"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <span
+          className={`text-[9px] font-mono rounded-full px-2 py-0.5 border truncate max-w-[140px] ${
+            isActive
+              ? "text-primary bg-primary/10 border-primary/20"
+              : "text-muted-foreground/60 bg-muted border-border"
+          }`}
+        >
+          {chat.title ?? "Untitled"}
+        </span>
+        <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums shrink-0 ml-1">
+          {formatRelativeTime(chat.updatedAt)}
+        </span>
+      </div>
+      {chat.lastPrompt && (
+        <p
+          className={`text-[11px] font-mono leading-relaxed line-clamp-2 ${
+            isActive ? "text-primary/80" : "text-muted-foreground"
+          }`}
+        >
+          {chat.lastPrompt}
+        </p>
+      )}
+    </button>
+  );
+}
+
+function VideoHistoryPanel({
+  open,
+  onClose,
+  activeChatId,
+  onSelectChat,
+}: {
+  open: boolean;
+  onClose: () => void;
+  activeChatId: string | null;
+  onSelectChat: (chat: VideoChatSummary) => void;
+}) {
+  const { data: chats, isLoading, isError } = useVideoChats();
+
+  // Close on Escape key
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    },
+    [onClose],
+  );
+
+  const panelContent = (
+    <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
+      {/* Panel header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <History className="h-3.5 w-3.5 text-muted-foreground/50" />
+          <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+            Video history
+          </span>
+          {chats && chats.length > 0 && (
+            <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5 tabular-nums">
+              {chats.length}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-all"
+          aria-label="Close history panel"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Chat list */}
+      <div className="flex-1 overflow-y-auto p-2">
+        {isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-4 w-4 text-muted-foreground/40 animate-spin" />
+          </div>
+        )}
+
+        {isError && (
+          <div className="px-3 py-4 text-center">
+            <p className="text-[10px] font-mono text-muted-foreground/40">
+              Failed to load history
+            </p>
+          </div>
+        )}
+
+        {!isLoading && !isError && chats?.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-10 gap-3">
+            <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center">
+              <Film className="h-4 w-4 text-muted-foreground/30" />
+            </div>
+            <p className="text-[10px] font-mono text-muted-foreground/40 text-center leading-relaxed">
+              No videos yet.
+              <br />
+              Generate your first one!
+            </p>
+          </div>
+        )}
+
+        {!isLoading && chats && chats.length > 0 && (
+          <div>
+            {chats.map((chat) => (
+              <HistoryChatRow
+                key={chat.id}
+                chat={chat}
+                isActive={activeChatId === chat.id}
+                onClick={() => {
+                  onSelectChat(chat);
+                  onClose();
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {/* ── Desktop: left sidebar overlay (sm and up) ──────────────────────── */}
+      <div
+        className={`hidden sm:block fixed inset-0 z-40 transition-all duration-200 ${
+          open ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+        aria-hidden={!open}
+      >
+        {/* Backdrop */}
+        <div
+          onClick={onClose}
+          className={`absolute inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-200 ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        {/* Sliding panel */}
+        <div
+          className={`absolute left-0 top-0 h-full w-72 bg-background border-r border-border shadow-lg transition-transform duration-200 ${
+            open ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          {panelContent}
+        </div>
+      </div>
+
+      {/* ── Mobile: bottom drawer (below sm) ──────────────────────────────── */}
+      <div
+        className={`sm:hidden fixed inset-0 z-40 transition-all duration-200 ${
+          open ? "pointer-events-auto" : "pointer-events-none"
+        }`}
+        aria-hidden={!open}
+      >
+        {/* Backdrop */}
+        <div
+          onClick={onClose}
+          className={`absolute inset-0 bg-background/70 transition-opacity duration-200 ${
+            open ? "opacity-100" : "opacity-0"
+          }`}
+        />
+        {/* Drawer sliding up from bottom */}
+        <div
+          className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${
+            open ? "translate-y-0" : "translate-y-full"
+          }`}
+          style={{ maxHeight: "72vh" }}
+        >
+          {/* Pull handle */}
+          <div className="flex justify-center pt-2.5 pb-1 shrink-0">
+            <div className="w-9 h-1 rounded-full bg-muted-foreground/20" />
+          </div>
+          {panelContent}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorPage() {
@@ -213,6 +428,9 @@ export default function VideoGeneratorPage() {
   const [jsonOpen, setJsonOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
+
+  // ── History panel ──────────────────────────────────────────────────────────
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // ── Chat persistence ───────────────────────────────────────────────────────
   // Set after first successful generation; reused for follow-up prompts.
@@ -319,6 +537,19 @@ export default function VideoGeneratorPage() {
     setChatId(null); // clear so next generation starts a fresh chat
   }
 
+  // ── History: load a past chat into the prompt field ───────────────────────
+  // Restores the last prompt and chatId so the next generate call continues
+  // that conversation thread. Clears any current result to avoid confusion.
+  function handleSelectHistoryChat(chat: VideoChatSummary) {
+    if (chat.lastPrompt) setPrompt(chat.lastPrompt);
+    setChatId(chat.id);
+    // Clear current result so user sees the input form and can re-generate
+    setVideoJson(null);
+    setMeta(null);
+    // Scroll to top / focus textarea after state settles
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }
+
   // ── Upload step indicator ──────────────────────────────────────────────────
   const renderUploadStepBadge = () => {
     if (uploadStep === "idle" || userImageEntries.length === 0) return null;
@@ -360,15 +591,26 @@ export default function VideoGeneratorPage() {
               BETA
             </span>
           </div>
-          {hasResult && (
+          <div className="flex items-center gap-2">
+            {/* History button — always visible */}
             <button
-              onClick={handleReset}
+              onClick={() => setHistoryOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all"
+              aria-label="Open video history"
             >
-              <RotateCcw className="h-3.5 w-3.5" />
-              New video
+              <History className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">History</span>
             </button>
-          )}
+            {hasResult && (
+              <button
+                onClick={handleReset}
+                className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                New video
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ══ INPUT ═══════════════════════════════════════════════════════════ */}
@@ -833,6 +1075,14 @@ export default function VideoGeneratorPage() {
           </div>
         )}
       </main>
+
+      {/* ── Video history panel (desktop sidebar + mobile bottom drawer) ── */}
+      <VideoHistoryPanel
+        open={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        activeChatId={chatId}
+        onSelectChat={handleSelectHistoryChat}
+      />
     </div>
   );
 }
