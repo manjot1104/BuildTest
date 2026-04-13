@@ -1,6 +1,10 @@
 import { Elysia, t } from "elysia";
 import { getSession } from "@/server/better-auth/server";
 import {
+  generateVideoHandler,
+  getVideoStatusHandler,
+} from '@/server/api/controllers/video.controller'
+import {
   createChatOwnershipHandler,
   forkChatHandler,
   getChatDetailsHandler,
@@ -1983,4 +1987,16 @@ if (!chat) {
     {
       params: t.Object({ token: t.String() }),
     },
-  );
+  )
+  
+  
+  // ============================================
+  // Video Generation Endpoints
+  // ============================================
+
+  // POST /api/video/generate — generate AI video background via kie.ai
+  .post('/video/generate', ({ request }) => generateVideoHandler(request))
+
+  // GET /api/video/status?taskId=xxx — poll video generation status
+  .get('/video/status', ({ request }) => getVideoStatusHandler(request))
+  ;

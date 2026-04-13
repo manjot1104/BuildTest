@@ -535,7 +535,8 @@ function ThreeDChatHistory({
                     <span className="font-medium text-orange-400">Our systems are currently down</span>
                 </div>
                 <p className="text-muted-foreground leading-relaxed">
-                    Our 3D generation service is temporarily unavailable. We'll get back to you shortly.
+                    3D Builder is temporarily unavailable due to limited resources. Please try again shortly.
+
                 </p>
             </div>
         )

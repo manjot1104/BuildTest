@@ -2,6 +2,7 @@
 
 import { useEffect, useState, lazy, Suspense } from 'react'
 
+
 import {
   WebPreview,
   WebPreviewNavigation,
@@ -20,8 +21,9 @@ import {
   Code,
   Github,
   FlaskConical,
-  
-  SearchCheckIcon
+  Video,
+  SearchCheckIcon,
+  Loader2,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
@@ -103,7 +105,9 @@ export function PreviewPanel({
  
   const [device, setDevice] = useState<PreviewDevice>('desktop')
 const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
-
+const [videoError, setVideoError] = useState<string | null>(null)
+const [videoGenerating, setVideoGenerating] = useState(false)
+const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
@@ -148,6 +152,63 @@ const showBuildingLoader = isBuilding && !effectiveSrc
     setGithubDialogMounted(true)
     setGithubDialogOpen(true)
   }
+//video generation handler
+ const handleGenerateVideo = async () => {
+  if (!currentChat?.id) return
+  setVideoGenerating(true)
+
+  try {
+    const res = await fetch('/api/video/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Cinematic seamless looping video background, professional, no text, 16:9, smooth motion.`,
+      }),
+    })
+
+    const json = await res.json() as {
+      taskId?: string
+      error?: string
+      message?: string
+      required?: number
+    }
+
+ 
+    if (res.status === 402 || json.error === 'insufficient_credits') {
+      setVideoError(`Not enough credits. You need ${json.required ?? 50} credits to generate a video.`)
+      setVideoGenerating(false)
+      return
+    }
+
+   
+    if (json.error === 'generation_failed' || !json.taskId) {
+      setVideoError(json.message ?? 'Video generation failed. Credits have been refunded.')
+      setVideoGenerating(false)
+      return
+    }
+
+
+    const poll = setInterval(async () => {
+      const statusRes = await fetch(`/api/video/status?taskId=${json.taskId}`)
+      const statusJson = await statusRes.json() as { status?: string; videoUrl?: string }
+
+      if (statusJson.status === 'completed' && statusJson.videoUrl) {
+        clearInterval(poll)
+        setGeneratedVideoUrl(statusJson.videoUrl)
+        setVideoGenerating(false)
+        setVideoError(null)
+      } else if (statusJson.status === 'failed') {
+        clearInterval(poll)
+        setVideoError('Video generation failed. Please try again.')
+        setVideoGenerating(false)
+      }
+    }, 3000)
+
+  } catch {
+    setVideoError('Something went wrong. Please try again.')
+    setVideoGenerating(false)
+  }
+}
 
   return (
     <>
@@ -206,7 +267,17 @@ value={
               >
                 <Github className="h-4 w-4" />
               </WebPreviewNavigationButton>
-
+{/* Video Generate Button */}
+<WebPreviewNavigationButton
+  tooltip={videoGenerating ? 'Generating video...' : 'Generate AI video background (50 credits)'}
+  disabled={!currentChat?.demo || videoGenerating}
+  onClick={handleGenerateVideo}
+>
+  {videoGenerating
+    ? <Loader2 className="h-4 w-4 animate-spin" />
+    : <Video className="h-4 w-4" />
+  }
+</WebPreviewNavigationButton>
               {/* Testing button — opens dialog, never navigates directly */}
               <WebPreviewNavigationButton
                 tooltip="Run tests"
@@ -315,7 +386,93 @@ value={
           </div>
 
         </WebPreview>
+        
       </div>
+
+
+
+
+     
+   {/* ── Video Error Modal ── */}
+{videoError && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    {/* backdrop */}
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      onClick={() => setVideoError(null)}
+    />
+    {/* modal */}
+    <div className="relative z-10 w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
+          <span className="text-destructive text-lg">⚠</span>
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-foreground mb-1">
+            Video Generation Failed
+          </h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {videoError}
+          </p>
+        </div>
+      </div>
+      <div className="flex justify-end mt-5">
+        <button
+          onClick={() => setVideoError(null)}
+          className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ── Video Ready Modal ── */}
+{generatedVideoUrl && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    {/* backdrop */}
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      onClick={() => setGeneratedVideoUrl(null)}
+    />
+    {/* modal */}
+    <div className="relative z-10 w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-foreground">
+          ✨ AI Video Background Ready
+        </h3>
+        <button
+          onClick={() => setGeneratedVideoUrl(null)}
+          className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-sm"
+        >
+          ✕
+        </button>
+      </div>
+      <video
+        src={generatedVideoUrl}
+        autoPlay loop muted playsInline
+        className="w-full rounded-lg max-h-48 object-cover"
+      />
+      <div className="flex gap-2 mt-4">
+        <a
+          href={generatedVideoUrl}
+          download="video-background.mp4"
+          className="flex-1 text-center text-sm font-medium px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Download Video
+        </a>
+        <button
+          onClick={() => setGeneratedVideoUrl(null)}
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-border hover:bg-muted transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {/* Code Viewer Dialog */}
       {hasFiles && (
