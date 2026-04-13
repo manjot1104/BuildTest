@@ -15,6 +15,7 @@ import {
   useGenerateVideo,
   useUploadUserImages,
   useVideoChats,
+  useVideoChat,
   type VideoMeta,
   type GenerateVideoOptions,
   type UserImageEntry,
@@ -437,6 +438,10 @@ export default function VideoGeneratorPage() {
   // Cleared by handleReset() so a "New video" starts a fresh chat.
   const [chatId, setChatId] = useState<string | null>(null);
 
+  // ── History: track whether we're loading a chat from history ──────────────
+  // When non-null, useVideoChat fetches the full detail and we render from it.
+  const [loadingHistoryChatId, setLoadingHistoryChatId] = useState<string | null>(null);
+
   // Image upload state
   const [userImageEntries, setUserImageEntries] = useState<
     Array<{ id: string; file: File; description: string; previewUrl: string }>
@@ -459,6 +464,55 @@ export default function VideoGeneratorPage() {
 
   const { mutate: generate, isPending: isGenerating } = useGenerateVideo();
   const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
+
+  // ── Fetch full chat detail when loading from history ──────────────────────
+  const {
+    data: historyChatDetail,
+    isLoading: isLoadingHistoryChat,
+    isError: isHistoryChatError,
+  } = useVideoChat(loadingHistoryChatId);
+
+  // When the history chat detail loads, populate videoJson + meta + prompt
+  // We use a ref to track which chatId we've already applied so we don't reapply on re-renders
+  const appliedHistoryChatIdRef = useRef<string | null>(null);
+
+  if (
+    historyChatDetail &&
+    loadingHistoryChatId &&
+    appliedHistoryChatIdRef.current !== loadingHistoryChatId
+  ) {
+    appliedHistoryChatIdRef.current = loadingHistoryChatId;
+
+    const vj = historyChatDetail.videoJson;
+    setVideoJson(vj);
+
+    // Reconstruct meta from the videoJson
+    const fps = vj.fps ?? 30;
+    const totalFrames = vj.duration;
+    setMeta({
+      scenes: vj.scenes.length,
+      totalFrames,
+      durationSeconds: parseFloat((totalFrames / fps).toFixed(1)),
+    });
+
+    // Restore last prompt so user can send a follow-up
+    const lastPrompt = historyChatDetail.prompts.at(-1)?.prompt ?? "";
+    if (lastPrompt) setPrompt(lastPrompt);
+
+    // Restore audio options if saved
+    if (historyChatDetail.options) {
+      const opts = historyChatDetail.options;
+      if (typeof opts.useTTS === "boolean") setUseTTS(opts.useTTS);
+      if (typeof opts.useMusic === "boolean") setUseMusic(opts.useMusic);
+      if (typeof opts.ttsVolume === "number") setTtsVolume(opts.ttsVolume);
+      if (typeof opts.musicVolume === "number") setMusicVolume(opts.musicVolume);
+      if (typeof opts.voiceId === "string") setVoiceId(opts.voiceId);
+      if (typeof opts.musicGenre === "string") setMusicGenre(opts.musicGenre);
+    }
+
+    // Stop the loading state — the chatId is already set from handleSelectHistoryChat
+    setLoadingHistoryChatId(null);
+  }
 
   const hasResult = videoJson !== null;
   const isBusy = isGenerating || isUploading;
@@ -535,17 +589,28 @@ export default function VideoGeneratorPage() {
     setUploadedImages([]);
     setImageSessionId(undefined);
     setChatId(null); // clear so next generation starts a fresh chat
+    setLoadingHistoryChatId(null);
+    appliedHistoryChatIdRef.current = null;
   }
 
-  // ── History: load a past chat into the prompt field ───────────────────────
-  // Restores the last prompt and chatId so the next generate call continues
-  // that conversation thread. Clears any current result to avoid confusion.
+  // ── History: load a past chat into the result view ────────────────────────
+  // Sets chatId for follow-up continuity and triggers useVideoChat to fetch
+  // the full detail (videoJson + prompts + options) so the player can render.
   function handleSelectHistoryChat(chat: VideoChatSummary) {
-    if (chat.lastPrompt) setPrompt(chat.lastPrompt);
-    setChatId(chat.id);
-    // Clear current result so user sees the input form and can re-generate
+    // Clear any existing result first to avoid stale display
     setVideoJson(null);
     setMeta(null);
+    appliedHistoryChatIdRef.current = null;
+
+    // Set the chatId for follow-up continuity
+    setChatId(chat.id);
+
+    // Pre-populate the prompt field with the last known prompt from the summary
+    if (chat.lastPrompt) setPrompt(chat.lastPrompt);
+
+    // Trigger the detail fetch — useVideoChat watches this value
+    setLoadingHistoryChatId(chat.id);
+
     // Scroll to top / focus textarea after state settles
     setTimeout(() => textareaRef.current?.focus(), 100);
   }
@@ -613,8 +678,34 @@ export default function VideoGeneratorPage() {
           </div>
         </div>
 
+        {/* ── Loading state when fetching a history chat ── */}
+        {isLoadingHistoryChat && !hasResult && (
+          <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
+            <div className="relative h-14 w-14">
+              <div className="absolute inset-0 rounded-full border-2 border-border" />
+              <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Film className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-sans font-semibold text-foreground">Loading video…</p>
+              <p className="text-[11px] font-mono text-muted-foreground/60">Fetching your saved video</p>
+            </div>
+          </div>
+        )}
+
+        {/* ── History chat load error ── */}
+        {isHistoryChatError && !hasResult && !isLoadingHistoryChat && (
+          <div className="rounded-xl border border-border bg-muted/20 p-4 text-center">
+            <p className="text-[11px] font-mono text-muted-foreground/60">
+              Failed to load video. Please try again.
+            </p>
+          </div>
+        )}
+
         {/* ══ INPUT ═══════════════════════════════════════════════════════════ */}
-        {!hasResult && (
+        {!hasResult && !isLoadingHistoryChat && (
           <div className="space-y-3">
 
             {/* Hero */}
