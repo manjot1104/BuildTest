@@ -1062,7 +1062,7 @@ export const report_exports = createTable(
 );
 
 // =============================================================================
-// NEW TABLE: per-page Core Web Vitals
+// per-page Core Web Vitals
 // Powers the "Performance Gauges" dashboard section (LCP / FID / CLS / TTFB)
 // with green / yellow / red thresholds per page.
 // =============================================================================
@@ -1166,3 +1166,48 @@ export const performanceMetricsRelations = relations(
     }),
   }),
 );
+
+// =============================================================================
+// Video Generation
+// =============================================================================
+
+export const video_chats = createTable(
+  "video_chats",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+ 
+    title: d.text("title"), // auto-generated from first prompt
+ 
+    // ── Current video state ───────────────────────────────────────────────────
+    // Completely rewritten on every follow-up prompt.
+    video_json: d.text("video_json").notNull(),          // latest VideoJson as JSON string
+    current_options: d.jsonb("current_options"),         // VideoOptions: { useTTS, useMusic, voiceId, musicGenre, ttsVolume, musicVolume }
+    current_user_images: d.jsonb("current_user_images"), // UserImage[]: replaceable at any time
+ 
+    // ── Prompt history (append-only log) ──────────────────────────────────────
+    // Shape: { prompt: string, sentAt: string }[]
+    // Never deleted — gives full history of how the video evolved.
+    prompts: d.jsonb("prompts").notNull().default([]),
+ 
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("video_chats_user_id_idx").on(t.user_id),
+    index("video_chats_updated_at_idx").on(t.updated_at),
+  ],
+);
+ 
+export const videoChatsRelations = relations(video_chats, ({ one }) => ({
+  user: one(user, { fields: [video_chats.user_id], references: [user.id] }),
+}));

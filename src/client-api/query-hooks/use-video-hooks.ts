@@ -2,7 +2,7 @@
 //
 // Adds: useUploadUserImages mutation
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VideoJson } from "@/remotion-src/types";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -15,6 +15,8 @@ export interface VideoMeta {
 
 export interface GenerateVideoResponse {
   videoJson: VideoJson;
+  /** Persisted chat id — store in React state for follow-up prompts. */
+  chatId: string;
   meta: VideoMeta;
 }
 
@@ -47,12 +49,32 @@ export interface UserImageEntry {
   description: string;
 }
 
+/** Shape returned by GET /api/video/chats */
+export interface VideoChatSummary {
+  id: string;
+  title: string | null;
+  lastPrompt: string | null;
+  updatedAt: string;
+}
+
+/** Shape returned by GET /api/video/chats/:chatId */
+export interface VideoChatDetail {
+  id: string;
+  title: string | null;
+  videoJson: VideoJson;
+  prompts: { prompt: string; sentAt: string }[];
+  options: Record<string, unknown> | null;
+  updatedAt: string;
+}
+
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const videoKeys = {
   all: ["video"] as const,
   generate: () => [...videoKeys.all, "generate"] as const,
   upload: () => [...videoKeys.all, "upload"] as const,
+  chats: () => [...videoKeys.all, "chats"] as const,
+  chat: (id: string) => [...videoKeys.all, "chats", id] as const,
 };
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -100,12 +122,20 @@ export function useUploadUserImages() {
  * useGenerateVideo
  *
  * Calls POST /api/video/generate with a prompt and optional user images.
+ * Pass chatId to continue an existing video chat (follow-up prompt).
  */
 export function useGenerateVideo() {
+  const qc = useQueryClient();
+
   return useMutation({
     mutationFn: async (input: {
       prompt: string;
       duration?: number;
+      /**
+       * Pass the chatId returned from a previous generation to send a follow-up.
+       * Omit (or pass null/undefined) to start a fresh video chat.
+       */
+      chatId?: string | null;
       options?: GenerateVideoOptions;
       /** From useUploadUserImages result — pass undefined if no images */
       userImages?: UploadedUserImage[];
@@ -128,6 +158,10 @@ export function useGenerateVideo() {
       }
 
       return data;
+    },
+    onSuccess: (data) => {
+      // Invalidate the chat list so any history panel stays fresh
+      void qc.invalidateQueries({ queryKey: videoKeys.chats() });
     },
   });
 }
@@ -158,6 +192,40 @@ export function useRenderVideo() {
         );
       }
 
+      return data;
+    },
+  });
+}
+
+// ─── Chat History ─────────────────────────────────────────────────────────────
+// These hooks are used for the video chat history panel / resume flow (Phase 2+).
+
+/** Fetches the list of video chats for the history panel. */
+export function useVideoChats() {
+  return useQuery({
+    queryKey: videoKeys.chats(),
+    queryFn: async (): Promise<VideoChatSummary[]> => {
+      const res = await fetch("/api/video/chats");
+      const data = (await res.json()) as
+        | { chats: VideoChatSummary[] }
+        | { error: string };
+      if (!res.ok || "error" in data)
+        throw new Error("error" in data ? data.error : "Failed to load chats");
+      return data.chats;
+    },
+  });
+}
+
+/** Fetches a single video chat by id (for resuming a past generation). */
+export function useVideoChat(chatId: string | null) {
+  return useQuery({
+    queryKey: videoKeys.chat(chatId ?? ""),
+    enabled: !!chatId,
+    queryFn: async (): Promise<VideoChatDetail> => {
+      const res = await fetch(`/api/video/chats/${chatId}`);
+      const data = (await res.json()) as VideoChatDetail | { error: string };
+      if (!res.ok || "error" in data)
+        throw new Error("error" in data ? data.error : "Failed to load chat");
       return data;
     },
   });

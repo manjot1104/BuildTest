@@ -214,6 +214,11 @@ export default function VideoGeneratorPage() {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
 
+  // ── Chat persistence ───────────────────────────────────────────────────────
+  // Set after first successful generation; reused for follow-up prompts.
+  // Cleared by handleReset() so a "New video" starts a fresh chat.
+  const [chatId, setChatId] = useState<string | null>(null);
+
   // Image upload state
   const [userImageEntries, setUserImageEntries] = useState<
     Array<{ id: string; file: File; description: string; previewUrl: string }>
@@ -276,6 +281,7 @@ export default function VideoGeneratorPage() {
         prompt: prompt.trim(),
         duration: selectedRange.seconds,
         options,
+        chatId: chatId ?? null, // pass existing chatId for follow-ups; null = new chat
         userImages: resolvedUserImages.length > 0 ? resolvedUserImages : undefined,
         imageSessionId: resolvedSessionId,
       },
@@ -283,6 +289,7 @@ export default function VideoGeneratorPage() {
         onSuccess: (data) => {
           setVideoJson(data.videoJson);
           setMeta(data.meta);
+          setChatId(data.chatId); // store for follow-up prompts
           toast.success(`Generated ${data.meta.scenes} scenes`);
         },
         onError: (err) => {
@@ -309,6 +316,7 @@ export default function VideoGeneratorPage() {
     setUploadStep("idle");
     setUploadedImages([]);
     setImageSessionId(undefined);
+    setChatId(null); // clear so next generation starts a fresh chat
   }
 
   // ── Upload step indicator ──────────────────────────────────────────────────

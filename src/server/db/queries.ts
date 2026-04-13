@@ -13,6 +13,10 @@ import {
   performance_metrics,
 } from './schema'
 
+import { video_chats } from './schema'
+import type { VideoJson } from '@/remotion-src/types'
+import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
+
 import { db } from './index'
 
 // ============================================================================
@@ -1338,4 +1342,196 @@ export async function getReportExportByBadgeToken(token: string) {
     where: eq(report_exports.embed_badge_token, token),
     with: { testRun: true },
   })
+}
+
+// ============================================================================
+// Video Generation Queries
+// ============================================================================
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type VideoChat = typeof video_chats.$inferSelect
+ 
+export interface VideoOptions {
+  useTTS?: boolean
+  useMusic?: boolean
+  voiceId?: string
+  musicGenre?: string
+  ttsVolume?: number
+  musicVolume?: number
+}
+ 
+export interface PromptLogEntry {
+  prompt: string
+  sentAt: string // ISO string
+}
+ 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+ 
+/** Derive a title from the first prompt (first 80 chars, trimmed). */
+function deriveTitle(prompt: string): string {
+  return prompt.trim().slice(0, 80)
+}
+ 
+// ── Queries ───────────────────────────────────────────────────────────────────
+ 
+/**
+ * Creates a new video_chats row BEFORE generation starts.
+ * video_json is set to a placeholder "[]" — updated once generation completes.
+ * Returns the new chat id so the controller can pass it to the client immediately.
+ */
+export async function createVideoChat({
+  userId,
+  prompt,
+  options,
+  userImages,
+}: {
+  userId: string
+  prompt: string
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+}): Promise<string> {
+  const id = randomUUID()
+  const promptEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
+ 
+  await db.insert(video_chats).values({
+    id,
+    user_id: userId,
+    title: deriveTitle(prompt),
+    video_json: '[]', // placeholder; filled in by updateVideoChatAfterGeneration
+    current_options: options ?? null,
+    current_user_images: userImages ?? null,
+    prompts: [promptEntry],
+  })
+ 
+  return id
+}
+ 
+/**
+ * Updates the video_json field after generation succeeds.
+ * Also bumps updated_at so the history list stays sorted correctly.
+ */
+export async function updateVideoChatAfterGeneration({
+  chatId,
+  userId,
+  videoJson,
+}: {
+  chatId: string
+  userId: string
+  videoJson: VideoJson
+}): Promise<void> {
+  await db
+    .update(video_chats)
+    .set({
+      video_json: JSON.stringify(videoJson),
+      updated_at: new Date(),
+    })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+}
+ 
+/**
+ * Appends a new prompt to the prompts log and replaces video_json.
+ * Used for follow-up prompts (Phase 2).
+ */
+export async function appendPromptAndUpdateVideo({
+  chatId,
+  userId,
+  prompt,
+  videoJson,
+  options,
+  userImages,
+}: {
+  chatId: string
+  userId: string
+  prompt: string
+  videoJson: VideoJson
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+}): Promise<void> {
+  // Fetch current prompts first (Drizzle doesn't support jsonb array append directly)
+  const [row] = await db
+    .select({ prompts: video_chats.prompts })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+ 
+  if (!row) return
+ 
+  const existing = (row.prompts as PromptLogEntry[]) ?? []
+  const newEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
+ 
+  await db
+    .update(video_chats)
+    .set({
+      video_json: JSON.stringify(videoJson),
+      prompts: [...existing, newEntry],
+      current_options: options ?? null,
+      current_user_images: userImages ?? null,
+      updated_at: new Date(),
+    })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+}
+ 
+/**
+ * Gets a single video chat by id with ownership check.
+ */
+export async function getVideoChatById({
+  chatId,
+  userId,
+}: {
+  chatId: string
+  userId: string
+}): Promise<VideoChat | undefined> {
+  const [row] = await db
+    .select()
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+ 
+  return row
+}
+ 
+/**
+ * Gets all video chats for a user, most recently updated first.
+ * Returns lightweight rows (no video_json) for list views.
+ */
+export async function getVideoChatsByUserId({
+  userId,
+  limit = 30,
+  offset = 0,
+}: {
+  userId: string
+  limit?: number
+  offset?: number
+}): Promise<
+  Pick<VideoChat, 'id' | 'title' | 'prompts' | 'created_at' | 'updated_at'>[]
+> {
+  return db
+    .select({
+      id: video_chats.id,
+      title: video_chats.title,
+      prompts: video_chats.prompts,
+      created_at: video_chats.created_at,
+      updated_at: video_chats.updated_at,
+    })
+    .from(video_chats)
+    .where(eq(video_chats.user_id, userId))
+    .orderBy(desc(video_chats.updated_at))
+    .limit(limit)
+    .offset(offset)
+}
+ 
+/**
+ * Deletes a video chat (with ownership check).
+ */
+export async function deleteVideoChat({
+  chatId,
+  userId,
+}: {
+  chatId: string
+  userId: string
+}): Promise<void> {
+  await db
+    .delete(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
 }
