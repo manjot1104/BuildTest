@@ -9,11 +9,12 @@ import {
   Clapperboard, Loader2, RotateCcw, Sparkles,
   ChevronDown, ChevronUp, Clock, Layers, Film,
   Mic, Music, Volume2, ImagePlus, X, Upload,
-  CheckCircle2, AlertCircle, History,
+  CheckCircle2, AlertCircle, History, Download,
 } from "lucide-react";
 import {
   useGenerateVideo,
   useUploadUserImages,
+  useDownloadVideo,
   useVideoChats,
   useVideoChat,
   type VideoMeta,
@@ -460,10 +461,14 @@ export default function VideoGeneratorPage() {
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
 
+  // ── Download progress (0–1, null when not downloading) ───────────────────
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { mutate: generate, isPending: isGenerating } = useGenerateVideo();
   const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
+  const { mutate: downloadVideo, isPending: isDownloading } = useDownloadVideo();
 
   // ── Fetch full chat detail when loading from history ──────────────────────
   const {
@@ -591,6 +596,7 @@ export default function VideoGeneratorPage() {
     setChatId(null); // clear so next generation starts a fresh chat
     setLoadingHistoryChatId(null);
     appliedHistoryChatIdRef.current = null;
+    setDownloadProgress(null);
   }
 
   // ── History: load a past chat into the result view ────────────────────────
@@ -613,6 +619,28 @@ export default function VideoGeneratorPage() {
 
     // Scroll to top / focus textarea after state settles
     setTimeout(() => textareaRef.current?.focus(), 100);
+  }
+
+  // ── Download handler ───────────────────────────────────────────────────────
+  function handleDownload() {
+    if (!videoJson || isDownloading) return;
+    setDownloadProgress(0);
+    downloadVideo(
+      {
+        videoJson,
+        onProgress: (p) => setDownloadProgress(p),
+      },
+      {
+        onSuccess: () => {
+          toast.success("Download started!");
+          setDownloadProgress(null);
+        },
+        onError: (err) => {
+          toast.error(err.message ?? "Download failed");
+          setDownloadProgress(null);
+        },
+      },
+    );
   }
 
   // ── Upload step indicator ──────────────────────────────────────────────────
@@ -1086,6 +1114,49 @@ export default function VideoGeneratorPage() {
                 autoPlay
                 loop
               />
+            </div>
+
+            {/* ── Download button ──────────────────────────────────────────── */}
+            <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-2">
+                  {isDownloading ? (
+                    <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5 text-muted-foreground/50" />
+                  )}
+                  <span className="text-[11px] font-mono text-muted-foreground">
+                    {isDownloading ? "Rendering in browser…" : "Download MP4"}
+                  </span>
+                  {isDownloading && downloadProgress !== null && (
+                    <span className="text-[9px] font-mono text-primary tabular-nums">
+                      {Math.round(downloadProgress * 100)}%
+                    </span>
+                  )}
+                </div>
+                {isDownloading && downloadProgress !== null && (
+                  <div className="h-1 w-24 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary rounded-full transition-all duration-300"
+                      style={{ width: `${Math.round(downloadProgress * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </button>
+              {/* Progress bar — full width, shown while rendering */}
+              {isDownloading && downloadProgress !== null && (
+                <div className="h-0.5 w-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${Math.round(downloadProgress * 100)}%` }}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Post-generation volume controls */}

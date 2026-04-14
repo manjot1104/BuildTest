@@ -1,6 +1,8 @@
-// src/client-api/query-hooks/use-video-hooks.ts  [UPDATED]
+// src/client-api/query-hooks/use-video-hooks.ts 
 //
-// Adds: useUploadUserImages mutation
+// useUploadUserImages mutation
+// useDownloadVideo mutation — fully client-side MP4 render via
+//       @remotion/web-renderer (renderMediaOnWeb + WebCodecs, no server involved)
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { VideoJson } from "@/remotion-src/types";
@@ -193,6 +195,92 @@ export function useRenderVideo() {
       }
 
       return data;
+    },
+  });
+}
+
+/**
+ * useDownloadVideo
+ *
+ * Renders the current VideoJson to an MP4 entirely in the browser using
+ * @remotion/web-renderer (renderMediaOnWeb + WebCodecs). Zero server calls.
+ *
+ * Install (pin to the EXACT same version as your other remotion/* packages):
+ *   npm i --save-exact @remotion/web-renderer@<your-remotion-version>
+ *
+ * Browser support (WebCodecs required):
+ *   Chrome 94+  ·  Firefox 130+  ·  Safari 26+
+ *
+ * The mutation accepts an optional onProgress callback (0–1) so the caller
+ * can show a progress bar while frames are being encoded.
+ *
+ * Note: @remotion/web-renderer is currently experimental — pin it and expect
+ * occasional breaking changes on minor Remotion version bumps.
+ */
+export function useDownloadVideo() {
+  return useMutation({
+    mutationFn: async ({
+      videoJson,
+      onProgress,
+    }: {
+      videoJson: VideoJson;
+      onProgress?: (progress: number) => void;
+    }): Promise<void> => {
+      // Dynamic import so the heavy package is excluded from the initial bundle
+      // and only loaded when the user actually clicks Download.
+      const { renderMediaOnWeb, canRenderMediaOnWeb } = await import(
+        "@remotion/web-renderer"
+      );
+
+      // Import the same React component the Player uses
+      const { VideoComposition } = await import(
+        "@/remotion-src/VideoComposition"
+      );
+
+      const width = videoJson.width ?? 1280;
+      const height = videoJson.height ?? 720;
+      const fps = videoJson.fps ?? 30;
+      const durationInFrames = videoJson.duration;
+
+      // Check browser compatibility before kicking off a potentially long render
+      const compatibility = await canRenderMediaOnWeb({
+        width,
+        height,
+        container: "mp4",
+      });
+
+      if (!compatibility.canRender) {
+        throw new Error(
+          "Your browser does not support client-side video rendering. " +
+            "Please use Chrome 94+, Firefox 130+, or Safari 26+.",
+        );
+      }
+
+      const { getBlob } = await renderMediaOnWeb({
+        composition: {
+          id: "VideoComposition",
+          component: VideoComposition,
+          durationInFrames,
+          fps,
+          width,
+          height,
+          defaultProps: { videoJson },
+          calculateMetadata: null,
+        },
+        inputProps: { videoJson },
+        onProgress: ({ progress }) => onProgress?.(progress),
+      });
+
+      const blob = await getBlob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "generated-video.mp4";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      // Release the object URL after a short delay so the download can start
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
     },
   });
 }

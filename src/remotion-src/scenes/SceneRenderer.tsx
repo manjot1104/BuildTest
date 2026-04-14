@@ -1,5 +1,6 @@
 import React from 'react';
-import { AbsoluteFill, Audio } from 'remotion';
+import { AbsoluteFill} from 'remotion';
+import { Audio } from "@remotion/media";
 import type { Scene } from '../types';
 import { BackgroundRenderer } from './BackgroundRenderer';
 import { LayoutRenderer } from './LayoutRenderer';
