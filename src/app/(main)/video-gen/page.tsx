@@ -2,7 +2,7 @@
 
 // src/app/video-gen/page.tsx
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Player } from "@remotion/player";
 import { toast } from "sonner";
 import {
@@ -10,7 +10,8 @@ import {
   ChevronDown, ChevronUp, Clock, Layers, Film,
   Mic, Music, Volume2, ImagePlus, X, Upload,
   CheckCircle2, AlertCircle, History, Download,
-  SendHorizonal, MessageSquarePlus,
+  SendHorizonal, MessageSquarePlus, RefreshCw,
+  AlertTriangle, Pencil, Trash2, User, Bot,
 } from "lucide-react";
 import {
   useGenerateVideo,
@@ -53,51 +54,176 @@ const EXAMPLE_PROMPTS = [
 
 const MAX_USER_IMAGES = 5;
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface UserImageEntryWithPreview extends UserImageEntry {
   id: string;
   previewUrl: string;
 }
 
-function UserImageUploader({
-  entries,
-  onChange,
+// Chat message types for the conversation view
+interface PromptMessage {
+  type: "prompt";
+  text: string;
+  sentAt: string;
+}
+
+interface VideoMessage {
+  type: "video";
+  videoJson: VideoJson;
+  meta: VideoMeta;
+  uploadedImages: UploadedUserImage[];
+  isLatest: boolean;
+  generationError?: string;
+}
+
+interface ErrorMessage {
+  type: "error";
+  text: string;
+  promptText: string; // the prompt that failed, for retry
+  sentAt: string;
+}
+
+type ChatMessage = PromptMessage | VideoMessage | ErrorMessage;
+
+// ─── Export Modal ─────────────────────────────────────────────────────────────
+
+function ExportModal({
+  open,
+  progress,
+  onClose,
+  isComplete,
+}: {
+  open: boolean;
+  progress: number | null;
+  onClose: () => void;
+  isComplete: boolean;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={isComplete ? onClose : undefined}
+      />
+      {/* Modal */}
+      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-background shadow-2xl p-6 space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <Download className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-sans font-semibold text-foreground">
+                {isComplete ? "Export complete!" : "Exporting video…"}
+              </p>
+              <p className="text-[10px] font-mono text-muted-foreground/60">
+                {isComplete ? "Your MP4 download has started" : "Rendering in your browser"}
+              </p>
+            </div>
+          </div>
+          {isComplete && (
+            <button
+              onClick={onClose}
+              className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-all"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {!isComplete && (
+          <div className="space-y-2">
+            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${Math.round((progress ?? 0) * 100)}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-muted-foreground/50">
+                Rendering frames…
+              </span>
+              <span className="text-[10px] font-mono text-primary tabular-nums font-bold">
+                {Math.round((progress ?? 0) * 100)}%
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Warning / success message */}
+        {!isComplete ? (
+          <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-3">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] font-mono text-amber-500/80 leading-relaxed">
+              <strong className="text-amber-500">Do not close this tab</strong> until the export
+              completes. Closing the tab will cancel the render and you'll need to start over.
+            </p>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-3">
+            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] font-mono text-emerald-500/80 leading-relaxed">
+              Your video has been saved to your downloads folder.
+            </p>
+          </div>
+        )}
+
+        {isComplete && (
+          <button
+            onClick={onClose}
+            className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 transition-all"
+          >
+            Done
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ImageManager ─────────────────────────────────────────────────────────────
+// Manages a combined list of existing (persisted) images + new ones to upload.
+// Supports editing descriptions, removing, and adding new images.
+
+function ImageManager({
+  existingImages,
+  newEntries,
+  onExistingChange,
+  onNewEntriesChange,
   disabled,
 }: {
-  entries: UserImageEntryWithPreview[];
-  onChange: (entries: UserImageEntryWithPreview[]) => void;
+  existingImages: UploadedUserImage[];
+  newEntries: UserImageEntryWithPreview[];
+  onExistingChange: (images: UploadedUserImage[]) => void;
+  onNewEntriesChange: (entries: UserImageEntryWithPreview[]) => void;
   disabled: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const totalSlots = existingImages.length + newEntries.length;
+  const canAddMore = totalSlots < MAX_USER_IMAGES;
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const remaining = MAX_USER_IMAGES - entries.length;
+      const remaining = MAX_USER_IMAGES - totalSlots;
       const toAdd = Array.from(files).slice(0, remaining);
-
-      const newEntries: UserImageEntryWithPreview[] = toAdd.map((file) => ({
+      const newItems: UserImageEntryWithPreview[] = toAdd.map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
         file,
         description: "",
         previewUrl: URL.createObjectURL(file),
       }));
-
-      onChange([...entries, ...newEntries]);
+      onNewEntriesChange([...newEntries, ...newItems]);
     },
-    [entries, onChange],
+    [totalSlots, newEntries, onNewEntriesChange],
   );
-
-  const updateDescription = (id: string, description: string) => {
-    onChange(entries.map((e) => (e.id === id ? { ...e, description } : e)));
-  };
-
-  const removeEntry = (id: string) => {
-    const entry = entries.find((e) => e.id === id);
-    if (entry) URL.revokeObjectURL(entry.previewUrl);
-    onChange(entries.filter((e) => e.id !== id));
-  };
 
   const handleDrop = useCallback(
     (ev: React.DragEvent) => {
@@ -107,22 +233,142 @@ function UserImageUploader({
     [handleFiles],
   );
 
+  const removeExisting = (url: string) => {
+    onExistingChange(existingImages.filter((img) => img.url !== url));
+  };
+
+  const removeNew = (id: string) => {
+    const entry = newEntries.find((e) => e.id === id);
+    if (entry) URL.revokeObjectURL(entry.previewUrl);
+    onNewEntriesChange(newEntries.filter((e) => e.id !== id));
+  };
+
+  const updateExistingDescription = (url: string, desc: string) => {
+    onExistingChange(
+      existingImages.map((img) =>
+        img.url === url ? { ...img, description: desc } : img,
+      ),
+    );
+  };
+
+  const updateNewDescription = (id: string, desc: string) => {
+    onNewEntriesChange(
+      newEntries.map((e) => (e.id === id ? { ...e, description: desc } : e)),
+    );
+  };
+
   return (
-    <div className="space-y-2 pt-3">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ImagePlus className="h-3.5 w-3.5 text-muted-foreground/50" />
           <span className="text-[11px] font-mono text-muted-foreground">
-            Your images
+            Images
           </span>
           <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5">
-            {entries.length}/{MAX_USER_IMAGES}
+            {totalSlots}/{MAX_USER_IMAGES}
           </span>
         </div>
       </div>
 
-      {/* Drop zone — only shown when there's room */}
-      {entries.length < MAX_USER_IMAGES && (
+      {/* Existing images */}
+      {existingImages.map((img, i) => (
+        <div
+          key={img.url}
+          className="flex items-start gap-2.5 p-2 rounded-lg border border-border bg-muted/20"
+        >
+          <div className="shrink-0 w-14 h-10 rounded-md overflow-hidden border border-border bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={img.url}
+              alt={img.description || `Image ${i + 1}`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-mono text-muted-foreground/40 mb-1">
+              Existing · #{img.index + 1}
+            </p>
+            {editingId === img.url ? (
+              <input
+                type="text"
+                value={img.description}
+                onChange={(e) => updateExistingDescription(img.url, e.target.value)}
+                onBlur={() => setEditingId(null)}
+                autoFocus
+                maxLength={120}
+                disabled={disabled}
+                className="w-full h-7 px-2 rounded-md border border-primary/50 bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/25 focus:outline-none"
+              />
+            ) : (
+              <p className="text-[11px] font-mono text-foreground/70 truncate">
+                {img.description || <span className="text-muted-foreground/30 italic">No description</span>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setEditingId(editingId === img.url ? null : img.url)}
+              disabled={disabled}
+              className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-all disabled:opacity-40"
+              aria-label="Edit description"
+            >
+              <Pencil className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              onClick={() => removeExisting(img.url)}
+              disabled={disabled}
+              className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-40"
+              aria-label="Remove image"
+            >
+              <Trash2 className="h-3 w-3" />
+            </button>
+          </div>
+        </div>
+      ))}
+
+      {/* New entries */}
+      {newEntries.map((entry, i) => (
+        <div
+          key={entry.id}
+          className="flex items-start gap-2.5 p-2 rounded-lg border border-primary/20 bg-primary/5"
+        >
+          <div className="shrink-0 w-14 h-10 rounded-md overflow-hidden border border-border bg-muted">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={entry.previewUrl}
+              alt={entry.description || `New ${i + 1}`}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-mono text-primary/50 mb-1">New</p>
+            <input
+              type="text"
+              value={entry.description}
+              onChange={(e) => updateNewDescription(entry.id, e.target.value)}
+              placeholder={`e.g. "Our product on a wooden desk"`}
+              maxLength={120}
+              disabled={disabled}
+              className="w-full h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:border-primary/50 disabled:opacity-40"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => removeNew(entry.id)}
+            disabled={disabled}
+            className="shrink-0 h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-red-500 hover:bg-red-500/10 transition-all disabled:opacity-40"
+            aria-label="Remove image"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      ))}
+
+      {/* Drop zone */}
+      {canAddMore && (
         <div
           className={`relative border border-dashed border-border rounded-lg p-4 text-center transition-colors cursor-pointer hover:border-primary/50 hover:bg-primary/5 ${disabled ? "opacity-40 pointer-events-none" : ""}`}
           onDrop={handleDrop}
@@ -149,59 +395,9 @@ function UserImageUploader({
         </div>
       )}
 
-      {/* Image list */}
-      {entries.length > 0 && (
-        <div className="space-y-2">
-          {entries.map((entry, i) => (
-            <div
-              key={entry.id}
-              className="flex items-start gap-2.5 p-2 rounded-lg border border-border bg-muted/20"
-            >
-              {/* Thumbnail */}
-              <div className="shrink-0 w-14 h-10 rounded-md overflow-hidden border border-border bg-muted">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={entry.previewUrl}
-                  alt={entry.description || `Image ${i + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-
-              {/* Description input */}
-              <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-mono text-muted-foreground/40 mb-1">
-                  Describe this image for the AI
-                </p>
-                <input
-                  type="text"
-                  value={entry.description}
-                  onChange={(e) => updateDescription(entry.id, e.target.value)}
-                  placeholder={`e.g. "Our product on a wooden desk"`}
-                  maxLength={120}
-                  disabled={disabled}
-                  className="w-full h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/25 focus:outline-none focus:border-primary/50 disabled:opacity-40"
-                />
-              </div>
-
-              {/* Remove button */}
-              <button
-                type="button"
-                onClick={() => removeEntry(entry.id)}
-                disabled={disabled}
-                className="shrink-0 h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-all disabled:opacity-40"
-                aria-label="Remove image"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {entries.length > 0 && (
-        <p className="text-[9px] font-mono text-muted-foreground/35 leading-relaxed">
-          The AI will use these images in scenes where the description matches the content.
-          Add a clear description so the AI knows when to use each one.
+      {!canAddMore && (
+        <p className="text-[9px] font-mono text-muted-foreground/40 leading-relaxed">
+          Maximum {MAX_USER_IMAGES} images reached. Remove an image to add a new one.
         </p>
       )}
     </div>
@@ -282,7 +478,6 @@ function VideoHistoryPanel({
 }) {
   const { data: chats, isLoading, isError } = useVideoChats();
 
-  // Close on Escape key
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -292,7 +487,6 @@ function VideoHistoryPanel({
 
   const panelContent = (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
-      {/* Panel header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           <History className="h-3.5 w-3.5 text-muted-foreground/50" />
@@ -315,35 +509,27 @@ function VideoHistoryPanel({
         </button>
       </div>
 
-      {/* Chat list */}
       <div className="flex-1 overflow-y-auto p-2">
         {isLoading && (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-4 w-4 text-muted-foreground/40 animate-spin" />
           </div>
         )}
-
         {isError && (
           <div className="px-3 py-4 text-center">
-            <p className="text-[10px] font-mono text-muted-foreground/40">
-              Failed to load history
-            </p>
+            <p className="text-[10px] font-mono text-muted-foreground/40">Failed to load history</p>
           </div>
         )}
-
         {!isLoading && !isError && chats?.length === 0 && (
           <div className="flex flex-col items-center justify-center py-10 gap-3">
             <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center">
               <Film className="h-4 w-4 text-muted-foreground/30" />
             </div>
             <p className="text-[10px] font-mono text-muted-foreground/40 text-center leading-relaxed">
-              No videos yet.
-              <br />
-              Generate your first one!
+              No videos yet.<br />Generate your first one!
             </p>
           </div>
         )}
-
         {!isLoading && chats && chats.length > 0 && (
           <div>
             {chats.map((chat) => (
@@ -351,10 +537,7 @@ function VideoHistoryPanel({
                 key={chat.id}
                 chat={chat}
                 isActive={activeChatId === chat.id}
-                onClick={() => {
-                  onSelectChat(chat);
-                  onClose();
-                }}
+                onClick={() => { onSelectChat(chat); onClose(); }}
               />
             ))}
           </div>
@@ -365,52 +548,35 @@ function VideoHistoryPanel({
 
   return (
     <>
-      {/* ── Desktop: left sidebar overlay (sm and up) ──────────────────────── */}
+      {/* Desktop sidebar */}
       <div
-        className={`hidden sm:block fixed inset-0 z-40 transition-all duration-200 ${
-          open ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`hidden sm:block fixed inset-0 z-40 transition-all duration-200 ${open ? "pointer-events-auto" : "pointer-events-none"}`}
         aria-hidden={!open}
       >
-        {/* Backdrop */}
         <div
           onClick={onClose}
-          className={`absolute inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-200 ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0"}`}
         />
-        {/* Sliding panel */}
         <div
-          className={`absolute left-0 top-0 h-full w-72 bg-background border-r border-border shadow-lg transition-transform duration-200 ${
-            open ? "translate-x-0" : "-translate-x-full"
-          }`}
+          className={`absolute left-0 top-0 h-full w-72 bg-background border-r border-border shadow-lg transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"}`}
         >
           {panelContent}
         </div>
       </div>
 
-      {/* ── Mobile: bottom drawer (below sm) ──────────────────────────────── */}
+      {/* Mobile bottom drawer */}
       <div
-        className={`sm:hidden fixed inset-0 z-40 transition-all duration-200 ${
-          open ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`sm:hidden fixed inset-0 z-40 transition-all duration-200 ${open ? "pointer-events-auto" : "pointer-events-none"}`}
         aria-hidden={!open}
       >
-        {/* Backdrop */}
         <div
           onClick={onClose}
-          className={`absolute inset-0 bg-background/70 transition-opacity duration-200 ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-background/70 transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0"}`}
         />
-        {/* Drawer sliding up from bottom */}
         <div
-          className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${
-            open ? "translate-y-0" : "translate-y-full"
-          }`}
+          className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"}`}
           style={{ maxHeight: "72vh" }}
         >
-          {/* Pull handle */}
           <div className="flex justify-center pt-2.5 pb-1 shrink-0">
             <div className="w-9 h-1 rounded-full bg-muted-foreground/20" />
           </div>
@@ -421,29 +587,193 @@ function VideoHistoryPanel({
   );
 }
 
-// ─── FollowUpBlock ────────────────────────────────────────────────────────────
-// Rendered below the video result. Lets the user send follow-up prompts,
-// swap images, or tweak audio options — all within the same chat.
+// ─── ChatVideoMessage ─────────────────────────────────────────────────────────
+// Renders a video result inline in the chat thread.
 
-function FollowUpBlock({
+function ChatVideoMessage({
+  msg,
+  isLatest,
+  onExport,
+  isDownloading,
+  downloadProgress,
+  ttsVolume,
+  musicVolume,
+  onTtsVolumeChange,
+  onMusicVolumeChange,
+}: {
+  msg: VideoMessage;
+  isLatest: boolean;
+  onExport: () => void;
+  isDownloading: boolean;
+  downloadProgress: number | null;
+  ttsVolume: number;
+  musicVolume: number;
+  onTtsVolumeChange: (v: number) => void;
+  onMusicVolumeChange: (v: number) => void;
+}) {
+  const [jsonOpen, setJsonOpen] = useState(false);
+  const { videoJson, meta, uploadedImages } = msg;
+
+  return (
+    <div className="space-y-3">
+      {/* Meta row */}
+      <div className="rounded-xl border border-border bg-muted/20 p-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {[
+            { icon: Layers, label: "scenes", value: meta.scenes },
+            { icon: Clock, label: "sec", value: meta.durationSeconds.toFixed(1) },
+            { icon: Film, label: "frames", value: meta.totalFrames },
+          ].map(({ icon: Icon, label, value }) => (
+            <div key={label} className="flex items-center gap-1.5">
+              <Icon className="h-3 w-3 text-muted-foreground/50 shrink-0" />
+              <span className="text-xs font-mono font-bold text-foreground tabular-nums">{value}</span>
+              <span className="text-[9px] font-mono text-muted-foreground/50">{label}</span>
+            </div>
+          ))}
+          <div className="flex gap-1 ml-auto flex-wrap justify-end">
+            {uploadedImages.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                <ImagePlus className="h-2.5 w-2.5" /> {uploadedImages.length}
+              </span>
+            )}
+            {videoJson.scenes?.some((s: any) => s.ttsUrl) && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                <Mic className="h-2.5 w-2.5" /> TTS
+              </span>
+            )}
+            {videoJson.bgmUrl && (
+              <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
+                <Music className="h-2.5 w-2.5" /> BGM
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Remotion Player */}
+      <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+        <Player
+          component={VideoComposition}
+          inputProps={{ videoJson }}
+          durationInFrames={videoJson.duration}
+          fps={videoJson.fps ?? 30}
+          compositionWidth={videoJson.width ?? 1280}
+          compositionHeight={videoJson.height ?? 720}
+          style={{ width: "100%", aspectRatio: "16/9" }}
+          controls
+          autoPlay={isLatest}
+          loop
+        />
+      </div>
+
+      {/* Volume controls (only on latest) */}
+      {isLatest && (videoJson.scenes?.some((s: any) => s.ttsUrl) || videoJson.bgmUrl) && (
+        <div className="rounded-xl border border-border bg-muted/20 p-3.5 space-y-3">
+          <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+            Adjust volumes
+          </p>
+          {videoJson.scenes?.some((s: any) => s.ttsUrl) && (
+            <div className="flex items-center gap-3">
+              <Mic className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+              <span className="text-[11px] font-mono text-muted-foreground w-16 shrink-0">Narration</span>
+              <input
+                type="range" min="0" max="1" step="0.05" value={ttsVolume}
+                onChange={(e) => onTtsVolumeChange(parseFloat(e.target.value))}
+                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+              />
+              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                {Math.round(ttsVolume * 100)}%
+              </span>
+            </div>
+          )}
+          {videoJson.bgmUrl && (
+            <div className="flex items-center gap-3">
+              <Music className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+              <span className="text-[11px] font-mono text-muted-foreground w-16 shrink-0">Music</span>
+              <input
+                type="range" min="0" max="1" step="0.05" value={musicVolume}
+                onChange={(e) => onMusicVolumeChange(parseFloat(e.target.value))}
+                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+              />
+              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                {Math.round(musicVolume * 100)}%
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Export button (only on latest) */}
+      {isLatest && (
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={isDownloading}
+          className="w-full flex items-center justify-center gap-2 h-9 rounded-xl border border-border bg-muted/20 text-[11px] font-mono text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isDownloading ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
+          ) : (
+            <><Download className="h-3.5 w-3.5" /> Export MP4</>
+          )}
+        </button>
+      )}
+
+      {/* JSON debug panel */}
+      {isLatest && (
+        <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setJsonOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+          >
+            <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+              Generated JSON
+            </span>
+            {jsonOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+          </button>
+          {jsonOpen && (
+            <pre className="border-t border-border px-4 py-4 text-[10px] font-mono text-muted-foreground/50 overflow-auto max-h-48 leading-relaxed bg-background/50">
+              {JSON.stringify(videoJson, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── FollowUpInput ────────────────────────────────────────────────────────────
+
+function FollowUpInput({
   isBusy,
   uploadedImages,
+  selectedRange,
+  onRangeChange,
   onSubmit,
+  lastFailedPrompt,
+  onRetry,
 }: {
   isBusy: boolean;
-  /** Currently persisted images for this chat — shown as starting state */
   uploadedImages: UploadedUserImage[];
+  selectedRange: DurationRange;
+  onRangeChange: (range: DurationRange) => void;
   onSubmit: (params: {
     followUpPrompt: string;
+    editedExistingImages: UploadedUserImage[];
     newImageEntries: UserImageEntryWithPreview[];
     options: GenerateVideoOptions;
+    duration: number;
   }) => Promise<void>;
+  lastFailedPrompt: string | null;
+  onRetry: () => void;
 }) {
   const [followUpPrompt, setFollowUpPrompt] = useState("");
-  const [followUpOptionsOpen, setFollowUpOptionsOpen] = useState(false);
-  const [followUpImagesOpen, setFollowUpImagesOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
 
-  // Audio options — initialised to current values passed via props
+  // Audio state
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
@@ -451,333 +781,311 @@ function FollowUpBlock({
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
 
-  // New images to add / replace in this follow-up
+  // Image state — mirror of existing images that user can edit/remove
+  const [editedExistingImages, setEditedExistingImages] = useState<UploadedUserImage[]>(uploadedImages);
   const [newImageEntries, setNewImageEntries] = useState<UserImageEntryWithPreview[]>([]);
-  const [followUpUploadStep, setFollowUpUploadStep] = useState<
-    "idle" | "uploading" | "done" | "error"
-  >("idle");
+
+  // Keep edited images in sync when uploadedImages prop changes (e.g. on new generation)
+  useEffect(() => {
+    setEditedExistingImages(uploadedImages);
+  }, [uploadedImages]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
 
-  const totalImagesAfterMerge =
-    uploadedImages.length + newImageEntries.filter(
-      // new entries that aren't replacing an existing slot by index — simple count cap
-      () => true,
-    ).length;
-
-  // Combined slot count: existing persisted images + new additions (capped at 5)
-  const slotsUsed = Math.min(totalImagesAfterMerge, MAX_USER_IMAGES);
-
-  async function handleFollowUpSubmit(e: React.FormEvent) {
+  function handleInitialSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!followUpPrompt.trim() || isBusy) return;
+    setShowWarning(true);
+  }
 
+  async function handleConfirmedSubmit() {
+    setShowWarning(false);
     const options: GenerateVideoOptions = {
       useTTS, useMusic, ttsVolume, musicVolume,
       ...(useTTS && { voiceId }),
       ...(useMusic && { musicGenre }),
     };
-
-    await onSubmit({ followUpPrompt, newImageEntries, options });
-
-    // Reset local state after submission
+    await onSubmit({
+      followUpPrompt,
+      editedExistingImages,
+      newImageEntries,
+      options,
+      duration: selectedRange.seconds,
+    });
     setFollowUpPrompt("");
     setNewImageEntries([]);
-    setFollowUpUploadStep("idle");
-    setFollowUpOptionsOpen(false);
-    setFollowUpImagesOpen(false);
+    setOptionsOpen(false);
+    setImagesOpen(false);
   }
 
-  const renderFollowUpUploadBadge = () => {
-    if (followUpUploadStep === "idle" || newImageEntries.length === 0) return null;
-    if (followUpUploadStep === "uploading") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
-          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading…
-        </span>
-      );
-    }
-    if (followUpUploadStep === "done") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
-          <CheckCircle2 className="h-2.5 w-2.5" /> Uploaded
-        </span>
-      );
-    }
-    if (followUpUploadStep === "error") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
-          <AlertCircle className="h-2.5 w-2.5" /> Upload failed
-        </span>
-      );
-    }
-  };
+  const hasImageChanges =
+    newImageEntries.length > 0 ||
+    editedExistingImages.length !== uploadedImages.length ||
+    editedExistingImages.some((img, i) => img.description !== uploadedImages[i]?.description);
 
   return (
-    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-      {/* Header label */}
-      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
-        <MessageSquarePlus className="h-3.5 w-3.5 text-primary/60" />
-        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-          Follow-up prompt
-        </span>
-        {uploadedImages.length > 0 && (
-          <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5">
-            {uploadedImages.length} image{uploadedImages.length !== 1 ? "s" : ""} in chat
-          </span>
-        )}
-      </div>
-
-      {/* Follow-up form */}
-      <form onSubmit={handleFollowUpSubmit}>
-        {/* Textarea */}
-        <div className="relative px-4">
-          <textarea
-            ref={textareaRef}
-            value={followUpPrompt}
-            onChange={(e) => setFollowUpPrompt(e.target.value)}
-            placeholder="e.g. Make the second scene darker, add a voiceover about climate change…"
-            rows={3}
-            disabled={isBusy}
-            aria-label="Follow-up prompt"
-            className="w-full px-0 pt-1 pb-6 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40 border-0"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleFollowUpSubmit(e);
-            }}
-          />
-          <span className="absolute bottom-3 right-4 text-[10px] font-mono text-muted-foreground/25 tabular-nums">
-            {followUpPrompt.length}/2000
-          </span>
+    <div className="space-y-3">
+      {/* Warning banner when showing confirmation */}
+      {showWarning && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+          <div className="flex items-start gap-2.5">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-xs font-sans font-semibold text-amber-500">
+                Current version will be replaced
+              </p>
+              <p className="text-[11px] font-mono text-amber-500/70 leading-relaxed">
+                Generating a new version will overwrite the current video. Make sure you've exported
+                it first if you want to keep it.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowWarning(false)}
+              className="flex-1 h-8 rounded-lg border border-border text-xs font-mono text-muted-foreground hover:bg-muted transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmedSubmit}
+              className="flex-1 h-8 rounded-lg bg-amber-500 text-white text-xs font-sans font-bold hover:bg-amber-500/90 transition-all"
+            >
+              Continue anyway
+            </button>
+          </div>
         </div>
+      )}
 
-        {/* Submit row */}
-        <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-3">
-          <p className="text-[9px] font-mono text-muted-foreground/35 leading-relaxed hidden sm:block">
-            Changes audio, images, or style without resetting the chat
-          </p>
-          <button
-            type="submit"
-            disabled={!followUpPrompt.trim() || isBusy}
-            className="inline-flex items-center justify-center gap-2 px-4 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0 ml-auto"
-          >
-            {isBusy ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span className="hidden sm:inline">Updating…</span>
-              </>
-            ) : (
-              <>
-                <SendHorizonal className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Update video</span>
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* ── New images panel ──────────────────────────────────────────── */}
-        <div className="border-t border-border">
+      {/* Retry banner */}
+      {lastFailedPrompt && !isBusy && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+            <p className="text-[11px] font-mono text-red-500/80 truncate">
+              Last generation failed
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => setFollowUpImagesOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-red-500/30 text-[10px] font-mono text-red-500 hover:bg-red-500/10 transition-all shrink-0"
           >
-            <div className="flex items-center gap-2">
-              <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                Add / replace images
+            <RefreshCw className="h-3 w-3" /> Retry
+          </button>
+        </div>
+      )}
+
+      {/* Input card */}
+      {!showWarning && (
+        <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+          {/* Header */}
+          <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+            <MessageSquarePlus className="h-3.5 w-3.5 text-primary/60" />
+            <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+              Follow-up
+            </span>
+          </div>
+
+          {/* Textarea */}
+          <form onSubmit={handleInitialSubmit}>
+            <div className="relative px-4">
+              <textarea
+                ref={textareaRef}
+                value={followUpPrompt}
+                onChange={(e) => setFollowUpPrompt(e.target.value)}
+                placeholder="e.g. Make the second scene darker, add a voiceover about climate…"
+                rows={3}
+                disabled={isBusy}
+                className="w-full px-0 pt-1 pb-6 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40 border-0"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleInitialSubmit(e);
+                }}
+              />
+              <span className="absolute bottom-3 right-4 text-[10px] font-mono text-muted-foreground/25 tabular-nums">
+                {followUpPrompt.length}/2000
               </span>
-              {newImageEntries.length > 0 && (
-                <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                  {newImageEntries.length} new
+            </div>
+
+            {/* Duration + submit row */}
+            <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest shrink-0 hidden sm:block">
+                  Duration
                 </span>
-              )}
-              {renderFollowUpUploadBadge()}
+                <div className="flex gap-1" role="group">
+                  {DURATION_RANGES.map((range) => (
+                    <button
+                      key={range.value}
+                      type="button"
+                      onClick={() => onRangeChange(range)}
+                      aria-pressed={selectedRange.value === range.value}
+                      className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${
+                        selectedRange.value === range.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      {range.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={!followUpPrompt.trim() || isBusy}
+                className="inline-flex items-center justify-center gap-2 px-4 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
+              >
+                {isBusy ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span className="hidden sm:inline">Updating…</span></>
+                ) : (
+                  <><SendHorizonal className="h-3.5 w-3.5" /><span className="hidden sm:inline">Update</span></>
+                )}
+              </button>
             </div>
-            {followUpImagesOpen
-              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-            }
-          </button>
+          </form>
 
-          {followUpImagesOpen && (
-            <div className="px-4 pb-4 border-t border-border bg-muted/10">
-              {/* Show currently persisted images as read-only reference */}
-              {uploadedImages.length > 0 && (
-                <div className="pt-3 pb-2 space-y-1.5">
-                  <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest">
-                    Current images in chat
-                  </p>
-                  <div className="space-y-1.5">
-                    {uploadedImages.map((img, i) => (
-                      <div
-                        key={img.url}
-                        className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-border bg-muted/10"
-                      >
-                        <div className="shrink-0 w-10 h-7 rounded overflow-hidden border border-border bg-muted">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={img.url}
-                            alt={img.description || `Image ${i + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+          {/* Images panel */}
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setImagesOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                  Images
+                </span>
+                {(editedExistingImages.length > 0 || newImageEntries.length > 0) && (
+                  <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.5 border ${
+                    hasImageChanges
+                      ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                      : "text-primary bg-primary/10 border-primary/20"
+                  }`}>
+                    {editedExistingImages.length + newImageEntries.length}
+                    {hasImageChanges && " · edited"}
+                  </span>
+                )}
+              </div>
+              {imagesOpen
+                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+              }
+            </button>
+            {imagesOpen && (
+              <div className="px-4 pb-4 border-t border-border bg-muted/10">
+                <div className="pt-3">
+                  <ImageManager
+                    existingImages={editedExistingImages}
+                    newEntries={newImageEntries}
+                    onExistingChange={setEditedExistingImages}
+                    onNewEntriesChange={setNewImageEntries}
+                    disabled={isBusy}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Audio options panel */}
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setOptionsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Volume2 className="h-3 w-3 text-muted-foreground/50" />
+                <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                  Audio
+                </span>
+                <div className="flex gap-1">
+                  {useTTS && (
+                    <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">TTS</span>
+                  )}
+                  {useMusic && (
+                    <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">Music</span>
+                  )}
+                </div>
+              </div>
+              {optionsOpen
+                ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+                : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+              }
+            </button>
+
+            {optionsOpen && (
+              <div className="px-4 pb-4 space-y-4 border-t border-border bg-muted/10">
+                {/* TTS */}
+                <div className="space-y-2 pt-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
+                      <span className="text-[11px] font-mono text-muted-foreground">Narration (TTS)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUseTTS((v) => !v)}
+                      className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                    >
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
+                    </button>
+                  </div>
+                  {useTTS && (
+                    <>
+                      <div className="flex items-center gap-2 pl-5">
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
+                        <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="aravind" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
+                      </div>
+                      <div className="flex items-center gap-2 pl-5">
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
+                        <input type="range" min="0" max="1" step="0.05" value={ttsVolume} onChange={(e) => setTtsVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(ttsVolume * 100)}%</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {/* Music */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
+                      <span className="text-[11px] font-mono text-muted-foreground">Background music</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUseMusic((v) => !v)}
+                      className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                    >
+                      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
+                    </button>
+                  </div>
+                  {useMusic && (
+                    <>
+                      <div className="flex items-center gap-2 pl-5">
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
+                        <div className="flex gap-1 flex-wrap">
+                          {MUSIC_GENRES.map((g) => (
+                            <button key={g.value} type="button" onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                          ))}
                         </div>
-                        <p className="flex-1 text-[10px] font-mono text-muted-foreground/60 truncate">
-                          {img.description || `Image ${i + 1}`}
-                        </p>
-                        <span className="text-[9px] font-mono text-muted-foreground/30 shrink-0">
-                          #{img.index + 1}
-                        </span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Uploader for new/replacement images */}
-              {slotsUsed < MAX_USER_IMAGES && (
-                <UserImageUploader
-                  entries={newImageEntries}
-                  onChange={setNewImageEntries}
-                  disabled={isBusy}
-                />
-              )}
-
-              {slotsUsed >= MAX_USER_IMAGES && newImageEntries.length === 0 && (
-                <p className="pt-3 text-[9px] font-mono text-muted-foreground/40 leading-relaxed">
-                  Maximum {MAX_USER_IMAGES} images reached. Remove an image from the chat before adding more.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ── Audio options panel ───────────────────────────────────────── */}
-        <div className="border-t border-border">
-          <button
-            type="button"
-            onClick={() => setFollowUpOptionsOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <Volume2 className="h-3 w-3 text-muted-foreground/50" />
-              <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                Audio options
-              </span>
-              <div className="flex gap-1">
-                {useTTS && (
-                  <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                    TTS
-                  </span>
-                )}
-                {useMusic && (
-                  <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                    Music
-                  </span>
-                )}
-              </div>
-            </div>
-            {followUpOptionsOpen
-              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-            }
-          </button>
-
-          {followUpOptionsOpen && (
-            <div className="px-4 pb-4 space-y-4 border-t border-border bg-muted/10">
-
-              {/* TTS toggle + voice */}
-              <div className="space-y-2 pt-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
-                    <span className="text-[11px] font-mono text-muted-foreground">Narration (TTS)</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setUseTTS((v) => !v)}
-                    className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
-                  >
-                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
-                  </button>
-                </div>
-                {useTTS && (
-                  <>
-                    <div className="flex items-center gap-2 pl-5">
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                      <input
-                        type="text"
-                        value={voiceId}
-                        onChange={(e) => setVoiceId(e.target.value)}
-                        placeholder="aravind"
-                        className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 pl-5">
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input
-                        type="range" min="0" max="1" step="0.05" value={ttsVolume}
-                        onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
-                        className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                      />
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
-                        {Math.round(ttsVolume * 100)}%
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Music toggle + genre */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
-                    <span className="text-[11px] font-mono text-muted-foreground">Background music</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setUseMusic((v) => !v)}
-                    className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
-                  >
-                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
-                  </button>
-                </div>
-                {useMusic && (
-                  <>
-                    <div className="flex items-center gap-2 pl-5">
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
-                      <div className="flex gap-1 flex-wrap">
-                        {MUSIC_GENRES.map((g) => (
-                          <button
-                            key={g.value}
-                            type="button"
-                            onClick={() => setMusicGenre(g.value)}
-                            className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
-                          >
-                            {g.label}
-                          </button>
-                        ))}
+                      <div className="flex items-center gap-2 pl-5">
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
+                        <input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={(e) => setMusicVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                        <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(musicVolume * 100)}%</span>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 pl-5">
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input
-                        type="range" min="0" max="1" step="0.05" value={musicVolume}
-                        onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
-                        className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                      />
-                      <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
-                        {Math.round(musicVolume * 100)}%
-                      </span>
-                    </div>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </form>
+      )}
     </div>
   );
 }
@@ -787,119 +1095,142 @@ function FollowUpBlock({
 export default function VideoGeneratorPage() {
   const [prompt, setPrompt] = useState("");
   const [selectedRange, setSelectedRange] = useState<DurationRange>(DURATION_RANGES[1]);
-  const [videoJson, setVideoJson] = useState<VideoJson | null>(null);
-  const [meta, setMeta] = useState<VideoMeta | null>(null);
-  const [jsonOpen, setJsonOpen] = useState(false);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [imagesOpen, setImagesOpen] = useState(false);
 
-  // ── History panel ──────────────────────────────────────────────────────────
-  const [historyOpen, setHistoryOpen] = useState(false);
-
-  // ── Chat persistence ───────────────────────────────────────────────────────
-  // Set after first successful generation; reused for follow-up prompts.
-  // Cleared by handleReset() so a "New video" starts a fresh chat.
+  // Chat messages
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
 
-  // ── History: track whether we're loading a chat from history ──────────────
-  // When non-null, useVideoChat fetches the full detail and we render from it.
-  const [loadingHistoryChatId, setLoadingHistoryChatId] = useState<string | null>(null);
+  // The current latest video (for volume controls + export)
+  const [latestVideoJson, setLatestVideoJson] = useState<VideoJson | null>(null);
+  const [ttsVolume, setTtsVolume] = useState(0.8);
+  const [musicVolume, setMusicVolume] = useState(0.3);
 
-  // Image upload state
-  const [userImageEntries, setUserImageEntries] = useState<
-    Array<{ id: string; file: File; description: string; previewUrl: string }>
-  >([]);
-  const [uploadStep, setUploadStep] = useState<
-    "idle" | "uploading" | "done" | "error"
-  >("idle");
+  // Image upload state (for initial prompt)
+  const [userImageEntries, setUserImageEntries] = useState<UserImageEntryWithPreview[]>([]);
+  const [uploadStep, setUploadStep] = useState<"idle" | "uploading" | "done" | "error">("idle");
   const [uploadedImages, setUploadedImages] = useState<UploadedUserImage[]>([]);
   const [imageSessionId, setImageSessionId] = useState<string | undefined>();
 
-  // Audio options
+  // Audio options (initial prompt)
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
   const [voiceId, setVoiceId] = useState("aravind");
-  const [ttsVolume, setTtsVolume] = useState(0.8);
-  const [musicVolume, setMusicVolume] = useState(0.3);
+  const [ttsVolume0, setTtsVolume0] = useState(0.8);
+  const [musicVolume0, setMusicVolume0] = useState(0.3);
 
-  // ── Download progress (0–1, null when not downloading) ───────────────────
+  // Export modal
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportComplete, setExportComplete] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
+  // History panel
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Last failed prompt for retry
+  const [lastFailedPrompt, setLastFailedPrompt] = useState<string | null>(null);
+  const [lastFailedOptions, setLastFailedOptions] = useState<GenerateVideoOptions | null>(null);
+
+  // History loading
+  const [loadingHistoryChatId, setLoadingHistoryChatId] = useState<string | null>(null);
+  const appliedHistoryChatIdRef = useRef<string | null>(null);
+
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { mutate: generate, isPending: isGenerating } = useGenerateVideo();
   const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
   const { mutate: downloadVideo, isPending: isDownloading } = useDownloadVideo();
 
-  // ── Fetch full chat detail when loading from history ──────────────────────
-  const {
-    data: historyChatDetail,
-    isLoading: isLoadingHistoryChat,
-    isError: isHistoryChatError,
-  } = useVideoChat(loadingHistoryChatId);
+  const { data: historyChatDetail, isLoading: isLoadingHistoryChat, isError: isHistoryChatError } =
+    useVideoChat(loadingHistoryChatId);
 
-  // When the history chat detail loads, populate videoJson + meta + prompt
-  // We use a ref to track which chatId we've already applied so we don't reapply on re-renders
-  const appliedHistoryChatIdRef = useRef<string | null>(null);
+  const isBusy = isGenerating || isUploading;
+  const hasResult = chatMessages.some((m) => m.type === "video");
 
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (chatMessages.length > 0) {
+      setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
+    }
+  }, [chatMessages.length]);
+
+  // Apply history chat detail
   if (
     historyChatDetail &&
     loadingHistoryChatId &&
     appliedHistoryChatIdRef.current !== loadingHistoryChatId
   ) {
     appliedHistoryChatIdRef.current = loadingHistoryChatId;
-
     const vj = historyChatDetail.videoJson;
-    setVideoJson(vj);
-
-    // Reconstruct meta from the videoJson
     const fps = vj.fps ?? 30;
-    const totalFrames = vj.duration;
-    setMeta({
+    const meta: VideoMeta = {
       scenes: vj.scenes.length,
-      totalFrames,
-      durationSeconds: parseFloat((totalFrames / fps).toFixed(1)),
-    });
+      totalFrames: vj.duration,
+      durationSeconds: parseFloat((vj.duration / fps).toFixed(1)),
+    };
 
-    // Restore last prompt so user can send a follow-up
-    const lastPrompt = historyChatDetail.prompts.at(-1)?.prompt ?? "";
-    if (lastPrompt) setPrompt(lastPrompt);
+    // Reconstruct chat messages from prompt history
+        const msgs: ChatMessage[] = [];
+        const prompts = historyChatDetail.prompts ?? [];
+        for (let i = 0; i < prompts.length; i++) {
+          const p = prompts[i];
+          if (!p) continue;
+          msgs.push({
+            type: "prompt",
+            text: p.prompt ?? "",
+            sentAt: p.sentAt ?? new Date().toISOString(),
+          });
+          if (i < prompts.length - 1) {
+            msgs.push({
+              type: "video",
+              videoJson: vj, // we only have the latest video; show placeholder for older
+              meta,
+              uploadedImages: historyChatDetail.userImages ?? [],
+              isLatest: false,
+            });
+          }
+        }
+        // Latest video
+        msgs.push({
+          type: "video",
+          videoJson: vj,
+          meta,
+          uploadedImages: historyChatDetail.userImages ?? [],
+          isLatest: true,
+        });
 
-    // Restore persisted user images so the follow-up block can show them
-    if (historyChatDetail.userImages) {
-      setUploadedImages(historyChatDetail.userImages);
-    }
+    setChatMessages(msgs);
+    setLatestVideoJson(vj);
+    setUploadedImages(historyChatDetail.userImages ?? []);
 
-    // Restore audio options if saved
     if (historyChatDetail.options) {
       const opts = historyChatDetail.options;
-      if (typeof opts.useTTS === "boolean") setUseTTS(opts.useTTS);
-      if (typeof opts.useMusic === "boolean") setUseMusic(opts.useMusic);
-      if (typeof opts.ttsVolume === "number") setTtsVolume(opts.ttsVolume);
-      if (typeof opts.musicVolume === "number") setMusicVolume(opts.musicVolume);
-      if (typeof opts.voiceId === "string") setVoiceId(opts.voiceId);
-      if (typeof opts.musicGenre === "string") setMusicGenre(opts.musicGenre);
+      if (typeof opts.ttsVolume === "number") setTtsVolume(opts.ttsVolume as number);
+      if (typeof opts.musicVolume === "number") setMusicVolume(opts.musicVolume as number);
     }
 
-    // Stop the loading state — the chatId is already set from handleSelectHistoryChat
     setLoadingHistoryChatId(null);
   }
-
-  const hasResult = videoJson !== null;
-  const isBusy = isGenerating || isUploading;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!prompt.trim() || isBusy) return;
 
+    const promptText = prompt.trim();
     const options: GenerateVideoOptions = {
-      useTTS, useMusic, ttsVolume, musicVolume,
+      useTTS, useMusic, ttsVolume: ttsVolume0, musicVolume: musicVolume0,
       ...(useTTS && { voiceId }),
       ...(useMusic && { musicGenre }),
     };
 
-    // Upload images first if any were added
+    // Add user message immediately
+    const sentAt = new Date().toISOString();
+    setChatMessages((prev) => [...prev, { type: "prompt", text: promptText, sentAt }]);
+    setPrompt("");
+
     let resolvedUserImages = uploadedImages;
     let resolvedSessionId = imageSessionId;
 
@@ -915,119 +1246,88 @@ export default function VideoGeneratorPage() {
         toast.success(`Uploaded ${result.images.length} image${result.images.length !== 1 ? "s" : ""}`);
       } catch (err) {
         setUploadStep("error");
-        toast.error(err instanceof Error ? err.message : "Image upload failed");
+        const errMsg = err instanceof Error ? err.message : "Image upload failed";
+        toast.error(errMsg);
+        // Add error message to chat, don't block
+        setChatMessages((prev) => [
+          ...prev,
+          { type: "error", text: errMsg, promptText, sentAt: new Date().toISOString() },
+        ]);
+        setLastFailedPrompt(promptText);
+        setLastFailedOptions(options);
         return;
       }
     }
 
+    setLastFailedPrompt(null);
+
     generate(
       {
-        prompt: prompt.trim(),
+        prompt: promptText,
         duration: selectedRange.seconds,
         options,
-        chatId: chatId ?? null, // pass existing chatId for follow-ups; null = new chat
+        chatId: chatId ?? null,
         userImages: resolvedUserImages.length > 0 ? resolvedUserImages : undefined,
         imageSessionId: resolvedSessionId,
       },
       {
         onSuccess: (data) => {
-          setVideoJson(data.videoJson);
-          setMeta(data.meta);
-          setChatId(data.chatId); // store for follow-up prompts
+          setChatId(data.chatId);
+          setLatestVideoJson(data.videoJson);
+          setTtsVolume(options.ttsVolume ?? 0.8);
+          setMusicVolume(options.musicVolume ?? 0.3);
+          // Mark previous videos as not latest
+          setChatMessages((prev) => [
+            ...prev.map((m) =>
+              m.type === "video" ? { ...m, isLatest: false } : m,
+            ),
+            {
+              type: "video",
+              videoJson: data.videoJson,
+              meta: data.meta,
+              uploadedImages: resolvedUserImages,
+              isLatest: true,
+            },
+          ]);
           toast.success(`Generated ${data.meta.scenes} scenes`);
         },
         onError: (err) => {
-          toast.error(err.message ?? "Failed to generate video");
+          const errMsg = err.message ?? "Failed to generate video";
+          toast.error(errMsg);
+          // Error appears in chat, not blocking
+          setChatMessages((prev) => [
+            ...prev,
+            { type: "error", text: errMsg, promptText, sentAt: new Date().toISOString() },
+          ]);
+          setLastFailedPrompt(promptText);
+          setLastFailedOptions(options);
         },
       },
     );
   }
 
-  function handleReset() {
-    // Revoke object URLs to avoid memory leaks
-    userImageEntries.forEach((e) => URL.revokeObjectURL(e.previewUrl));
-
-    setVideoJson(null);
-    setMeta(null);
-    setPrompt("");
-    setSelectedRange(DURATION_RANGES[1]);
-    setJsonOpen(false);
-    setOptionsOpen(false);
-    setImagesOpen(false);
-    setTtsVolume(0.8);
-    setMusicVolume(0.3);
-    setUserImageEntries([]);
-    setUploadStep("idle");
-    setUploadedImages([]);
-    setImageSessionId(undefined);
-    setChatId(null); // clear so next generation starts a fresh chat
-    setLoadingHistoryChatId(null);
-    appliedHistoryChatIdRef.current = null;
-    setDownloadProgress(null);
-  }
-
-  // ── History: load a past chat into the result view ────────────────────────
-  // Sets chatId for follow-up continuity and triggers useVideoChat to fetch
-  // the full detail (videoJson + prompts + options) so the player can render.
-  function handleSelectHistoryChat(chat: VideoChatSummary) {
-    // Clear any existing result first to avoid stale display
-    setVideoJson(null);
-    setMeta(null);
-    appliedHistoryChatIdRef.current = null;
-
-    // Set the chatId for follow-up continuity
-    setChatId(chat.id);
-
-    // Pre-populate the prompt field with the last known prompt from the summary
-    if (chat.lastPrompt) setPrompt(chat.lastPrompt);
-
-    // Trigger the detail fetch — useVideoChat watches this value
-    setLoadingHistoryChatId(chat.id);
-
-    // Scroll to top / focus textarea after state settles
-    setTimeout(() => textareaRef.current?.focus(), 100);
-  }
-
-  // ── Download handler ───────────────────────────────────────────────────────
-  function handleDownload() {
-    if (!videoJson || isDownloading) return;
-    setDownloadProgress(0);
-    downloadVideo(
-      {
-        videoJson,
-        onProgress: (p) => setDownloadProgress(p),
-      },
-      {
-        onSuccess: () => {
-          toast.success("Download started!");
-          setDownloadProgress(null);
-        },
-        onError: (err) => {
-          toast.error(err.message ?? "Download failed");
-          setDownloadProgress(null);
-        },
-      },
-    );
-  }
-
-  // ── Follow-up handler ──────────────────────────────────────────────────────
-  // Called by FollowUpBlock when the user submits a follow-up prompt.
-  // Uploads any new images, merges them with existing ones, then calls generate.
   async function handleFollowUp({
     followUpPrompt,
+    editedExistingImages,
     newImageEntries,
     options,
+    duration,
   }: {
     followUpPrompt: string;
+    editedExistingImages: UploadedUserImage[];
     newImageEntries: UserImageEntryWithPreview[];
     options: GenerateVideoOptions;
+    duration: number;
   }) {
-    if (!chatId) return; // should never happen — follow-up only shown when hasResult
+    if (!chatId) return;
+
+    const sentAt = new Date().toISOString();
+    setChatMessages((prev) => [...prev, { type: "prompt", text: followUpPrompt, sentAt }]);
+    setLastFailedPrompt(null);
 
     let resolvedNewImages: UploadedUserImage[] = [];
     let resolvedNewSessionId: string | undefined;
 
-    // Upload new images if provided
     if (newImageEntries.length > 0) {
       try {
         const result = await uploadImages(newImageEntries);
@@ -1035,74 +1335,163 @@ export default function VideoGeneratorPage() {
         resolvedNewSessionId = result.sessionId;
         toast.success(`Uploaded ${result.images.length} image${result.images.length !== 1 ? "s" : ""}`);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Image upload failed");
+        const errMsg = err instanceof Error ? err.message : "Image upload failed";
+        toast.error(errMsg);
+        setChatMessages((prev) => [
+          ...prev,
+          { type: "error", text: errMsg, promptText: followUpPrompt, sentAt: new Date().toISOString() },
+        ]);
+        setLastFailedPrompt(followUpPrompt);
+        setLastFailedOptions(options);
         return;
       }
     }
 
-    // Merge: existing persisted images + newly uploaded ones.
-    // Server handles de-duplication by index in generateVideoHandler.
-    const mergedImages: UploadedUserImage[] = [
-      ...uploadedImages,
-      ...resolvedNewImages,
-    ];
+    const mergedImages: UploadedUserImage[] = [...editedExistingImages, ...resolvedNewImages];
 
     generate(
       {
         prompt: followUpPrompt.trim(),
-        duration: selectedRange.seconds,
+        duration,
         options,
-        chatId, // existing chat — server treats this as a follow-up
+        chatId,
         userImages: mergedImages.length > 0 ? mergedImages : undefined,
         imageSessionId: resolvedNewSessionId ?? imageSessionId,
       },
       {
         onSuccess: (data) => {
-          setVideoJson(data.videoJson);
-          setMeta(data.meta);
-          // Update uploaded images to the merged set returned by server
+          setLatestVideoJson(data.videoJson);
+          setTtsVolume(options.ttsVolume ?? 0.8);
+          setMusicVolume(options.musicVolume ?? 0.3);
           if (mergedImages.length > 0) setUploadedImages(mergedImages);
           if (resolvedNewSessionId) setImageSessionId(resolvedNewSessionId);
+          setChatMessages((prev) => [
+            ...prev.map((m) =>
+              m.type === "video" ? { ...m, isLatest: false } : m,
+            ),
+            {
+              type: "video",
+              videoJson: data.videoJson,
+              meta: data.meta,
+              uploadedImages: mergedImages,
+              isLatest: true,
+            },
+          ]);
           toast.success(`Updated — ${data.meta.scenes} scenes`);
         },
         onError: (err) => {
-          toast.error(err.message ?? "Follow-up failed");
+          const errMsg = err.message ?? "Follow-up failed";
+          toast.error(errMsg);
+          setChatMessages((prev) => [
+            ...prev,
+            { type: "error", text: errMsg, promptText: followUpPrompt, sentAt: new Date().toISOString() },
+          ]);
+          setLastFailedPrompt(followUpPrompt);
+          setLastFailedOptions(options);
         },
       },
     );
   }
 
-  // ── Upload step indicator ──────────────────────────────────────────────────
+  function handleRetry() {
+    if (!lastFailedPrompt) return;
+    setPrompt(lastFailedPrompt);
+    setLastFailedPrompt(null);
+    textareaRef.current?.focus();
+  }
+
+  function handleReset() {
+    userImageEntries.forEach((e) => URL.revokeObjectURL(e.previewUrl));
+    setChatMessages([]);
+    setChatId(null);
+    setLatestVideoJson(null);
+    setPrompt("");
+    setSelectedRange(DURATION_RANGES[1]);
+    setOptionsOpen(false);
+    setImagesOpen(false);
+    setTtsVolume0(0.8);
+    setMusicVolume0(0.3);
+    setTtsVolume(0.8);
+    setMusicVolume(0.3);
+    setUserImageEntries([]);
+    setUploadStep("idle");
+    setUploadedImages([]);
+    setImageSessionId(undefined);
+    setLoadingHistoryChatId(null);
+    appliedHistoryChatIdRef.current = null;
+    setDownloadProgress(null);
+    setExportModalOpen(false);
+    setExportComplete(false);
+    setLastFailedPrompt(null);
+    setLastFailedOptions(null);
+  }
+
+  function handleSelectHistoryChat(chat: VideoChatSummary) {
+    handleReset();
+    setChatId(chat.id);
+    if (chat.lastPrompt) setPrompt(chat.lastPrompt);
+    setLoadingHistoryChatId(chat.id);
+    setTimeout(() => textareaRef.current?.focus(), 100);
+  }
+
+  function handleExport() {
+    if (!latestVideoJson || isDownloading) return;
+    setExportModalOpen(true);
+    setExportComplete(false);
+    setDownloadProgress(0);
+    downloadVideo(
+      {
+        videoJson: latestVideoJson,
+        onProgress: (p) => setDownloadProgress(p),
+      },
+      {
+        onSuccess: () => {
+          setExportComplete(true);
+          setDownloadProgress(null);
+        },
+        onError: (err) => {
+          toast.error(err.message ?? "Export failed");
+          setExportModalOpen(false);
+          setDownloadProgress(null);
+        },
+      },
+    );
+  }
+
+  function handleTtsVolumeChange(v: number) {
+    setTtsVolume(v);
+    setLatestVideoJson((prev) => (prev ? { ...prev, ttsVolume: v } : null));
+  }
+
+  function handleMusicVolumeChange(v: number) {
+    setMusicVolume(v);
+    setLatestVideoJson((prev) => (prev ? { ...prev, musicVolume: v } : null));
+  }
+
   const renderUploadStepBadge = () => {
     if (uploadStep === "idle" || userImageEntries.length === 0) return null;
-    if (uploadStep === "uploading") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
-          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading…
-        </span>
-      );
-    }
-    if (uploadStep === "done") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
-          <CheckCircle2 className="h-2.5 w-2.5" /> Uploaded
-        </span>
-      );
-    }
-    if (uploadStep === "error") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
-          <AlertCircle className="h-2.5 w-2.5" /> Upload failed
-        </span>
-      );
-    }
+    if (uploadStep === "uploading") return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+        <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading…
+      </span>
+    );
+    if (uploadStep === "done") return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
+        <CheckCircle2 className="h-2.5 w-2.5" /> Uploaded
+      </span>
+    );
+    if (uploadStep === "error") return (
+      <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
+        <AlertCircle className="h-2.5 w-2.5" /> Upload failed
+      </span>
+    );
   };
 
   return (
     <div className="relative -m-4 w-[calc(100%+2rem)] min-h-screen bg-sidebar">
       <main className="w-full max-w-2xl mx-auto px-4 py-6 space-y-4">
 
-        {/* ── Top bar ── */}
+        {/* Top bar */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-7 w-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -1114,11 +1503,9 @@ export default function VideoGeneratorPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {/* History button — always visible */}
             <button
               onClick={() => setHistoryOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all"
-              aria-label="Open video history"
             >
               <History className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">History</span>
@@ -1129,14 +1516,14 @@ export default function VideoGeneratorPage() {
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                New video
+                <span className="hidden sm:inline">New video</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* ── Loading state when fetching a history chat ── */}
-        {isLoadingHistoryChat && !hasResult && (
+        {/* Loading history */}
+        {isLoadingHistoryChat && chatMessages.length === 0 && (
           <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
             <div className="relative h-14 w-14">
               <div className="absolute inset-0 rounded-full border-2 border-border" />
@@ -1145,26 +1532,19 @@ export default function VideoGeneratorPage() {
                 <Film className="h-5 w-5 text-primary" />
               </div>
             </div>
-            <div className="text-center space-y-1">
-              <p className="text-sm font-sans font-semibold text-foreground">Loading video…</p>
-              <p className="text-[11px] font-mono text-muted-foreground/60">Fetching your saved video</p>
-            </div>
+            <p className="text-sm font-sans font-semibold text-foreground">Loading video…</p>
           </div>
         )}
 
-        {/* ── History chat load error ── */}
-        {isHistoryChatError && !hasResult && !isLoadingHistoryChat && (
+        {isHistoryChatError && chatMessages.length === 0 && !isLoadingHistoryChat && (
           <div className="rounded-xl border border-border bg-muted/20 p-4 text-center">
-            <p className="text-[11px] font-mono text-muted-foreground/60">
-              Failed to load video. Please try again.
-            </p>
+            <p className="text-[11px] font-mono text-muted-foreground/60">Failed to load video. Please try again.</p>
           </div>
         )}
 
-        {/* ══ INPUT ═══════════════════════════════════════════════════════════ */}
-        {!hasResult && !isLoadingHistoryChat && (
+        {/* ── INITIAL INPUT (no messages yet) ── */}
+        {!hasResult && chatMessages.length === 0 && !isLoadingHistoryChat && (
           <div className="space-y-3">
-
             {/* Hero */}
             <div className="text-center space-y-2.5 py-4">
               <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
@@ -1180,10 +1560,8 @@ export default function VideoGeneratorPage() {
               </p>
             </div>
 
-            {/* Input card */}
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-
                 {/* Textarea */}
                 <div className="relative">
                   <textarea
@@ -1193,7 +1571,6 @@ export default function VideoGeneratorPage() {
                     placeholder="e.g. Explain photosynthesis in 3 scenes with a clean educational style"
                     rows={4}
                     disabled={isBusy}
-                    aria-label="Video prompt"
                     className="w-full px-4 pt-4 pb-8 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
@@ -1204,10 +1581,10 @@ export default function VideoGeneratorPage() {
                   </span>
                 </div>
 
-                {/* Duration selector + submit */}
+                {/* Duration + submit */}
                 <div className="border-t border-border px-4 py-3 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest shrink-0">
+                    <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest shrink-0 hidden sm:block">
                       Duration
                     </span>
                     <div className="flex gap-1" role="group">
@@ -1217,10 +1594,7 @@ export default function VideoGeneratorPage() {
                           type="button"
                           onClick={() => setSelectedRange(range)}
                           aria-pressed={selectedRange.value === range.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                            }`}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
                         >
                           {range.label}
                         </button>
@@ -1233,106 +1607,65 @@ export default function VideoGeneratorPage() {
                     className="inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
                   >
                     {isUploading ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span className="hidden sm:inline">Uploading…</span>
-                      </>
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span className="hidden sm:inline">Uploading…</span></>
                     ) : isGenerating ? (
-                      <>
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span className="hidden sm:inline">Generating…</span>
-                      </>
+                      <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span className="hidden sm:inline">Generating…</span></>
                     ) : (
-                      <>
-                        <Film className="h-3.5 w-3.5" />
-                        <span className="hidden sm:inline">Generate</span>
-                      </>
+                      <><Film className="h-3.5 w-3.5" /><span className="hidden sm:inline">Generate</span></>
                     )}
                   </button>
                 </div>
 
-                {/* ── Images panel ─────────────────────────────────────────── */}
+                {/* Images */}
                 <div className="border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setImagesOpen((v) => !v)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
-                  >
+                  <button type="button" onClick={() => setImagesOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-2">
                       <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
-                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                        Your images
-                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Your images</span>
                       {userImageEntries.length > 0 && (
-                        <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                          {userImageEntries.length}
-                        </span>
+                        <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">{userImageEntries.length}</span>
                       )}
                       {renderUploadStepBadge()}
                     </div>
-                    {imagesOpen
-                      ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-                    }
+                    {imagesOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                   </button>
-
                   {imagesOpen && (
                     <div className="px-4 pb-4 border-t border-border bg-muted/10">
-                      <UserImageUploader
-                        entries={userImageEntries}
-                        onChange={setUserImageEntries}
-                        disabled={isBusy}
-                      />
+                      <div className="pt-3">
+                        <ImageManager
+                          existingImages={[]}
+                          newEntries={userImageEntries}
+                          onExistingChange={() => {}}
+                          onNewEntriesChange={setUserImageEntries}
+                          disabled={isBusy}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
 
-                {/* ── Audio options panel ───────────────────────────────────── */}
+                {/* Audio options */}
                 <div className="border-t border-border">
-                  <button
-                    type="button"
-                    onClick={() => setOptionsOpen((v) => !v)}
-                    className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
-                  >
+                  <button type="button" onClick={() => setOptionsOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors">
                     <div className="flex items-center gap-2">
                       <Volume2 className="h-3 w-3 text-muted-foreground/50" />
-                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
-                        Audio options
-                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Audio options</span>
                       <div className="flex gap-1">
-                        {useTTS && (
-                          <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                            TTS
-                          </span>
-                        )}
-                        {useMusic && (
-                          <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
-                            Music
-                          </span>
-                        )}
+                        {useTTS && <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">TTS</span>}
+                        {useMusic && <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">Music</span>}
                       </div>
                     </div>
-                    {optionsOpen
-                      ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
-                      : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
-                    }
+                    {optionsOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
                   </button>
-
                   {optionsOpen && (
                     <div className="px-4 pb-4 space-y-4 border-t border-border bg-muted/10">
-
-                      {/* TTS toggle + voice */}
                       <div className="space-y-2 pt-3">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
                             <span className="text-[11px] font-mono text-muted-foreground">Narration (TTS)</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setUseTTS((v) => !v)}
-                            className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
-                          >
+                          <button type="button" onClick={() => setUseTTS((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}>
                             <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
                           </button>
                         </div>
@@ -1340,45 +1673,23 @@ export default function VideoGeneratorPage() {
                           <>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                              <input
-                                type="text"
-                                value={voiceId}
-                                onChange={(e) => setVoiceId(e.target.value)}
-                                placeholder="aravind"
-                                className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
-                              />
+                              <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="aravind" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                              <input
-                                type="range" min="0" max="1" step="0.05" value={ttsVolume}
-                                onChange={(e) => {
-                                  const v = parseFloat(e.target.value);
-                                  setTtsVolume(v);
-                                  setVideoJson(prev => prev ? { ...prev, ttsVolume: v } : null);
-                                }}
-                                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                              />
-                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
-                                {Math.round(ttsVolume * 100)}%
-                              </span>
+                              <input type="range" min="0" max="1" step="0.05" value={ttsVolume0} onChange={(e) => setTtsVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(ttsVolume0 * 100)}%</span>
                             </div>
                           </>
                         )}
                       </div>
-
-                      {/* Music toggle + genre */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
                             <span className="text-[11px] font-mono text-muted-foreground">Background music</span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => setUseMusic((v) => !v)}
-                            className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
-                          >
+                          <button type="button" onClick={() => setUseMusic((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}>
                             <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
                           </button>
                         </div>
@@ -1388,31 +1699,14 @@ export default function VideoGeneratorPage() {
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                               <div className="flex gap-1 flex-wrap">
                                 {MUSIC_GENRES.map((g) => (
-                                  <button
-                                    key={g.value}
-                                    type="button"
-                                    onClick={() => setMusicGenre(g.value)}
-                                    className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
-                                  >
-                                    {g.label}
-                                  </button>
+                                  <button key={g.value} type="button" onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
                                 ))}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                              <input
-                                type="range" min="0" max="1" step="0.05" value={musicVolume}
-                                onChange={(e) => {
-                                  const v = parseFloat(e.target.value);
-                                  setMusicVolume(v);
-                                  setVideoJson(prev => prev ? { ...prev, musicVolume: v } : null);
-                                }}
-                                className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                              />
-                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
-                                {Math.round(musicVolume * 100)}%
-                              </span>
+                              <input type="range" min="0" max="1" step="0.05" value={musicVolume0} onChange={(e) => setMusicVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                              <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(musicVolume0 * 100)}%</span>
                             </div>
                           </>
                         )}
@@ -1437,29 +1731,6 @@ export default function VideoGeneratorPage() {
                   <p className="text-sm font-sans font-semibold text-foreground">
                     {isUploading ? "Uploading your images…" : "Generating your video…"}
                   </p>
-                  <p className="text-[11px] font-mono text-muted-foreground/60">
-                    {isUploading
-                      ? `Preparing ${userImageEntries.length} image${userImageEntries.length !== 1 ? "s" : ""}`
-                      : `AI is composing ${selectedRange.label} of scenes`
-                    }
-                  </p>
-                </div>
-                <div className="flex flex-col gap-1.5 w-full max-w-xs">
-                  {[
-                    ...(userImageEntries.length > 0 ? ["Uploading your images"] : []),
-                    "Analyzing your prompt",
-                    "Composing scenes",
-                    ...(useTTS ? ["Generating narration audio"] : []),
-                    ...(useMusic ? ["Adding background music"] : []),
-                  ].map((step, i) => (
-                    <div key={step} className="flex items-center gap-2">
-                      <Loader2
-                        className="h-3 w-3 text-primary animate-spin shrink-0"
-                        style={{ animationDelay: `${i * 300}ms` }}
-                      />
-                      <span className="text-[10px] font-mono text-muted-foreground/50">{step}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -1467,9 +1738,7 @@ export default function VideoGeneratorPage() {
             {/* Example prompts */}
             {!isBusy && (
               <div>
-                <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-2">
-                  Try an example
-                </p>
+                <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-2">Try an example</p>
                 <div className="flex flex-wrap gap-1.5">
                   {EXAMPLE_PROMPTS.map((ex) => (
                     <button
@@ -1487,239 +1756,150 @@ export default function VideoGeneratorPage() {
           </div>
         )}
 
-        {/* ══ RESULT ══════════════════════════════════════════════════════════ */}
-        {hasResult && videoJson && (
+        {/* ── CHAT THREAD ── */}
+        {chatMessages.length > 0 && (
           <div className="space-y-4">
-
-            {/* Meta row */}
-            <div className="rounded-xl border border-border bg-muted/20 p-4">
-              <div className="flex items-center gap-4 flex-wrap">
-                {[
-                  { icon: Layers, label: "scenes", value: meta?.scenes },
-                  { icon: Clock, label: "seconds", value: meta?.durationSeconds.toFixed(1) },
-                  { icon: Film, label: "frames", value: meta?.totalFrames },
-                ].map(({ icon: Icon, label, value }) => (
-                  <div key={label} className="flex items-center gap-2">
-                    <div className="h-7 w-7 rounded-lg bg-muted border border-border flex items-center justify-center shrink-0">
-                      <Icon className="h-3.5 w-3.5 text-muted-foreground/60" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-mono font-bold text-foreground tabular-nums leading-none">{value}</p>
-                      <p className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">{label}</p>
-                    </div>
-                  </div>
-                ))}
-                <div className="flex gap-1.5 ml-auto">
-                  {uploadedImages.length > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                      <ImagePlus className="h-2.5 w-2.5" /> {uploadedImages.length} image{uploadedImages.length !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {videoJson.scenes.some(s => s.ttsUrl) && (
-                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                      <Mic className="h-2.5 w-2.5" /> TTS
-                    </span>
-                  )}
-                  {videoJson.bgmUrl && (
-                    <span className="inline-flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5">
-                      <Music className="h-2.5 w-2.5" /> Music
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Remotion Player */}
-            <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm">
-              <Player
-                component={VideoComposition}
-                inputProps={{ videoJson }}
-                durationInFrames={videoJson.duration}
-                fps={videoJson.fps ?? 30}
-                compositionWidth={videoJson.width ?? 1280}
-                compositionHeight={videoJson.height ?? 720}
-                style={{ width: "100%", aspectRatio: "16/9" }}
-                controls
-                autoPlay
-                loop
-              />
-            </div>
-
-            {/* ── Follow-up prompt block ───────────────────────────────────── */}
-            {/* Only shown when a chatId exists (i.e. after first generation) */}
-            {chatId && (
-              <>
-                {/* Generating overlay — replaces block while busy */}
-                {isBusy ? (
-                  <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
-                    <div className="relative h-14 w-14">
-                      <div className="absolute inset-0 rounded-full border-2 border-border" />
-                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <Film className="h-5 w-5 text-primary" />
-                      </div>
-                    </div>
-                    <div className="text-center space-y-1">
-                      <p className="text-sm font-sans font-semibold text-foreground">Updating your video…</p>
-                      <p className="text-[11px] font-mono text-muted-foreground/60">
-                        AI is applying your follow-up changes
+            {chatMessages.map((msg, idx) => {
+              if (msg.type === "prompt") {
+                return (
+                  <div key={idx} className="flex items-start gap-3 justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3">
+                      <p className="text-sm font-mono text-primary-foreground leading-relaxed break-words">
+                        {msg.text}
+                      </p>
+                      <p className="text-[9px] font-mono text-primary-foreground/40 mt-1.5 text-right">
+                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </p>
                     </div>
-                    <div className="flex flex-col gap-1.5 w-full max-w-xs">
-                      {[
-                        "Reading chat history",
-                        "Applying your changes",
-                        ...(useTTS ? ["Regenerating narration"] : []),
-                        ...(useMusic ? ["Adjusting music"] : []),
-                      ].map((step, i) => (
-                        <div key={step} className="flex items-center gap-2">
-                          <Loader2
-                            className="h-3 w-3 text-primary animate-spin shrink-0"
-                            style={{ animationDelay: `${i * 300}ms` }}
-                          />
-                          <span className="text-[10px] font-mono text-muted-foreground/50">{step}</span>
-                        </div>
-                      ))}
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mt-1">
+                      <User className="h-3.5 w-3.5 text-primary" />
                     </div>
                   </div>
-                ) : (
-                  <FollowUpBlock
-                    isBusy={isBusy}
-                    uploadedImages={uploadedImages}
-                    onSubmit={handleFollowUp}
-                  />
-                )}
-              </>
+                );
+              }
+
+              if (msg.type === "error") {
+                return (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
+                      <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-500/20 bg-red-500/5 px-4 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        <p className="text-[11px] font-mono text-red-500/80 leading-relaxed">
+                          {msg.text}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRetry}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-mono text-red-500/70 hover:text-red-500 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Retry
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (msg.type === "video") {
+                const videoMsg = msg as VideoMessage;
+                return (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
+                      <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <ChatVideoMessage
+                        msg={videoMsg}
+                        isLatest={videoMsg.isLatest}
+                        onExport={handleExport}
+                        isDownloading={isDownloading}
+                        downloadProgress={downloadProgress}
+                        ttsVolume={ttsVolume}
+                        musicVolume={musicVolume}
+                        onTtsVolumeChange={handleTtsVolumeChange}
+                        onMusicVolumeChange={handleMusicVolumeChange}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+
+            {/* Generating indicator */}
+            {isBusy && (
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
+                  <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                </div>
+                <div className="rounded-2xl rounded-tl-sm border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
+                          style={{ animationDelay: `${i * 150}ms` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[11px] font-mono text-muted-foreground/60">
+                      {isUploading ? "Uploading images…" : "Generating video…"}
+                    </span>
+                  </div>
+                </div>
+              </div>
             )}
 
-            {/* ── Download button ──────────────────────────────────────────── */}
-            <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <div className="flex items-center gap-2">
-                  {isDownloading ? (
-                    <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
-                  ) : (
-                    <Download className="h-3.5 w-3.5 text-muted-foreground/50" />
-                  )}
-                  <span className="text-[11px] font-mono text-muted-foreground">
-                    {isDownloading ? "Rendering in browser…" : "Download MP4"}
-                  </span>
-                  {isDownloading && downloadProgress !== null && (
-                    <span className="text-[9px] font-mono text-primary tabular-nums">
-                      {Math.round(downloadProgress * 100)}%
-                    </span>
-                  )}
-                </div>
-                {isDownloading && downloadProgress !== null && (
-                  <div className="h-1 w-24 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full bg-primary rounded-full transition-all duration-300"
-                      style={{ width: `${Math.round(downloadProgress * 100)}%` }}
-                    />
-                  </div>
-                )}
-              </button>
-              {/* Progress bar — full width, shown while rendering */}
-              {isDownloading && downloadProgress !== null && (
-                <div className="h-0.5 w-full bg-muted">
-                  <div
-                    className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${Math.round(downloadProgress * 100)}%` }}
-                  />
-                </div>
-              )}
-            </div>
+            <div ref={chatBottomRef} />
 
-            {/* Post-generation volume controls */}
-            <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
-              <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest">Adjust volumes</p>
-              {videoJson.scenes.some(s => s.ttsUrl) && (
-                <div className="flex items-center gap-3">
-                  <Mic className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  <span className="text-[11px] font-mono text-muted-foreground w-20 shrink-0">Narration</span>
-                  <input
-                    type="range" min="0" max="1" step="0.05" value={ttsVolume}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      setTtsVolume(v);
-                      setVideoJson(prev => prev ? { ...prev, ttsVolume: v } : null);
-                    }}
-                    className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground/50 w-10 text-right tabular-nums">
-                    {Math.round(ttsVolume * 100)}%
-                  </span>
-                </div>
-              )}
-              {videoJson.bgmUrl && (
-                <div className="flex items-center gap-3">
-                  <Music className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                  <span className="text-[11px] font-mono text-muted-foreground w-20 shrink-0">Music</span>
-                  <input
-                    type="range" min="0" max="1" step="0.05" value={musicVolume}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      setMusicVolume(v);
-                      setVideoJson(prev => prev ? { ...prev, musicVolume: v } : null);
-                    }}
-                    className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
-                  />
-                  <span className="text-[10px] font-mono text-muted-foreground/50 w-10 text-right tabular-nums">
-                    {Math.round(musicVolume * 100)}%
-                  </span>
-                </div>
-              )}
-            </div>
+            {/* Follow-up input (shown after first video) */}
+            {hasResult && !isLoadingHistoryChat && (
+              <div className="pt-2">
+                <FollowUpInput
+                  isBusy={isBusy}
+                  uploadedImages={uploadedImages}
+                  selectedRange={selectedRange}
+                  onRangeChange={setSelectedRange}
+                  onSubmit={handleFollowUp}
+                  lastFailedPrompt={lastFailedPrompt}
+                  onRetry={handleRetry}
+                />
+              </div>
+            )}
 
-            {/* Prompt used */}
-            <div className="px-4 py-3 bg-muted/30 rounded-xl border border-border">
-              <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-1">Prompt</p>
-              <p className="text-xs font-mono text-muted-foreground leading-relaxed">{prompt}</p>
-            </div>
-
-            {/* JSON debug panel */}
-            <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setJsonOpen((v) => !v)}
-                aria-expanded={jsonOpen}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors touch-manipulation"
-              >
-                <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Generated JSON</span>
-                {jsonOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
-              </button>
-              {jsonOpen && (
-                <pre className="border-t border-border px-4 py-4 text-[10px] font-mono text-muted-foreground/50 overflow-auto max-h-72 leading-relaxed custom-scrollbar bg-background/50">
-                  {JSON.stringify(videoJson, null, 2)}
-                </pre>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="flex gap-2 flex-wrap pb-6 pt-1">
+            {/* New video footer */}
+            <div className="flex justify-center pb-6">
               <button
                 onClick={handleReset}
-                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground transition-all ml-auto touch-manipulation"
+                className="inline-flex items-center gap-2 h-8 px-4 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground border border-transparent hover:border-border transition-all"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                new video
+                Start new video
               </button>
             </div>
           </div>
         )}
       </main>
 
-      {/* ── Video history panel (desktop sidebar + mobile bottom drawer) ── */}
+      {/* History panel */}
       <VideoHistoryPanel
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
         activeChatId={chatId}
         onSelectChat={handleSelectHistoryChat}
+      />
+
+      {/* Export modal */}
+      <ExportModal
+        open={exportModalOpen}
+        progress={downloadProgress}
+        onClose={() => { setExportModalOpen(false); setExportComplete(false); }}
+        isComplete={exportComplete}
       />
     </div>
   );
