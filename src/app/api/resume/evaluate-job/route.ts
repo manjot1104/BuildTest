@@ -4,10 +4,15 @@ import { getSession } from "@/server/better-auth/server"
 import {
   JOB_FIT_EVALUATION_SYSTEM_PROMPT,
   jobFitEvaluateRequestSchema,
+  minimalJobFitEvaluationStub,
   normalizeJobFitEvaluationPayload,
 } from "@/lib/resume/job-fit-evaluation"
 
 export const maxDuration = 120
+
+/** Stay under serverless limits: avoid chained 90s OpenRouter calls causing gateway 502. */
+const PER_MODEL_TIMEOUT_MS = 40_000
+const MAX_MODEL_ATTEMPTS = 3
 
 const DEFAULT_MODEL = "google/gemma-3-12b-it:free"
 
@@ -44,18 +49,59 @@ function openRouterMessageText(content: unknown): string {
   return ""
 }
 
+/** First top-level `{ ... }` using brace depth (avoids greedy-regex failures on nested JSON). */
+function extractBalancedJsonObject(raw: string): string | null {
+  const start = raw.indexOf("{")
+  if (start === -1) return null
+  let depth = 0
+  let inString = false
+  let escape = false
+  for (let i = start; i < raw.length; i++) {
+    const c = raw[i]
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (c === "\\" && inString) {
+      escape = true
+      continue
+    }
+    if (c === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (c === "{") depth++
+    else if (c === "}") {
+      depth--
+      if (depth === 0) return raw.slice(start, i + 1)
+    }
+  }
+  return null
+}
+
 async function callModel(
   messages: { role: string; content: string }[],
   model: string,
+  timeoutMs: number = PER_MODEL_TIMEOUT_MS,
 ): Promise<string> {
   const apiKey = env.OPENROUTER_API_KEY
   if (!apiKey) throw new Error("OPENROUTER_API_KEY is not configured.")
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 90_000)
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  const buildBody = (jsonObjectMode: boolean) =>
+    JSON.stringify({
+      model,
+      messages,
+      temperature: 0.2,
+      max_tokens: 4096,
+      ...(jsonObjectMode ? { response_format: { type: "json_object" as const } } : {}),
+    })
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    let response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -63,14 +109,30 @@ async function callModel(
         "HTTP-Referer": env.NEXT_PUBLIC_APP_URL,
         "X-Title": "Buildify Job Fit Evaluation",
       },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: 0.2,
-        max_tokens: 4096,
-      }),
+      body: buildBody(true),
       signal: controller.signal,
     })
+
+    // Some providers/models reject JSON mode; retry once without it (do not mask other 400s).
+    if (!response.ok && response.status === 400) {
+      const errText = await response.text()
+      if (/response_format|json_object|json.?mode/i.test(errText)) {
+        response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+            "HTTP-Referer": env.NEXT_PUBLIC_APP_URL,
+            "X-Title": "Buildify Job Fit Evaluation",
+          },
+          body: buildBody(false),
+          signal: controller.signal,
+        })
+      } else {
+        clearTimeout(timeoutId)
+        throw new Error(`OpenRouter error (${model}): 400 - ${errText.slice(0, 500)}`)
+      }
+    }
 
     clearTimeout(timeoutId)
 
@@ -99,10 +161,10 @@ async function callWithFallback(
   messages: { role: string; content: string }[],
   requestedModel: string,
 ): Promise<{ content: string; model: string }> {
-  const chain = buildModelChain(requestedModel)
+  const chain = buildModelChain(requestedModel).slice(0, MAX_MODEL_ATTEMPTS)
   for (const model of chain) {
     try {
-      const content = await callModel(messages, model)
+      const content = await callModel(messages, model, PER_MODEL_TIMEOUT_MS)
       return { content, model }
     } catch {
       continue
@@ -114,16 +176,50 @@ async function callWithFallback(
 function parseEvaluationJson(raw: string): unknown {
   let cleaned = raw.trim()
   cleaned = cleaned.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "")
-  cleaned = cleaned.trim()
-  try {
-    return JSON.parse(cleaned)
-  } catch {
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0])
+  const firstObj = cleaned.indexOf("{")
+  if (firstObj > 0) cleaned = cleaned.slice(firstObj)
+  cleaned = cleaned.replace(/[\u201c\u201d]/g, '"').trim()
+
+  const balanced = extractBalancedJsonObject(cleaned)
+  const chunks = [
+    cleaned,
+    balanced ?? "",
+    balanced ? balanced.replace(/,\s*(\}|\])/g, "$1") : "",
+    cleaned.replace(/,\s*(\}|\])/g, "$1"),
+  ].filter((s) => s.length > 0)
+
+  const uniq = [...new Set(chunks)]
+  for (const chunk of uniq) {
+    try {
+      return JSON.parse(chunk)
+    } catch {
+      const extracted = extractBalancedJsonObject(chunk)
+      if (extracted && extracted !== chunk) {
+        try {
+          return JSON.parse(extracted)
+        } catch {
+          try {
+            return JSON.parse(extracted.replace(/,\s*(\}|\])/g, "$1"))
+          } catch {
+            /* continue */
+          }
+        }
+      }
+      const m = chunk.match(/\{[\s\S]*\}/)
+      if (m) {
+        try {
+          return JSON.parse(m[0])
+        } catch {
+          try {
+            return JSON.parse(m[0].replace(/,\s*(\}|\])/g, "$1"))
+          } catch {
+            /* continue */
+          }
+        }
+      }
     }
-    throw new Error("invalid json")
   }
+  throw new Error("invalid json")
 }
 
 /**
@@ -173,26 +269,17 @@ export async function POST(request: NextRequest) {
     try {
       parsed = parseEvaluationJson(result.content)
     } catch {
-      return NextResponse.json(
-        { error: "AI returned invalid data. Please try again." },
-        { status: 502 },
-      )
+      return NextResponse.json({
+        success: true,
+        evaluation: minimalJobFitEvaluationStub(
+          "The model reply was not valid JSON. Try Analyze again or pick another model.",
+        ),
+        model: result.model,
+        parseWarning: true,
+      })
     }
 
     const normalized = normalizeJobFitEvaluationPayload(parsed)
-    if (!normalized) {
-      console.warn(
-        "[resume/evaluate-job] Could not normalize model output; raw length:",
-        result.content.length,
-      )
-      return NextResponse.json(
-        {
-          error:
-            "The AI returned a format we could not read. Try again or switch model (e.g. LLaMA 70B).",
-        },
-        { status: 502 },
-      )
-    }
 
     return NextResponse.json({
       success: true,

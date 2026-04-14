@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -224,6 +224,18 @@ export default function AIResumeBuilderPage() {
       additionalInstructions: '',
     },
   })
+
+  const additionalInstructionsSectionRef = useRef<HTMLDivElement | null>(null)
+
+  const navigateJobFitToGenerate = useCallback(() => {
+    additionalInstructionsSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+    window.setTimeout(() => {
+      void form.setFocus('additionalInstructions')
+    }, 450)
+  }, [form])
 
   const watchedResumeFields = useWatch({ control: form.control }) as ResumeFormData
 
@@ -1670,6 +1682,20 @@ export default function AIResumeBuilderPage() {
               onJobDescriptionChange={setJobFitJdDraft}
               resumeContext={resumeContextForJobFit}
               selectedModel={selectedModel}
+              onNavigateToGenerate={navigateJobFitToGenerate}
+              onAppendTailoringToInstructions={(block) => {
+                const cur = form.getValues('additionalInstructions') ?? ''
+                const next = cur.trim() ? `${cur.trim()}\n\n${block}` : block
+                if (next.length > 100_000) {
+                  toast.error(
+                    'Additional instructions would exceed the limit. Shorten existing text or use Copy instead.',
+                  )
+                  return
+                }
+                form.setValue('additionalInstructions', next)
+                toast.success('Tailoring ideas appended to Additional instructions')
+                navigateJobFitToGenerate()
+              }}
             />
           </motion.div>
 
@@ -2175,12 +2201,14 @@ export default function AIResumeBuilderPage() {
             </div>
           </motion.div>
 
-          {/* Additional Instructions Section */}
+          {/* Additional Instructions Section — job fit Step 3 scroll target */}
           <motion.div
+            ref={additionalInstructionsSectionRef}
+            id="ai-resume-additional-instructions"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+            className="scroll-mt-20 overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
           >
             <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
               <Settings2 className="size-4 text-muted-foreground" />
