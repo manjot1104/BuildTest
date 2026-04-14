@@ -1351,7 +1351,7 @@ export async function getReportExportByBadgeToken(token: string) {
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type VideoChat = typeof video_chats.$inferSelect
- 
+
 export interface VideoOptions {
   useTTS?: boolean
   useMusic?: boolean
@@ -1360,21 +1360,21 @@ export interface VideoOptions {
   ttsVolume?: number
   musicVolume?: number
 }
- 
+
 export interface PromptLogEntry {
   prompt: string
   sentAt: string // ISO string
 }
- 
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
- 
+
 /** Derive a title from the first prompt (first 80 chars, trimmed). */
 function deriveTitle(prompt: string): string {
   return prompt.trim().slice(0, 80)
 }
- 
+
 // ── Queries ───────────────────────────────────────────────────────────────────
- 
+
 /**
  * Creates a new video_chats row BEFORE generation starts.
  * video_json is set to a placeholder "[]" — updated once generation completes.
@@ -1385,15 +1385,17 @@ export async function createVideoChat({
   prompt,
   options,
   userImages,
+  imageSessionId,
 }: {
   userId: string
   prompt: string
   options?: VideoOptions
   userImages?: UploadedUserImage[]
+  imageSessionId?: string
 }): Promise<string> {
   const id = randomUUID()
   const promptEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
- 
+
   await db.insert(video_chats).values({
     id,
     user_id: userId,
@@ -1401,37 +1403,49 @@ export async function createVideoChat({
     video_json: '[]', // placeholder; filled in by updateVideoChatAfterGeneration
     current_options: options ?? null,
     current_user_images: userImages ?? null,
+    image_session_id: imageSessionId ?? null,
     prompts: [promptEntry],
   })
- 
+
   return id
 }
- 
+
 /**
  * Updates the video_json field after generation succeeds.
- * Also bumps updated_at so the history list stays sorted correctly.
+ * Also updates current_options, current_user_images, and image_session_id.
+ * Bumps updated_at so the history list stays sorted correctly.
  */
 export async function updateVideoChatAfterGeneration({
   chatId,
   userId,
   videoJson,
+  options,
+  userImages,
+  imageSessionId,
 }: {
   chatId: string
   userId: string
   videoJson: VideoJson
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+  imageSessionId?: string
 }): Promise<void> {
   await db
     .update(video_chats)
     .set({
       video_json: JSON.stringify(videoJson),
+      current_options: options ?? null,
+      current_user_images: userImages ?? null,
+      image_session_id: imageSessionId ?? null,
       updated_at: new Date(),
     })
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
 }
- 
+
 /**
  * Appends a new prompt to the prompts log and replaces video_json.
- * Used for follow-up prompts (Phase 2).
+ * Also updates current_options, current_user_images, and image_session_id.
+ * Used for follow-up prompts.
  */
 export async function appendPromptAndUpdateVideo({
   chatId,
@@ -1440,6 +1454,7 @@ export async function appendPromptAndUpdateVideo({
   videoJson,
   options,
   userImages,
+  imageSessionId,
 }: {
   chatId: string
   userId: string
@@ -1447,6 +1462,7 @@ export async function appendPromptAndUpdateVideo({
   videoJson: VideoJson
   options?: VideoOptions
   userImages?: UploadedUserImage[]
+  imageSessionId?: string
 }): Promise<void> {
   // Fetch current prompts first (Drizzle doesn't support jsonb array append directly)
   const [row] = await db
@@ -1454,12 +1470,12 @@ export async function appendPromptAndUpdateVideo({
     .from(video_chats)
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
     .limit(1)
- 
+
   if (!row) return
- 
+
   const existing = (row.prompts as PromptLogEntry[]) ?? []
   const newEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
- 
+
   await db
     .update(video_chats)
     .set({
@@ -1467,11 +1483,12 @@ export async function appendPromptAndUpdateVideo({
       prompts: [...existing, newEntry],
       current_options: options ?? null,
       current_user_images: userImages ?? null,
+      image_session_id: imageSessionId ?? null,
       updated_at: new Date(),
     })
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
 }
- 
+
 /**
  * Gets a single video chat by id with ownership check.
  */
@@ -1487,10 +1504,10 @@ export async function getVideoChatById({
     .from(video_chats)
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
     .limit(1)
- 
+
   return row
 }
- 
+
 /**
  * Gets all video chats for a user, most recently updated first.
  * Returns lightweight rows (no video_json) for list views.
@@ -1520,7 +1537,7 @@ export async function getVideoChatsByUserId({
     .limit(limit)
     .offset(offset)
 }
- 
+
 /**
  * Deletes a video chat (with ownership check).
  */

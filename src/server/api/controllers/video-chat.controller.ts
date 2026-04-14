@@ -10,6 +10,7 @@ import {
   deleteVideoChat,
 } from '@/server/db/queries'
 import type { VideoJson } from '@/remotion-src/types'
+import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
 
 // ── GET /api/video/chats ──────────────────────────────────────────────────────
 
@@ -49,6 +50,7 @@ export async function getVideoChatHandler({
       videoJson: VideoJson
       prompts: { prompt: string; sentAt: string }[]
       options: Record<string, unknown> | null
+      userImages?: UploadedUserImage[]
       updatedAt: string
     }
   | { error: string; status: number }
@@ -66,12 +68,15 @@ export async function getVideoChatHandler({
     return { error: 'Corrupt video data', status: 500 }
   }
 
+  const userImages = (row.current_user_images as UploadedUserImage[] | null) ?? undefined
+
   return {
     id: row.id,
     title: row.title,
     videoJson,
     prompts: (row.prompts as { prompt: string; sentAt: string }[]) ?? [],
     options: (row.current_options as Record<string, unknown> | null) ?? null,
+    userImages,
     updatedAt: row.updated_at.toISOString(),
   }
 }

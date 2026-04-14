@@ -1,5 +1,5 @@
 // ============================================================
-// VIDEO CONTROLLER
+// VideoGenController
 //   - Receives { body }
 //   - Calls the service
 //   - Returns data or { error: string; status: number }
@@ -36,11 +36,16 @@ export async function generateVideoHandler({
      */
     chatId?: string | null;
     /**
-     * User-uploaded images resolved from a prior /api/video/upload-images call.
-     * Each entry has an index, a public URL, and a description the user provided.
-     * The LLM will be told about these and instructed to use them where relevant.
+     * User-uploaded images for this generation.
+     * For follow-ups: pass the FULL array of images (old + new).
+     * Images are persisted in current_user_images and reused until replaced.
      */
     userImages?: UserImage[];
+    /**
+     * Session ID from /api/video/upload-images.
+     * Used to track which images belong together for cleanup.
+     */
+    imageSessionId?: string;
     options?: {
       useTTS?: boolean;
       voiceId?: string;
@@ -66,7 +71,13 @@ export async function generateVideoHandler({
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
 
-    const { prompt, duration = 15, userImages = [], chatId: incomingChatId } = body;
+    const { 
+      prompt, 
+      duration = 15, 
+      userImages = [], 
+      imageSessionId,
+      chatId: incomingChatId 
+    } = body;
     const userId = session.user.id;
 
     if (!prompt?.trim()) return { error: "Prompt is required", status: 400 };
@@ -84,6 +95,13 @@ export async function generateVideoHandler({
       };
 
     // Validate user images if provided
+    if (userImages.length > 5) {
+      return {
+        error: "Maximum 5 user images allowed per chat",
+        status: 400,
+      };
+    }
+
     if (userImages.length > 0) {
       for (const [i, img] of userImages.entries()) {
         if (typeof img.index !== "number" || img.index < 0) {
@@ -121,10 +139,12 @@ export async function generateVideoHandler({
 
     let chatId: string;
     let previousVideoJson: VideoJson | undefined;
+    let previousOptions: typeof options | undefined;
+    let previousUserImages: UserImage[] | undefined;
     let originalPrompt: string | undefined;
 
     if (incomingChatId) {
-      // Follow-up prompt: verify ownership and load previous video for context
+      // Follow-up prompt: verify ownership and load previous state
       const existing = await getVideoChatById({ chatId: incomingChatId, userId });
       if (!existing) return { error: "Chat not found", status: 404 };
       chatId = incomingChatId;
@@ -137,9 +157,40 @@ export async function generateVideoHandler({
         console.warn(`[VideoController] Could not parse existing video_json for chat ${chatId} — generating fresh`);
       }
 
+      // Load previous options and images for context
+      previousOptions = existing.current_options as typeof options | undefined;
+      previousUserImages = (existing.current_user_images as UserImage[] | undefined) ?? [];
+
       // Recover original prompt from prompt log for follow-up context
       const prompts = (existing.prompts as { prompt: string; sentAt: string }[]) ?? [];
       originalPrompt = prompts[0]?.prompt;
+
+      // ── Merge user images: keep old ones not replaced by new uploads ─────────
+      // Client sends FULL array on follow-up, but we need to detect what changed
+      const mergedImages: UserImage[] = [];
+      const newImageIndices = new Set(userImages.map(img => img.index));
+      
+      // Keep previous images that weren't replaced
+      for (const prevImg of previousUserImages) {
+        if (!newImageIndices.has(prevImg.index)) {
+          mergedImages.push(prevImg);
+        }
+      }
+      
+      // Add new/replacement images
+      mergedImages.push(...userImages);
+      
+      // Sort by index and validate count
+      mergedImages.sort((a, b) => a.index - b.index);
+      if (mergedImages.length > 5) {
+        return {
+          error: "Maximum 5 user images allowed per chat",
+          status: 400,
+        };
+      }
+
+      // Use merged images for generation
+      body.userImages = mergedImages;
     } else {
       // New chat: insert a placeholder row (video_json filled in after generation)
       chatId = await createVideoChat({
@@ -147,10 +198,31 @@ export async function generateVideoHandler({
         prompt: prompt.trim(),
         options,
         userImages: userImages.length > 0 ? userImages as UploadedUserImage[] : undefined,
+        imageSessionId,
       });
     }
 
-    // ── 2. Generate ───────────────────────────────────────────────────────────
+    // ── 2. Determine what changed to optimize regeneration ────────────────────
+    
+    const optionsChanged = !!(incomingChatId && previousOptions && (
+      options.useTTS !== previousOptions.useTTS ||
+      options.voiceId !== previousOptions.voiceId ||
+      options.useMusic !== previousOptions.useMusic ||
+      options.musicGenre !== previousOptions.musicGenre
+    ));
+
+    const imagesChanged = !!(incomingChatId && (
+      userImages.length !== (previousUserImages?.length ?? 0) ||
+      userImages.some((img, i) => 
+        img.url !== previousUserImages?.[i]?.url ||
+        img.description !== previousUserImages?.[i]?.description
+      )
+    ));
+
+    // Note: Volume changes (ttsVolume, musicVolume) don't require regeneration
+    // — they're applied client-side in the Player component
+
+    // ── 3. Generate ───────────────────────────────────────────────────────────
 
     const result = await generateVideoJson(prompt.trim(), duration, {
       useTTS: options.useTTS,
@@ -159,17 +231,19 @@ export async function generateVideoHandler({
       musicGenre: options.musicGenre,
       ttsVolume: options.ttsVolume,
       musicVolume: options.musicVolume,
-      userImages,
-      // Pass follow-up context when available — service strips audio URLs before sending to LLM
+      userImages: body.userImages, // merged images from step 1
+      // Pass follow-up context when available
       previousVideoJson,
       originalPrompt,
+      // Signal whether options/images changed (service can optimize accordingly)
+      optionsChanged,
+      imagesChanged,
     });
 
     if (!result.success) {
       console.error(
         `[VideoController] generateVideoJson failed: ${result.details}`,
       );
-      // Row already exists; leave video_json as placeholder — client will show error
       return {
         error:
           "Failed to generate video. Please try again or rephrase your prompt.",
@@ -177,24 +251,32 @@ export async function generateVideoHandler({
       };
     }
 
-    // ── 3. Persist result ─────────────────────────────────────────────────────
+    // ── 4. Persist result ─────────────────────────────────────────────────────
 
     if (incomingChatId) {
-      // Follow-up: append to prompt log + replace video_json
+      // Follow-up: append to prompt log + replace video_json + update options/images
       await appendPromptAndUpdateVideo({
         chatId,
         userId,
         prompt: prompt.trim(),
         videoJson: result.videoJson,
         options,
-        userImages: userImages.length > 0 ? userImages as UploadedUserImage[] : undefined,
+        userImages: body.userImages?.length ? body.userImages as UploadedUserImage[] : undefined,
+        imageSessionId,
       });
     } else {
       // First prompt: title + prompt log already set at creation; just save result
-      await updateVideoChatAfterGeneration({ chatId, userId, videoJson: result.videoJson });
+      await updateVideoChatAfterGeneration({ 
+        chatId, 
+        userId, 
+        videoJson: result.videoJson,
+        options,
+        userImages: body.userImages?.length ? body.userImages as UploadedUserImage[] : undefined,
+        imageSessionId,
+      });
     }
 
-    // ── 4. Return ─────────────────────────────────────────────────────────────
+    // ── 5. Return ─────────────────────────────────────────────────────────────
 
     const fps = result.videoJson.fps || 30;
     const totalFrames = result.videoJson.duration;

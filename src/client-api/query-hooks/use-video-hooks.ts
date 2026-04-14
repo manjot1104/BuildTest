@@ -66,6 +66,7 @@ export interface VideoChatDetail {
   videoJson: VideoJson;
   prompts: { prompt: string; sentAt: string }[];
   options: Record<string, unknown> | null;
+  userImages?: UploadedUserImage[]; // Current user images from the chat
   updatedAt: string;
 }
 
@@ -125,6 +126,11 @@ export function useUploadUserImages() {
  *
  * Calls POST /api/video/generate with a prompt and optional user images.
  * Pass chatId to continue an existing video chat (follow-up prompt).
+ * 
+ * For follow-ups:
+ * - Pass the FULL array of userImages (old + new) — server merges intelligently
+ * - Options are preserved from previous generation unless explicitly changed
+ * - Volume changes (ttsVolume, musicVolume) apply instantly without regeneration
  */
 export function useGenerateVideo() {
   const qc = useQueryClient();
@@ -139,8 +145,13 @@ export function useGenerateVideo() {
        */
       chatId?: string | null;
       options?: GenerateVideoOptions;
-      /** From useUploadUserImages result — pass undefined if no images */
+      /** 
+       * Full array of user images for this generation.
+       * For follow-ups: include both unchanged images from previous generation
+       * AND any new images uploaded for this prompt.
+       */
       userImages?: UploadedUserImage[];
+      /** Session ID from the most recent upload (if any new images were added) */
       imageSessionId?: string;
     }): Promise<GenerateVideoResponse> => {
       const res = await fetch("/api/video/generate", {
