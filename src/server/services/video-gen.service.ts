@@ -3,20 +3,35 @@
 // Self-contained LLM service for video JSON generation.
 // Zero imports from other services in this codebase.
 //
+// ── TWO-STAGE PIPELINE ────────────────────────────────────────────────────────
+// Stage 1 (LLM): Generate compact scene plan — layout, duration, narration text,
+//   background seeds, element text. Output is small (~300–500 tokens), making
+//   truncation and validation failures far less likely.
+// Stage 2 (parallel): Enrich — TTS per scene, music, image URL resolution.
+//   All enrichment runs in parallel via Promise.allSettled, so a single TTS
+//   failure doesn't abort the whole video.
+//
+// ── VERCEL COMPATIBILITY ──────────────────────────────────────────────────────
+// Each function is stateless and self-contained. No in-memory caches or
+// long-lived connections. Safe for Vercel's serverless/edge runtime.
+// For follow-up prompts: pass previousVideoJson as a string — the LLM gets
+// stripped context (no audio URLs) to keep the request small.
+//
 // TO SWAP LLM PROVIDERS — change only:
-//   1. OPENROUTER_API_URL  (if moving off OpenRouter entirely)
-//   2. VIDEO_MODELS        (model list)
-//   3. buildRequestBody()  (if new provider has a different request shape)
-//   4. extractContent()    (if new provider has a different response shape)
-// Nothing in video.controller.ts or elysia.ts needs to change.
+//   1. OPENROUTER_API_URL  (if moving off OpenRouter)
+//   2. VIDEO_MODELS        (model list + priority order)
+//   3. buildRequestBody()  (if new provider has different request shape)
+//   4. extractContent()    (if new provider has different response shape)
 
 import { validateVideoJson } from "@/remotion-src/utils/validateVideoJson";
 import {
   VIDEO_SYSTEM_PROMPT,
   buildVideoPrompt,
+  buildFollowUpPrompt,
 } from "@/remotion-src/utils/llmPrompt";
 import type { VideoJson } from "@/remotion-src/types";
-// Import your engines
+
+// Import engines
 import { generateSmallestAITTS } from "../engines/video-gen-tts.engine";
 import { getMusicTrack } from "../engines/video-gen-music.engine";
 import {
@@ -29,18 +44,22 @@ import {
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-const RETRY_DELAY_MS = 2_000;
+// Only used for 429 rate-limit responses — all other failures (404, empty, 402)
+// are immediate and should not sleep before trying the next model.
+const RATE_LIMIT_DELAY_MS = 500;
 
-// Free models ordered by JSON reliability for structured output tasks.
+// Models ordered by JSON reliability and output quality.
+// Larger context / instruction-tuned models first — they handle structured
+// output more reliably. Free tier fallbacks at the end.
 const VIDEO_MODELS = [
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "upstage/solar-pro-3:free",
-  "nvidia/nemotron-3-nano-30b-a3b:free",
-  "stepfun/step-3.5-flash:free",
-  "google/gemma-3-12b-it:free",
-  "qwen/qwen3-4b:free",
   "arcee-ai/trinity-large-preview:free",
+  "stepfun/step-3.5-flash:free",
+  "nvidia/nemotron-3-nano-30b-a3b:free",
+  "qwen/qwen3-4b:free",
+  "upstage/solar-pro-3:free",
   "mistralai/mistral-small-3.1-24b-instruct:free",
+  "meta-llama/llama-3.3-70b-instruct:free",
+  "google/gemma-3-12b-it:free",
   "openrouter/free",
 ];
 
@@ -66,16 +85,36 @@ export interface GenerateVideoError {
   details?: string;
 }
 
+export type GenerateVideoOptions = {
+  useTTS?: boolean;
+  useMusic?: boolean;
+  voiceId?: string;
+  musicGenre?: string;
+  ttsVolume?: number;
+  musicVolume?: number;
+  userImages?: UserImage[];
+  /**
+   * For follow-up prompts: pass the previous VideoJson so the LLM can make
+   * targeted edits. The service strips audio URLs before sending to save tokens.
+   */
+  previousVideoJson?: VideoJson;
+  /**
+   * The original prompt used to generate previousVideoJson.
+   * Required when previousVideoJson is provided so the LLM has full context.
+   */
+  originalPrompt?: string;
+};
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// ── Parse top-level JSON objects from a string, depth-aware ──────────────────
-// Handles the case where a model emits bare scene objects instead of a root wrapper.
+// ── JSON extraction helpers ───────────────────────────────────────────────────
 
 function extractBareScenes(text: string): any[] {
+  // Handles the case where a model emits bare scene objects instead of a root wrapper.
   const scenes: any[] = [];
   let depth = 0;
   let start = -1;
@@ -84,18 +123,9 @@ function extractBareScenes(text: string): any[] {
 
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (ch === "\\" && inString) {
-      escape = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
     if (inString) continue;
 
     if (ch === "{") {
@@ -111,9 +141,7 @@ function extractBareScenes(text: string): any[] {
           if (parsed.layout || parsed.elements || parsed.durationInFrames) {
             scenes.push(parsed);
           }
-        } catch {
-          /* skip unparseable chunks */
-        }
+        } catch { /* skip */ }
         start = -1;
       }
     }
@@ -138,9 +166,7 @@ function extractJson(raw: string): string {
   try {
     JSON.parse(candidate);
     return candidate;
-  } catch {
-    /* fall through */
-  }
+  } catch { /* fall through */ }
 
   // Detect bare concatenated scene objects (model skipped the root wrapper)
   const bareScenes = extractBareScenes(stripped);
@@ -152,12 +178,7 @@ function extractJson(raw: string): string {
       (sum: number, s: any) => sum + (Number(s?.durationInFrames) || 150),
       0,
     );
-    const wrapped = {
-      duration: totalFrames,
-      fps: 30,
-      scenes: bareScenes,
-    };
-    return JSON.stringify(wrapped);
+    return JSON.stringify({ duration: totalFrames, fps: 30, scenes: bareScenes });
   }
 
   // Return candidate for truncation repair to attempt
@@ -185,18 +206,9 @@ function repairTruncatedJson(raw: string): string {
   let escape = false;
 
   for (const ch of text) {
-    if (escape) {
-      escape = false;
-      continue;
-    }
-    if (ch === "\\" && inString) {
-      escape = true;
-      continue;
-    }
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
     if (inString) continue;
     if (ch === "{") braces++;
     else if (ch === "}") braces--;
@@ -238,14 +250,14 @@ function findUndefinedFields(obj: any, path = ""): string[] {
 
 // ── Request / response adapters ───────────────────────────────────────────────
 
-function buildRequestBody(
-  model: string,
-  messages: OpenRouterMessage[],
-): object {
+function buildRequestBody(model: string, messages: OpenRouterMessage[]): object {
   return {
     model,
-    max_tokens: 8192,
-    temperature: 0.1,
+    // Reduced from 8192 — the leaner prompt needs far fewer output tokens.
+    // 3000 is enough for 6 scenes with full element detail, with headroom.
+    // Keeping it lower reduces cost and latency on free-tier models.
+    max_tokens: 3500,
+    temperature: 0.15, // Slightly lower than before for more deterministic structure
     messages,
   };
 }
@@ -268,35 +280,31 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
         headers: {
           Authorization: `Bearer ${OPENROUTER_API_KEY}`,
           "Content-Type": "application/json",
-          "HTTP-Referer":
-            process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+          "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
           "X-Title": "Video Generator",
         },
         body: JSON.stringify(buildRequestBody(model, messages)),
       });
 
       if (response.status === 429) {
-        console.warn(
-          `[VideoService] ${model} rate-limited (429) — waiting ${RETRY_DELAY_MS}ms`,
-        );
+        // Rate-limited — the only status worth waiting on before trying the next model
+        console.warn(`[VideoService] ${model} rate-limited (429) — waiting ${RATE_LIMIT_DELAY_MS}ms`);
         lastError = new Error(`Rate limited: ${await response.text()}`);
-        await sleep(RETRY_DELAY_MS);
+        await sleep(RATE_LIMIT_DELAY_MS);
         continue;
       }
 
       if (response.status === 402) {
+        // Spend limit — response is immediate, no sleep needed
         console.error(`[VideoService] ${model} spend limit (402)`);
-        lastError = new Error(`Spend limit reached: ${await response.text()}`);
-        await sleep(RETRY_DELAY_MS);
+        lastError = new Error("Spend limit reached");
         continue;
       }
 
       if (response.status === 404) {
-        const body = await response.text();
-        console.warn(
-          `[VideoService] ${model} not found (404) — skipping: ${body}`,
-        );
-        lastError = new Error(`Model not found: ${body}`);
+        // Model not found — response is immediate, skip silently
+        console.warn(`[VideoService] ${model} not found (404) — skipping`);
+        lastError = new Error("Model not found");
         continue;
       }
 
@@ -308,9 +316,8 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
       const content = extractContent(data);
 
       if (!content) {
-        console.warn(
-          `[VideoService] ${model} returned empty content — trying next model`,
-        );
+        // Empty response — immediate, try next model without waiting
+        console.warn(`[VideoService] ${model} returned empty content — trying next model`);
         lastError = new Error("Empty response");
         continue;
       }
@@ -318,129 +325,66 @@ async function callOpenRouter(messages: OpenRouterMessage[]): Promise<string> {
       console.log(`[VideoService] ✓ model=${model} chars=${content.length}`);
       return content;
     } catch (err) {
+      // Network / unexpected errors — small delay before next model
       lastError = err instanceof Error ? err : new Error(String(err));
       console.warn(`[VideoService] ${model} failed: ${lastError.message}`);
-      await sleep(RETRY_DELAY_MS);
+      await sleep(RATE_LIMIT_DELAY_MS);
     }
   }
 
   throw new Error(`All video models failed. Last error: ${lastError?.message}`);
 }
 
-async function enrichVideoWithAudio(
-  videoJson: VideoJson,
-  options: {
-    useTTS?: boolean;
-    useMusic?: boolean;
-    voiceId?: string;
-    musicGenre?: string;
-    ttsVolume?: number;
-    musicVolume?: number;
-  },
-): Promise<VideoJson> {
-  // 1. Handle Music (Global)
-  if (options.useMusic) {
-    const track = getMusicTrack(options.musicGenre || "corporate");
-    if (track) {
-      videoJson.bgmUrl = track.url;
-      videoJson.musicVolume = options.musicVolume ?? track.defaultVolume;
-    }
-  } else {
-    videoJson.musicVolume = 0;
-  }
+// ── Stage 1: LLM scene plan generation ───────────────────────────────────────
+// Returns a validated VideoJson with only the structural data from the LLM.
+// No audio URLs — those are added in stage 2.
 
-  // 2. Handle TTS (Per Scene)
-  if (options.useTTS) {
-    for (const [i, scene] of videoJson.scenes.entries()) {
-      const originalFrames = scene.durationInFrames;
-      try {
-        const { url, durationInSeconds } = await generateSmallestAITTS(
-          scene.text,
-          i,
-          options.voiceId,
-        );
-
-        scene.ttsUrl = url;
-
-        if (durationInSeconds > 0) {
-          scene.durationInFrames = Math.ceil(durationInSeconds * 30) + 5;
-        } else {
-          console.warn(
-            `[VideoService] scene ${i}: TTS duration=0, keeping original durationInFrames=${originalFrames}`,
-          );
-          scene.durationInFrames = originalFrames;
-        }
-      } catch (err) {
-        console.error(`[VideoService] TTS failed for scene ${i}:`, err);
-        scene.durationInFrames = originalFrames;
-      }
-    }
-  }
-
-  videoJson.ttsVolume = options.ttsVolume ?? 0.8;
-
-  // 3. Recalculate Root Duration
-  videoJson.duration = videoJson.scenes.reduce((acc, s, i) => {
-    const isLast = i === videoJson.scenes.length - 1;
-    const overlap = s.transitionDuration ?? 20;
-    return acc + s.durationInFrames - (isLast ? 0 : overlap);
-  }, 0);
-
-  return videoJson;
-}
-
-// ── Public service API ────────────────────────────────────────────────────────
-
-export async function generateVideoJson(
+async function generateScenePlan(
   prompt: string,
-  durationSeconds = 15,
-  options: {
-    useTTS?: boolean;
-    useMusic?: boolean;
-    voiceId?: string;
-    musicGenre?: string;
-    ttsVolume?: number;
-    musicVolume?: number;
-    /** User-uploaded images to pass into the LLM prompt and resolve post-generation */
-    userImages?: UserImage[];
-  } = {},
-): Promise<GenerateVideoResult | GenerateVideoError> {
-  const { userImages = [], ...audioOptions } = options;
+  durationSeconds: number,
+  userImages: UserImage[],
+  previousVideoJson?: VideoJson,
+  originalPrompt?: string,
+): Promise<VideoJson> {
+  const isFollowUp = !!previousVideoJson && !!originalPrompt;
+
+  const userMessage = isFollowUp
+    ? buildFollowUpPrompt(
+        originalPrompt!,
+        prompt,
+        JSON.stringify(previousVideoJson),
+        durationSeconds,
+        userImages,
+      )
+    : buildVideoPrompt(prompt, durationSeconds, userImages);
 
   const messages: OpenRouterMessage[] = [
     { role: "system", content: VIDEO_SYSTEM_PROMPT },
-    {
-      role: "user",
-      content: buildVideoPrompt(prompt, durationSeconds, userImages),
-    },
+    { role: "user", content: userMessage },
   ];
 
   let lastError = "";
 
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  // 3 attempts: first two are fresh calls; third adds error context to guide the model
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      console.log(`[VideoService] generateVideoJson attempt ${attempt}/2`);
+      console.log(`[VideoService] Stage 1 attempt ${attempt}/3 (followUp=${isFollowUp})`);
 
       const attemptMessages: OpenRouterMessage[] =
-        attempt === 1
+        attempt <= 2
           ? messages
           : [
               ...messages,
-              {
-                role: "assistant",
-                content:
-                  lastError || "Previous attempt failed with invalid JSON.",
-              },
+              { role: "assistant", content: lastError || "Previous attempt produced invalid JSON." },
               {
                 role: "user",
                 content:
-                  'The JSON you returned was invalid. Please return ONLY valid JSON matching the schema — a single root object with a "scenes" array. No markdown, no explanation.',
+                  'The JSON was invalid or truncated. Return ONLY a valid JSON object with a "scenes" array. No markdown, no explanation. Keep it concise.',
               },
             ];
 
       const raw = await callOpenRouter(attemptMessages);
-
-      console.log(`[VideoService] raw tail: ...${raw.trimEnd().slice(-120)}`);
+      console.log(`[VideoService] Stage 1 raw tail: ...${raw.trimEnd().slice(-80)}`);
 
       const jsonString = extractJson(raw);
 
@@ -454,31 +398,23 @@ export async function generateVideoJson(
       } catch {
         const repaired = repairTruncatedJson(jsonString);
         console.warn(
-          `[VideoService] JSON parse failed on attempt ${attempt} — trying repair ` +
-            `(${jsonString.length} chars → ${repaired.length} chars)`,
+          `[VideoService] JSON parse failed (attempt ${attempt}) — trying repair ` +
+            `(${jsonString.length} → ${repaired.length} chars)`,
         );
         try {
           parsed = JSON.parse(repaired);
-          console.log(
-            `[VideoService] ✓ Truncation repair succeeded on attempt ${attempt}`,
-          );
+          console.log(`[VideoService] ✓ Repair succeeded (attempt ${attempt})`);
         } catch {
-          lastError = `Attempt ${attempt}: invalid JSON — ${jsonString}`;
-          console.warn(`[VideoService] ${lastError}`);
-          if (attempt < 2) await sleep(RETRY_DELAY_MS);
+          lastError = `Attempt ${attempt}: invalid JSON`;
+          // No sleep — move straight to next attempt; callOpenRouter picks a fresh model
           continue;
         }
       }
 
-      console.log(
-        `[VideoService] DEBUG parsed JSON (attempt ${attempt}):\n` +
-          JSON.stringify(parsed, null, 2),
-      );
-
       const undefinedFields = findUndefinedFields(parsed);
       if (undefinedFields.length > 0) {
         console.warn(
-          `[VideoService] DEBUG null/undefined fields:\n` +
+          `[VideoService] Null/undefined fields:\n` +
             undefinedFields.map((f) => `  ${f}`).join("\n"),
         );
       }
@@ -486,65 +422,171 @@ export async function generateVideoJson(
       const validation = validateVideoJson(parsed);
       if (!validation.success) {
         const issueDetails = validation.error.issues
-          .map(
-            (i) =>
-              `  path=${JSON.stringify(i.path)} code=${i.code} msg="${i.message}"`,
-          )
+          .map((i) => `  path=${JSON.stringify(i.path)} msg="${i.message}"`)
           .join("\n");
         lastError =
           `Attempt ${attempt}: schema validation failed — ` +
           validation.error.issues.map((i) => i.message).join(", ");
-        console.warn(
-          `[VideoService] ${lastError}\nZod issue detail:\n${issueDetails}`,
-        );
-        if (attempt < 2) await sleep(RETRY_DELAY_MS);
+        console.warn(`[VideoService] ${lastError}\n${issueDetails}`);
+        // No sleep — schema failures are deterministic for this response; retry immediately
         continue;
       }
 
-      // ── IMAGE RESOLUTION PHASE ────────────────────────────────────────────
-      // Resolve all image URLs: user:// refs → actual URLs, picsum seeds → Pexels/picsum
       console.log(
-        `[VideoService] Resolving image URLs (${userImages.length} user images available)…`,
+        `[VideoService] ✓ Stage 1 complete — ${validation.data.scenes.length} scenes`,
       );
-      const imageResolvedJson = await resolveAllImageUrls(
-        validation.data as VideoJson,
-        userImages,
-      );
-
-      // ── AUDIO ENRICHMENT PHASE ────────────────────────────────────────────
-      const enrichedJson = await enrichVideoWithAudio(
-        imageResolvedJson,
-        audioOptions,
-      );
-
-      const totalFrames = enrichedJson.duration;
-      const calculatedSeconds = totalFrames / (enrichedJson.fps || 30);
-
-      console.log(
-        `[VideoService] ✓ Generated ${validation.data.scenes.length} scenes, ` +
-          `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [Target: ${durationSeconds}s]`,
-      );
-
-      return { success: true, videoJson: enrichedJson as VideoJson };
+      return validation.data as VideoJson;
     } catch (err) {
       lastError = `Attempt ${attempt}: ${err instanceof Error ? err.message : String(err)}`;
-      console.error(`[VideoService] ${lastError}`);
-      if (attempt < 2) await sleep(RETRY_DELAY_MS);
+      console.error(`[VideoService] Stage 1 error: ${lastError}`);
     }
   }
 
-  return {
-    success: false,
-    error: "Failed to generate valid video JSON after retries",
-    details: lastError,
-  };
+  throw new Error(`Stage 1 failed after 3 attempts. Last error: ${lastError}`);
+}
+
+// ── Stage 2: Parallel enrichment ─────────────────────────────────────────────
+// Image resolution and TTS are both network-bound and fully independent.
+// Firing them concurrently cuts stage 2 time to max(imageTime, ttsTime)
+// instead of their sum. Promise.allSettled on TTS means a single scene
+// failure doesn't abort the rest.
+
+async function enrichScenePlan(
+  videoJson: VideoJson,
+  options: {
+    useTTS?: boolean;
+    useMusic?: boolean;
+    voiceId?: string;
+    musicGenre?: string;
+    ttsVolume?: number;
+    musicVolume?: number;
+    userImages?: UserImage[];
+  },
+): Promise<VideoJson> {
+  const { userImages = [], ...audioOptions } = options;
+
+  // ── 2a. Music (sync lookup — no network call, zero latency) ──────────────
+  if (audioOptions.useMusic) {
+    const track = getMusicTrack(audioOptions.musicGenre || "corporate");
+    if (track) {
+      videoJson.bgmUrl = track.url;
+      videoJson.musicVolume = audioOptions.musicVolume ?? track.defaultVolume;
+    }
+  } else {
+    videoJson.musicVolume = 0;
+  }
+  videoJson.ttsVolume = audioOptions.ttsVolume ?? 0.8;
+
+  // ── 2b. Image resolution + TTS fired in parallel ──────────────────────────
+  console.log(
+    `[VideoService] Stage 2: image resolution + TTS in parallel (${videoJson.scenes.length} scenes)…`,
+  );
+
+  const [imageResolvedJson, ttsResults] = await Promise.all([
+    resolveAllImageUrls(videoJson, userImages),
+    audioOptions.useTTS
+      ? Promise.allSettled(
+          videoJson.scenes.map((scene, i) =>
+            generateSmallestAITTS(scene.text, i, audioOptions.voiceId),
+          ),
+        )
+      : Promise.resolve(null),
+  ]);
+
+  // ── 2c. Apply TTS results onto the image-resolved JSON ────────────────────
+  if (ttsResults) {
+    ttsResults.forEach((result, i) => {
+      const scene = imageResolvedJson.scenes[i]!;
+      if (result.status === "fulfilled") {
+        const { url, durationInSeconds } = result.value;
+        scene.ttsUrl = url;
+        if (durationInSeconds > 0) {
+          scene.durationInFrames = Math.ceil(durationInSeconds * 30) + 5;
+        } else {
+          console.warn(
+            `[VideoService] Scene ${i}: TTS duration=0, keeping original durationInFrames=${scene.durationInFrames}`,
+          );
+        }
+      } else {
+        // TTS failure is non-fatal — scene plays without narration audio
+        console.error(`[VideoService] TTS failed for scene ${i}:`, result.reason);
+      }
+    });
+  }
+
+  // ── 2d. Recalculate root duration after TTS may have changed scene lengths ─
+  imageResolvedJson.duration = imageResolvedJson.scenes.reduce((acc, s, i) => {
+    const isLast = i === imageResolvedJson.scenes.length - 1;
+    const overlap = s.transitionDuration ?? 20;
+    return acc + s.durationInFrames - (isLast ? 0 : overlap);
+  }, 0);
+
+  return imageResolvedJson;
+}
+
+// ── Public service API ────────────────────────────────────────────────────────
+
+/**
+ * generateVideoJson
+ *
+ * Two-stage pipeline:
+ *   1. LLM generates a compact scene plan (structure only)
+ *   2. Parallel enrichment: image resolution + TTS run concurrently
+ *
+ * For follow-up prompts, pass `options.previousVideoJson` and `options.originalPrompt`.
+ * The previous JSON is stripped of audio URLs before being sent to the LLM.
+ */
+export async function generateVideoJson(
+  prompt: string,
+  durationSeconds = 15,
+  options: GenerateVideoOptions = {},
+): Promise<GenerateVideoResult | GenerateVideoError> {
+  const {
+    userImages = [],
+    previousVideoJson,
+    originalPrompt,
+    ...audioOptions
+  } = options;
+
+  try {
+    // ── Stage 1: scene plan ───────────────────────────────────────────────────
+    const scenePlan = await generateScenePlan(
+      prompt,
+      durationSeconds,
+      userImages,
+      previousVideoJson,
+      originalPrompt,
+    );
+
+    // ── Stage 2: enrich ───────────────────────────────────────────────────────
+    const enrichedJson = await enrichScenePlan(scenePlan, {
+      ...audioOptions,
+      userImages,
+    });
+
+    const totalFrames = enrichedJson.duration;
+    const calculatedSeconds = totalFrames / (enrichedJson.fps || 30);
+
+    console.log(
+      `[VideoService] ✓ Done — ${enrichedJson.scenes.length} scenes, ` +
+        `${totalFrames} frames (~${calculatedSeconds.toFixed(1)}s) [target: ${durationSeconds}s]`,
+    );
+
+    return { success: true, videoJson: enrichedJson as VideoJson };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[VideoService] generateVideoJson failed: ${msg}`);
+    return {
+      success: false,
+      error: "Failed to generate valid video JSON after retries",
+      details: msg,
+    };
+  }
 }
 
 export async function renderVideo(
   videoJson: VideoJson,
-): Promise<
-  { success: true; status: "queued"; jobId: string } | GenerateVideoError
-> {
+): Promise<{ success: true; status: "queued"; jobId: string } | GenerateVideoError> {
   console.log(
     `[VideoService] renderVideo stub — ${videoJson.scenes.length} scenes`,
   );

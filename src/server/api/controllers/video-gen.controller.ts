@@ -120,12 +120,26 @@ export async function generateVideoHandler({
     // Row is created BEFORE generation so the intent is captured even on failure.
 
     let chatId: string;
+    let previousVideoJson: VideoJson | undefined;
+    let originalPrompt: string | undefined;
 
     if (incomingChatId) {
-      // Follow-up prompt: verify ownership before touching anything
+      // Follow-up prompt: verify ownership and load previous video for context
       const existing = await getVideoChatById({ chatId: incomingChatId, userId });
       if (!existing) return { error: "Chat not found", status: 404 };
       chatId = incomingChatId;
+
+      // Load previous VideoJson so the LLM can make targeted edits
+      try {
+        previousVideoJson = JSON.parse(existing.video_json) as VideoJson;
+      } catch {
+        // If video_json is corrupt/placeholder, proceed without previous context
+        console.warn(`[VideoController] Could not parse existing video_json for chat ${chatId} — generating fresh`);
+      }
+
+      // Recover original prompt from prompt log for follow-up context
+      const prompts = (existing.prompts as { prompt: string; sentAt: string }[]) ?? [];
+      originalPrompt = prompts[0]?.prompt;
     } else {
       // New chat: insert a placeholder row (video_json filled in after generation)
       chatId = await createVideoChat({
@@ -146,6 +160,9 @@ export async function generateVideoHandler({
       ttsVolume: options.ttsVolume,
       musicVolume: options.musicVolume,
       userImages,
+      // Pass follow-up context when available — service strips audio URLs before sending to LLM
+      previousVideoJson,
+      originalPrompt,
     });
 
     if (!result.success) {
