@@ -10,6 +10,7 @@ import {
   ChevronDown, ChevronUp, Clock, Layers, Film,
   Mic, Music, Volume2, ImagePlus, X, Upload,
   CheckCircle2, AlertCircle, History, Download,
+  SendHorizonal, MessageSquarePlus,
 } from "lucide-react";
 import {
   useGenerateVideo,
@@ -420,6 +421,367 @@ function VideoHistoryPanel({
   );
 }
 
+// ─── FollowUpBlock ────────────────────────────────────────────────────────────
+// Rendered below the video result. Lets the user send follow-up prompts,
+// swap images, or tweak audio options — all within the same chat.
+
+function FollowUpBlock({
+  isBusy,
+  uploadedImages,
+  onSubmit,
+}: {
+  isBusy: boolean;
+  /** Currently persisted images for this chat — shown as starting state */
+  uploadedImages: UploadedUserImage[];
+  onSubmit: (params: {
+    followUpPrompt: string;
+    newImageEntries: UserImageEntryWithPreview[];
+    options: GenerateVideoOptions;
+  }) => Promise<void>;
+}) {
+  const [followUpPrompt, setFollowUpPrompt] = useState("");
+  const [followUpOptionsOpen, setFollowUpOptionsOpen] = useState(false);
+  const [followUpImagesOpen, setFollowUpImagesOpen] = useState(false);
+
+  // Audio options — initialised to current values passed via props
+  const [useTTS, setUseTTS] = useState(true);
+  const [useMusic, setUseMusic] = useState(true);
+  const [musicGenre, setMusicGenre] = useState("corporate");
+  const [voiceId, setVoiceId] = useState("aravind");
+  const [ttsVolume, setTtsVolume] = useState(0.8);
+  const [musicVolume, setMusicVolume] = useState(0.3);
+
+  // New images to add / replace in this follow-up
+  const [newImageEntries, setNewImageEntries] = useState<UserImageEntryWithPreview[]>([]);
+  const [followUpUploadStep, setFollowUpUploadStep] = useState<
+    "idle" | "uploading" | "done" | "error"
+  >("idle");
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
+
+  const totalImagesAfterMerge =
+    uploadedImages.length + newImageEntries.filter(
+      // new entries that aren't replacing an existing slot by index — simple count cap
+      () => true,
+    ).length;
+
+  // Combined slot count: existing persisted images + new additions (capped at 5)
+  const slotsUsed = Math.min(totalImagesAfterMerge, MAX_USER_IMAGES);
+
+  async function handleFollowUpSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!followUpPrompt.trim() || isBusy) return;
+
+    const options: GenerateVideoOptions = {
+      useTTS, useMusic, ttsVolume, musicVolume,
+      ...(useTTS && { voiceId }),
+      ...(useMusic && { musicGenre }),
+    };
+
+    await onSubmit({ followUpPrompt, newImageEntries, options });
+
+    // Reset local state after submission
+    setFollowUpPrompt("");
+    setNewImageEntries([]);
+    setFollowUpUploadStep("idle");
+    setFollowUpOptionsOpen(false);
+    setFollowUpImagesOpen(false);
+  }
+
+  const renderFollowUpUploadBadge = () => {
+    if (followUpUploadStep === "idle" || newImageEntries.length === 0) return null;
+    if (followUpUploadStep === "uploading") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">
+          <Loader2 className="h-2.5 w-2.5 animate-spin" /> Uploading…
+        </span>
+      );
+    }
+    if (followUpUploadStep === "done") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-emerald-500 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
+          <CheckCircle2 className="h-2.5 w-2.5" /> Uploaded
+        </span>
+      );
+    }
+    if (followUpUploadStep === "error") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[9px] font-mono text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
+          <AlertCircle className="h-2.5 w-2.5" /> Upload failed
+        </span>
+      );
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+      {/* Header label */}
+      <div className="flex items-center gap-2 px-4 pt-3 pb-2">
+        <MessageSquarePlus className="h-3.5 w-3.5 text-primary/60" />
+        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+          Follow-up prompt
+        </span>
+        {uploadedImages.length > 0 && (
+          <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5">
+            {uploadedImages.length} image{uploadedImages.length !== 1 ? "s" : ""} in chat
+          </span>
+        )}
+      </div>
+
+      {/* Follow-up form */}
+      <form onSubmit={handleFollowUpSubmit}>
+        {/* Textarea */}
+        <div className="relative px-4">
+          <textarea
+            ref={textareaRef}
+            value={followUpPrompt}
+            onChange={(e) => setFollowUpPrompt(e.target.value)}
+            placeholder="e.g. Make the second scene darker, add a voiceover about climate change…"
+            rows={3}
+            disabled={isBusy}
+            aria-label="Follow-up prompt"
+            className="w-full px-0 pt-1 pb-6 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40 border-0"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleFollowUpSubmit(e);
+            }}
+          />
+          <span className="absolute bottom-3 right-4 text-[10px] font-mono text-muted-foreground/25 tabular-nums">
+            {followUpPrompt.length}/2000
+          </span>
+        </div>
+
+        {/* Submit row */}
+        <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-3">
+          <p className="text-[9px] font-mono text-muted-foreground/35 leading-relaxed hidden sm:block">
+            Changes audio, images, or style without resetting the chat
+          </p>
+          <button
+            type="submit"
+            disabled={!followUpPrompt.trim() || isBusy}
+            className="inline-flex items-center justify-center gap-2 px-4 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0 ml-auto"
+          >
+            {isBusy ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="hidden sm:inline">Updating…</span>
+              </>
+            ) : (
+              <>
+                <SendHorizonal className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Update video</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* ── New images panel ──────────────────────────────────────────── */}
+        <div className="border-t border-border">
+          <button
+            type="button"
+            onClick={() => setFollowUpImagesOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
+              <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                Add / replace images
+              </span>
+              {newImageEntries.length > 0 && (
+                <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
+                  {newImageEntries.length} new
+                </span>
+              )}
+              {renderFollowUpUploadBadge()}
+            </div>
+            {followUpImagesOpen
+              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+            }
+          </button>
+
+          {followUpImagesOpen && (
+            <div className="px-4 pb-4 border-t border-border bg-muted/10">
+              {/* Show currently persisted images as read-only reference */}
+              {uploadedImages.length > 0 && (
+                <div className="pt-3 pb-2 space-y-1.5">
+                  <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest">
+                    Current images in chat
+                  </p>
+                  <div className="space-y-1.5">
+                    {uploadedImages.map((img, i) => (
+                      <div
+                        key={img.url}
+                        className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-border bg-muted/10"
+                      >
+                        <div className="shrink-0 w-10 h-7 rounded overflow-hidden border border-border bg-muted">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.url}
+                            alt={img.description || `Image ${i + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <p className="flex-1 text-[10px] font-mono text-muted-foreground/60 truncate">
+                          {img.description || `Image ${i + 1}`}
+                        </p>
+                        <span className="text-[9px] font-mono text-muted-foreground/30 shrink-0">
+                          #{img.index + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Uploader for new/replacement images */}
+              {slotsUsed < MAX_USER_IMAGES && (
+                <UserImageUploader
+                  entries={newImageEntries}
+                  onChange={setNewImageEntries}
+                  disabled={isBusy}
+                />
+              )}
+
+              {slotsUsed >= MAX_USER_IMAGES && newImageEntries.length === 0 && (
+                <p className="pt-3 text-[9px] font-mono text-muted-foreground/40 leading-relaxed">
+                  Maximum {MAX_USER_IMAGES} images reached. Remove an image from the chat before adding more.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Audio options panel ───────────────────────────────────────── */}
+        <div className="border-t border-border">
+          <button
+            type="button"
+            onClick={() => setFollowUpOptionsOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Volume2 className="h-3 w-3 text-muted-foreground/50" />
+              <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+                Audio options
+              </span>
+              <div className="flex gap-1">
+                {useTTS && (
+                  <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
+                    TTS
+                  </span>
+                )}
+                {useMusic && (
+                  <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">
+                    Music
+                  </span>
+                )}
+              </div>
+            </div>
+            {followUpOptionsOpen
+              ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" />
+              : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />
+            }
+          </button>
+
+          {followUpOptionsOpen && (
+            <div className="px-4 pb-4 space-y-4 border-t border-border bg-muted/10">
+
+              {/* TTS toggle + voice */}
+              <div className="space-y-2 pt-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <span className="text-[11px] font-mono text-muted-foreground">Narration (TTS)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseTTS((v) => !v)}
+                    className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                  >
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
+                  </button>
+                </div>
+                {useTTS && (
+                  <>
+                    <div className="flex items-center gap-2 pl-5">
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
+                      <input
+                        type="text"
+                        value={voiceId}
+                        onChange={(e) => setVoiceId(e.target.value)}
+                        placeholder="aravind"
+                        className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 pl-5">
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
+                      <input
+                        type="range" min="0" max="1" step="0.05" value={ttsVolume}
+                        onChange={(e) => setTtsVolume(parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                      />
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                        {Math.round(ttsVolume * 100)}%
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Music toggle + genre */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <span className="text-[11px] font-mono text-muted-foreground">Background music</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseMusic((v) => !v)}
+                    className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                  >
+                    <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
+                  </button>
+                </div>
+                {useMusic && (
+                  <>
+                    <div className="flex items-center gap-2 pl-5">
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
+                      <div className="flex gap-1 flex-wrap">
+                        {MUSIC_GENRES.map((g) => (
+                          <button
+                            key={g.value}
+                            type="button"
+                            onClick={() => setMusicGenre(g.value)}
+                            className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                          >
+                            {g.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pl-5">
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
+                      <input
+                        type="range" min="0" max="1" step="0.05" value={musicVolume}
+                        onChange={(e) => setMusicVolume(parseFloat(e.target.value))}
+                        className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer"
+                      />
+                      <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">
+                        {Math.round(musicVolume * 100)}%
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function VideoGeneratorPage() {
@@ -503,6 +865,11 @@ export default function VideoGeneratorPage() {
     // Restore last prompt so user can send a follow-up
     const lastPrompt = historyChatDetail.prompts.at(-1)?.prompt ?? "";
     if (lastPrompt) setPrompt(lastPrompt);
+
+    // Restore persisted user images so the follow-up block can show them
+    if (historyChatDetail.userImages) {
+      setUploadedImages(historyChatDetail.userImages);
+    }
 
     // Restore audio options if saved
     if (historyChatDetail.options) {
@@ -638,6 +1005,68 @@ export default function VideoGeneratorPage() {
         onError: (err) => {
           toast.error(err.message ?? "Download failed");
           setDownloadProgress(null);
+        },
+      },
+    );
+  }
+
+  // ── Follow-up handler ──────────────────────────────────────────────────────
+  // Called by FollowUpBlock when the user submits a follow-up prompt.
+  // Uploads any new images, merges them with existing ones, then calls generate.
+  async function handleFollowUp({
+    followUpPrompt,
+    newImageEntries,
+    options,
+  }: {
+    followUpPrompt: string;
+    newImageEntries: UserImageEntryWithPreview[];
+    options: GenerateVideoOptions;
+  }) {
+    if (!chatId) return; // should never happen — follow-up only shown when hasResult
+
+    let resolvedNewImages: UploadedUserImage[] = [];
+    let resolvedNewSessionId: string | undefined;
+
+    // Upload new images if provided
+    if (newImageEntries.length > 0) {
+      try {
+        const result = await uploadImages(newImageEntries);
+        resolvedNewImages = result.images;
+        resolvedNewSessionId = result.sessionId;
+        toast.success(`Uploaded ${result.images.length} image${result.images.length !== 1 ? "s" : ""}`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Image upload failed");
+        return;
+      }
+    }
+
+    // Merge: existing persisted images + newly uploaded ones.
+    // Server handles de-duplication by index in generateVideoHandler.
+    const mergedImages: UploadedUserImage[] = [
+      ...uploadedImages,
+      ...resolvedNewImages,
+    ];
+
+    generate(
+      {
+        prompt: followUpPrompt.trim(),
+        duration: selectedRange.seconds,
+        options,
+        chatId, // existing chat — server treats this as a follow-up
+        userImages: mergedImages.length > 0 ? mergedImages : undefined,
+        imageSessionId: resolvedNewSessionId ?? imageSessionId,
+      },
+      {
+        onSuccess: (data) => {
+          setVideoJson(data.videoJson);
+          setMeta(data.meta);
+          // Update uploaded images to the merged set returned by server
+          if (mergedImages.length > 0) setUploadedImages(mergedImages);
+          if (resolvedNewSessionId) setImageSessionId(resolvedNewSessionId);
+          toast.success(`Updated — ${data.meta.scenes} scenes`);
+        },
+        onError: (err) => {
+          toast.error(err.message ?? "Follow-up failed");
         },
       },
     );
@@ -1115,6 +1544,53 @@ export default function VideoGeneratorPage() {
                 loop
               />
             </div>
+
+            {/* ── Follow-up prompt block ───────────────────────────────────── */}
+            {/* Only shown when a chatId exists (i.e. after first generation) */}
+            {chatId && (
+              <>
+                {/* Generating overlay — replaces block while busy */}
+                {isBusy ? (
+                  <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
+                    <div className="relative h-14 w-14">
+                      <div className="absolute inset-0 rounded-full border-2 border-border" />
+                      <div className="absolute inset-0 rounded-full border-2 border-transparent border-t-primary animate-spin" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Film className="h-5 w-5 text-primary" />
+                      </div>
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-sans font-semibold text-foreground">Updating your video…</p>
+                      <p className="text-[11px] font-mono text-muted-foreground/60">
+                        AI is applying your follow-up changes
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-1.5 w-full max-w-xs">
+                      {[
+                        "Reading chat history",
+                        "Applying your changes",
+                        ...(useTTS ? ["Regenerating narration"] : []),
+                        ...(useMusic ? ["Adjusting music"] : []),
+                      ].map((step, i) => (
+                        <div key={step} className="flex items-center gap-2">
+                          <Loader2
+                            className="h-3 w-3 text-primary animate-spin shrink-0"
+                            style={{ animationDelay: `${i * 300}ms` }}
+                          />
+                          <span className="text-[10px] font-mono text-muted-foreground/50">{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <FollowUpBlock
+                    isBusy={isBusy}
+                    uploadedImages={uploadedImages}
+                    onSubmit={handleFollowUp}
+                  />
+                )}
+              </>
+            )}
 
             {/* ── Download button ──────────────────────────────────────────── */}
             <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
