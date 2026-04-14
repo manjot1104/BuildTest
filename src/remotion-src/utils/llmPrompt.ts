@@ -160,8 +160,15 @@ ${strippedPrev}
 
 The user now wants to change it: "${followUpPrompt}"
 ${userImagesBlock}
-Apply the requested changes and return the FULL updated scene plan as raw JSON.
-Keep scenes that don't need to change. Update only what the user asked for.
-REQUIREMENTS: same as before — ${minScenes}–${maxScenes} scenes, durationInFrames sum ≈ ${provisionalFrames}, "duration": ${targetFrames}, "fps": 30.
+=== STRICT EDITING RULES ===
+- SURGICAL EDITS ONLY. Apply EXACTLY what the user asked for — nothing more.
+- DO NOT add, remove, or reorder scenes unless the user explicitly asked for it.
+- DO NOT add new scenes to "summarize", "show", or "explain" the changes you made.
+- DO NOT change scene content, narration, layout, or elements that were not mentioned.
+- Copy every unchanged scene EXACTLY as-is from the current plan above.
+- The scene count MUST stay the same unless the user explicitly asked to add or remove scenes, or changed the video duration.
+- Only modify the specific properties the user referenced (e.g. background, text color, image url).
+
+REQUIREMENTS: ${minScenes}–${maxScenes} scenes, durationInFrames sum ≈ ${provisionalFrames}, "duration": ${targetFrames}, "fps": 30.
 Output raw JSON only.`;
 };
