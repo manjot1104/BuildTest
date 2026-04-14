@@ -2019,39 +2019,42 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
  
   // POST /api/video/generate — prompt → VideoJson
-  // Returns validated VideoJson ready to pass to the Remotion Player.
-  .post(
-    '/video/generate',
-    async ({ body, set }: any) => {
-      const result = await generateVideoHandler({ body })
-      if ('status' in result && 'error' in result) {
-        set.status = result.status
-        return result
-      }
+// Returns validated VideoJson ready to pass to the Remotion Player.
+.post(
+  '/video/generate',
+  async ({ body, set }: any) => {
+    const result = await generateVideoHandler({ body })
+    if ('status' in result && 'error' in result) {
+      set.status = result.status
       return result
-    },
-    {
-      body: t.Object({
-        prompt: t.String(),
-        duration: t.Optional(t.Number()),
-        options: t.Optional(t.Object({
-          useTTS: t.Optional(t.Boolean()),
-          voiceId: t.Optional(t.String()),
-          useMusic: t.Optional(t.Boolean()),
-          musicGenre: t.Optional(t.String()),
-          ttsVolume: t.Optional(t.Number()),
-          musicVolume: t.Optional(t.Number()),
-        })),
-        userImages: t.Optional(t.Array(t.Object({
-          index: t.Number(),
-          url: t.String(),
-          description: t.String(),
-          filename: t.String(),
-        }))),
-        imageSessionId: t.Optional(t.String()),
-      }),
-    },
-  )
+    }
+    return result
+  },
+  {
+    body: t.Object({
+      prompt: t.String(),
+      duration: t.Optional(t.Number()),
+      // ── NEW: required for follow-up prompts ──────────────────────────────
+      chatId: t.Optional(t.Nullable(t.String())),
+      imageSessionId: t.Optional(t.String()),
+      // ────────────────────────────────────────────────────────────────────
+      options: t.Optional(t.Object({
+        useTTS: t.Optional(t.Boolean()),
+        voiceId: t.Optional(t.String()),
+        useMusic: t.Optional(t.Boolean()),
+        musicGenre: t.Optional(t.String()),
+        ttsVolume: t.Optional(t.Number()),
+        musicVolume: t.Optional(t.Number()),
+      })),
+      userImages: t.Optional(t.Array(t.Object({
+        index: t.Number(),
+        url: t.String(),
+        description: t.String(),
+        filename: t.String(),
+      }))),
+    }),
+  },
+)
  
   // POST /api/video/render — VideoJson → render job 
   // Currently returns a stub jobId. In the future, this will trigger actual rendering and return a real jobId that can be polled for status and results.
