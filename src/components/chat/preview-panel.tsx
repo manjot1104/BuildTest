@@ -24,6 +24,7 @@ import {
   Video,
   SearchCheckIcon,
   Loader2,
+  Download,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
@@ -54,6 +55,7 @@ interface PreviewPanelProps {
   setIsFullscreen: (fullscreen: boolean) => void
   isBuilding?: boolean
 onSeoAudit?: (prompt: string, chatId: string, mode?: string) => void 
+templateVideoFile?: string | null
 }
 
 type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
@@ -101,6 +103,7 @@ export function PreviewPanel({
   setIsFullscreen,
   isBuilding = false,
   onSeoAudit,
+  templateVideoFile,
 }: PreviewPanelProps) {
  
   const [device, setDevice] = useState<PreviewDevice>('desktop')
@@ -108,11 +111,14 @@ const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo
 const [videoError, setVideoError] = useState<string | null>(null)
 const [videoGenerating, setVideoGenerating] = useState(false)
 const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null)
+const [videoModalOpen, setVideoModalOpen] = useState(false)
   const [isReloading, setIsReloading] = useState(false)
   const [codeDialogOpen, setCodeDialogOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
   const [testingDialogOpen, setTestingDialogOpen] = useState(false)
-
+const [videoFullscreen, setVideoFullscreen] = useState(false)
+const [videoLoading, setVideoLoading] = useState(true)
+const [isPlaying, setIsPlaying] = useState(true)
   // Track if dialog has ever been opened — once opened, keep mounted for fast re-open
   const [githubDialogMounted, setGithubDialogMounted] = useState(false)
 
@@ -152,63 +158,7 @@ const showBuildingLoader = isBuilding && !effectiveSrc
     setGithubDialogMounted(true)
     setGithubDialogOpen(true)
   }
-//video generation handler
- const handleGenerateVideo = async () => {
-  if (!currentChat?.id) return
-  setVideoGenerating(true)
 
-  try {
-    const res = await fetch('/api/video/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: `Cinematic seamless looping video background, professional, no text, 16:9, smooth motion.`,
-      }),
-    })
-
-    const json = await res.json() as {
-      taskId?: string
-      error?: string
-      message?: string
-      required?: number
-    }
-
- 
-    if (res.status === 402 || json.error === 'insufficient_credits') {
-      setVideoError(`Not enough credits. You need ${json.required ?? 50} credits to generate a video.`)
-      setVideoGenerating(false)
-      return
-    }
-
-   
-    if (json.error === 'generation_failed' || !json.taskId) {
-      setVideoError(json.message ?? 'Video generation failed. Credits have been refunded.')
-      setVideoGenerating(false)
-      return
-    }
-
-
-    const poll = setInterval(async () => {
-      const statusRes = await fetch(`/api/video/status?taskId=${json.taskId}`)
-      const statusJson = await statusRes.json() as { status?: string; videoUrl?: string }
-
-      if (statusJson.status === 'completed' && statusJson.videoUrl) {
-        clearInterval(poll)
-        setGeneratedVideoUrl(statusJson.videoUrl)
-        setVideoGenerating(false)
-        setVideoError(null)
-      } else if (statusJson.status === 'failed') {
-        clearInterval(poll)
-        setVideoError('Video generation failed. Please try again.')
-        setVideoGenerating(false)
-      }
-    }, 3000)
-
-  } catch {
-    setVideoError('Something went wrong. Please try again.')
-    setVideoGenerating(false)
-  }
-}
 
   return (
     <>
@@ -269,9 +219,17 @@ value={
               </WebPreviewNavigationButton>
 {/* Video Generate Button */}
 <WebPreviewNavigationButton
-  tooltip={videoGenerating ? 'Generating video...' : 'Generate AI video background (50 credits)'}
-  disabled={!currentChat?.demo || videoGenerating}
-  onClick={handleGenerateVideo}
+  tooltip={templateVideoFile ? 'Play template preview video' : videoGenerating ? 'Generating video...' : 'Generate AI video background (50 credits)'}
+  disabled={videoGenerating || !templateVideoFile}
+onClick={() => {
+  if (templateVideoFile) {
+    setTimeout(() => {
+  setVideoModalOpen(true)
+}, 50)
+  } else {
+    setVideoError('No preview video available for this template.')
+  }
+}}
 >
   {videoGenerating
     ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -391,7 +349,115 @@ value={
 
 
 
+{/* ── Template Video Modal ── */}
+{videoModalOpen && templateVideoFile && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center" style={{ contain: 'strict' }}>
+    
+    <div 
+      className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+      onClick={() => { setVideoModalOpen(false); setVideoFullscreen(false) }} 
+    />
+    <div className={cn(
+  "relative z-10 bg-card border border-border shadow-2xl transition-all duration-150", 
+  videoFullscreen 
+    ? "inset-0 fixed rounded-none w-screen h-screen flex flex-col" 
+    : "w-full max-w-2xl mx-4 rounded-xl p-0 overflow-hidden"
+)}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/10">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          <span className="text-xs font-medium text-muted-foreground ml-2">
+            {templateVideoFile.replace('.mp4', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {/* Download */}
+          <a
+            href={`/template-videos/${templateVideoFile}`}
+            download={templateVideoFile}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title="Download video"
+            onClick={e => e.stopPropagation()}
+          >
+            <Download className="h-3.5 w-3.5" />
+          </a>
+          {/* Fullscreen toggle */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setVideoFullscreen(v => !v) }}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title={videoFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {videoFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+          </button>
+          {/* Close */}
+          <button 
+            onClick={() => { setVideoModalOpen(false); setVideoFullscreen(false) }} 
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+  <div className="relative">
+  
+  {/*  Loader */}
+  {videoLoading && (
+    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
+      <Loader2 className="h-6 w-6 animate-spin text-white" />
+    </div>
+  )}
 
+  {/* Video */}
+  <video
+    src={`/template-videos/${templateVideoFile}`}
+    autoPlay
+    loop
+    muted
+    playsInline
+    preload="metadata"
+    onLoadedData={() => setVideoLoading(false)}
+    className={cn(
+      "w-full object-cover block",
+      videoFullscreen ? "flex-1 min-h-0" : "max-h-[70vh]"
+    )}
+    style={{ transform: 'translateZ(0)' }}
+    id="preview-video"
+  />
+
+  {/* Play/Pause Button */}
+  {!videoLoading && (
+    <button
+      onClick={() => {
+        const video = document.getElementById('preview-video') as HTMLVideoElement
+        if (!video) return
+
+        if (video.paused) {
+          video.play()
+          setIsPlaying(true)
+        } else {
+          video.pause()
+          setIsPlaying(false)
+        }
+      }}
+      className="absolute inset-0 flex items-center justify-center z-30"
+    >
+      <div className="bg-black/50 backdrop-blur-sm rounded-full p-3 hover:bg-black/70 transition">
+        {isPlaying ? (
+          <span className="text-white text-lg">⏸</span>
+        ) : (
+          <span className="text-white text-lg">▶</span>
+        )}
+      </div>
+    </button>
+  )}
+
+</div>
+    </div>
+  </div>
+)}
      
    {/* ── Video Error Modal ── */}
 {videoError && (
@@ -449,8 +515,8 @@ value={
           ✕
         </button>
       </div>
-      <video
-        src={generatedVideoUrl}
+   <video
+  src={generatedVideoUrl}
         autoPlay loop muted playsInline
         className="w-full rounded-lg max-h-48 object-cover"
       />

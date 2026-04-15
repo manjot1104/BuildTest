@@ -38,7 +38,7 @@ export const env = createEnv({
     DAYTONA_API_KEY: z.string().min(1).optional(),
     DAYTONA_API_URL: z.string().url().optional(),
     DAYTONA_TARGET: z.string().optional(),
-REPLICATE_API_TOKEN: z.string().min(1).optional(),
+
 
     // ElevenLabs (optional feature)
     ELEVENLABS_API_KEY: z.string().min(1).optional(),
@@ -88,7 +88,7 @@ REPLICATE_API_TOKEN: z.string().min(1).optional(),
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
     TINYFISH_API_KEY: process.env.TINYFISH_API_KEY,
-  REPLICATE_API_TOKEN: process.env.REPLICATE_API_TOKEN,
+
     PAGESPEED_API_KEY: process.env.PAGESPEED_API_KEY,
   },
 

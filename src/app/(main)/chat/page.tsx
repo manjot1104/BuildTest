@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
+import React, { useState, useEffect, useRef, useCallback, Suspense} from 'react'
 import { SeoAuditResults } from '@/components/chat/seo-audit-results'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -164,9 +164,9 @@ function ThreeDToolbarBtn({ tooltip, onClick, disabled, children, active }: {
     tooltip: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode; active?: boolean
 }) {
     return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
+       <TooltipProvider delayDuration={200}>
+  <Tooltip>
+    <TooltipTrigger asChild>
                     <button
                         onClick={onClick}
                         disabled={disabled}
@@ -675,7 +675,7 @@ useEffect(() => {
 
     const shouldShowPreview = !!hookCurrentChat?.id && !isStreaming
     useEffect(() => { setIsLoading(hookIsLoading) }, [hookIsLoading])
-
+const [selectedTemplateVideo, setSelectedTemplateVideo] = useState<string | null>(null)
     const autoPromptFiredRef = useRef(false)
     const handleReset = useCallback(() => {
         autoPromptFiredRef.current = false
@@ -684,6 +684,7 @@ useEffect(() => {
         setIsLoading(false); setIsFullscreen(false); setUrlChatId(null)
         setThreeDHtml(''); setThreeDMessages([]); setThreeDLoading(false); setThreeDFullscreen(false); setThreeDSceneId('')
         lastUserPromptRef.current = ''
+        setSelectedTemplateVideo(null)
         const u = new URL(window.location.href); u.searchParams.delete('chatId')
         window.history.replaceState({}, '', u.pathname)
         clearPromptFromStorage()
@@ -951,7 +952,16 @@ useEffect(() => {
             try { await fetch('/api/chat/ownership', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chatId: chatData.id }) }) } catch { }
         }
     }
-
+const getVideoFromPrompt = (prompt?: string) => {
+  if (!prompt) return null
+  const p = prompt.toLowerCase()
+  if (p.includes('landing')) return 'landing-page.mp4'
+  if (p.includes('task')) return 'task-management.mp4'
+  if (p.includes('dashboard')) return 'dashboard.mp4'
+  if (p.includes('blog')) return 'blog.mp4'
+  if (p.includes('shop') || p.includes('e-commerce') || p.includes('store')) return 'shop.mp4'
+  return null
+}
     const handleStreamingComplete = async (finalContent: string | MessageBinaryFormat) => {
         await hookHandleStreamingComplete(finalContent)
     }
@@ -1028,12 +1038,14 @@ useEffect(() => {
 
     // ── 2D Suggestions ────────────────────────────────────────────────────────
     const suggestions = [
-        { label: 'Landing Page', text: `Create a modern SaaS landing page.\n\nSections:\n- Hero section with headline, subtext and primary CTA\n- Product screenshot or illustration\n- Features grid (3–6 cards with icons)\n- Pricing section with highlighted recommended plan\n- Testimonials section\n- Conversion-focused footer with links and CTA\n\nDesign Requirements:\n- Clean modern UI\n- Generous whitespace\n- Smooth hover and scroll animations\n- Mobile-first responsive layout`, icon: Layout },
-        { label: 'Task Management', text: `Build a task management web application with a Kanban-style interface.\n\nFeatures:\n- Sidebar with projects and filters\n- Columns: Todo, In Progress, Done\n- Draggable task cards between columns\n- Task details with title, description and due date\n- Ability to add, edit and delete tasks\n\nUI Requirements:\n- Clean dashboard layout\n- Card based design\n- Responsive interface`, icon: CheckSquare },
-        { label: 'Dashboard', text: `Create an analytics dashboard.\n\nLayout:\n- Left sidebar navigation\n- Top header with search and profile\n\nMain Content:\n- KPI stats cards (Users, Revenue, Growth)\n- Line chart for trends\n- Bar chart for category performance\n- Table for recent activity\n\nDesign:\n- Dark modern UI\n- Clear visual hierarchy\n- Responsive layout`, icon: BarChart3 },
-        { label: 'Blog', text: `Create a modern blog platform.\n\nPages:\n- Homepage with article cards\n- Article detail page\n- Author profile page\n\nFeatures:\n- Category and tag filtering\n- Search functionality\n- Reading progress indicator\n- Pagination for posts\n\nDesign:\n- Typography-focused layout\n- Clean reading experience\n- Responsive design`, icon: FileText },
-        { label: 'Shop', text: `Create an e-commerce store.\n\nPages:\n- Product listing page\n- Product detail page\n- Shopping cart\n- Checkout page\n\nFeatures:\n- Product cards with image, price and rating\n- Add to cart functionality\n- Product variants and quantity selector\n- Order summary and checkout flow\n\nDesign:\n- Clean product grid\n- Mobile responsive layout\n- High-conversion UI patterns`, icon: ShoppingCart },
+        { label: 'Landing Page', text: `Create a modern SaaS landing page.\n\nSections:\n- Hero section with headline, subtext and primary CTA\n- Product screenshot or illustration\n- Features grid (3–6 cards with icons)\n- Pricing section with highlighted recommended plan\n- Testimonials section\n- Conversion-focused footer with links and CTA\n\nDesign Requirements:\n- Clean modern UI\n- Generous whitespace\n- Smooth hover and scroll animations\n- Mobile-first responsive layout`, icon: Layout , videoFile: 'landing-page.mp4' },
+        { label: 'Task Management', text: `Build a task management web application with a Kanban-style interface.\n\nFeatures:\n- Sidebar with projects and filters\n- Columns: Todo, In Progress, Done\n- Draggable task cards between columns\n- Task details with title, description and due date\n- Ability to add, edit and delete tasks\n\nUI Requirements:\n- Clean dashboard layout\n- Card based design\n- Responsive interface`, icon: CheckSquare , videoFile: 'task-management.mp4' },
+        { label: 'Dashboard', text: `Create an analytics dashboard.\n\nLayout:\n- Left sidebar navigation\n- Top header with search and profile\n\nMain Content:\n- KPI stats cards (Users, Revenue, Growth)\n- Line chart for trends\n- Bar chart for category performance\n- Table for recent activity\n\nDesign:\n- Dark modern UI\n- Clear visual hierarchy\n- Responsive layout`, icon: BarChart3 , videoFile: 'dashboard.mp4' },
+        { label: 'Blog', text: `Create a modern blog platform.\n\nPages:\n- Homepage with article cards\n- Article detail page\n- Author profile page\n\nFeatures:\n- Category and tag filtering\n- Search functionality\n- Reading progress indicator\n- Pagination for posts\n\nDesign:\n- Typography-focused layout\n- Clean reading experience\n- Responsive design`, icon: FileText , videoFile: 'blog.mp4' },
+        { label: 'Shop', text: `Create an e-commerce store.\n\nPages:\n- Product listing page\n- Product detail page\n- Shopping cart\n- Checkout page\n\nFeatures:\n- Product cards with image, price and rating\n- Add to cart functionality\n- Product variants and quantity selector\n- Order summary and checkout flow\n\nDesign:\n- Clean product grid\n- Mobile responsive layout\n- High-conversion UI patterns`, icon: ShoppingCart , videoFile: 'shop.mp4' },
     ]
+
+ 
 
     // ── BUILDER mode ──────────────────────────────────────────────────────────
     return (
@@ -1092,7 +1104,17 @@ useEffect(() => {
   onSeoAudit={handleAutoPrompt}
 />
                                 ) : shouldShowPreview ? (
-                                    <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt} />
+                                    <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt}  
+                                 templateVideoFile={
+  selectedTemplateVideo ??
+  getVideoFromPrompt(
+    chatHistory?.find(m => m.type === 'user')?.content?.toString()
+  )
+}
+
+                                    
+                                    
+                                    />
                                 ) : null
                             }
                         />
@@ -1178,7 +1200,7 @@ useEffect(() => {
                                     ? suggestions.map(s => {
                                         const Icon = s.icon
                                         return (
-                                            <button key={s.label} onClick={() => setMessage(s.text)} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-muted/60 border border-border/40 hover:border-border/60 text-xs text-muted-foreground hover:text-foreground transition-all duration-200')}>
+                                          <button key={s.label} onClick={() => { setMessage(s.text); setSelectedTemplateVideo(s.videoFile ?? null) }} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-muted/60 border border-border/40 hover:border-border/60 text-xs text-muted-foreground hover:text-foreground transition-all duration-200')}>
                                                 <Icon className="size-3 shrink-0" />
                                                 {s.label}
                                             </button>
