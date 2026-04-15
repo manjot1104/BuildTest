@@ -366,62 +366,63 @@ useEffect(() => {
                 {html && !loading && (
                     <iframe
                         ref={iframeRef}
-                        srcDoc={(() => {
-                            // Bootstrap script injected into every generated scene:
-                            // 1. Sends READY ping to parent so host knows iframe is live
-                            // 2. Re-registers MOUSEMOVE/SCROLL listeners inside iframe
-                            //    as a fallback (in case AI forgot or used wrong syntax)
-                            const bootstrap = `<script>
-(function() {
-  // Notify parent that iframe is loaded and ready
-  window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+                        srcDoc={html}
+//                         srcDoc={(() => {
+//                             // Bootstrap script injected into every generated scene:
+//                             // 1. Sends READY ping to parent so host knows iframe is live
+//                             // 2. Re-registers MOUSEMOVE/SCROLL listeners inside iframe
+//                             //    as a fallback (in case AI forgot or used wrong syntax)
+//                             const bootstrap = `<script>
+// (function() {
+//   // Notify parent that iframe is loaded and ready
+//   window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
 
-  // Internal mouse tracker for parallax (fallback if AI used window.onmousemove)
-  var _nx = 0, _ny = 0;
-  document.addEventListener('mousemove', function(e) {
-    _nx = (e.clientX / window.innerWidth)  * 2 - 1;
-    _ny = -((e.clientY / window.innerHeight) * 2 - 1);
-    // Dispatch to any listeners that used the normalized form
-    window._mouseNX = _nx; window._mouseNY = _ny;
-  });
+//   // Internal mouse tracker for parallax (fallback if AI used window.onmousemove)
+//   var _nx = 0, _ny = 0;
+//   document.addEventListener('mousemove', function(e) {
+//     _nx = (e.clientX / window.innerWidth)  * 2 - 1;
+//     _ny = -((e.clientY / window.innerHeight) * 2 - 1);
+//     // Dispatch to any listeners that used the normalized form
+//     window._mouseNX = _nx; window._mouseNY = _ny;
+//   });
 
-  // Relay SCROLL and MOUSEMOVE from parent
-  window.addEventListener('message', function(e) {
-    if (!e.data || !e.data.type) return;
-    if (e.data.type === 'MOUSEMOVE') {
-      window._mouseNX = e.data.nx;
-      window._mouseNY = e.data.ny;
-      // Fire a synthetic mousemove so Three.js listeners inside also fire
-      var me = new MouseEvent('mousemove', {
-        clientX: e.data.x * window.innerWidth,
-        clientY: e.data.y * window.innerHeight,
-        bubbles: true
-      });
-      document.dispatchEvent(me);
-    }
-    // SCROLL is handled by AI's own listener; this just ensures it exists
-  });
-})();
-<\/script>`;
-                            const injected = html.includes('</body>') 
-                                ? html.replace('</body>', bootstrap + `<script>
-                                document.addEventListener('click', function(e) {
-                                    var a = e.target.closest('a');
-                                    if (a) {
-                                        var href = a.getAttribute('href');
-                                        if (href && (href === '#' || href === '/' || href.startsWith('#'))) {
-                                            e.preventDefault();
-                                            if (href.startsWith('#') && href.length > 1) {
-                                                var el = document.querySelector(href);
-                                                if (el) el.scrollIntoView({ behavior: 'smooth' });
-                                            }
-                                        }
-                                    }
-                                });
-                            <\/script></body>`)
-                                : bootstrap + html;
-                            return injected;
-                        })()}
+//   // Relay SCROLL and MOUSEMOVE from parent
+//   window.addEventListener('message', function(e) {
+//     if (!e.data || !e.data.type) return;
+//     if (e.data.type === 'MOUSEMOVE') {
+//       window._mouseNX = e.data.nx;
+//       window._mouseNY = e.data.ny;
+//       // Fire a synthetic mousemove so Three.js listeners inside also fire
+//       var me = new MouseEvent('mousemove', {
+//         clientX: e.data.x * window.innerWidth,
+//         clientY: e.data.y * window.innerHeight,
+//         bubbles: true
+//       });
+//       document.dispatchEvent(me);
+//     }
+//     // SCROLL is handled by AI's own listener; this just ensures it exists
+//   });
+// })();
+// <\/script>`;
+//                             const injected = html.includes('</body>') 
+//                                 ? html.replace('</body>', bootstrap + `<script>
+//                                 document.addEventListener('click', function(e) {
+//                                     var a = e.target.closest('a');
+//                                     if (a) {
+//                                         var href = a.getAttribute('href');
+//                                         if (href && (href === '#' || href === '/' || href.startsWith('#'))) {
+//                                             e.preventDefault();
+//                                             if (href.startsWith('#') && href.length > 1) {
+//                                                 var el = document.querySelector(href);
+//                                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
+//                                             }
+//                                         }
+//                                     }
+//                                 });
+//                             <\/script></body>`)
+//                                 : bootstrap + html;
+//                             return injected;
+//                         })()}
                         className="absolute inset-0 w-full h-full border-none"
                         sandbox="allow-scripts allow-same-origin"
                         style={{ pointerEvents: 'auto' }}
@@ -716,18 +717,20 @@ const handleChatIdChange = useCallback((chatId: string | null, mode?: string | n
                     ])
                     lastUserPromptRef.current = data.prompt
                     setThreeDSceneId(chatId)
+                    console.log('HTML BEFORE SET:', threeDHtml)
+console.log('API HTML:', data.demo_html)
                    const hasHtml =
   typeof data.demo_html === 'string' &&
   data.demo_html.trim().length > 20
-console.log('🧠 HTML CHECK', {
+console.log(' HTML CHECK', {
   hasHtml,
   length: data?.demo_html?.length,
   preview: data?.demo_html?.slice(0, 30)
 })
-if (hasHtml) {
+if (hasHtml && !threeDHtml) {
     setThreeDHtml(data.demo_html)
-    setThreeDLoading(false)  
-    return                    
+    setThreeDLoading(false)
+    return
 }
 // No auto-generate , user can click Regenerate manually if needed
                 }
@@ -876,13 +879,13 @@ const res = await fetch('/api/chat/ownership', {
   body: JSON.stringify({ 
     chatId: sceneIdToSave, 
     prompt: userMessage,
-    demoUrl: `threed://${sceneIdToSave}`,
+   demoUrl: `${window.location.origin}/apps/${sceneIdToSave}`,
     demo_html: savedHtml
   }),
 })
 
 const result = await res.json()
-console.log('💾 SAVE RESPONSE', result)
+
 const currentUrl = new URL(window.location.href)
 if (currentUrl.searchParams.get('chatId') !== sceneIdToSave) {
     window.history.replaceState({}, '', `/chat?chatId=${sceneIdToSave}&mode=3d`)
@@ -1111,6 +1114,7 @@ const getVideoFromPrompt = (prompt?: string) => {
     chatHistory?.find(m => m.type === 'user')?.content?.toString()
   )
 }
+onExploreTemplates={() => {  setShowChatInterface(false) }}
 
                                     
                                     

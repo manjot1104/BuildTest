@@ -25,6 +25,8 @@ import {
   SearchCheckIcon,
   Loader2,
   Download,
+   Play, 
+   Pause,
 } from 'lucide-react'
 
 import { CodeViewerDialog } from '@/components/code-viewer/code-viewer'
@@ -56,6 +58,7 @@ interface PreviewPanelProps {
   isBuilding?: boolean
 onSeoAudit?: (prompt: string, chatId: string, mode?: string) => void 
 templateVideoFile?: string | null
+onExploreTemplates?: () => void
 }
 
 type PreviewDevice = 'mobile' | 'tablet' | 'desktop'
@@ -104,10 +107,11 @@ export function PreviewPanel({
   isBuilding = false,
   onSeoAudit,
   templateVideoFile,
+  onExploreTemplates,
 }: PreviewPanelProps) {
  
   const [device, setDevice] = useState<PreviewDevice>('desktop')
-const [iframeSrc, setIframeSrc] = useState<string | undefined>(currentChat?.demo)
+
 const [videoError, setVideoError] = useState<string | null>(null)
 const [videoGenerating, setVideoGenerating] = useState(false)
 const [generatedVideoUrl, setGeneratedVideoUrl] = useState<string | null>(null)
@@ -117,6 +121,7 @@ const [videoModalOpen, setVideoModalOpen] = useState(false)
   const [githubDialogOpen, setGithubDialogOpen] = useState(false)
   const [testingDialogOpen, setTestingDialogOpen] = useState(false)
 const [videoFullscreen, setVideoFullscreen] = useState(false)
+const [showVideoFallback, setShowVideoFallback] = useState(false)
 const [videoLoading, setVideoLoading] = useState(true)
 const [isPlaying, setIsPlaying] = useState(true)
   // Track if dialog has ever been opened — once opened, keep mounted for fast re-open
@@ -125,13 +130,9 @@ const [isPlaying, setIsPlaying] = useState(true)
   const hasFiles = (currentChat?.files?.length ?? 0) > 0
 
 
-useEffect(() => {
-  if (currentChat?.demo) {
-    setIframeSrc(currentChat.demo)
-  }
-}, [currentChat?.demo])
 
-  const effectiveSrc = iframeSrc || currentChat?.demo
+
+const effectiveSrc = currentChat?.demo
 const showBuildingLoader = isBuilding && !effectiveSrc
 
 
@@ -219,17 +220,15 @@ value={
               </WebPreviewNavigationButton>
 {/* Video Generate Button */}
 <WebPreviewNavigationButton
-  tooltip={templateVideoFile ? 'Play template preview video' : videoGenerating ? 'Generating video...' : 'Generate AI video background (50 credits)'}
-  disabled={videoGenerating || !templateVideoFile}
-onClick={() => {
-  if (templateVideoFile) {
-    setTimeout(() => {
-  setVideoModalOpen(true)
-}, 50)
-  } else {
-    setVideoError('No preview video available for this template.')
-  }
-}}
+  tooltip={templateVideoFile ? 'Play template preview video' : 'Video preview-coming soon'}
+  disabled={videoGenerating}  
+  onClick={() => {
+    if (templateVideoFile) {
+      setTimeout(() => setVideoModalOpen(true), 50)
+    } else {
+      setShowVideoFallback(true) 
+    }
+  }}
 >
   {videoGenerating
     ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -247,11 +246,15 @@ onClick={() => {
               <WebPreviewNavigationButton
                 tooltip="Refresh preview"
                 disabled={!effectiveSrc}
-                onClick={() => {
-                  if (!effectiveSrc) return
-                  setIsReloading(true)
-                  setIframeSrc(`${currentChat!.demo}?reload=${Date.now()}`)
-                }}
+               onClick={() => {
+  if (!effectiveSrc) return
+  setIsReloading(true)
+
+  const iframe = document.querySelector("iframe")
+  if (iframe) {
+    iframe.src = iframe.src
+  }
+}}
               >
                 <RefreshCw className="h-4 w-4" />
               </WebPreviewNavigationButton>
@@ -401,14 +404,22 @@ onClick={() => {
           </button>
         </div>
       </div>
-  <div className="relative">
+  <div className="relative group">
   
   {/*  Loader */}
-  {videoLoading && (
-    <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-20">
-      <Loader2 className="h-6 w-6 animate-spin text-white" />
+ {videoLoading && (
+  <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20 gap-4">
+    <div className="relative w-12 h-12">
+      <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+      <div className="absolute inset-0 rounded-full border-2 border-t-white border-l-transparent border-r-transparent border-b-transparent animate-spin" />
+      <div className="absolute inset-2 rounded-full border border-t-white/50 border-transparent animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
     </div>
-  )}
+    <div className="flex flex-col items-center gap-1 text-center">
+      <p className="text-sm font-medium text-white">Loading Preview</p>
+      <p className="text-xs text-white/50">Preparing your template video…</p>
+    </div>
+  </div>
+)}
 
   {/* Video */}
   <video
@@ -422,7 +433,10 @@ onClick={() => {
     className={cn(
       "w-full object-cover block",
       videoFullscreen ? "flex-1 min-h-0" : "max-h-[70vh]"
+      
     )}
+    onPlay={() => setIsPlaying(true)}
+onPause={() => setIsPlaying(false)}
     style={{ transform: 'translateZ(0)' }}
     id="preview-video"
   />
@@ -442,14 +456,10 @@ onClick={() => {
           setIsPlaying(false)
         }
       }}
-      className="absolute inset-0 flex items-center justify-center z-30"
+      className="absolute inset-0 flex items-center justify-center z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
     >
-      <div className="bg-black/50 backdrop-blur-sm rounded-full p-3 hover:bg-black/70 transition">
-        {isPlaying ? (
-          <span className="text-white text-lg">⏸</span>
-        ) : (
-          <span className="text-white text-lg">▶</span>
-        )}
+      <div className="bg-black/40 backdrop-blur-md rounded-full p-4 border border-white/20 shadow-xl hover:bg-black/60 hover:scale-105 transition-all duration-150">
+     {isPlaying ? <Pause className="h-5 w-5 text-white fill-white" /> : <Play className="h-5 w-5 text-white fill-white ml-0.5" />}
       </div>
     </button>
   )}
@@ -493,7 +503,108 @@ onClick={() => {
     </div>
   </div>
 )}
+{/* ── Video Fallback Modal ── */}
+{showVideoFallback && (
+  <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+    
+    {/* backdrop */}
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      onClick={() => setShowVideoFallback(false)}
+    />
 
+    {/* modal */}
+    <div className="relative z-10 w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/10">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-yellow-500" />
+          <span className="text-xs font-medium text-muted-foreground">
+            Video preview
+          </span>
+        </div>
+        <button
+          onClick={() => setShowVideoFallback(false)}
+          className="text-muted-foreground hover:text-foreground text-sm"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Body */}
+     <div className="p-8 text-center">
+        
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+          <Video className="h-5 w-5 text-muted-foreground" />
+        </div>
+
+        <h3 className="text-sm font-semibold text-foreground mb-2">
+          Custom video generation coming soon
+        </h3>
+
+      <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+  Video previews are available for our curated templates.
+  Custom video generation is coming soon. Explore templates below 🚀
+</p>
+
+        {/* Template suggestions */}
+        <div className="grid grid-cols-2 gap-4 mb-6 text-left">
+{['Landing Page', 'Task Management', 'Dashboard', 'Blog', 'Shop'].map((name, i, arr) => {
+  const isLast = i === arr.length - 1
+
+  return (
+    <div
+      key={name}
+      className={cn(isLast ? "col-span-2 flex justify-center" : "")}
+    >
+      <div className="bg-muted/40 border border-border rounded-xl p-4 cursor-pointer hover:bg-muted transition-all duration-150 w-full max-w-[260px]">
+        
+        <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">
+          Template
+        </div>
+
+  <div className="flex items-center justify-between mt-2">
+  
+  <div className="text-xs font-medium text-foreground">
+    {name}
+  </div>
+
+  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap">
+    Video ready
+  </span>
+
+</div>
+
+      </div>
+    </div>
+  )
+})}
+        </div>
+
+        {/* Buttons */}
+       <div className="flex gap-3 mt-2">
+         <button
+  onClick={() => {
+    setShowVideoFallback(false)
+    onExploreTemplates?.()
+  }}
+  className="flex-1 py-2 text-sm font-medium rounded-lg bg-foreground text-background hover:opacity-90 transition"
+>
+  Explore templates
+</button>
+
+          <button
+            onClick={() => setShowVideoFallback(false)}
+            className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted transition"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 {/* ── Video Ready Modal ── */}
 {generatedVideoUrl && (
   <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -503,7 +614,7 @@ onClick={() => {
       onClick={() => setGeneratedVideoUrl(null)}
     />
     {/* modal */}
-    <div className="relative z-10 w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl p-6">
+    <div className="relative z-10 w-full max-w-2xl mx-4 bg-card border border-border rounded-xl shadow-2xl p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-foreground">
           ✨ AI Video Background Ready
