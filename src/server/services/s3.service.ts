@@ -1,7 +1,7 @@
 // src/server/services/s3.service.ts
-// Stores screenshots in AWS S3
+// Stores screenshots, video-generation images, and TTS audio in AWS S3.
 
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { env } from "@/env";
 
 const AWS_S3_BUCKET    = env.AWS_S3_BUCKET ?? "buildify-screenshots";
@@ -137,4 +137,140 @@ export function urlToSlug(url: string): string {
   } catch {
     return "page";
   }
+}
+
+// ---------------------------------------------------------------------------
+// uploadVideoImage
+//
+// Uploads a user-uploaded image (Buffer) for video generation to S3.
+// Extension is preserved from the original filename — not hardcoded.
+//
+// Key format: video-images/{sessionId}/{filename}
+//   e.g.      video-images/abc123def456/0.webp
+//
+// Returns the public HTTPS URL, or throws on failure.
+// ---------------------------------------------------------------------------
+
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  ".jpg":  "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png":  "image/png",
+  ".webp": "image/webp",
+  ".gif":  "image/gif",
+  ".avif": "image/avif",
+};
+
+export async function uploadVideoImage(params: {
+  buffer:    Buffer;
+  sessionId: string;
+  filename:  string; // e.g. "0.webp" — extension drives Content-Type
+}): Promise<string> {
+  const { buffer, sessionId, filename } = params;
+  const client = getClient();
+
+  const ext         = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  const contentType = IMAGE_CONTENT_TYPES[ext] ?? "application/octet-stream";
+  const key         = `video-images/${sessionId}/${filename}`;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket:      AWS_S3_BUCKET,
+      Key:         key,
+      Body:        buffer,
+      ContentType: contentType,
+      // Images are tied to a session; a long TTL is fine since keys are unique per session.
+      CacheControl: "public, max-age=86400",
+    }),
+  );
+
+  const url = `https://${AWS_S3_BUCKET}.s3.${AWS_S3_REGION}.amazonaws.com/${key}`;
+  console.log(`[S3] ✓ Video image uploaded: ${url}`);
+  return url;
+}
+
+// ---------------------------------------------------------------------------
+// deleteVideoImageSession
+//
+// Deletes all images for a given sessionId from S3.
+// Mirror of the local cleanupSessionImages() — call after video generation
+// completes or on session expiry. Failures are logged but not thrown.
+//
+// Lists objects under video-images/{sessionId}/ then bulk-deletes them.
+// ---------------------------------------------------------------------------
+
+export async function deleteVideoImageSession(sessionId: string): Promise<void> {
+  try {
+    const client = getClient();
+    const prefix = `video-images/${sessionId}/`;
+
+    // List all objects under this session prefix
+    const listed = await client.send(
+      new ListObjectsV2Command({ Bucket: AWS_S3_BUCKET, Prefix: prefix }),
+    );
+
+    const objects = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
+    if (objects.length === 0) return;
+
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: AWS_S3_BUCKET,
+        Delete: { Objects: objects, Quiet: true },
+      }),
+    );
+
+    console.log(`[S3] ✓ Deleted ${objects.length} image(s) for session: ${sessionId}`);
+  } catch (err) {
+    console.error(`[S3] deleteVideoImageSession error for ${sessionId}:`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// uploadVideoAudio
+//
+// Uploads a TTS audio file (Buffer) for a single video scene to S3.
+// Extension is preserved from the filename — not hardcoded to .wav.
+//
+// Key format: video-audio/{generationId}/{filename}
+//   e.g.      video-audio/gen_1712345678901/scene-2.wav
+//
+// Returns the public HTTPS URL, or throws on failure.
+// The URL includes a cache-bust query string so Remotion always fetches
+// the latest audio when a scene is regenerated.
+// ---------------------------------------------------------------------------
+
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+  ".wav":  "audio/wav",
+  ".mp3":  "audio/mpeg",
+  ".ogg":  "audio/ogg",
+  ".aac":  "audio/aac",
+  ".webm": "audio/webm",
+  ".flac": "audio/flac",
+};
+
+export async function uploadVideoAudio(params: {
+  buffer:       Buffer;
+  generationId: string; // groups all scenes from one generation run
+  filename:     string; // e.g. "scene-0.wav" — extension drives Content-Type
+}): Promise<string> {
+  const { buffer, generationId, filename } = params;
+  const client = getClient();
+
+  const ext         = filename.slice(filename.lastIndexOf(".")).toLowerCase();
+  const contentType = AUDIO_CONTENT_TYPES[ext] ?? "application/octet-stream";
+  const key         = `video-audio/${generationId}/${filename}`;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket:      AWS_S3_BUCKET,
+      Key:         key,
+      Body:        buffer,
+      ContentType: contentType,
+      // No long-term caching — audio may be regenerated for the same scene
+      CacheControl: "public, max-age=3600",
+    }),
+  );
+
+  const url = `https://${AWS_S3_BUCKET}.s3.${AWS_S3_REGION}.amazonaws.com/${key}`;
+  console.log(`[S3] ✓ Video audio uploaded: ${url}`);
+  return url;
 }

@@ -1,21 +1,19 @@
 // server/controllers/video-upload.controller.ts
 //
 // Handles user image uploads for video generation.
-// Images are stored in public/user-images/[sessionId]/ temporarily.
+// Images are stored in S3 under video-images/[sessionId]/.
 // Max MAX_IMAGES_PER_SESSION images per upload batch.
 //
-// FUTURE: Swap `saveImageLocally` with an S3/R2 upload function — nothing else changes.
+// FUTURE: To change the bucket or region, update s3.service.ts — nothing here changes.
 
 import { getSession } from "@/server/better-auth/server";
-import { writeFile, mkdir, unlink, readdir } from "fs/promises";
-import { existsSync } from "fs";
-import path from "path";
 import crypto from "crypto";
+import path from "path";
+import { uploadVideoImage, deleteVideoImageSession } from "@/server/services/s3.service";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 export const MAX_IMAGES_PER_SESSION = 5;
-const UPLOAD_DIR = path.join(process.cwd(), "public", "user-images");
 const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB per file
 
@@ -23,7 +21,7 @@ const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB per file
 
 export interface UploadedUserImage {
   index: number;
-  /** Public URL accessible by Remotion, e.g. /user-images/[sessionId]/0.jpg */
+  /** Public S3 URL accessible by Remotion, e.g. https://bucket.s3.region.amazonaws.com/video-images/[sessionId]/0.jpg */
   url: string;
   description: string;
   filename: string;
@@ -47,45 +45,14 @@ function sanitizeFilename(original: string, index: number): string {
   return `${index}${safeExt}`;
 }
 
-async function ensureDir(dirPath: string): Promise<void> {
-  if (!existsSync(dirPath)) {
-    await mkdir(dirPath, { recursive: true });
-  }
-}
-
-// ── Local storage (swap this for S3/R2 later) ─────────────────────────────────
-
-async function saveImageLocally(
-  buffer: Buffer,
-  sessionDir: string,
-  filename: string,
-): Promise<void> {
-  await ensureDir(sessionDir);
-  await writeFile(path.join(sessionDir, filename), buffer);
-}
-
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 
 /**
- * Deletes all images for a given sessionId.
+ * Deletes all images for a given sessionId from S3.
  * Call this after video generation completes (or on session expiry).
  */
 export async function cleanupSessionImages(sessionId: string): Promise<void> {
-  const sessionDir = path.join(UPLOAD_DIR, sessionId);
-  if (!existsSync(sessionDir)) return;
-
-  try {
-    const files = await readdir(sessionDir);
-    await Promise.all(
-      files.map((f) => unlink(path.join(sessionDir, f)).catch(() => {})),
-    );
-    // Remove the now-empty dir
-    const { rmdir } = await import("fs/promises");
-    await rmdir(sessionDir).catch(() => {});
-    console.log(`[UploadController] Cleaned up session: ${sessionId}`);
-  } catch (err) {
-    console.error(`[UploadController] Cleanup error for ${sessionId}:`, err);
-  }
+  await deleteVideoImageSession(sessionId);
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -141,26 +108,24 @@ export async function uploadUserImagesHandler({
     }
 
     const sessionId = generateSessionId();
-    const sessionDir = path.join(UPLOAD_DIR, sessionId);
-
     const uploadedImages: UploadedUserImage[] = [];
 
     for (const [i, file] of images.entries()) {
       const filename = sanitizeFilename(file.name, i);
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      await saveImageLocally(buffer, sessionDir, filename);
+      const s3Url = await uploadVideoImage({ buffer, sessionId, filename });
 
       uploadedImages.push({
         index: i,
-        url: `/user-images/${sessionId}/${filename}`,
+        url: s3Url,
         description: descriptions[i]?.trim() || `Image ${i + 1}`,
         filename,
       });
     }
 
     console.log(
-      `[UploadController] Saved ${uploadedImages.length} images for session ${sessionId}`,
+      `[UploadController] Uploaded ${uploadedImages.length} images to S3 for session ${sessionId}`,
     );
 
     return { images: uploadedImages, sessionId };

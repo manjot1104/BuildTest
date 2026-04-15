@@ -513,10 +513,12 @@ async function enrichScenePlan(
     ttsVolume?: number;
     musicVolume?: number;
     userImages?: UserImage[];
+    // Stable ID for this generation run — all TTS files share this S3 prefix.
+    generationId: string;
   },
   previousVideoJson?: VideoJson,
 ): Promise<VideoJson> {
-  const { userImages = [], ...audioOptions } = options;
+  const { userImages = [], generationId, ...audioOptions } = options;
 
   // ── 2a. Music (sync lookup — no network call, zero latency) ──────────────
   if (audioOptions.useMusic) {
@@ -556,7 +558,7 @@ async function enrichScenePlan(
       ? Promise.allSettled(
           scenesNeedingTTS.map((i) => {
             const scene = videoJson.scenes[i]!;
-            return generateSmallestAITTS(scene.text, i, audioOptions.voiceId).then(
+            return generateSmallestAITTS(scene.text, i, audioOptions.voiceId, generationId).then(
               result => ({ sceneIndex: i, ...result })
             );
           }),
@@ -634,6 +636,9 @@ export async function generateVideoJson(
     ...audioOptions
   } = options;
 
+  // Stable ID for this generation run — groups all TTS uploads under one S3 prefix.
+  const generationId = `gen_${Date.now()}`;
+
   try {
     // ── Stage 1: scene plan ───────────────────────────────────────────────────
     const scenePlan = await generateScenePlan(
@@ -650,6 +655,7 @@ export async function generateVideoJson(
       {
         ...audioOptions,
         userImages,
+        generationId,
       },
       previousVideoJson, // Pass for TTS optimization
     );

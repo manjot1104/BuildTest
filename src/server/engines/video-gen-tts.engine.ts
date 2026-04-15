@@ -1,7 +1,6 @@
 // server/engines/video-gen-tts.engine.ts
 import * as mm from "music-metadata";
-import fs from "node:fs/promises";
-import path from "node:path";
+import { uploadVideoAudio } from "@/server/services/s3.service";
 
 export interface TTSResult {
   url: string;
@@ -11,22 +10,15 @@ export interface TTSResult {
 export async function generateSmallestAITTS(
   text: string,
   index: number,
-  voiceId: string = "aarush"
+  voiceId: string = "aarush",
+  // Groups all scenes from one generation run under a single S3 prefix.
+  // Callers (video-gen.service.ts) should pass a stable ID per generation
+  // (e.g. `gen_${Date.now()}`). Defaults to a timestamp so the function
+  // remains callable without changes to existing call sites.
+  generationId: string = `gen_${Date.now()}`,
 ): Promise<TTSResult> {
   const SMALLEST_API_KEY = process.env.SMALLEST_API_KEY;
   if (!SMALLEST_API_KEY) throw new Error("SMALLEST_API_KEY not set");
-
-  const audioDir = path.join(process.cwd(), "public", "audio");
-
-  if (index === 0) {
-    try {
-      await fs.rm(audioDir, { recursive: true, force: true });
-      await fs.mkdir(audioDir, { recursive: true });
-      console.log("[TTS Engine] Fresh start: Audio directory cleared.");
-    } catch (err) {
-      console.error("[TTS Engine] Cleanup failed:", err);
-    }
-  }
 
   const SAMPLE_RATE = 24000;
 
@@ -66,19 +58,26 @@ export async function generateSmallestAITTS(
 
   // Save as .wav (not .mp3 — the API returns WAV)
   const fileName = `scene-${index}.wav`;
-  const filePath = path.join(audioDir, fileName);
-  await fs.writeFile(filePath, bytes);
 
-  // Primary: let music-metadata read the WAV header
+  // Upload to S3; key: video-audio/{generationId}/{fileName}
+  const s3Url = await uploadVideoAudio({
+    buffer: bytes,
+    generationId,
+    filename: fileName,
+  });
+
+  // Derive duration from WAV header via music-metadata.
+  // We parse the in-memory buffer directly — no temp file needed now that
+  // we're no longer writing to disk.
   let durationInSeconds = 0;
   try {
-    const metadata = await mm.parseFile(filePath);
+    const metadata = await mm.parseBuffer(bytes, { mimeType: "audio/wav" });
     durationInSeconds = metadata.format.duration ?? 0;
   } catch (err) {
     console.warn(`[TTS Engine] music-metadata parse failed for scene ${index}:`, err);
   }
 
-  // Fallback: compute from PCM byte count if metadata failed or returned 0
+  // Fallback: compute from PCM byte count if metadata failed or returned 0.
   // WAV header is 44 bytes; remaining bytes are 16-bit mono PCM → bytes / 2 / sampleRate
   if (durationInSeconds <= 0) {
     const pcmBytes = Math.max(0, bytes.byteLength - 44);
@@ -89,11 +88,13 @@ export async function generateSmallestAITTS(
   }
 
   console.log(
-    `[TTS Engine] scene ${index}: ${fileName} saved, duration=${durationInSeconds.toFixed(2)}s`
+    `[TTS Engine] scene ${index}: ${fileName} uploaded to S3, duration=${durationInSeconds.toFixed(2)}s`
   );
 
+  // Append cache-bust so Remotion always fetches the latest audio when a
+  // scene is regenerated within the same generation run.
   return {
-    url: `/audio/${fileName}?t=${Date.now()}`,
+    url: `${s3Url}?t=${Date.now()}`,
     durationInSeconds,
   };
 }
