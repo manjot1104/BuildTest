@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -52,6 +53,12 @@ import {
   formatLayoutContextForScoring,
   TEXT_LAYOUT_CLIENT_OPTIONS,
 } from '@/lib/text-layout/layout-stats'
+import {
+  buildPersonalizedStudioDraft,
+  writeBuildifyStudioLegacyDraft,
+  type PortfolioStudioResumeInput,
+} from '@/lib/ai-resume/portfolio-studio-bridge'
+import { writeResumeStudioBootstrap } from '@/components/buildify-studio/resume-studio-bootstrap'
 
 function parsedExtractedFieldToString(
   v: string | string[] | null | undefined,
@@ -164,7 +171,37 @@ type ResumeFormData = z.infer<typeof resumeSchema>
 
 type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling' | 'score'
 
+const PORTFOLIO_STUDIO_EXAMPLES = [
+  {
+    id: 'developer-portfolio',
+    studioTemplateId: 'developer-dark' as const,
+    title: 'Developer Portfolio',
+    description: 'Use shared resume to create a clean dev portfolio in Studio.',
+    prompt:
+      'Convert this shared resume into a single-page developer portfolio in Buildify Studio. Keep a dark modern UI, add sections for About, Skills, Experience, Featured Projects, and Contact. Highlight measurable impact from experience bullets and make CTA buttons clear.',
+  },
+  {
+    id: 'designer-portfolio',
+    studioTemplateId: 'designer-clean' as const,
+    title: 'Designer Portfolio',
+    description: 'Turn resume highlights into a visual design portfolio.',
+    prompt:
+      'Create a visual portfolio website from this resume for a product/designer profile. Prioritize hero intro, case-study style project cards, tools/skills chips, and social links. Keep typography elegant and spacing premium with a clean light theme.',
+  },
+  {
+    id: 'freelancer-landing',
+    studioTemplateId: 'freelancer-clean' as const,
+    title: 'Freelancer Landing',
+    description: 'Generate a service-focused portfolio + inquiry form.',
+    prompt:
+      'Build a freelancer portfolio from this resume with sections: Hero, Services, Selected Work, Testimonials, and Contact Form. Add trust signals from achievements/certifications and include a clear "Book a Call" call-to-action above the fold.',
+  },
+] as const
+
 export default function AIResumeBuilderPage() {
+  const router = useRouter()
+  /** `portfolio`: entered via Portfolio card — show Buildify Studio examples only in this path. */
+  const [resumeBuilderMode, setResumeBuilderMode] = useState<'resume' | 'portfolio'>('resume')
   const [currentStep, setCurrentStep] = useState<Step>('format-selection')
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -226,6 +263,48 @@ export default function AIResumeBuilderPage() {
   })
 
   const additionalInstructionsSectionRef = useRef<HTMLDivElement | null>(null)
+
+  const applyPortfolioStudioExample = useCallback(
+    (examplePrompt: string, options?: { scroll?: boolean; silent?: boolean }) => {
+      const current = form.getValues('additionalInstructions')?.trim() ?? ''
+      const nextValue = current ? `${current}\n\n${examplePrompt}` : examplePrompt
+      if (nextValue.length > 100_000) {
+        toast.error(
+          'Additional instructions would exceed the limit. Remove some text and try again.',
+        )
+        return false
+      }
+      form.setValue('additionalInstructions', nextValue, { shouldDirty: true })
+      if (!options?.silent) {
+        toast.success('Portfolio Studio example added to instructions')
+      }
+      if (options?.scroll !== false) {
+        additionalInstructionsSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      }
+      return true
+    },
+    [form],
+  )
+
+  const openPortfolioStudioFromExample = useCallback(
+    (example: (typeof PORTFOLIO_STUDIO_EXAMPLES)[number]) => {
+      if (!applyPortfolioStudioExample(example.prompt, { scroll: false, silent: true })) return
+      try {
+        const data = form.getValues() as PortfolioStudioResumeInput
+        writeResumeStudioBootstrap({ templateId: example.studioTemplateId, resume: data })
+        const draft = buildPersonalizedStudioDraft(example.studioTemplateId, data)
+        writeBuildifyStudioLegacyDraft(draft.elements, draft.background)
+        toast.success('Opening Buildify Studio with your portfolio draft…')
+        router.push('/buildify-studio/new')
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Could not prepare Buildify Studio draft.')
+      }
+    },
+    [applyPortfolioStudioExample, form, router],
+  )
 
   const navigateJobFitToGenerate = useCallback(() => {
     additionalInstructionsSectionRef.current?.scrollIntoView({
@@ -667,6 +746,7 @@ export default function AIResumeBuilderPage() {
 
   const handleReset = () => {
     setCurrentStep('format-selection')
+    setResumeBuilderMode('resume')
     setSelectedTemplate(null)
     setLatexCode('')
     setEditedLatex('')
@@ -927,6 +1007,7 @@ export default function AIResumeBuilderPage() {
   }
 
   const handleFormatSelect = (selectedType: 'latex' | 'html') => {
+    setResumeBuilderMode('resume')
     setTemplateType(selectedType)
     form.setValue('templateType', selectedType)
     
@@ -934,11 +1015,26 @@ export default function AIResumeBuilderPage() {
     setCurrentStep('template-browser')
   }
 
+  const handlePortfolioEntry = () => {
+    setResumeBuilderMode('portfolio')
+    setTemplateType('html')
+    form.setValue('templateType', 'html')
+    setSelectedTemplate(null)
+    setCurrentStep('form')
+  }
+
   // Show format selection first
   if (currentStep === 'format-selection') {
     return (
       <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-        <TemplateSelection onSelect={handleFormatSelect} onScoreResume={() => setCurrentStep('score')} />
+        <TemplateSelection
+          onSelect={handleFormatSelect}
+          onScoreResume={() => {
+            setResumeBuilderMode('resume')
+            setCurrentStep('score')
+          }}
+          onPortfolio={handlePortfolioEntry}
+        />
       </div>
     )
   }
@@ -1040,7 +1136,14 @@ export default function AIResumeBuilderPage() {
           <div className="mb-6 flex flex-col gap-4">
             <div className="flex items-start gap-3 sm:gap-4">
               <button
-                onClick={() => { setCurrentStep('format-selection'); setScoreData(null); setShowScore(false); setScoreInput(''); setScoreFile(null) }}
+                onClick={() => {
+                  setResumeBuilderMode('resume')
+                  setCurrentStep('format-selection')
+                  setScoreData(null)
+                  setShowScore(false)
+                  setScoreInput('')
+                  setScoreFile(null)
+                }}
                 className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <ArrowLeft className="size-4" />
@@ -1536,7 +1639,9 @@ export default function AIResumeBuilderPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">Build Your Resume</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground sm:text-base">
-            Fill in your details and AI will craft a professional resume you can edit and download as PDF.
+            {resumeBuilderMode === 'portfolio'
+              ? 'Fill in your details, then use the Portfolio Studio examples below to open Buildify Studio with your content. Resume output uses HTML → PDF.'
+              : 'Fill in your details and AI will craft a professional resume you can edit and download as PDF.'}
           </p>
         </div>
       </motion.div>
@@ -1718,6 +1823,7 @@ export default function AIResumeBuilderPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
+                      setResumeBuilderMode('resume')
                       if (templateType === 'html') {
                         setCurrentStep('template-browser')
                       } else {
@@ -1755,6 +1861,7 @@ export default function AIResumeBuilderPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    setResumeBuilderMode('resume')
                     if (templateType === 'html' && selectedTemplate) {
                       setCurrentStep('template-browser')
                     } else {
@@ -2237,6 +2344,52 @@ export default function AIResumeBuilderPage() {
               />
             </div>
           </motion.div>
+
+          {resumeBuilderMode === 'portfolio' && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.37, ease: [0.25, 0.1, 0.25, 1] }}
+              className="overflow-hidden rounded-xl border border-border/60 bg-card"
+            >
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <FolderKanban className="size-4 text-violet-500" />
+                <span className="text-sm font-medium">Portfolio Studio Examples</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Working examples
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-7 gap-1.5 text-xs"
+                  onClick={() => router.push('/buildify-studio/new')}
+                >
+                  Open Studio
+                </Button>
+              </div>
+              <div className="space-y-3 p-4">
+                <p className="text-xs text-muted-foreground">
+                  Pick an example to quickly generate a portfolio from a person&apos;s shared resume, then refine in Buildify Studio.
+                </p>
+                <div className="grid gap-2 md:grid-cols-3">
+                  {PORTFOLIO_STUDIO_EXAMPLES.map((example) => (
+                    <button
+                      key={example.id}
+                      type="button"
+                      onClick={() => openPortfolioStudioFromExample(example)}
+                      className="rounded-lg border border-border/60 bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40"
+                    >
+                      <p className="text-xs font-medium text-foreground">{example.title}</p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                        {example.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           <ResumeLayoutInsights formValues={layoutPreviewForm} />
 
