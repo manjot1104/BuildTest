@@ -21,6 +21,9 @@ import {
   appendPromptAndUpdateVideo,
   getVideoChatById,
 } from "@/server/db/queries";
+import {
+  deleteVideoImageSession,
+} from "@/server/services/s3.service";
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
@@ -71,12 +74,12 @@ export async function generateVideoHandler({
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
 
-    const { 
-      prompt, 
-      duration = 15, 
-      userImages = [], 
+    const {
+      prompt,
+      duration = 15,
+      userImages = [],
       imageSessionId,
-      chatId: incomingChatId 
+      chatId: incomingChatId,
     } = body;
     const userId = session.user.id;
 
@@ -169,17 +172,17 @@ export async function generateVideoHandler({
       // Client sends FULL array on follow-up, but we need to detect what changed
       const mergedImages: UserImage[] = [];
       const newImageIndices = new Set(userImages.map(img => img.index));
-      
+
       // Keep previous images that weren't replaced
       for (const prevImg of previousUserImages) {
         if (!newImageIndices.has(prevImg.index)) {
           mergedImages.push(prevImg);
         }
       }
-      
+
       // Add new/replacement images
       mergedImages.push(...userImages);
-      
+
       // Sort by index and validate count
       mergedImages.sort((a, b) => a.index - b.index);
       if (mergedImages.length > 5) {
@@ -203,7 +206,7 @@ export async function generateVideoHandler({
     }
 
     // ── 2. Determine what changed to optimize regeneration ────────────────────
-    
+
     const optionsChanged = !!(incomingChatId && previousOptions && (
       options.useTTS !== previousOptions.useTTS ||
       options.voiceId !== previousOptions.voiceId ||
@@ -213,7 +216,7 @@ export async function generateVideoHandler({
 
     const imagesChanged = !!(incomingChatId && (
       userImages.length !== (previousUserImages?.length ?? 0) ||
-      userImages.some((img, i) => 
+      userImages.some((img, i) =>
         img.url !== previousUserImages?.[i]?.url ||
         img.description !== previousUserImages?.[i]?.description
       )
@@ -251,11 +254,16 @@ export async function generateVideoHandler({
       };
     }
 
-    // ── 4. Persist result ─────────────────────────────────────────────────────
+    // ── 4. Persist result and collect previous S3 IDs for cleanup ────────────
+    // Cleanup runs AFTER the DB write succeeds so we never lose the live data
+    // even if cleanup fails (S3 deletes are non-fatal).
+
+    let prevImageSessionId: string | null = null;
+    let prevGenerationId: string | null = null;
 
     if (incomingChatId) {
       // Follow-up: append to prompt log + replace video_json + update options/images
-      await appendPromptAndUpdateVideo({
+      ({ prevImageSessionId} = await appendPromptAndUpdateVideo({
         chatId,
         userId,
         prompt: prompt.trim(),
@@ -263,20 +271,40 @@ export async function generateVideoHandler({
         options,
         userImages: body.userImages?.length ? body.userImages as UploadedUserImage[] : undefined,
         imageSessionId,
-      });
+      }));
     } else {
       // First prompt: title + prompt log already set at creation; just save result
-      await updateVideoChatAfterGeneration({ 
-        chatId, 
-        userId, 
+      ({ prevImageSessionId, } = await updateVideoChatAfterGeneration({
+        chatId,
+        userId,
         videoJson: result.videoJson,
         options,
         userImages: body.userImages?.length ? body.userImages as UploadedUserImage[] : undefined,
         imageSessionId,
-      });
+      }));
     }
 
-    // ── 5. Return ─────────────────────────────────────────────────────────────
+    // ── 5. Clean up old S3 files (non-fatal, fire-and-forget) ─────────────────
+    // Only delete the old image session if a new one was uploaded this request.
+    // (If the user didn't upload new images, imageSessionId is undefined and
+    // we keep the existing session untouched.)
+    if (imageSessionId && prevImageSessionId && prevImageSessionId !== imageSessionId) {
+      deleteVideoImageSession(prevImageSessionId).catch((err) =>
+        console.error(`[VideoController] Failed to clean up old image session ${prevImageSessionId}:`, err),
+      );
+    }
+
+    // Audio cleanup on follow-up is intentionally skipped here.
+    // TTS now uses chatId as the S3 prefix (video-audio/{chatId}/scene-N.wav),
+    // so changed scenes overwrite their file in-place and unchanged scenes are
+    // never re-uploaded. There are no orphaned files to delete between generations.
+    // Full cleanup (all scenes) still happens on chat delete via deleteVideoChatHandler.
+    //
+    // The prevGenerationId value is kept in the DB for observability but is no
+    // longer used for mid-session cleanup.
+    void prevGenerationId; // suppress unused-variable lint warning
+
+    // ── 6. Return ─────────────────────────────────────────────────────────────
 
     const fps = result.videoJson.fps || 30;
     const totalFrames = result.videoJson.duration;

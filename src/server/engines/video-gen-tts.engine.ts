@@ -11,11 +11,10 @@ export async function generateSmallestAITTS(
   text: string,
   index: number,
   voiceId: string = "aarush",
-  // Groups all scenes from one generation run under a single S3 prefix.
-  // Callers (video-gen.service.ts) should pass a stable ID per generation
-  // (e.g. `gen_${Date.now()}`). Defaults to a timestamp so the function
-  // remains callable without changes to existing call sites.
-  generationId: string = `gen_${Date.now()}`,
+  // The chatId is used as the S3 directory prefix so scene-N.wav files are
+  // overwritten in-place on follow-up generations instead of accumulating
+  // under new prefixes. Falls back to a timestamp only in tests.
+  chatId: string = `gen_${Date.now()}`,
 ): Promise<TTSResult> {
   const SMALLEST_API_KEY = process.env.SMALLEST_API_KEY;
   if (!SMALLEST_API_KEY) throw new Error("SMALLEST_API_KEY not set");
@@ -59,10 +58,12 @@ export async function generateSmallestAITTS(
   // Save as .wav (not .mp3 — the API returns WAV)
   const fileName = `scene-${index}.wav`;
 
-  // Upload to S3; key: video-audio/{generationId}/{fileName}
+  // Upload to S3; key: video-audio/{chatId}/{fileName}
+  // scene-N.wav is overwritten in-place on follow-up generations —
+  // no orphaned files accumulate under old prefixes.
   const s3Url = await uploadVideoAudio({
     buffer: bytes,
-    generationId,
+    generationId: chatId, // s3.service.ts field name unchanged
     filename: fileName,
   });
 

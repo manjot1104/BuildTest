@@ -1187,8 +1187,8 @@ export const video_chats = createTable(
     video_json: d.text("video_json").notNull(),          // latest VideoJson as JSON string
     current_options: d.jsonb("current_options"),         // VideoOptions: { useTTS, useMusic, voiceId, musicGenre, ttsVolume, musicVolume }
     current_user_images: d.jsonb("current_user_images"), // UserImage[]: replaceable at any time (max 5)
-    image_session_id: d.text("image_session_id"),        // tracks which upload session owns the current images (for cleanup)
- 
+    image_session_id: d.text("image_session_id"),        // tracks which upload session owns the current images (for S3 cleanup)
+    
     // ── Prompt history (append-only log) ──────────────────────────────────────
     // Shape: { prompt: string, sentAt: string }[]
     // Never deleted — gives full history of how the video evolved.

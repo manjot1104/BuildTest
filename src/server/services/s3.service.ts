@@ -274,3 +274,38 @@ export async function uploadVideoAudio(params: {
   console.log(`[S3] ✓ Video audio uploaded: ${url}`);
   return url;
 }
+// ---------------------------------------------------------------------------
+// deleteVideoAudioGeneration
+//
+// Deletes all TTS audio files for a given generationId from S3.
+// Mirror of deleteVideoImageSession — call after a follow-up generation
+// replaces the current_generation_id, or when a chat is deleted.
+// Failures are logged but not thrown (non-fatal, same pattern as images).
+//
+// Lists objects under video-audio/{generationId}/ then bulk-deletes them.
+// ---------------------------------------------------------------------------
+
+export async function deleteVideoAudioGeneration(generationId: string): Promise<void> {
+  try {
+    const client = getClient();
+    const prefix = `video-audio/${generationId}/`;
+
+    const listed = await client.send(
+      new ListObjectsV2Command({ Bucket: AWS_S3_BUCKET, Prefix: prefix }),
+    );
+
+    const objects = listed.Contents?.map((o) => ({ Key: o.Key! })) ?? [];
+    if (objects.length === 0) return;
+
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: AWS_S3_BUCKET,
+        Delete: { Objects: objects, Quiet: true },
+      }),
+    );
+
+    console.log(`[S3] ✓ Deleted ${objects.length} audio file(s) for generation: ${generationId}`);
+  } catch (err) {
+    console.error(`[S3] deleteVideoAudioGeneration error for ${generationId}:`, err);
+  }
+}

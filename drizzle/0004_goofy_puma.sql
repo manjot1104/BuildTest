@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_video_chats" ADD COLUMN "current_generation_id" text;

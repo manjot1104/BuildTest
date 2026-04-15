@@ -9,6 +9,10 @@ import {
   getVideoChatsByUserId,
   deleteVideoChat,
 } from '@/server/db/queries'
+import {
+  deleteVideoAudioGeneration,
+  deleteVideoImageSession,
+} from '@/server/services/s3.service'
 import type { VideoJson } from '@/remotion-src/types'
 import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
 
@@ -91,6 +95,22 @@ export async function deleteVideoChatHandler({
   const session = await getSession()
   if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
 
-  await deleteVideoChat({ chatId: params.chatId, userId: session.user.id })
+  const { imageSessionId } = await deleteVideoChat({
+    chatId: params.chatId,
+    userId: session.user.id,
+  })
+
+  // Fire-and-forget — deletion failure should not fail the API response.
+  if (imageSessionId) {
+    deleteVideoImageSession(imageSessionId).catch((err) =>
+      console.error(`[VideoChatController] Failed to clean up image session ${imageSessionId}:`, err),
+    )
+  }
+
+  // TTS audio is stored under video-audio/{chatId}/ — clean up using the chatId directly.
+  deleteVideoAudioGeneration(params.chatId).catch((err) =>
+    console.error(`[VideoChatController] Failed to clean up TTS audio for chat ${params.chatId}:`, err),
+  )
+
   return { success: true }
 }

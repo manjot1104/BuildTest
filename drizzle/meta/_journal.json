@@ -29,6 +29,20 @@
       "when": 1776155528041,
       "tag": "0003_unusual_strong_guy",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776237290947,
+      "tag": "0004_goofy_puma",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776240932388,
+      "tag": "0005_large_rachel_grey",
+      "breakpoints": true
     }
   ]
 }

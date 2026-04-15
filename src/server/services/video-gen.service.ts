@@ -112,6 +112,13 @@ export type GenerateVideoOptions = {
    * Used to optimize image resolution — if false, can reuse previous URLs.
    */
   imagesChanged?: boolean;
+  /**
+   * The chatId used as the S3 prefix for all TTS uploads (video-audio/{chatId}/scene-N.wav).
+   * Changed scenes overwrite their file in-place; unchanged scenes are untouched.
+   * Falls back to a timestamp prefix when omitted (should not happen in normal flow
+   * since chatId is created before generation starts).
+   */
+  chatId?: string;
 };
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -138,9 +145,9 @@ function stripVideoJsonForLLM(videoJson: VideoJson): string {
         type: scene.background.type,
         // Keep only the essential background properties
         ...(scene.background.type === 'color' && { value: scene.background.value }),
-        ...(scene.background.type === 'gradient' && { 
-          from: scene.background.from, 
-          to: scene.background.to 
+        ...(scene.background.type === 'gradient' && {
+          from: scene.background.from,
+          to: scene.background.to
         }),
         ...(scene.background.type === 'image' && { url: scene.background.url }),
       },
@@ -513,12 +520,11 @@ async function enrichScenePlan(
     ttsVolume?: number;
     musicVolume?: number;
     userImages?: UserImage[];
-    // Stable ID for this generation run — all TTS files share this S3 prefix.
-    generationId: string;
+    chatId: string;
   },
   previousVideoJson?: VideoJson,
 ): Promise<VideoJson> {
-  const { userImages = [], generationId, ...audioOptions } = options;
+  const { userImages = [], chatId, ...audioOptions } = options;
 
   // ── 2a. Music (sync lookup — no network call, zero latency) ──────────────
   if (audioOptions.useMusic) {
@@ -558,7 +564,7 @@ async function enrichScenePlan(
       ? Promise.allSettled(
           scenesNeedingTTS.map((i) => {
             const scene = videoJson.scenes[i]!;
-            return generateSmallestAITTS(scene.text, i, audioOptions.voiceId, generationId).then(
+            return generateSmallestAITTS(scene.text, i, audioOptions.voiceId, chatId).then(
               result => ({ sceneIndex: i, ...result })
             );
           }),
@@ -633,11 +639,9 @@ export async function generateVideoJson(
     originalPrompt,
     optionsChanged,
     imagesChanged,
+    chatId = `gen_${Date.now()}`,
     ...audioOptions
   } = options;
-
-  // Stable ID for this generation run — groups all TTS uploads under one S3 prefix.
-  const generationId = `gen_${Date.now()}`;
 
   try {
     // ── Stage 1: scene plan ───────────────────────────────────────────────────
@@ -655,7 +659,7 @@ export async function generateVideoJson(
       {
         ...audioOptions,
         userImages,
-        generationId,
+        chatId,
       },
       previousVideoJson, // Pass for TTS optimization
     );

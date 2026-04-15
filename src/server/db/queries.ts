@@ -1414,6 +1414,9 @@ export async function createVideoChat({
  * Updates the video_json field after generation succeeds.
  * Also updates current_options, current_user_images, and image_session_id.
  * Bumps updated_at so the history list stays sorted correctly.
+ *
+ * Returns the previous image_session_id so the caller can clean up old S3
+ * image files after the DB write succeeds.
  */
 export async function updateVideoChatAfterGeneration({
   chatId,
@@ -1429,7 +1432,14 @@ export async function updateVideoChatAfterGeneration({
   options?: VideoOptions
   userImages?: UploadedUserImage[]
   imageSessionId?: string
-}): Promise<void> {
+}): Promise<{ prevImageSessionId: string | null }> {
+  // Fetch previous image session ID before overwriting so the caller can delete old S3 files.
+  const [prev] = await db
+    .select({ image_session_id: video_chats.image_session_id })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
   await db
     .update(video_chats)
     .set({
@@ -1440,12 +1450,17 @@ export async function updateVideoChatAfterGeneration({
       updated_at: new Date(),
     })
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return { prevImageSessionId: prev?.image_session_id ?? null }
 }
 
 /**
  * Appends a new prompt to the prompts log and replaces video_json.
  * Also updates current_options, current_user_images, and image_session_id.
  * Used for follow-up prompts.
+ *
+ * Returns the previous image_session_id so the caller can clean up old S3
+ * image files after the DB write succeeds.
  */
 export async function appendPromptAndUpdateVideo({
   chatId,
@@ -1463,15 +1478,18 @@ export async function appendPromptAndUpdateVideo({
   options?: VideoOptions
   userImages?: UploadedUserImage[]
   imageSessionId?: string
-}): Promise<void> {
-  // Fetch current prompts first (Drizzle doesn't support jsonb array append directly)
+}): Promise<{ prevImageSessionId: string | null }> {
+  // Fetch current prompts + previous image session ID in one query.
   const [row] = await db
-    .select({ prompts: video_chats.prompts })
+    .select({
+      prompts: video_chats.prompts,
+      image_session_id: video_chats.image_session_id,
+    })
     .from(video_chats)
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
     .limit(1)
 
-  if (!row) return
+  if (!row) return { prevImageSessionId: null }
 
   const existing = (row.prompts as PromptLogEntry[]) ?? []
   const newEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
@@ -1487,6 +1505,12 @@ export async function appendPromptAndUpdateVideo({
       updated_at: new Date(),
     })
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return {
+    // Only meaningful to clean up the old image session if a new one was uploaded.
+    // The controller decides whether to act on this.
+    prevImageSessionId: row.image_session_id ?? null,
+  }
 }
 
 /**
@@ -1540,6 +1564,9 @@ export async function getVideoChatsByUserId({
 
 /**
  * Deletes a video chat (with ownership check).
+ * Returns the image_session_id that was stored so the caller can clean up
+ * the associated S3 image files. TTS audio is stored under video-audio/{chatId}/
+ * and is cleaned up using the chatId directly.
  */
 export async function deleteVideoChat({
   chatId,
@@ -1547,8 +1574,17 @@ export async function deleteVideoChat({
 }: {
   chatId: string
   userId: string
-}): Promise<void> {
+}): Promise<{ imageSessionId: string | null }> {
+  // Fetch image session ID before deleting so the caller can clean up S3.
+  const [row] = await db
+    .select({ image_session_id: video_chats.image_session_id })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
   await db
     .delete(video_chats)
     .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return { imageSessionId: row?.image_session_id ?? null }
 }
