@@ -1,11 +1,10 @@
 'use server'
 
-import { env } from '@/env'
-import { getSession } from '@/server/better-auth/server'
-import { deductCredits, addAdditionalCredits } from '@/server/services/credits.service'
 
-const REPLICATE_BASE = 'https://api.replicate.com/v1'
-const VIDEO_CREDIT_COST = 50
+import { getSession } from '@/server/better-auth/server'
+
+
+
 
 export async function generateVideoHandler(request: Request) {
   const session = await getSession()

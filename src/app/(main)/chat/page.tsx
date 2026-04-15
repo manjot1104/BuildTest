@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useRef, useCallback, Suspense} from 'react'
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { SeoAuditResults } from '@/components/chat/seo-audit-results'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -164,9 +164,9 @@ function ThreeDToolbarBtn({ tooltip, onClick, disabled, children, active }: {
     tooltip: string; onClick?: () => void; disabled?: boolean; children: React.ReactNode; active?: boolean
 }) {
     return (
-       <TooltipProvider delayDuration={200}>
-  <Tooltip>
-    <TooltipTrigger asChild>
+          <TooltipProvider delayDuration={200}>
+            <Tooltip>
+                <TooltipTrigger asChild>
                     <button
                         onClick={onClick}
                         disabled={disabled}
@@ -363,69 +363,70 @@ useEffect(() => {
   </div>
 )}
 
-                {html && !loading && (
-                    <iframe
+              {html && !loading && (
+  <iframe
+    key={sceneId + '-' + html.length}
                         ref={iframeRef}
-                        srcDoc={html}
-//                         srcDoc={(() => {
-//                             // Bootstrap script injected into every generated scene:
-//                             // 1. Sends READY ping to parent so host knows iframe is live
-//                             // 2. Re-registers MOUSEMOVE/SCROLL listeners inside iframe
-//                             //    as a fallback (in case AI forgot or used wrong syntax)
-//                             const bootstrap = `<script>
-// (function() {
-//   // Notify parent that iframe is loaded and ready
-//   window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
+                        srcDoc={(() => {
+                            // Bootstrap script injected into every generated scene:
+                            // 1. Sends READY ping to parent so host knows iframe is live
+                            // 2. Re-registers MOUSEMOVE/SCROLL listeners inside iframe
+                            //    as a fallback (in case AI forgot or used wrong syntax)
+                            const bootstrap = `<script>
+(function() {
+  // Notify parent that iframe is loaded and ready
+  window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
 
-//   // Internal mouse tracker for parallax (fallback if AI used window.onmousemove)
-//   var _nx = 0, _ny = 0;
-//   document.addEventListener('mousemove', function(e) {
-//     _nx = (e.clientX / window.innerWidth)  * 2 - 1;
-//     _ny = -((e.clientY / window.innerHeight) * 2 - 1);
-//     // Dispatch to any listeners that used the normalized form
-//     window._mouseNX = _nx; window._mouseNY = _ny;
-//   });
+  // Internal mouse tracker for parallax (fallback if AI used window.onmousemove)
+  var _nx = 0, _ny = 0;
+  document.addEventListener('mousemove', function(e) {
+    _nx = (e.clientX / window.innerWidth)  * 2 - 1;
+    _ny = -((e.clientY / window.innerHeight) * 2 - 1);
+    // Dispatch to any listeners that used the normalized form
+    window._mouseNX = _nx; window._mouseNY = _ny;
+  });
 
-//   // Relay SCROLL and MOUSEMOVE from parent
-//   window.addEventListener('message', function(e) {
-//     if (!e.data || !e.data.type) return;
-//     if (e.data.type === 'MOUSEMOVE') {
-//       window._mouseNX = e.data.nx;
-//       window._mouseNY = e.data.ny;
-//       // Fire a synthetic mousemove so Three.js listeners inside also fire
-//       var me = new MouseEvent('mousemove', {
-//         clientX: e.data.x * window.innerWidth,
-//         clientY: e.data.y * window.innerHeight,
-//         bubbles: true
-//       });
-//       document.dispatchEvent(me);
-//     }
-//     // SCROLL is handled by AI's own listener; this just ensures it exists
-//   });
-// })();
-// <\/script>`;
-//                             const injected = html.includes('</body>') 
-//                                 ? html.replace('</body>', bootstrap + `<script>
-//                                 document.addEventListener('click', function(e) {
-//                                     var a = e.target.closest('a');
-//                                     if (a) {
-//                                         var href = a.getAttribute('href');
-//                                         if (href && (href === '#' || href === '/' || href.startsWith('#'))) {
-//                                             e.preventDefault();
-//                                             if (href.startsWith('#') && href.length > 1) {
-//                                                 var el = document.querySelector(href);
-//                                                 if (el) el.scrollIntoView({ behavior: 'smooth' });
-//                                             }
-//                                         }
-//                                     }
-//                                 });
-//                             <\/script></body>`)
-//                                 : bootstrap + html;
-//                             return injected;
-//                         })()}
+  // Relay SCROLL and MOUSEMOVE from parent
+  window.addEventListener('message', function(e) {
+    if (!e.data || !e.data.type) return;
+    if (e.data.type === 'MOUSEMOVE') {
+      window._mouseNX = e.data.nx;
+      window._mouseNY = e.data.ny;
+      // Fire a synthetic mousemove so Three.js listeners inside also fire
+      var me = new MouseEvent('mousemove', {
+        clientX: e.data.x * window.innerWidth,
+        clientY: e.data.y * window.innerHeight,
+        bubbles: true
+      });
+      document.dispatchEvent(me);
+    }
+    // SCROLL is handled by AI's own listener; this just ensures it exists
+  });
+})();
+<\/script>`;
+                            const injected = html.includes('</body>') 
+                                ? html.replace('</body>', bootstrap + `<script>
+                                document.addEventListener('click', function(e) {
+                                    var a = e.target.closest('a');
+                                    if (a) {
+                                        var href = a.getAttribute('href');
+                                        if (href && (href === '#' || href === '/' || href.startsWith('#'))) {
+                                            e.preventDefault();
+                                            if (href.startsWith('#') && href.length > 1) {
+                                                var el = document.querySelector(href);
+                                                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                                            }
+                                        }
+                                    }
+                                });
+                            <\/script></body>`)
+                                : bootstrap + html;
+                            return injected;
+                            
+                        })()}
                         className="absolute inset-0 w-full h-full border-none"
-                        sandbox="allow-scripts allow-same-origin"
-                        style={{ pointerEvents: 'auto' }}
+                        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups allow-modals allow-forms"
+                        style={{ pointerEvents: 'auto', willChange: 'transform' }}
                         onLoad={() => {
                             iframeReadyRef.current = true
                             // Re-send current scroll position so scene starts at right depth
@@ -536,8 +537,7 @@ function ThreeDChatHistory({
                     <span className="font-medium text-orange-400">Our systems are currently down</span>
                 </div>
                 <p className="text-muted-foreground leading-relaxed">
-                    3D Builder is temporarily unavailable due to limited resources. Please try again shortly.
-
+                    Our 3D generation service is temporarily unavailable. We'll get back to you shortly.
                 </p>
             </div>
         )
@@ -621,7 +621,7 @@ export default function ChatPage() {
     const [threeDFullscreen, setThreeDFullscreen] = useState(false)
     const [threeDSceneId, setThreeDSceneId] = useState<string>('')
     const lastUserPromptRef = useRef<string>('')
-
+const [selectedTemplateVideo, setSelectedTemplateVideo] = useState<string | null>(null)
     const [envPanelOpen, setEnvPanelOpen] = useState(false)
     const { variables } = useEnvVariables()
     const [attachments, setAttachments] = useState<ImageAttachment[]>([])
@@ -676,7 +676,7 @@ useEffect(() => {
 
     const shouldShowPreview = !!hookCurrentChat?.id && !isStreaming
     useEffect(() => { setIsLoading(hookIsLoading) }, [hookIsLoading])
-const [selectedTemplateVideo, setSelectedTemplateVideo] = useState<string | null>(null)
+
     const autoPromptFiredRef = useRef(false)
     const handleReset = useCallback(() => {
         autoPromptFiredRef.current = false
@@ -685,7 +685,7 @@ const [selectedTemplateVideo, setSelectedTemplateVideo] = useState<string | null
         setIsLoading(false); setIsFullscreen(false); setUrlChatId(null)
         setThreeDHtml(''); setThreeDMessages([]); setThreeDLoading(false); setThreeDFullscreen(false); setThreeDSceneId('')
         lastUserPromptRef.current = ''
-        setSelectedTemplateVideo(null)
+          setSelectedTemplateVideo(null)
         const u = new URL(window.location.href); u.searchParams.delete('chatId')
         window.history.replaceState({}, '', u.pathname)
         clearPromptFromStorage()
@@ -717,20 +717,18 @@ const handleChatIdChange = useCallback((chatId: string | null, mode?: string | n
                     ])
                     lastUserPromptRef.current = data.prompt
                     setThreeDSceneId(chatId)
-                    console.log('HTML BEFORE SET:', threeDHtml)
-console.log('API HTML:', data.demo_html)
                    const hasHtml =
   typeof data.demo_html === 'string' &&
   data.demo_html.trim().length > 20
-console.log(' HTML CHECK', {
+console.log('🧠 HTML CHECK', {
   hasHtml,
   length: data?.demo_html?.length,
   preview: data?.demo_html?.slice(0, 30)
 })
-if (hasHtml && !threeDHtml) {
+if (hasHtml) {
     setThreeDHtml(data.demo_html)
-    setThreeDLoading(false)
-    return
+    setThreeDLoading(false)  
+    return                    
 }
 // No auto-generate , user can click Regenerate manually if needed
                 }
@@ -867,7 +865,10 @@ let output = data?.choices?.[0]?.message?.content || ''
                 if (!output.includes('</html>')) output += '\n</html>'
             }
 
-            setThreeDHtml(output)
+           setThreeDHtml('')   
+setTimeout(() => {
+  setThreeDHtml(output)
+}, 50)
             
             const sceneIdToSave = localSceneId
 try {
@@ -879,13 +880,13 @@ const res = await fetch('/api/chat/ownership', {
   body: JSON.stringify({ 
     chatId: sceneIdToSave, 
     prompt: userMessage,
-   demoUrl: `${window.location.origin}/apps/${sceneIdToSave}`,
+    demoUrl: `threed://${sceneIdToSave}`,
     demo_html: savedHtml
   }),
 })
 
 const result = await res.json()
-
+console.log('💾 SAVE RESPONSE', result)
 const currentUrl = new URL(window.location.href)
 if (currentUrl.searchParams.get('chatId') !== sceneIdToSave) {
     window.history.replaceState({}, '', `/chat?chatId=${sceneIdToSave}&mode=3d`)
@@ -1041,14 +1042,12 @@ const getVideoFromPrompt = (prompt?: string) => {
 
     // ── 2D Suggestions ────────────────────────────────────────────────────────
     const suggestions = [
-        { label: 'Landing Page', text: `Create a modern SaaS landing page.\n\nSections:\n- Hero section with headline, subtext and primary CTA\n- Product screenshot or illustration\n- Features grid (3–6 cards with icons)\n- Pricing section with highlighted recommended plan\n- Testimonials section\n- Conversion-focused footer with links and CTA\n\nDesign Requirements:\n- Clean modern UI\n- Generous whitespace\n- Smooth hover and scroll animations\n- Mobile-first responsive layout`, icon: Layout , videoFile: 'landing-page.mp4' },
+      { label: 'Landing Page', text: `Create a modern SaaS landing page.\n\nSections:\n- Hero section with headline, subtext and primary CTA\n- Product screenshot or illustration\n- Features grid (3–6 cards with icons)\n- Pricing section with highlighted recommended plan\n- Testimonials section\n- Conversion-focused footer with links and CTA\n\nDesign Requirements:\n- Clean modern UI\n- Generous whitespace\n- Smooth hover and scroll animations\n- Mobile-first responsive layout`, icon: Layout , videoFile: 'landing-page.mp4' },
         { label: 'Task Management', text: `Build a task management web application with a Kanban-style interface.\n\nFeatures:\n- Sidebar with projects and filters\n- Columns: Todo, In Progress, Done\n- Draggable task cards between columns\n- Task details with title, description and due date\n- Ability to add, edit and delete tasks\n\nUI Requirements:\n- Clean dashboard layout\n- Card based design\n- Responsive interface`, icon: CheckSquare , videoFile: 'task-management.mp4' },
         { label: 'Dashboard', text: `Create an analytics dashboard.\n\nLayout:\n- Left sidebar navigation\n- Top header with search and profile\n\nMain Content:\n- KPI stats cards (Users, Revenue, Growth)\n- Line chart for trends\n- Bar chart for category performance\n- Table for recent activity\n\nDesign:\n- Dark modern UI\n- Clear visual hierarchy\n- Responsive layout`, icon: BarChart3 , videoFile: 'dashboard.mp4' },
         { label: 'Blog', text: `Create a modern blog platform.\n\nPages:\n- Homepage with article cards\n- Article detail page\n- Author profile page\n\nFeatures:\n- Category and tag filtering\n- Search functionality\n- Reading progress indicator\n- Pagination for posts\n\nDesign:\n- Typography-focused layout\n- Clean reading experience\n- Responsive design`, icon: FileText , videoFile: 'blog.mp4' },
         { label: 'Shop', text: `Create an e-commerce store.\n\nPages:\n- Product listing page\n- Product detail page\n- Shopping cart\n- Checkout page\n\nFeatures:\n- Product cards with image, price and rating\n- Add to cart functionality\n- Product variants and quantity selector\n- Order summary and checkout flow\n\nDesign:\n- Clean product grid\n- Mobile responsive layout\n- High-conversion UI patterns`, icon: ShoppingCart , videoFile: 'shop.mp4' },
     ]
-
- 
 
     // ── BUILDER mode ──────────────────────────────────────────────────────────
     return (
@@ -1107,18 +1106,13 @@ const getVideoFromPrompt = (prompt?: string) => {
   onSeoAudit={handleAutoPrompt}
 />
                                 ) : shouldShowPreview ? (
-                                    <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt}  
+                                                                       <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt}  
                                  templateVideoFile={
   selectedTemplateVideo ??
   getVideoFromPrompt(
     chatHistory?.find(m => m.type === 'user')?.content?.toString()
   )
-}
-onExploreTemplates={() => {  setShowChatInterface(false) }}
-
-                                    
-                                    
-                                    />
+} />
                                 ) : null
                             }
                         />
@@ -1204,7 +1198,7 @@ onExploreTemplates={() => {  setShowChatInterface(false) }}
                                     ? suggestions.map(s => {
                                         const Icon = s.icon
                                         return (
-                                          <button key={s.label} onClick={() => { setMessage(s.text); setSelectedTemplateVideo(s.videoFile ?? null) }} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-muted/60 border border-border/40 hover:border-border/60 text-xs text-muted-foreground hover:text-foreground transition-all duration-200')}>
+                                            <button key={s.label} onClick={() => { setMessage(s.text); setSelectedTemplateVideo(s.videoFile ?? null) }} className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full hover:bg-muted/60 border border-border/40 hover:border-border/60 text-xs text-muted-foreground hover:text-foreground transition-all duration-200')}>
                                                 <Icon className="size-3 shrink-0" />
                                                 {s.label}
                                             </button>
