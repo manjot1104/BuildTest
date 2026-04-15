@@ -2034,7 +2034,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     body: t.Object({
       prompt: t.String(),
       duration: t.Optional(t.Number()),
-      // ── NEW: required for follow-up prompts ──────────────────────────────
+      // ── required for follow-up prompts ──────────────────────────────
       chatId: t.Optional(t.Nullable(t.String())),
       imageSessionId: t.Optional(t.String()),
       // ────────────────────────────────────────────────────────────────────
@@ -2114,7 +2114,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   // DELETE /api/video/chats/:chatId — delete a video chat by id
-  // Called if you add a delete button to the history panel in future.
+  // Called if we add a delete button to the history panel in future.
   .delete(
     '/video/chats/:chatId',
     async ({ params, set }) => {

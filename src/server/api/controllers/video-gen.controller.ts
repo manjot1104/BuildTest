@@ -24,6 +24,12 @@ import {
 import {
   deleteVideoImageSession,
 } from "@/server/services/s3.service";
+// ── Credits ───────────────────────────────────────────────────────────────────
+import {
+  hasEnoughCreditsForVideo,
+  deductCreditsForVideo,
+  addAdditionalCredits,
+} from "@/server/services/credits.service";
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
@@ -68,8 +74,14 @@ export async function generateVideoHandler({
         durationSeconds: number;
       };
     }
-  | { error: string; status: number }
+  | { error: string; status: number; code?: string }
 > {
+  // Track credit deduction state for refund-on-failure
+  let creditsDeducted = false;
+  let creditsDeductedAmount = 0;
+  let resolvedUserId: string | undefined;
+  let resolvedChatId: string | undefined;
+
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
@@ -82,6 +94,7 @@ export async function generateVideoHandler({
       chatId: incomingChatId,
     } = body;
     const userId = session.user.id;
+    resolvedUserId = userId;
 
     if (!prompt?.trim()) return { error: "Prompt is required", status: 400 };
     if (prompt.trim().length < 5)
@@ -137,8 +150,36 @@ export async function generateVideoHandler({
       musicVolume: body.options?.musicVolume ?? 0.3,
     };
 
-    // ── 1. Validate incoming chatId (follow-up) or create a new chat row ──────
-    // Row is created BEFORE generation so the intent is captured even on failure.
+    const isNewChat = !incomingChatId;
+
+    // ── Credit check — before ANY work is done ────────────────────────────────
+    const creditCheck = await hasEnoughCreditsForVideo(userId, isNewChat);
+    if (!creditCheck.hasCredits) {
+      return {
+        error: `You don't have enough credits. This action costs ${creditCheck.required} credit${creditCheck.required !== 1 ? "s" : ""} and you have ${creditCheck.available} remaining. Please upgrade your plan or purchase more credits.`,
+        status: 402,
+        code: "INSUFFICIENT_CREDITS",
+      };
+    }
+
+    // ── 1. Deduct credits upfront — before generation begins ─────────────────
+    // Mirrors the chat controller pattern: deduct atomically now, refund on failure.
+    // This prevents the race condition where a user sends multiple prompts
+    // concurrently during a long-running generation and only gets charged once.
+    const deductResult = await deductCreditsForVideo(userId, isNewChat, incomingChatId ?? undefined);
+    if (!deductResult.success) {
+      return {
+        error: `You don't have enough credits. Please upgrade your plan or purchase more credits.`,
+        status: 402,
+        code: "INSUFFICIENT_CREDITS",
+      };
+    }
+    creditsDeducted = true;
+    creditsDeductedAmount = deductResult.creditsUsed ?? 0;
+
+    // ── 2. Validate incoming chatId (follow-up) or create a new chat row ──────
+    // Row is created AFTER credit deduction so we never create orphaned rows
+    // for users who can't afford the generation.
 
     let chatId: string;
     let previousVideoJson: VideoJson | undefined;
@@ -151,6 +192,7 @@ export async function generateVideoHandler({
       const existing = await getVideoChatById({ chatId: incomingChatId, userId });
       if (!existing) return { error: "Chat not found", status: 404 };
       chatId = incomingChatId;
+      resolvedChatId = chatId;
 
       // Load previous VideoJson so the LLM can make targeted edits
       try {
@@ -203,9 +245,10 @@ export async function generateVideoHandler({
         userImages: userImages.length > 0 ? userImages as UploadedUserImage[] : undefined,
         imageSessionId,
       });
+      resolvedChatId = chatId;
     }
 
-    // ── 2. Determine what changed to optimize regeneration ────────────────────
+    // ── 3. Determine what changed to optimize regeneration ────────────────────
 
     const optionsChanged = !!(incomingChatId && previousOptions && (
       options.useTTS !== previousOptions.useTTS ||
@@ -225,7 +268,7 @@ export async function generateVideoHandler({
     // Note: Volume changes (ttsVolume, musicVolume) don't require regeneration
     // — they're applied client-side in the Player component
 
-    // ── 3. Generate ───────────────────────────────────────────────────────────
+    // ── 4. Generate ───────────────────────────────────────────────────────────
 
     const result = await generateVideoJson(prompt.trim(), duration, {
       useTTS: options.useTTS,
@@ -234,7 +277,7 @@ export async function generateVideoHandler({
       musicGenre: options.musicGenre,
       ttsVolume: options.ttsVolume,
       musicVolume: options.musicVolume,
-      userImages: body.userImages, // merged images from step 1
+      userImages: body.userImages, // merged images from step 2
       // Pass follow-up context when available
       previousVideoJson,
       originalPrompt,
@@ -247,6 +290,21 @@ export async function generateVideoHandler({
       console.error(
         `[VideoController] generateVideoJson failed: ${result.details}`,
       );
+
+      // Refund explicitly here: catch block only runs for thrown errors,
+      // not for early returns. Credits were deducted before generation started
+      // so we must restore them on every failure path.
+      if (creditsDeducted && resolvedUserId && creditsDeductedAmount > 0) {
+        try {
+          await addAdditionalCredits(resolvedUserId, creditsDeductedAmount);
+        } catch (refundErr) {
+          console.error(
+            `[VideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
+            refundErr,
+          );
+        }
+      }
+
       return {
         error:
           "Failed to generate video. Please try again or rephrase your prompt.",
@@ -254,12 +312,14 @@ export async function generateVideoHandler({
       };
     }
 
-    // ── 4. Persist result and collect previous S3 IDs for cleanup ────────────
+    // Generation succeeded — mark credits as consumed (no refund needed)
+    creditsDeducted = false;
+
+    // ── 5. Persist result and collect previous S3 IDs for cleanup ────────────
     // Cleanup runs AFTER the DB write succeeds so we never lose the live data
     // even if cleanup fails (S3 deletes are non-fatal).
 
     let prevImageSessionId: string | null = null;
-    let prevGenerationId: string | null = null;
 
     if (incomingChatId) {
       // Follow-up: append to prompt log + replace video_json + update options/images
@@ -284,7 +344,7 @@ export async function generateVideoHandler({
       }));
     }
 
-    // ── 5. Clean up old S3 files (non-fatal, fire-and-forget) ─────────────────
+    // ── 6. Clean up old S3 files (non-fatal, fire-and-forget) ─────────────────
     // Only delete the old image session if a new one was uploaded this request.
     // (If the user didn't upload new images, imageSessionId is undefined and
     // we keep the existing session untouched.)
@@ -295,16 +355,12 @@ export async function generateVideoHandler({
     }
 
     // Audio cleanup on follow-up is intentionally skipped here.
-    // TTS now uses chatId as the S3 prefix (video-audio/{chatId}/scene-N.wav),
+    // TTS uses chatId as the S3 prefix (video-audio/{chatId}/scene-N.wav),
     // so changed scenes overwrite their file in-place and unchanged scenes are
     // never re-uploaded. There are no orphaned files to delete between generations.
     // Full cleanup (all scenes) still happens on chat delete via deleteVideoChatHandler.
-    //
-    // The prevGenerationId value is kept in the DB for observability but is no
-    // longer used for mid-session cleanup.
-    void prevGenerationId; // suppress unused-variable lint warning
 
-    // ── 6. Return ─────────────────────────────────────────────────────────────
+    // ── 7. Return ─────────────────────────────────────────────────────────────
 
     const fps = result.videoJson.fps || 30;
     const totalFrames = result.videoJson.duration;
@@ -319,6 +375,21 @@ export async function generateVideoHandler({
     };
   } catch (err) {
     console.error("[VideoController] generateVideoHandler error:", err);
+
+    // ── Refund credits if deducted but generation threw an error ──────────────
+    // Mirrors the chat controller pattern. Non-fatal: log on refund failure
+    // rather than dropping the error response.
+    if (creditsDeducted && resolvedUserId && creditsDeductedAmount > 0) {
+      try {
+        await addAdditionalCredits(resolvedUserId, creditsDeductedAmount);
+      } catch (refundErr) {
+        console.error(
+          `[VideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
+          refundErr,
+        );
+      }
+    }
+
     return { error: "Internal server error", status: 500 };
   }
 }

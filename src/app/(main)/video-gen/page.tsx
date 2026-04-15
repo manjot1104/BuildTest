@@ -11,7 +11,7 @@ import {
   Mic, Music, Volume2, ImagePlus, X, Upload,
   CheckCircle2, AlertCircle, History, Download,
   SendHorizonal, MessageSquarePlus, RefreshCw,
-  AlertTriangle, Pencil, Trash2, User, Bot,
+  AlertTriangle, Pencil, Trash2, User, Bot, Zap,
 } from "lucide-react";
 import {
   useGenerateVideo,
@@ -27,6 +27,8 @@ import {
 } from "@/client-api/query-hooks/use-video-hooks";
 import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
+import { SubscriptionModal } from "@/components/payments/subscription-modal";
+import { useUserCredits } from "@/hooks/use-user-credits";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -84,6 +86,69 @@ interface LatestVideoData {
   videoJson: VideoJson;
   meta: VideoMeta;
   uploadedImages: UploadedUserImage[];
+}
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
+
+/** Returns true when the server responded with INSUFFICIENT_CREDITS */
+function isInsufficientCreditsError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // The mutation throws with the server's error message which contains the code
+  // via the fetch wrapper in use-video-hooks. We also check for the HTTP 402 text
+  // that some wrappers surface.
+  return (
+    err.message.includes("INSUFFICIENT_CREDITS") ||
+    err.message.toLowerCase().includes("enough credits") ||
+    err.message.includes("402")
+  );
+}
+
+// ─── Credit limit banner ──────────────────────────────────────────────────────
+
+function CreditLimitBanner({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <div className="flex items-center gap-2 min-w-0">
+        <Zap className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+        <p className="text-[11px] font-mono text-amber-500/80">
+          Not enough credits to generate a video
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onUpgrade}
+        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-amber-500/30 text-[10px] font-mono text-amber-500 hover:bg-amber-500/10 transition-all shrink-0 font-semibold"
+      >
+        Upgrade ↗
+      </button>
+    </div>
+  );
+}
+
+// ─── Credits pill ─────────────────────────────────────────────────────────────
+
+function CreditsPill({
+  totalCredits,
+  onUpgrade,
+}: {
+  totalCredits: number;
+  onUpgrade: () => void;
+}) {
+  const isLow = totalCredits <= 2;
+  return (
+    <button
+      onClick={onUpgrade}
+      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-mono transition-all ${
+        isLow
+          ? "border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+          : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+      }`}
+      title="Manage credits"
+    >
+      <Zap className="h-3.5 w-3.5" />
+      <span className="tabular-nums">{totalCredits}</span>
+    </button>
+  );
 }
 
 // ─── Export Modal ─────────────────────────────────────────────────────────────
@@ -739,14 +804,17 @@ function VideoPanel({
 
 function FollowUpInput({
   isBusy,
+  isOutOfCredits,
   uploadedImages,
   selectedRange,
   onRangeChange,
   onSubmit,
   lastFailedPrompt,
   onRetry,
+  onUpgrade,
 }: {
   isBusy: boolean;
+  isOutOfCredits: boolean;
   uploadedImages: UploadedUserImage[];
   selectedRange: DurationRange;
   onRangeChange: (range: DurationRange) => void;
@@ -759,6 +827,7 @@ function FollowUpInput({
   }) => Promise<void>;
   lastFailedPrompt: string | null;
   onRetry: () => void;
+  onUpgrade: () => void;
 }) {
   const [followUpPrompt, setFollowUpPrompt] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -785,7 +854,7 @@ function FollowUpInput({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!followUpPrompt.trim() || isBusy) return;
+    if (!followUpPrompt.trim() || isBusy || isOutOfCredits) return;
 
     const options: GenerateVideoOptions = {
       useTTS, useMusic, ttsVolume, musicVolume,
@@ -812,6 +881,11 @@ function FollowUpInput({
 
   return (
     <div className="space-y-3">
+      {/* Credit limit banner — shown above the follow-up input when out of credits */}
+      {isOutOfCredits && (
+        <CreditLimitBanner onUpgrade={onUpgrade} />
+      )}
+
       {/* Retry banner */}
       {lastFailedPrompt && !isBusy && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
@@ -850,7 +924,7 @@ function FollowUpInput({
               onChange={(e) => setFollowUpPrompt(e.target.value)}
               placeholder="e.g. Make the second scene darker, add a voiceover about climate…"
               rows={3}
-              disabled={isBusy}
+              disabled={isBusy || isOutOfCredits}
               className="w-full px-0 pt-1 pb-6 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40 border-0"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
@@ -887,7 +961,7 @@ function FollowUpInput({
             </div>
             <button
               type="submit"
-              disabled={!followUpPrompt.trim() || isBusy}
+              disabled={!followUpPrompt.trim() || isBusy || isOutOfCredits}
               className="inline-flex items-center justify-center gap-2 px-4 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
             >
               {isBusy ? (
@@ -1089,6 +1163,16 @@ export default function VideoGeneratorPage() {
   const [loadingHistoryChatId, setLoadingHistoryChatId] = useState<string | null>(null);
   const appliedHistoryChatIdRef = useRef<string | null>(null);
 
+  // ── Subscription modal ─────────────────────────────────────────────────────
+  const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
+
+  // useUserCredits returns { credits, subscription, hasActiveSubscription, isLoading, error, refetch }
+  // where credits is UserCredits | null (with subscriptionCredits, additionalCredits, totalCredits)
+  const { credits: userCredits, hasActiveSubscription, subscription } = useUserCredits();
+
+  // Derived credit state — credits is null while loading or unauthenticated
+  const isOutOfCredits = userCredits !== null && userCredits.totalCredits <= 0;
+
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -1156,9 +1240,28 @@ export default function VideoGeneratorPage() {
     setLoadingHistoryChatId(null);
   }
 
+  // ── Shared credit-error handler ────────────────────────────────────────────
+  // Called from both initial and follow-up generation error paths.
+  function handleGenerationError(err: unknown, promptText: string) {
+    if (isInsufficientCreditsError(err)) {
+      // Don't add an error bubble — open the subscription modal directly.
+      setSubscriptionModalOpen(true);
+      toast.error("Not enough credits — please top up to continue.");
+      return;
+    }
+    const errMsg = err instanceof Error ? (err.message ?? "Failed to generate video") : "Failed to generate video";
+    toast.error(errMsg);
+    setChatMessages((prev) => [
+      ...prev,
+      { type: "error", text: errMsg, promptText, sentAt: new Date().toISOString() },
+    ]);
+    setLastFailedPrompt(promptText);
+    setLastFailedOptions(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || isBusy) return;
+    if (!prompt.trim() || isBusy || isOutOfCredits) return;
 
     const promptText = prompt.trim();
     const options: GenerateVideoOptions = {
@@ -1224,14 +1327,7 @@ export default function VideoGeneratorPage() {
           toast.success(`Generated ${data.meta.scenes} scenes`);
         },
         onError: (err) => {
-          const errMsg = err.message ?? "Failed to generate video";
-          toast.error(errMsg);
-          setChatMessages((prev) => [
-            ...prev,
-            { type: "error", text: errMsg, promptText, sentAt: new Date().toISOString() },
-          ]);
-          setLastFailedPrompt(promptText);
-          setLastFailedOptions(options);
+          handleGenerationError(err, promptText);
         },
       },
     );
@@ -1307,15 +1403,7 @@ export default function VideoGeneratorPage() {
           toast.success(`Updated — ${data.meta.scenes} scenes`);
         },
         onError: (err) => {
-          const errMsg = err.message ?? "Follow-up failed";
-          toast.error(errMsg);
-          // Add error message — existing video stays untouched
-          setChatMessages((prev) => [
-            ...prev,
-            { type: "error", text: errMsg, promptText: followUpPrompt, sentAt: new Date().toISOString() },
-          ]);
-          setLastFailedPrompt(followUpPrompt);
-          setLastFailedOptions(options);
+          handleGenerationError(err, followUpPrompt);
         },
       },
     );
@@ -1431,6 +1519,13 @@ export default function VideoGeneratorPage() {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            {/* Credits pill — tapping opens the subscription modal */}
+            {userCredits !== null && (
+              <CreditsPill
+                totalCredits={userCredits.totalCredits}
+                onUpgrade={() => setSubscriptionModalOpen(true)}
+              />
+            )}
             <button
               onClick={() => setHistoryOpen(true)}
               className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all"
@@ -1488,6 +1583,11 @@ export default function VideoGeneratorPage() {
               </p>
             </div>
 
+            {/* Credit limit banner — shown above the input when out of credits */}
+            {isOutOfCredits && (
+              <CreditLimitBanner onUpgrade={() => setSubscriptionModalOpen(true)} />
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-3">
               <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
                 {/* Textarea */}
@@ -1498,7 +1598,7 @@ export default function VideoGeneratorPage() {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g. Explain photosynthesis in 3 scenes with a clean educational style"
                     rows={4}
-                    disabled={isBusy}
+                    disabled={isBusy || isOutOfCredits}
                     className="w-full px-4 pt-4 pb-8 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
@@ -1531,7 +1631,7 @@ export default function VideoGeneratorPage() {
                   </div>
                   <button
                     type="submit"
-                    disabled={!prompt.trim() || isBusy}
+                    disabled={!prompt.trim() || isBusy || isOutOfCredits}
                     className="inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
                   >
                     {isUploading ? (
@@ -1788,12 +1888,14 @@ export default function VideoGeneratorPage() {
               <div className="pt-2">
                 <FollowUpInput
                   isBusy={isBusy}
+                  isOutOfCredits={isOutOfCredits}
                   uploadedImages={uploadedImages}
                   selectedRange={selectedRange}
                   onRangeChange={setSelectedRange}
                   onSubmit={handleFollowUp}
                   lastFailedPrompt={lastFailedPrompt}
                   onRetry={handleRetry}
+                  onUpgrade={() => setSubscriptionModalOpen(true)}
                 />
               </div>
             )}
@@ -1826,6 +1928,15 @@ export default function VideoGeneratorPage() {
         progress={downloadProgress}
         onClose={() => { setExportModalOpen(false); setExportComplete(false); }}
         isComplete={exportComplete}
+      />
+
+      {/* Subscription modal — opened automatically on INSUFFICIENT_CREDITS error or credit pill click */}
+      <SubscriptionModal
+        open={subscriptionModalOpen}
+        onOpenChange={setSubscriptionModalOpen}
+        hasActiveSubscription={hasActiveSubscription}
+        currentCredits={userCredits?.totalCredits ?? 0}
+        currentPlanId={subscription?.plan_id ?? null}
       />
     </div>
   );

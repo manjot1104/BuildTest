@@ -88,7 +88,7 @@ export async function fetchPexelsImage(
   try {
     const params = new URLSearchParams({
       query,
-      per_page: "5",
+      per_page: "3",
       orientation: "landscape",
     });
 

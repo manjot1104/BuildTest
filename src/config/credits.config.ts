@@ -98,6 +98,10 @@ export const CREDIT_PACKS = {
 export const CREDIT_COSTS = {
   NEW_PROMPT: 20, // Credits deducted for a new chat/prompt
   FOLLOW_UP_PROMPT: 30, // Credits deducted for follow-up message in existing chat
+
+  // Video costs (2x the regular chat costs)
+  VIDEO_NEW_PROMPT: 40,
+  VIDEO_FOLLOW_UP_PROMPT: 60,
 } as const;
 
 // Rate Limiting
@@ -131,6 +135,11 @@ export function getAllCreditPacks(): CreditPack[] {
 // Calculate credit cost based on whether it's a new chat or follow-up
 export function calculateCreditCost(isNewChat: boolean): number {
   return isNewChat ? CREDIT_COSTS.NEW_PROMPT : CREDIT_COSTS.FOLLOW_UP_PROMPT;
+}
+
+// Calculate video credit cost (2x the regular chat costs)
+export function calculateVideoCreditCost(isNewChat: boolean): number {
+  return isNewChat ? CREDIT_COSTS.VIDEO_NEW_PROMPT : CREDIT_COSTS.VIDEO_FOLLOW_UP_PROMPT;
 }
 
 // Localized pricing types
