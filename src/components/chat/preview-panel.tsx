@@ -220,7 +220,7 @@ value={
               </WebPreviewNavigationButton>
 {/* Video Generate Button */}
 <WebPreviewNavigationButton
-  tooltip={templateVideoFile ? 'Play template preview video' : 'Video preview-coming soon'}
+  tooltip={templateVideoFile ? 'AI Generated video' : 'Coming soon - click to learn more'}
   disabled={videoGenerating}  
   onClick={() => {
     if (templateVideoFile) {
@@ -411,8 +411,8 @@ value={
   <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20 gap-4">
     <div className="relative w-12 h-12">
       <div className="absolute inset-0 rounded-full border-2 border-white/10" />
-      <div className="absolute inset-0 rounded-full border-2 border-t-white border-l-transparent border-r-transparent border-b-transparent animate-spin" />
-      <div className="absolute inset-2 rounded-full border border-t-white/50 border-transparent animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
+      <div className="absolute inset-0 rounded-full border-2 border-t-primary border-l-transparent border-r-transparent border-b-transparent animate-spin" />
+      <div className="absolute inset-2 rounded-full border border-t-primary/50 border-transparent animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
     </div>
     <div className="flex flex-col items-center gap-1 text-center">
       <p className="text-sm font-medium text-white">Loading Preview</p>
@@ -544,8 +544,8 @@ onPause={() => setIsPlaying(false)}
         </h3>
 
       <p className="text-sm text-muted-foreground leading-relaxed mb-5">
-  Video previews are available for our curated templates.
-  Custom video generation is coming soon. Explore templates below 🚀
+  Video previews are currently available only for our curated templates.
+  Custom video generation is coming soon !! Explore templates below 🚀
 </p>
 
         {/* Template suggestions */}

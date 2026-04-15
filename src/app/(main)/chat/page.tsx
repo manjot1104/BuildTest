@@ -365,7 +365,7 @@ useEffect(() => {
 
               {html && !loading && (
   <iframe
-    key={sceneId + '-' + html.length}
+   key={sceneId}
                         ref={iframeRef}
                         srcDoc={(() => {
                             // Bootstrap script injected into every generated scene:
@@ -425,13 +425,15 @@ useEffect(() => {
                             
                         })()}
                         className="absolute inset-0 w-full h-full border-none"
-                        sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups allow-modals allow-forms"
+                   sandbox="allow-scripts allow-pointer-lock"
                         style={{ pointerEvents: 'auto', willChange: 'transform' }}
                         onLoad={() => {
-                            iframeReadyRef.current = true
-                            // Re-send current scroll position so scene starts at right depth
-                            postToIframe({ type: 'SCROLL', progress: scrollProgressRef.current })
-                        }}
+    iframeReadyRef.current = true
+    // Small delay so Three.js initializes, then send scroll
+    setTimeout(() => {
+        postToIframe({ type: 'SCROLL', progress: scrollProgressRef.current })
+    }, 100)
+}}
                     />
                 )}
 
@@ -800,6 +802,10 @@ const generate3DScene = async (userMessage: string, existingHtml?: string): Prom
 if (!localSceneId) {
     localSceneId = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
     setThreeDSceneId(localSceneId)
+    } else {
+        const newId = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+    localSceneId = newId
+    setThreeDSceneId(newId)
 }
      
 
@@ -865,10 +871,8 @@ let output = data?.choices?.[0]?.message?.content || ''
                 if (!output.includes('</html>')) output += '\n</html>'
             }
 
-           setThreeDHtml('')   
-setTimeout(() => {
-  setThreeDHtml(output)
-}, 50)
+          
+setThreeDHtml(output)
             
             const sceneIdToSave = localSceneId
 try {

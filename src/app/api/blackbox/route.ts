@@ -80,6 +80,18 @@ HARD RULES:
 - canvas: position fixed, 0 0, 100vw 100vh, z-index -1
 - UI above canvas: position fixed/absolute
 - NO import/export/ES modules — inline script only
+- renderer.forceContextLoss() MUST be called in window.beforeunload and visibilitychange=hidden events
+- Add: window.addEventListener('beforeunload', function() { renderer.forceContextLoss(); renderer.dispose(); });
+- document.addEventListener('visibilitychange', function() { if(document.hidden) renderer.forceContextLoss(); });
+- BEFORE calling new THREE.WebGLRenderer(), ALWAYS check: if (document.querySelector('canvas')) { document.querySelector('canvas').remove(); }
+- Only ONE renderer instance allowed. Store as var renderer at top scope. Never re-initialize.
+- renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); — cap at 1.5, NOT 2
+- NEVER make any external API calls, fetch requests, or XMLHttpRequests inside the HTML
+- NEVER use ip-api.com, ipapi.co, geolocation APIs, or any third-party data services
+- NEVER use navigator.geolocation
+- The HTML must be 100% self-contained with zero network requests after page load
+- All data must be hardcoded — no runtime fetching of any kind
+
 
 INTERACTIONS ON CLICK (MANDATORY):
 - All navbar links and buttons must have click feedback animation (scale down to 0.92 then back to 1)
