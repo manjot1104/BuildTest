@@ -1997,6 +1997,5 @@ if (!chat) {
   // POST /api/video/generate — generate AI video background via kie.ai
   .post('/video/generate', ({ request }) => generateVideoHandler(request))
 
-  // GET /api/video/status?taskId=xxx — poll video generation status
-  .get('/video/status', ({ request }) => getVideoStatusHandler(request))
+
   ;
