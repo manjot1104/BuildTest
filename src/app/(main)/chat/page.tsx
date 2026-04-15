@@ -1116,7 +1116,8 @@ const getVideoFromPrompt = (prompt?: string) => {
   getVideoFromPrompt(
     chatHistory?.find(m => m.type === 'user')?.content?.toString()
   )
-} />
+} 
+onExploreTemplates={() => {  setShowChatInterface(false) }}/>
                                 ) : null
                             }
                         />
