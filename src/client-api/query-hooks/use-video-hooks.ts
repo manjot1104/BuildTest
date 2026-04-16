@@ -70,6 +70,15 @@ export interface VideoChatDetail {
   updatedAt: string;
 }
 
+/** Shape returned by GET /api/video/usage */
+export interface VideoUsageData {
+  promptsToday: number;
+  dailyLimit: number;
+  planId: string;
+  isAuthenticated: boolean;
+  resetsAt: string; // ISO string — midnight UTC
+}
+
 // ─── Query Keys ───────────────────────────────────────────────────────────────
 
 export const videoKeys = {
@@ -78,6 +87,7 @@ export const videoKeys = {
   upload: () => [...videoKeys.all, "upload"] as const,
   chats: () => [...videoKeys.all, "chats"] as const,
   chat: (id: string) => [...videoKeys.all, "chats", id] as const,
+  usage: () => [...videoKeys.all, "usage"] as const,
 };
 
 // ─── Mutations ────────────────────────────────────────────────────────────────
@@ -175,6 +185,8 @@ export function useGenerateVideo() {
     onSuccess: (data) => {
       // Invalidate the chat list so any history panel stays fresh
       void qc.invalidateQueries({ queryKey: videoKeys.chats() });
+      // Invalidate usage so the daily counter updates immediately
+      void qc.invalidateQueries({ queryKey: videoKeys.usage() });
     },
   });
 }
@@ -329,8 +341,8 @@ export function useVideoChat(chatId: string | null) {
     },
   });
 }
-// Add after useVideoChat, before the final closing line
 
+/** Add after useVideoChat, before the final closing line */
 export function useRenameVideoChat() {
   const qc = useQueryClient();
   return useMutation({
@@ -350,6 +362,38 @@ export function useRenameVideoChat() {
     },
   });
 }
+
+/**
+ * useVideoDailyUsage
+ *
+ * Fetches today's video generation usage for the current user.
+ * Falls back gracefully — if the endpoint doesn't exist yet, returns null.
+ *
+ * NOTE: If you don't have a /api/video/usage endpoint yet, this hook degrades
+ * gracefully (returns null data). You can implement the endpoint later and
+ * the UI will automatically start using real data.
+ */
+export function useVideoDailyUsage() {
+  return useQuery({
+    queryKey: videoKeys.usage(),
+    queryFn: async (): Promise<VideoUsageData | null> => {
+      try {
+        const res = await fetch("/api/video/usage");
+        if (!res.ok) return null;
+        const data = await res.json();
+        if ("error" in data) return null;
+        return data as VideoUsageData;
+      } catch {
+        // Endpoint not implemented yet — degrade gracefully
+        return null;
+      }
+    },
+    // Stale after 30s — usage counter doesn't need to be real-time
+    staleTime: 30_000,
+  });
+}
+
+// ─── URL proxy helpers ────────────────────────────────────────────────────────
 
 function isS3Url(url: string): boolean {
   return url.includes('.s3.') && url.includes('amazonaws.com')

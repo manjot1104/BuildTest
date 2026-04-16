@@ -12,6 +12,7 @@ import {
   CheckCircle2, AlertCircle, History, Download,
   SendHorizonal, MessageSquarePlus, RefreshCw,
   AlertTriangle, Pencil, Trash2, User, Bot, Zap,
+  Lock, Info,
 } from "lucide-react";
 import {
   useGenerateVideo,
@@ -19,6 +20,7 @@ import {
   useVideoChats,
   useVideoChat,
   useRenameVideoChat,
+  useVideoDailyUsage,
   proxyS3Urls,
   type VideoMeta,
   type GenerateVideoOptions,
@@ -31,6 +33,78 @@ import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
 import { SubscriptionModal } from "@/components/payments/subscription-modal";
 import { useUserCredits } from "@/hooks/use-user-credits";
+
+// ─── Plan Limits Config ───────────────────────────────────────────────────────
+//
+// ✏️  EDIT THIS OBJECT to change limits per plan.
+//    - dailyPrompts: total prompts allowed per day (initial + follow-ups combined)
+//    - allowFollowUp: whether follow-up prompts are allowed after first generation
+//    - maxImages: max user-uploaded images per generation
+//    - maxDurationSeconds: maximum video duration in seconds (maps to DURATION_RANGES)
+//
+// To remove a limit entirely, set it to Infinity (e.g. maxImages: Infinity).
+// To add a new plan, add a new key matching the plan_id from your subscription system.
+
+interface VideoPlanLimits {
+  dailyPrompts: number;
+  allowFollowUp: boolean;
+  maxImages: number;
+  maxDurationSeconds: number;
+  label: string;
+}
+
+type PlanTier = 'guest' | 'free' | 'starter' | 'pro' | 'enterprise';
+
+const VIDEO_PLAN_LIMITS: Record<PlanTier, VideoPlanLimits> = {
+  // Unauthenticated users never reach this page (redirected at layout level),
+  // but we define a "guest" tier as a safety net.
+  guest: {
+    dailyPrompts: 0,
+    allowFollowUp: false,
+    maxImages: 0,
+    maxDurationSeconds: 0,
+    label: "Guest",
+  },
+  free: {
+    dailyPrompts: 1,
+    allowFollowUp: false,
+    maxImages: 1,
+    maxDurationSeconds: 20, // maps to the "10–20s" range
+    label: "Free",
+  },
+  starter: {
+    dailyPrompts: 10,
+    allowFollowUp: true,
+    maxImages: 5,
+    maxDurationSeconds: 30,
+    label: "Starter",
+  },
+  pro: {
+    dailyPrompts: 15,
+    allowFollowUp: true,
+    maxImages: 5,
+    maxDurationSeconds: 30,
+    label: "Pro",
+  },
+  enterprise: {
+    dailyPrompts: 20,
+    allowFollowUp: true,
+    maxImages: 5,
+    maxDurationSeconds: 30,
+    label: "Enterprise",
+  },
+};
+
+/** Resolve limits for a given plan id (falls back to "free" for unknown plans). */
+function getPlanLimits(planId: string | null | undefined): VideoPlanLimits {
+  // Handle null/undefined/empty string cases first
+  if (!planId) return VIDEO_PLAN_LIMITS.free;
+
+  const normalizedId = planId.toLowerCase() as PlanTier;
+
+  // Return the plan or fall back to 'free' if the key doesn't exist
+  return VIDEO_PLAN_LIMITS[normalizedId] || VIDEO_PLAN_LIMITS.free;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -102,6 +176,201 @@ function isInsufficientCreditsError(err: unknown): boolean {
   );
 }
 
+// ─── PlanLimitsBadge — compact inline badge for a single limit ────────────────
+
+function PlanLimitsBadge({ icon: Icon, label, value }: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <Icon className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+      <span className="text-[10px] font-mono text-muted-foreground/50">{label}</span>
+      <span className="text-[10px] font-mono text-foreground/60 font-semibold">{value}</span>
+    </div>
+  );
+}
+
+// ─── PlanLimitsPanel — shown above the prompt form ────────────────────────────
+
+function PlanLimitsPanel({
+  limits,
+  promptsToday,
+  planId,
+  onUpgrade,
+}: {
+  limits: VideoPlanLimits;
+  promptsToday: number;
+  planId: string | null | undefined;
+  onUpgrade: () => void;
+}) {
+  const isFree = !planId || planId === "free";
+  const remaining = Math.max(0, limits.dailyPrompts - promptsToday);
+  const pct = limits.dailyPrompts > 0 ? promptsToday / limits.dailyPrompts : 1;
+  const isAtLimit = promptsToday >= limits.dailyPrompts;
+  const isNearLimit = pct >= 0.7 && !isAtLimit;
+
+  const barColor = isAtLimit
+    ? "bg-red-500"
+    : isNearLimit
+    ? "bg-amber-500"
+    : "bg-primary";
+
+  const maxDurLabel =
+    limits.maxDurationSeconds >= 25
+      ? "30s"
+      : limits.maxDurationSeconds >= 16
+      ? "20s"
+      : "10s";
+
+  return (
+    <div
+      className={`rounded-xl border bg-muted/20 overflow-hidden transition-all ${
+        isAtLimit
+          ? "border-red-500/20"
+          : isNearLimit
+          ? "border-amber-500/20"
+          : "border-border"
+      }`}
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap">
+        <div className="flex items-center gap-2 min-w-0">
+          <div
+            className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${
+              isFree
+                ? "bg-muted border border-border"
+                : "bg-primary/10 border border-primary/20"
+            }`}
+          >
+            {isFree ? (
+              <Lock className="h-3 w-3 text-muted-foreground/50" />
+            ) : (
+              <Zap className="h-3 w-3 text-primary" />
+            )}
+          </div>
+          <span className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-widest">
+            {limits.label} plan
+          </span>
+          {/* Daily prompt usage bar */}
+          <div className="flex items-center gap-1.5 ml-1">
+            <div className="w-16 h-1.5 rounded-full bg-border overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                style={{ width: `${Math.min(100, pct * 100)}%` }}
+              />
+            </div>
+            <span
+              className={`text-[10px] font-mono tabular-nums ${
+                isAtLimit
+                  ? "text-red-400 font-semibold"
+                  : isNearLimit
+                  ? "text-amber-400"
+                  : "text-muted-foreground/50"
+              }`}
+            >
+              {isAtLimit ? "limit reached" : `${remaining} left today`}
+            </span>
+          </div>
+        </div>
+
+        {/* Upgrade CTA */}
+        <button
+          type="button"
+          onClick={onUpgrade}
+          className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold underline underline-offset-2 transition-colors shrink-0 ${
+            isFree || isAtLimit
+              ? "text-primary hover:text-primary/80"
+              : "text-muted-foreground/40 hover:text-muted-foreground"
+          }`}
+        >
+          {isFree ? "Upgrade for more ↗" : isAtLimit ? "Upgrade plan ↗" : "Manage plan ↗"}
+        </button>
+      </div>
+
+      {/* Limits detail row — always visible so users understand what they get */}
+      <div className="border-t border-border px-4 py-2.5 flex items-center gap-4 flex-wrap bg-muted/10">
+        <PlanLimitsBadge
+          icon={Film}
+          label="prompts/day"
+          value={limits.dailyPrompts === Infinity ? "unlimited" : String(limits.dailyPrompts)}
+        />
+        <PlanLimitsBadge
+          icon={MessageSquarePlus}
+          label="follow-up"
+          value={limits.allowFollowUp ? "yes" : "no"}
+        />
+        <PlanLimitsBadge
+          icon={ImagePlus}
+          label="images"
+          value={limits.maxImages === Infinity ? "unlimited" : limits.maxImages === 0 ? "none" : String(limits.maxImages)}
+        />
+        <PlanLimitsBadge
+          icon={Clock}
+          label="max duration"
+          value={limits.maxDurationSeconds >= 30 ? "30s" : maxDurLabel}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── DailyLimitBanner — shown when daily prompt limit is hit ──────────────────
+
+function DailyLimitBanner({
+  planLabel,
+  onUpgrade,
+}: {
+  planLabel: string;
+  onUpgrade: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <div className="flex items-center gap-2 min-w-0">
+        <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+        <p className="text-[11px] font-mono text-red-500/80 leading-relaxed">
+          You&apos;ve used all {planLabel} plan prompts for today. Resets at midnight UTC.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onUpgrade}
+        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-red-500/30 text-[10px] font-mono text-red-500 hover:bg-red-500/10 transition-all shrink-0 font-semibold"
+      >
+        Upgrade ↗
+      </button>
+    </div>
+  );
+}
+
+// ─── FollowUpLockedBanner — shown on free plan after first video ──────────────
+
+function FollowUpLockedBanner({ onUpgrade }: { onUpgrade: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+      <div className="flex items-center gap-2 min-w-0">
+        <Lock className="h-3.5 w-3.5 text-primary shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[11px] font-mono text-foreground/80 leading-relaxed">
+            Follow-up prompts are a paid feature
+          </p>
+          <p className="text-[10px] font-mono text-muted-foreground/50 mt-0.5">
+            Upgrade to Starter or above to refine your video with follow-up prompts.
+          </p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onUpgrade}
+        className="inline-flex items-center gap-1.5 h-7 px-3 rounded-lg border border-primary/30 text-[10px] font-mono text-primary hover:bg-primary/10 transition-all shrink-0 font-semibold"
+      >
+        Upgrade ↗
+      </button>
+    </div>
+  );
+}
+
 // ─── Credit limit banner ──────────────────────────────────────────────────────
 
 function CreditLimitBanner({ onUpgrade }: { onUpgrade: () => void }) {
@@ -157,23 +426,27 @@ function ImageManager({
   onExistingChange,
   onNewEntriesChange,
   disabled,
+  maxImages,
 }: {
   existingImages: UploadedUserImage[];
   newEntries: UserImageEntryWithPreview[];
   onExistingChange: (images: UploadedUserImage[]) => void;
   onNewEntriesChange: (entries: UserImageEntryWithPreview[]) => void;
   disabled: boolean;
+  /** Plan-enforced max. Defaults to MAX_USER_IMAGES (5). */
+  maxImages?: number;
 }) {
+  const effectiveMax = Math.min(maxImages ?? MAX_USER_IMAGES, MAX_USER_IMAGES);
   const inputRef = useRef<HTMLInputElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const totalSlots = existingImages.length + newEntries.length;
-  const canAddMore = totalSlots < MAX_USER_IMAGES;
+  const canAddMore = totalSlots < effectiveMax;
 
   const handleFiles = useCallback(
     (files: FileList | null) => {
       if (!files) return;
-      const remaining = MAX_USER_IMAGES - totalSlots;
+      const remaining = effectiveMax - totalSlots;
       const toAdd = Array.from(files).slice(0, remaining);
       const newItems: UserImageEntryWithPreview[] = toAdd.map((file) => ({
         id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -183,7 +456,7 @@ function ImageManager({
       }));
       onNewEntriesChange([...newEntries, ...newItems]);
     },
-    [totalSlots, newEntries, onNewEntriesChange],
+    [totalSlots, newEntries, onNewEntriesChange, effectiveMax],
   );
 
   const handleDrop = useCallback(
@@ -227,7 +500,7 @@ function ImageManager({
             Images
           </span>
           <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5">
-            {totalSlots}/{MAX_USER_IMAGES}
+            {totalSlots}/{effectiveMax}
           </span>
         </div>
       </div>
@@ -328,7 +601,7 @@ function ImageManager({
         </div>
       ))}
 
-      {/* Drop zone */}
+      {/* Drop zone — only shown if within plan limit */}
       {canAddMore && (
         <div
           className={`relative border border-dashed border-border rounded-lg p-4 text-center transition-colors cursor-pointer hover:border-primary/50 hover:bg-primary/5 ${disabled ? "opacity-40 pointer-events-none" : ""}`}
@@ -356,9 +629,16 @@ function ImageManager({
         </div>
       )}
 
-      {!canAddMore && (
+      {!canAddMore && effectiveMax === 0 && (
+        <p className="text-[9px] font-mono text-muted-foreground/40 leading-relaxed flex items-center gap-1.5">
+          <Lock className="h-3 w-3" />
+          Image uploads are not available on your current plan.
+        </p>
+      )}
+
+      {!canAddMore && effectiveMax > 0 && (
         <p className="text-[9px] font-mono text-muted-foreground/40 leading-relaxed">
-          Maximum {MAX_USER_IMAGES} images reached. Remove an image to add a new one.
+          Maximum {effectiveMax} image{effectiveMax !== 1 ? "s" : ""} reached for your plan. Remove one to add another.
         </p>
       )}
     </div>
@@ -767,6 +1047,8 @@ function VideoPanel({
 function FollowUpInput({
   isBusy,
   isOutOfCredits,
+  isAtDailyLimit,
+  isFollowUpLocked,
   uploadedImages,
   selectedRange,
   onRangeChange,
@@ -774,9 +1056,14 @@ function FollowUpInput({
   lastFailedPrompt,
   onRetry,
   onUpgrade,
+  planLimits,
 }: {
   isBusy: boolean;
   isOutOfCredits: boolean;
+  /** Daily prompt limit reached */
+  isAtDailyLimit: boolean;
+  /** Plan doesn't allow follow-up prompts */
+  isFollowUpLocked: boolean;
   uploadedImages: UploadedUserImage[];
   selectedRange: DurationRange;
   onRangeChange: (range: DurationRange) => void;
@@ -790,6 +1077,7 @@ function FollowUpInput({
   lastFailedPrompt: string | null;
   onRetry: () => void;
   onUpgrade: () => void;
+  planLimits: VideoPlanLimits;
 }) {
   const [followUpPrompt, setFollowUpPrompt] = useState("");
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -822,9 +1110,12 @@ function FollowUpInput({
     }
   }, [isBusy]);
 
+  // Whether the whole input should be disabled
+  const isBlocked = isBusy || isOutOfCredits || isAtDailyLimit || isFollowUpLocked;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!followUpPrompt.trim() || isBusy || isOutOfCredits) return;
+    if (!followUpPrompt.trim() || isBlocked) return;
 
     const options: GenerateVideoOptions = {
       useTTS, useMusic, ttsVolume, musicVolume,
@@ -849,11 +1140,21 @@ function FollowUpInput({
     editedExistingImages.length !== uploadedImages.length ||
     editedExistingImages.some((img, i) => img.description !== uploadedImages[i]?.description);
 
+  // ── Locked state — plan doesn't allow follow-up ──────────────────────────
+  if (isFollowUpLocked) {
+    return <FollowUpLockedBanner onUpgrade={onUpgrade} />;
+  }
+
   return (
     <div className="space-y-3">
       {/* Credit limit banner */}
       {isOutOfCredits && (
         <CreditLimitBanner onUpgrade={onUpgrade} />
+      )}
+
+      {/* Daily limit banner */}
+      {isAtDailyLimit && !isOutOfCredits && (
+        <DailyLimitBanner planLabel={planLimits.label} onUpgrade={onUpgrade} />
       )}
 
       {/* Retry banner */}
@@ -876,7 +1177,7 @@ function FollowUpInput({
       )}
 
       {/* Input card */}
-      <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBusy ? "opacity-60 pointer-events-none" : ""}`}>
+      <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBlocked ? "opacity-60 pointer-events-none" : ""}`}>
         {/* Header */}
         <div className="flex items-center gap-2 px-4 pt-3 pb-1">
           <MessageSquarePlus className="h-3.5 w-3.5 text-primary/60" />
@@ -894,7 +1195,7 @@ function FollowUpInput({
               onChange={(e) => setFollowUpPrompt(e.target.value)}
               placeholder="e.g. Make the second scene darker, add a voiceover about climate…"
               rows={3}
-              disabled={isBusy || isOutOfCredits}
+              disabled={isBlocked}
               className="w-full px-0 pt-1 pb-6 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40 border-0"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
@@ -912,26 +1213,34 @@ function FollowUpInput({
                 Duration
               </span>
               <div className="flex gap-1" role="group">
-                {DURATION_RANGES.map((range) => (
-                  <button
-                    key={range.value}
-                    type="button"
-                    onClick={() => onRangeChange(range)}
-                    disabled={isBusy}
-                    aria-pressed={selectedRange.value === range.value}
-                    className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${selectedRange.value === range.value
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-border text-muted-foreground hover:text-foreground"
+                {DURATION_RANGES.map((range) => {
+                  const isDisabled = range.seconds > planLimits.maxDurationSeconds;
+                  return (
+                    <button
+                      key={range.value}
+                      type="button"
+                      onClick={() => !isDisabled && onRangeChange(range)}
+                      disabled={isBusy || isDisabled}
+                      title={isDisabled ? `Max ${planLimits.maxDurationSeconds}s on ${planLimits.label} plan` : undefined}
+                      aria-pressed={selectedRange.value === range.value}
+                      className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${
+                        isDisabled
+                          ? "border-border/50 text-muted-foreground/30 cursor-not-allowed"
+                          : selectedRange.value === range.value
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:text-foreground"
                       }`}
-                  >
-                    {range.label}
-                  </button>
-                ))}
+                    >
+                      {range.label}
+                      {isDisabled && <Lock className="inline h-2.5 w-2.5 ml-0.5 mb-px" />}
+                    </button>
+                  );
+                })}
               </div>
             </div>
             <button
               type="submit"
-              disabled={!followUpPrompt.trim() || isBusy || isOutOfCredits}
+              disabled={!followUpPrompt.trim() || isBlocked}
               className="inline-flex items-center justify-center gap-2 px-4 h-8 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
             >
               {isBusy ? (
@@ -947,8 +1256,8 @@ function FollowUpInput({
         <div className="border-t border-border">
           <button
             type="button"
-            onClick={() => !isBusy && setImagesOpen((v) => !v)}
-            disabled={isBusy}
+            onClick={() => !isBlocked && setImagesOpen((v) => !v)}
+            disabled={isBlocked}
             className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none"
           >
             <div className="flex items-center gap-2">
@@ -979,7 +1288,8 @@ function FollowUpInput({
                   newEntries={newImageEntries}
                   onExistingChange={setEditedExistingImages}
                   onNewEntriesChange={setNewImageEntries}
-                  disabled={isBusy}
+                  disabled={isBlocked}
+                  maxImages={planLimits.maxImages}
                 />
               </div>
             </div>
@@ -990,8 +1300,8 @@ function FollowUpInput({
         <div className="border-t border-border">
           <button
             type="button"
-            onClick={() => !isBusy && setOptionsOpen((v) => !v)}
-            disabled={isBusy}
+            onClick={() => !isBlocked && setOptionsOpen((v) => !v)}
+            disabled={isBlocked}
             className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none"
           >
             <div className="flex items-center gap-2">
@@ -1026,7 +1336,7 @@ function FollowUpInput({
                   <button
                     type="button"
                     onClick={() => setUseTTS((v) => !v)}
-                    disabled={isBusy}
+                    disabled={isBlocked}
                     className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
                   >
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
@@ -1036,11 +1346,11 @@ function FollowUpInput({
                   <>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} disabled={isBusy} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
+                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} disabled={isBlocked} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input type="range" min="0" max="1" step="0.05" value={ttsVolume} disabled={isBusy} onChange={(e) => setTtsVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                      <input type="range" min="0" max="1" step="0.05" value={ttsVolume} disabled={isBlocked} onChange={(e) => setTtsVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(ttsVolume * 100)}%</span>
                     </div>
                   </>
@@ -1056,7 +1366,7 @@ function FollowUpInput({
                   <button
                     type="button"
                     onClick={() => setUseMusic((v) => !v)}
-                    disabled={isBusy}
+                    disabled={isBlocked}
                     className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
                   >
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
@@ -1068,13 +1378,13 @@ function FollowUpInput({
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                       <div className="flex gap-1 flex-wrap">
                         {MUSIC_GENRES.map((g) => (
-                          <button key={g.value} type="button" disabled={isBusy} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                          <button key={g.value} type="button" disabled={isBlocked} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
                         ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input type="range" min="0" max="1" step="0.05" value={musicVolume} disabled={isBusy} onChange={(e) => setMusicVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                      <input type="range" min="0" max="1" step="0.05" value={musicVolume} disabled={isBlocked} onChange={(e) => setMusicVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(musicVolume * 100)}%</span>
                     </div>
                   </>
@@ -1134,6 +1444,19 @@ export default function VideoGeneratorPage() {
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 
   const { credits: userCredits, hasActiveSubscription, subscription } = useUserCredits();
+  const { data: usageData } = useVideoDailyUsage();
+
+  // ── Resolve plan limits ────────────────────────────────────────────────────
+  // planId from subscription (null = free tier)
+  const planId = subscription?.plan_id ?? null;
+  const planLimits = getPlanLimits(planId);
+
+  // Prompt usage: use server data if available, otherwise optimistically track locally
+  // Local tracking: count prompts in chatMessages sent this session
+  const localPromptsThisSession = chatMessages.filter((m) => m.type === "prompt").length;
+  const promptsToday = usageData?.promptsToday ?? localPromptsThisSession;
+  const isAtDailyLimit = promptsToday >= planLimits.dailyPrompts;
+  const isFollowUpLocked = !planLimits.allowFollowUp;
 
   const isOutOfCredits = userCredits !== null && userCredits.totalCredits <= 0;
 
@@ -1148,6 +1471,14 @@ export default function VideoGeneratorPage() {
 
   const isBusy = isGenerating || isUploading;
   const hasResult = latestVideoData !== null;
+
+  // Clamp selectedRange to plan's maxDurationSeconds on plan change
+  useEffect(() => {
+    if (selectedRange.seconds > planLimits.maxDurationSeconds) {
+      const allowed = DURATION_RANGES.filter((r) => r.seconds <= planLimits.maxDurationSeconds);
+      if (allowed.length > 0) setSelectedRange(allowed[allowed.length - 1] ?? DURATION_RANGES[0]);
+    }
+  }, [planLimits.maxDurationSeconds, selectedRange.seconds]);
 
   // Fix 3: close initial-prompt panels when generation starts
   useEffect(() => {
@@ -1226,7 +1557,7 @@ export default function VideoGeneratorPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!prompt.trim() || isBusy || isOutOfCredits) return;
+    if (!prompt.trim() || isBusy || isOutOfCredits || isAtDailyLimit) return;
 
     const promptText = prompt.trim();
     const options: GenerateVideoOptions = {
@@ -1407,7 +1738,6 @@ export default function VideoGeneratorPage() {
   }
 
   // Fix 4: write videoJson to localStorage and open /video-download in a new tab
-  
   function handleExport() {
     if (!latestVideoData) return;
     // Use localStorage so the payload survives cross-tab navigation
@@ -1447,6 +1777,9 @@ export default function VideoGeneratorPage() {
       </span>
     );
   };
+
+  // Whether the current selected range is allowed by the plan
+  const isDurationAllowed = (range: DurationRange) => range.seconds <= planLimits.maxDurationSeconds;
 
   return (
     <div className="relative -m-4 w-[calc(100%+2rem)] min-h-screen bg-sidebar">
@@ -1530,14 +1863,27 @@ export default function VideoGeneratorPage() {
               </div>
             )}
 
-            {/* Credit limit banner */}
+            {/* ── Plan limits panel — always visible so users know what they have ── */}
+            <PlanLimitsPanel
+              limits={planLimits}
+              promptsToday={promptsToday}
+              planId={planId}
+              onUpgrade={() => setSubscriptionModalOpen(true)}
+            />
+
+            {/* Credit limit banner (separate from daily limit — different failure mode) */}
             {isOutOfCredits && (
               <CreditLimitBanner onUpgrade={() => setSubscriptionModalOpen(true)} />
             )}
 
+            {/* Daily limit banner */}
+            {isAtDailyLimit && !isOutOfCredits && (
+              <DailyLimitBanner planLabel={planLimits.label} onUpgrade={() => setSubscriptionModalOpen(true)} />
+            )}
+
             {/* Fix 3: wrap initial input in opacity overlay while busy */}
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBusy ? "opacity-60 pointer-events-none" : ""}`}>
+              <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBusy || isAtDailyLimit ? "opacity-60 pointer-events-none" : ""}`}>
                 {/* Textarea */}
                 <div className="relative">
                   <textarea
@@ -1546,7 +1892,7 @@ export default function VideoGeneratorPage() {
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g. Explain photosynthesis in 3 scenes with a clean educational style"
                     rows={4}
-                    disabled={isBusy || isOutOfCredits}
+                    disabled={isBusy || isOutOfCredits || isAtDailyLimit}
                     className="w-full px-4 pt-4 pb-8 bg-transparent text-sm font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none resize-none disabled:opacity-40"
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleSubmit(e);
@@ -1564,16 +1910,27 @@ export default function VideoGeneratorPage() {
                       <button
                         type="button"
                         onClick={() => setImagesOpen((v) => !v)}
-                        disabled={isBusy}
-                        title="Attach images"
-                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 ${imagesOpen || userImageEntries.length > 0
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                          }`}
+                        disabled={isBusy || planLimits.maxImages === 0}
+                        title={
+                          planLimits.maxImages === 0
+                            ? `Image uploads are not available on the ${planLimits.label} plan`
+                            : "Attach images"
+                        }
+                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 ${
+                          planLimits.maxImages === 0
+                            ? "border-border text-muted-foreground/30 cursor-not-allowed"
+                            : imagesOpen || userImageEntries.length > 0
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                        }`}
                       >
-                        <ImagePlus className="h-3.5 w-3.5" />
+                        {planLimits.maxImages === 0 ? (
+                          <Lock className="h-3.5 w-3.5" />
+                        ) : (
+                          <ImagePlus className="h-3.5 w-3.5" />
+                        )}
                       </button>
-                      {userImageEntries.length > 0 && (
+                      {userImageEntries.length > 0 && planLimits.maxImages > 0 && (
                         <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-primary text-[8px] text-primary-foreground flex items-center justify-center font-bold pointer-events-none">
                           {userImageEntries.length}
                         </span>
@@ -1583,26 +1940,41 @@ export default function VideoGeneratorPage() {
                       Duration
                     </span>
                     <div className="flex gap-1" role="group">
-                      {DURATION_RANGES.map((range) => (
-                        <button
-                          key={range.value}
-                          type="button"
-                          onClick={() => setSelectedRange(range)}
-                          disabled={isBusy}
-                          aria-pressed={selectedRange.value === range.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${selectedRange.value === range.value
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:text-foreground"
+                      {DURATION_RANGES.map((range) => {
+                        const isLocked = !isDurationAllowed(range);
+                        return (
+                          <button
+                            key={range.value}
+                            type="button"
+                            onClick={() => {
+                              if (isLocked) {
+                                toast.error(`Max duration on ${planLimits.label} plan is ${planLimits.maxDurationSeconds}s. Upgrade to unlock.`);
+                                setSubscriptionModalOpen(true);
+                                return;
+                              }
+                              setSelectedRange(range);
+                            }}
+                            disabled={isBusy}
+                            aria-pressed={selectedRange.value === range.value}
+                            title={isLocked ? `Locked on ${planLimits.label} plan — upgrade to unlock` : undefined}
+                            className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:cursor-not-allowed ${
+                              isLocked
+                                ? "border-border/50 text-muted-foreground/30 cursor-pointer"
+                                : selectedRange.value === range.value
+                                ? "border-primary bg-primary/10 text-primary"
+                                : "border-border text-muted-foreground hover:text-foreground"
                             }`}
-                        >
-                          {range.label}
-                        </button>
-                      ))}
+                          >
+                            {range.label}
+                            {isLocked && <Lock className="inline h-2.5 w-2.5 ml-0.5 mb-px opacity-50" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   <button
                     type="submit"
-                    disabled={!prompt.trim() || isBusy || isOutOfCredits}
+                    disabled={!prompt.trim() || isBusy || isOutOfCredits || isAtDailyLimit}
                     className="inline-flex items-center justify-center gap-2 px-4 h-9 rounded-lg bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed transition-all touch-manipulation shrink-0"
                   >
                     {isUploading ? (
@@ -1615,33 +1987,49 @@ export default function VideoGeneratorPage() {
                   </button>
                 </div>
 
-                {/* Images */}
-                <div className="border-t border-border">
-                  <button type="button" onClick={() => !isBusy && setImagesOpen((v) => !v)} disabled={isBusy} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none">
-                    <div className="flex items-center gap-2">
-                      <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
-                      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Your images</span>
-                      {userImageEntries.length > 0 && (
-                        <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">{userImageEntries.length}</span>
-                      )}
-                      {renderUploadStepBadge()}
-                    </div>
-                    {imagesOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
-                  </button>
-                  {imagesOpen && (
-                    <div className="px-4 pb-4 border-t border-border bg-muted/10">
-                      <div className="pt-3">
-                        <ImageManager
-                          existingImages={[]}
-                          newEntries={userImageEntries}
-                          onExistingChange={() => { }}
-                          onNewEntriesChange={setUserImageEntries}
-                          disabled={isBusy}
-                        />
+                {/* Images — gated by planLimits.maxImages */}
+                {planLimits.maxImages > 0 && (
+                  <div className="border-t border-border">
+                    <button type="button" onClick={() => !isBusy && setImagesOpen((v) => !v)} disabled={isBusy} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none">
+                      <div className="flex items-center gap-2">
+                        <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
+                        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Your images</span>
+                        {userImageEntries.length > 0 && (
+                          <span className="text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-0.5">{userImageEntries.length}</span>
+                        )}
+                        {renderUploadStepBadge()}
                       </div>
-                    </div>
-                  )}
-                </div>
+                      {imagesOpen ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40" />}
+                    </button>
+                    {imagesOpen && (
+                      <div className="px-4 pb-4 border-t border-border bg-muted/10">
+                        <div className="pt-3">
+                          <ImageManager
+                            existingImages={[]}
+                            newEntries={userImageEntries}
+                            onExistingChange={() => { }}
+                            onNewEntriesChange={setUserImageEntries}
+                            disabled={isBusy}
+                            maxImages={planLimits.maxImages}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Locked images notice for plans without image support */}
+                {planLimits.maxImages === 0 && (
+                  <div className="border-t border-border px-4 py-3 flex items-center gap-2">
+                    <Lock className="h-3 w-3 text-muted-foreground/30 shrink-0" />
+                    <span className="text-[10px] font-mono text-muted-foreground/40">
+                      Image uploads not available on {planLimits.label} plan ·{" "}
+                      <button type="button" onClick={() => setSubscriptionModalOpen(true)} className="text-primary/60 hover:text-primary underline underline-offset-2 transition-colors">
+                        upgrade
+                      </button>
+                    </span>
+                  </div>
+                )}
 
                 {/* Audio options — Fix 3: disabled while busy */}
                 <div className="border-t border-border">
@@ -1863,6 +2251,8 @@ export default function VideoGeneratorPage() {
                 <FollowUpInput
                   isBusy={isBusy}
                   isOutOfCredits={isOutOfCredits}
+                  isAtDailyLimit={isAtDailyLimit}
+                  isFollowUpLocked={isFollowUpLocked}
                   uploadedImages={uploadedImages}
                   selectedRange={selectedRange}
                   onRangeChange={setSelectedRange}
@@ -1870,6 +2260,7 @@ export default function VideoGeneratorPage() {
                   lastFailedPrompt={lastFailedPrompt}
                   onRetry={handleRetry}
                   onUpgrade={() => setSubscriptionModalOpen(true)}
+                  planLimits={planLimits}
                 />
               </div>
             )}

@@ -118,9 +118,6 @@ export default function VideoDownloadPage() {
           </div>
           <div>
             <p className="text-sm font-sans font-semibold text-foreground">Video Export</p>
-            <p className="text-[11px] font-mono text-muted-foreground/60">
-              Client-side render · no server required
-            </p>
           </div>
         </div>
 
