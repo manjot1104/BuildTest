@@ -1192,7 +1192,7 @@ export default function VideoGeneratorPage() {
 
     setChatMessages(msgs);
     setLatestVideoData({
-      videoJson: vj,
+      videoJson: proxyS3Urls(vj),
       meta,
       uploadedImages: historyChatDetail.userImages ?? [],
     });
@@ -1406,14 +1406,17 @@ export default function VideoGeneratorPage() {
     setTimeout(() => textareaRef.current?.focus(), 100);
   }
 
-  // Fix 4: write videoJson to sessionStorage and open /video-download in a new tab
+  // Fix 4: write videoJson to localStorage and open /video-download in a new tab
+  
   function handleExport() {
     if (!latestVideoData) return;
-    sessionStorage.setItem(
+    // Use localStorage so the payload survives cross-tab navigation
+    // (sessionStorage is NOT shared with tabs opened via window.open + noopener)
+    localStorage.setItem(
       "video-download-payload",
       JSON.stringify({ videoJson: latestVideoData.videoJson }),
     );
-    window.open("/video-gen/download", "_blank", "noopener,noreferrer");
+    window.open("/video-gen/download", "_blank", "noreferrer");
   }
 
   function handleTtsVolumeChange(v: number) {

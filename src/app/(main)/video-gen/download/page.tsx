@@ -1,6 +1,6 @@
 "use client";
 
-// src/app/video-download/page.tsx
+// src/app/video-gen/download/page.tsx
 // Opened in a new tab when the user clicks "Export MP4".
 // Reads videoJson from sessionStorage (key: "video-download-payload"),
 // renders it with @remotion/web-renderer, and auto-starts the download.
@@ -31,8 +31,15 @@ export default function VideoDownloadPage() {
     async function run() {
       try {
         // ── 1. Read payload ──────────────────────────────────────────────
-        const raw = sessionStorage.getItem("video-download-payload");
+
+        // Try localStorage first (written by handleExport), fall back to sessionStorage
+        const raw = 
+         localStorage.getItem("video-download-payload") ??
+         sessionStorage.getItem("video-download-payload");
         if (!raw) throw new Error("No video payload found. Please go back and try again.");
+
+        // Stale payload could cause a wrong video to download on next export attempt, so we clear it immediately after reading
+        localStorage.removeItem("video-download-payload");
 
         const { videoJson } = JSON.parse(raw) as { videoJson: VideoJson };
         if (!videoJson) throw new Error("Invalid video payload.");
