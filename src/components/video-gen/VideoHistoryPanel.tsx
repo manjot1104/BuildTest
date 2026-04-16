@@ -37,17 +37,20 @@ function ChatRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(chat.title ?? "");
+
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors group mb-0.5 ${
-        isActive
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors group mb-0.5 cursor-pointer ${isActive
           ? "bg-primary/10 border border-primary/20"
           : "hover:bg-muted/50 border border-transparent"
-      }`}
+        }`}
     >
-      <div className="flex items-center justify-between mb-1">
+      {/* Row 1: title pill + pencil + timestamp */}
+      <div className="flex items-center gap-2 mb-1.5">
         {editing ? (
           <input
             value={draft}
@@ -55,41 +58,44 @@ function ChatRow({
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => { onRename(chat.id, draft); setEditing(false); }}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === "Enter") { onRename(chat.id, draft); setEditing(false); }
               if (e.key === "Escape") { setDraft(chat.title ?? ""); setEditing(false); }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="text-[9px] font-mono rounded-full px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none w-full max-w-[130px]"
+            className="flex-1 text-xs font-mono rounded-md px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none"
           />
         ) : (
           <>
-            <span className={`text-[9px] font-mono rounded-full px-2 py-0.5 border ${isActive ? "text-primary bg-primary/10 border-primary/20" : "text-muted-foreground/60 bg-muted border-border"}`}>
+            <span className={`text-xs font-mono rounded-full px-2 py-0.5 border truncate max-w-[140px] shrink-0 ${isActive
+                ? "text-primary bg-primary/10 border-primary/20"
+                : "text-muted-foreground/70 bg-muted border-border"
+              }`}>
               {chat.title ?? "Untitled"}
             </span>
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setDraft(chat.title ?? ""); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0 ml-1"
+              className="opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0"
               aria-label="Rename"
             >
-              <Pencil className="h-2.5 w-2.5" />
+              <Pencil className="h-3 w-3" />
             </button>
+            <span className="text-xs font-mono text-muted-foreground/40 tabular-nums ml-auto shrink-0">
+              {formatRelativeTime(chat.updatedAt)}
+            </span>
           </>
         )}
-        <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums">
-          {formatRelativeTime(chat.updatedAt)}
-        </span>
       </div>
+
+      {/* Row 2: last prompt preview */}
       {chat.lastPrompt && (
-        <p
-          className={`text-[11px] font-mono leading-relaxed line-clamp-2 ${
-            isActive ? "text-primary/80" : "text-muted-foreground"
-          }`}
-        >
+        <p className={`text-sm font-mono leading-relaxed line-clamp-2 ${isActive ? "text-primary/80" : "text-muted-foreground"
+          }`}>
           {chat.lastPrompt}
         </p>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -201,24 +207,21 @@ export function VideoHistoryPanel({
     <>
       {/* ── Desktop: sidebar overlay ─────────────────────────────── */}
       <div
-        className={`hidden sm:block fixed inset-0 z-40 transition-all duration-200 ${
-          open ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`hidden sm:block fixed inset-0 z-40 transition-all duration-200 ${open ? "pointer-events-auto" : "pointer-events-none"
+          }`}
       >
         {/* Backdrop */}
         <div
           ref={overlayRef}
           onClick={onClose}
-          className={`absolute inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-200 ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-background/60 backdrop-blur-sm transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0"
+            }`}
         />
 
         {/* Panel */}
         <div
-          className={`absolute left-0 top-0 h-full w-72 bg-background border-r border-border shadow-lg transition-transform duration-200 ${
-            open ? "translate-x-0" : "-translate-x-full"
-          }`}
+          className={`absolute left-0 top-0 h-full w-72 bg-background border-r border-border shadow-lg transition-transform duration-200 ${open ? "translate-x-0" : "-translate-x-full"
+            }`}
         >
           {content}
         </div>
@@ -226,23 +229,20 @@ export function VideoHistoryPanel({
 
       {/* ── Mobile: bottom drawer ─────────────────────────────────── */}
       <div
-        className={`sm:hidden fixed inset-0 z-40 transition-all duration-200 ${
-          open ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`sm:hidden fixed inset-0 z-40 transition-all duration-200 ${open ? "pointer-events-auto" : "pointer-events-none"
+          }`}
       >
         {/* Backdrop */}
         <div
           onClick={onClose}
-          className={`absolute inset-0 bg-background/70 transition-opacity duration-200 ${
-            open ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-background/70 transition-opacity duration-200 ${open ? "opacity-100" : "opacity-0"
+            }`}
         />
 
         {/* Drawer */}
         <div
-          className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${
-            open ? "translate-y-0" : "translate-y-full"
-          }`}
+          className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"
+            }`}
           style={{ maxHeight: "72vh" }}
         >
           {/* Pull handle */}

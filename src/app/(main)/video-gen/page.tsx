@@ -16,7 +16,6 @@ import {
 import {
   useGenerateVideo,
   useUploadUserImages,
-  useDownloadVideo,
   useVideoChats,
   useVideoChat,
   useRenameVideoChat,
@@ -96,9 +95,6 @@ interface LatestVideoData {
 /** Returns true when the server responded with INSUFFICIENT_CREDITS */
 function isInsufficientCreditsError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  // The mutation throws with the server's error message which contains the code
-  // via the fetch wrapper in use-video-hooks. We also check for the HTTP 402 text
-  // that some wrappers surface.
   return (
     err.message.includes("INSUFFICIENT_CREDITS") ||
     err.message.toLowerCase().includes("enough credits") ||
@@ -141,116 +137,15 @@ function CreditsPill({
   return (
     <button
       onClick={onUpgrade}
-      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-mono transition-all ${
-        isLow
-          ? "border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
-          : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-      }`}
+      className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-lg border text-xs font-mono transition-all ${isLow
+        ? "border-amber-500/30 text-amber-500 hover:bg-amber-500/10"
+        : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+        }`}
       title="Manage credits"
     >
       <Zap className="h-3.5 w-3.5" />
       <span className="tabular-nums">{totalCredits}</span>
     </button>
-  );
-}
-
-// ─── Export Modal ─────────────────────────────────────────────────────────────
-
-function ExportModal({
-  open,
-  progress,
-  onClose,
-  isComplete,
-}: {
-  open: boolean;
-  progress: number | null;
-  onClose: () => void;
-  isComplete: boolean;
-}) {
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
-        onClick={isComplete ? onClose : undefined}
-      />
-      {/* Modal */}
-      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-background shadow-2xl p-6 space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-              <Download className="h-4 w-4 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm font-sans font-semibold text-foreground">
-                {isComplete ? "Export complete!" : "Exporting video…"}
-              </p>
-              <p className="text-[10px] font-mono text-muted-foreground/60">
-                {isComplete ? "Your MP4 download has started" : "Rendering in your browser"}
-              </p>
-            </div>
-          </div>
-          {isComplete && (
-            <button
-              onClick={onClose}
-              className="shrink-0 h-7 w-7 rounded-lg flex items-center justify-center text-muted-foreground/40 hover:text-foreground hover:bg-muted transition-all"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
-
-        {/* Progress bar */}
-        {!isComplete && (
-          <div className="space-y-2">
-            <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${Math.round((progress ?? 0) * 100)}%` }}
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-mono text-muted-foreground/50">
-                Rendering frames…
-              </span>
-              <span className="text-[10px] font-mono text-primary tabular-nums font-bold">
-                {Math.round((progress ?? 0) * 100)}%
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* Warning / success message */}
-        {!isComplete ? (
-          <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-3">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-            <p className="text-[11px] font-mono text-amber-500/80 leading-relaxed">
-              <strong className="text-amber-500">Do not close this tab</strong> until the export
-              completes. Closing the tab will cancel the render and you'll need to start over.
-            </p>
-          </div>
-        ) : (
-          <div className="flex items-start gap-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-3.5 py-3">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-            <p className="text-[11px] font-mono text-emerald-500/80 leading-relaxed">
-              Your video has been saved to your downloads folder.
-            </p>
-          </div>
-        )}
-
-        {isComplete && (
-          <button
-            onClick={onClose}
-            className="w-full h-9 rounded-xl bg-primary text-primary-foreground text-xs font-sans font-bold hover:bg-primary/90 transition-all"
-          >
-            Done
-          </button>
-        )}
-      </div>
-    </div>
   );
 }
 
@@ -485,31 +380,44 @@ function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// Fix 1: HistoryChatRow accepts an optimistic title override so renames are
+// reflected immediately without waiting for the server to invalidate the cache.
 function HistoryChatRow({
   chat,
   isActive,
   onClick,
   onRename,
+  optimisticTitle,
 }: {
   chat: VideoChatSummary;
   isActive: boolean;
   onClick: () => void;
   onRename: (id: string, title: string) => void;
+  optimisticTitle?: string;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(chat.title ?? "");
+  // Prefer the optimistic title passed from the parent while the mutation settles
+  const displayTitle = optimisticTitle ?? chat.title ?? "Untitled";
+  const [draft, setDraft] = useState(displayTitle);
+
+  // Keep draft in sync if the displayed title changes externally
+  useEffect(() => {
+    if (!editing) setDraft(displayTitle);
+  }, [displayTitle, editing]);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors mb-0.5 border group ${
-        isActive
-          ? "bg-primary/10 border-primary/20"
-          : "hover:bg-muted/50 border-transparent hover:border-border/50"
-      }`}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onClick(); }}
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors group mb-0.5 cursor-pointer ${isActive
+        ? "bg-primary/10 border border-primary/20"
+        : "hover:bg-muted/50 border border-transparent"
+        }`}
     >
-      <div className="flex items-center justify-between mb-1">
+      {/* Row 1: title pill + pencil + timestamp */}
+      <div className="flex items-center gap-2 mb-1.5">
         {editing ? (
           <input
             value={draft}
@@ -517,41 +425,44 @@ function HistoryChatRow({
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => { onRename(chat.id, draft); setEditing(false); }}
             onKeyDown={(e) => {
+              e.stopPropagation();
               if (e.key === "Enter") { onRename(chat.id, draft); setEditing(false); }
-              if (e.key === "Escape") { setDraft(chat.title ?? ""); setEditing(false); }
+              if (e.key === "Escape") { setDraft(displayTitle); setEditing(false); }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="text-[9px] font-mono rounded-full px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none w-full max-w-[130px]"
+            className="flex-1 text-xs font-mono rounded-md px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none"
           />
         ) : (
           <>
-            <span className={`text-[9px] font-mono rounded-full px-2 py-0.5 border truncate max-w-[120px] ${isActive ? "text-primary bg-primary/10 border-primary/20" : "text-muted-foreground/60 bg-muted border-border"}`}>
-              {chat.title ?? "Untitled"}
+            <span className={`text-xs font-mono rounded-full px-2 py-0.5 border truncate max-w-[140px] shrink-0 ${isActive
+              ? "text-primary bg-primary/10 border-primary/20"
+              : "text-muted-foreground/70 bg-muted border-border"
+              }`}>
+              {displayTitle}
             </span>
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); setDraft(chat.title ?? ""); setEditing(true); }}
-              className="opacity-0 group-hover:opacity-100 h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0 ml-1"
+              onClick={(e) => { e.stopPropagation(); setDraft(displayTitle); setEditing(true); }}
+              className="opacity-0 group-hover:opacity-100 h-5 w-5 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0"
               aria-label="Rename"
             >
-              <Pencil className="h-2.5 w-2.5" />
+              <Pencil className="h-3 w-3" />
             </button>
+            <span className="text-xs font-mono text-muted-foreground/40 tabular-nums ml-auto shrink-0">
+              {formatRelativeTime(chat.updatedAt)}
+            </span>
           </>
         )}
-        <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums shrink-0 ml-1">
-          {formatRelativeTime(chat.updatedAt)}
-        </span>
       </div>
+
+      {/* Row 2: last prompt preview */}
       {chat.lastPrompt && (
-        <p
-          className={`text-[11px] font-mono leading-relaxed line-clamp-2 ${
-            isActive ? "text-primary/80" : "text-muted-foreground"
-          }`}
-        >
+        <p className={`text-sm font-mono leading-relaxed line-clamp-2 ${isActive ? "text-primary/80" : "text-muted-foreground"
+          }`}>
           {chat.lastPrompt}
         </p>
       )}
-    </button>
+    </div>
   );
 }
 
@@ -568,7 +479,37 @@ function VideoHistoryPanel({
 }) {
   const { data: chats, isLoading, isError } = useVideoChats();
   const { mutate: renameChat } = useRenameVideoChat();
-  
+
+  // Fix 1: track optimistic renames locally so the new title shows instantly
+  const [optimisticTitles, setOptimisticTitles] = useState<Record<string, string>>({});
+
+  const handleRename = (id: string, title: string) => {
+    // Apply optimistically
+    setOptimisticTitles((prev) => ({ ...prev, [id]: title }));
+    renameChat(
+      { id, title },
+      {
+        onError: () => {
+          // Roll back on failure
+          setOptimisticTitles((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+          toast.error("Failed to rename — changes reverted.");
+        },
+        onSuccess: () => {
+          // Server cache invalidated by the mutation; clear optimistic override
+          setOptimisticTitles((prev) => {
+            const next = { ...prev };
+            delete next[id];
+            return next;
+          });
+        },
+      },
+    );
+  };
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -579,13 +520,13 @@ function VideoHistoryPanel({
   const panelContent = (
     <div className="flex flex-col h-full" onKeyDown={handleKeyDown}>
       <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
           <History className="h-3.5 w-3.5 text-muted-foreground/50" />
-          <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">
+          <span className="text-xs font-mono text-muted-foreground/50 uppercase tracking-widest">
             Video history
           </span>
           {chats && chats.length > 0 && (
-            <span className="text-[9px] font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5 tabular-nums">
+            <span className="text-xs font-mono text-muted-foreground/40 border border-border rounded-full px-1.5 py-0.5 tabular-nums">
               {chats.length}
             </span>
           )}
@@ -608,7 +549,7 @@ function VideoHistoryPanel({
         )}
         {isError && (
           <div className="px-3 py-4 text-center">
-            <p className="text-[10px] font-mono text-muted-foreground/40">Failed to load history</p>
+            <p className="text-xs font-mono text-muted-foreground/40">Failed to load history</p>
           </div>
         )}
         {!isLoading && !isError && chats?.length === 0 && (
@@ -616,7 +557,7 @@ function VideoHistoryPanel({
             <div className="h-9 w-9 rounded-xl bg-muted border border-border flex items-center justify-center">
               <Film className="h-4 w-4 text-muted-foreground/30" />
             </div>
-            <p className="text-[10px] font-mono text-muted-foreground/40 text-center leading-relaxed">
+            <p className="text-xs font-mono text-muted-foreground/40 text-center leading-relaxed">
               No videos yet.<br />Generate your first one!
             </p>
           </div>
@@ -629,7 +570,8 @@ function VideoHistoryPanel({
                 chat={chat}
                 isActive={activeChatId === chat.id}
                 onClick={() => { onSelectChat(chat); onClose(); }}
-                onRename={(id, title) => renameChat({ id, title })}
+                onRename={handleRename}
+                optimisticTitle={optimisticTitles[chat.id]}
               />
             ))}
           </div>
@@ -667,7 +609,7 @@ function VideoHistoryPanel({
         />
         <div
           className={`absolute bottom-0 left-0 right-0 bg-background rounded-t-2xl border-t border-x border-border transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"}`}
-          style={{ maxHeight: "72vh" }}
+          style={{ maxHeight: "72vh", paddingBottom: "env(safe-area-inset-bottom)" }}
         >
           <div className="flex justify-center pt-2.5 pb-1 shrink-0">
             <div className="w-9 h-1 rounded-full bg-muted-foreground/20" />
@@ -685,8 +627,6 @@ function VideoHistoryPanel({
 function VideoPanel({
   data,
   onExport,
-  isDownloading,
-  downloadProgress,
   ttsVolume,
   musicVolume,
   onTtsVolumeChange,
@@ -694,8 +634,6 @@ function VideoPanel({
 }: {
   data: LatestVideoData;
   onExport: () => void;
-  isDownloading: boolean;
-  downloadProgress: number | null;
   ttsVolume: number;
   musicVolume: number;
   onTtsVolumeChange: (v: number) => void;
@@ -793,18 +731,13 @@ function VideoPanel({
         </div>
       )}
 
-      {/* Export button */}
+      {/* Fix 4: Export opens a dedicated download page in a new tab */}
       <button
         type="button"
         onClick={onExport}
-        disabled={isDownloading}
-        className="w-full flex items-center justify-center gap-2 h-9 rounded-xl border border-border bg-muted/20 text-[11px] font-mono text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full flex items-center justify-center gap-2 h-9 rounded-xl border border-border bg-muted/20 text-[11px] font-mono text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all"
       >
-        {isDownloading ? (
-          <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Exporting…</>
-        ) : (
-          <><Download className="h-3.5 w-3.5" /> Export MP4</>
-        )}
+        <Download className="h-3.5 w-3.5" /> Export MP4
       </button>
 
       {/* JSON debug panel */}
@@ -881,6 +814,14 @@ function FollowUpInput({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Fix 3: close expanded panels when generation starts so UI is clean
+  useEffect(() => {
+    if (isBusy) {
+      setOptionsOpen(false);
+      setImagesOpen(false);
+    }
+  }, [isBusy]);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!followUpPrompt.trim() || isBusy || isOutOfCredits) return;
@@ -910,7 +851,7 @@ function FollowUpInput({
 
   return (
     <div className="space-y-3">
-      {/* Credit limit banner — shown above the follow-up input when out of credits */}
+      {/* Credit limit banner */}
       {isOutOfCredits && (
         <CreditLimitBanner onUpgrade={onUpgrade} />
       )}
@@ -935,7 +876,7 @@ function FollowUpInput({
       )}
 
       {/* Input card */}
-      <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+      <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBusy ? "opacity-60 pointer-events-none" : ""}`}>
         {/* Header */}
         <div className="flex items-center gap-2 px-4 pt-3 pb-1">
           <MessageSquarePlus className="h-3.5 w-3.5 text-primary/60" />
@@ -965,7 +906,7 @@ function FollowUpInput({
           </div>
 
           {/* Duration + submit row */}
-          <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="border-t border-border px-4 py-2.5 flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest shrink-0 hidden sm:block">
                 Duration
@@ -976,12 +917,12 @@ function FollowUpInput({
                     key={range.value}
                     type="button"
                     onClick={() => onRangeChange(range)}
+                    disabled={isBusy}
                     aria-pressed={selectedRange.value === range.value}
-                    className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${
-                      selectedRange.value === range.value
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${selectedRange.value === range.value
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                      }`}
                   >
                     {range.label}
                   </button>
@@ -1002,12 +943,13 @@ function FollowUpInput({
           </div>
         </form>
 
-        {/* Images panel */}
+        {/* Images panel — Fix 3: disabled while busy */}
         <div className="border-t border-border">
           <button
             type="button"
-            onClick={() => setImagesOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            onClick={() => !isBusy && setImagesOpen((v) => !v)}
+            disabled={isBusy}
+            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none"
           >
             <div className="flex items-center gap-2">
               <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
@@ -1015,11 +957,10 @@ function FollowUpInput({
                 Images
               </span>
               {(editedExistingImages.length > 0 || newImageEntries.length > 0) && (
-                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.5 border ${
-                  hasImageChanges
-                    ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
-                    : "text-primary bg-primary/10 border-primary/20"
-                }`}>
+                <span className={`text-[9px] font-mono rounded-full px-1.5 py-0.5 border ${hasImageChanges
+                  ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                  : "text-primary bg-primary/10 border-primary/20"
+                  }`}>
                   {editedExistingImages.length + newImageEntries.length}
                   {hasImageChanges && " · edited"}
                 </span>
@@ -1045,12 +986,13 @@ function FollowUpInput({
           )}
         </div>
 
-        {/* Audio options panel */}
+        {/* Audio options panel — Fix 3: disabled while busy */}
         <div className="border-t border-border">
           <button
             type="button"
-            onClick={() => setOptionsOpen((v) => !v)}
-            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
+            onClick={() => !isBusy && setOptionsOpen((v) => !v)}
+            disabled={isBusy}
+            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none"
           >
             <div className="flex items-center gap-2">
               <Volume2 className="h-3 w-3 text-muted-foreground/50" />
@@ -1084,7 +1026,8 @@ function FollowUpInput({
                   <button
                     type="button"
                     onClick={() => setUseTTS((v) => !v)}
-                    className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                    disabled={isBusy}
+                    className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}
                   >
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
                   </button>
@@ -1093,11 +1036,11 @@ function FollowUpInput({
                   <>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
+                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} disabled={isBusy} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input type="range" min="0" max="1" step="0.05" value={ttsVolume} onChange={(e) => setTtsVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                      <input type="range" min="0" max="1" step="0.05" value={ttsVolume} disabled={isBusy} onChange={(e) => setTtsVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(ttsVolume * 100)}%</span>
                     </div>
                   </>
@@ -1113,7 +1056,8 @@ function FollowUpInput({
                   <button
                     type="button"
                     onClick={() => setUseMusic((v) => !v)}
-                    className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
+                    disabled={isBusy}
+                    className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}
                   >
                     <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
                   </button>
@@ -1124,13 +1068,13 @@ function FollowUpInput({
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                       <div className="flex gap-1 flex-wrap">
                         {MUSIC_GENRES.map((g) => (
-                          <button key={g.value} type="button" onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                          <button key={g.value} type="button" disabled={isBusy} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
                         ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                      <input type="range" min="0" max="1" step="0.05" value={musicVolume} onChange={(e) => setMusicVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                      <input type="range" min="0" max="1" step="0.05" value={musicVolume} disabled={isBusy} onChange={(e) => setMusicVolume(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(musicVolume * 100)}%</span>
                     </div>
                   </>
@@ -1157,7 +1101,6 @@ export default function VideoGeneratorPage() {
   const [chatId, setChatId] = useState<string | null>(null);
 
   // The single latest rendered video — replaced on every successful generation.
-  // null = no video yet. On follow-up failure this is NOT changed.
   const [latestVideoData, setLatestVideoData] = useState<LatestVideoData | null>(null);
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
@@ -1176,11 +1119,6 @@ export default function VideoGeneratorPage() {
   const [ttsVolume0, setTtsVolume0] = useState(0.8);
   const [musicVolume0, setMusicVolume0] = useState(0.3);
 
-  // Export modal
-  const [exportModalOpen, setExportModalOpen] = useState(false);
-  const [exportComplete, setExportComplete] = useState(false);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
-
   // History panel
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -1192,14 +1130,11 @@ export default function VideoGeneratorPage() {
   const [loadingHistoryChatId, setLoadingHistoryChatId] = useState<string | null>(null);
   const appliedHistoryChatIdRef = useRef<string | null>(null);
 
-  // ── Subscription modal ─────────────────────────────────────────────────────
+  // Subscription modal
   const [subscriptionModalOpen, setSubscriptionModalOpen] = useState(false);
 
-  // useUserCredits returns { credits, subscription, hasActiveSubscription, isLoading, error, refetch }
-  // where credits is UserCredits | null (with subscriptionCredits, additionalCredits, totalCredits)
   const { credits: userCredits, hasActiveSubscription, subscription } = useUserCredits();
 
-  // Derived credit state — credits is null while loading or unauthenticated
   const isOutOfCredits = userCredits !== null && userCredits.totalCredits <= 0;
 
   const chatBottomRef = useRef<HTMLDivElement>(null);
@@ -1207,13 +1142,20 @@ export default function VideoGeneratorPage() {
 
   const { mutate: generate, isPending: isGenerating } = useGenerateVideo();
   const { mutateAsync: uploadImages, isPending: isUploading } = useUploadUserImages();
-  const { mutate: downloadVideo, isPending: isDownloading } = useDownloadVideo();
 
   const { data: historyChatDetail, isLoading: isLoadingHistoryChat, isError: isHistoryChatError } =
     useVideoChat(loadingHistoryChatId);
 
   const isBusy = isGenerating || isUploading;
   const hasResult = latestVideoData !== null;
+
+  // Fix 3: close initial-prompt panels when generation starts
+  useEffect(() => {
+    if (isBusy) {
+      setOptionsOpen(false);
+      setImagesOpen(false);
+    }
+  }, [isBusy]);
 
   // Scroll to bottom when messages change or video appears
   useEffect(() => {
@@ -1237,7 +1179,6 @@ export default function VideoGeneratorPage() {
       durationSeconds: parseFloat((vj.duration / fps).toFixed(1)),
     };
 
-    // Reconstruct chat messages (prompts only) from prompt history
     const msgs: ChatMessage[] = [];
     const prompts = historyChatDetail.prompts ?? [];
     for (const p of prompts) {
@@ -1250,14 +1191,11 @@ export default function VideoGeneratorPage() {
     }
 
     setChatMessages(msgs);
-
-    // Set the single latest video
     setLatestVideoData({
       videoJson: vj,
       meta,
       uploadedImages: historyChatDetail.userImages ?? [],
     });
-
     setUploadedImages(historyChatDetail.userImages ?? []);
 
     if (historyChatDetail.options) {
@@ -1269,11 +1207,9 @@ export default function VideoGeneratorPage() {
     setLoadingHistoryChatId(null);
   }
 
-  // ── Shared credit-error handler ────────────────────────────────────────────
-  // Called from both initial and follow-up generation error paths.
+  // Shared credit-error handler
   function handleGenerationError(err: unknown, promptText: string) {
     if (isInsufficientCreditsError(err)) {
-      // Don't add an error bubble — open the subscription modal directly.
       setSubscriptionModalOpen(true);
       toast.error("Not enough credits — please top up to continue.");
       return;
@@ -1299,7 +1235,6 @@ export default function VideoGeneratorPage() {
       ...(useMusic && { musicGenre }),
     };
 
-    // Add user message immediately
     const sentAt = new Date().toISOString();
     setChatMessages((prev) => [...prev, { type: "prompt", text: promptText, sentAt }]);
     setPrompt("");
@@ -1345,7 +1280,6 @@ export default function VideoGeneratorPage() {
       {
         onSuccess: (data) => {
           setChatId(data.chatId);
-          const fps = data.videoJson.fps ?? 30;
           setLatestVideoData({
             videoJson: proxyS3Urls(data.videoJson),
             meta: data.meta,
@@ -1375,7 +1309,6 @@ export default function VideoGeneratorPage() {
     options: GenerateVideoOptions;
     duration: number;
   }) {
-    // Guard: follow-ups require an existing chat
     if (!chatId) return;
 
     const sentAt = new Date().toISOString();
@@ -1394,7 +1327,6 @@ export default function VideoGeneratorPage() {
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Image upload failed";
         toast.error(errMsg);
-        // Add error message but do NOT clear or replace the existing video
         setChatMessages((prev) => [
           ...prev,
           { type: "error", text: errMsg, promptText: followUpPrompt, sentAt: new Date().toISOString() },
@@ -1412,14 +1344,12 @@ export default function VideoGeneratorPage() {
         prompt: followUpPrompt.trim(),
         duration,
         options,
-        // Always pass the existing chatId — server will append to existing chat
         chatId,
         userImages: mergedImages.length > 0 ? mergedImages : undefined,
         imageSessionId: resolvedNewSessionId ?? imageSessionId,
       },
       {
         onSuccess: (data) => {
-          // Replace the single video — same chatId, no new chat created
           setLatestVideoData({
             videoJson: proxyS3Urls(data.videoJson),
             meta: data.meta,
@@ -1464,9 +1394,6 @@ export default function VideoGeneratorPage() {
     setImageSessionId(undefined);
     setLoadingHistoryChatId(null);
     appliedHistoryChatIdRef.current = null;
-    setDownloadProgress(null);
-    setExportModalOpen(false);
-    setExportComplete(false);
     setLastFailedPrompt(null);
     setLastFailedOptions(null);
   }
@@ -1479,28 +1406,14 @@ export default function VideoGeneratorPage() {
     setTimeout(() => textareaRef.current?.focus(), 100);
   }
 
+  // Fix 4: write videoJson to sessionStorage and open /video-download in a new tab
   function handleExport() {
-    if (!latestVideoData || isDownloading) return;
-    setExportModalOpen(true);
-    setExportComplete(false);
-    setDownloadProgress(0);
-    downloadVideo(
-      {
-        videoJson: latestVideoData.videoJson,
-        onProgress: (p) => setDownloadProgress(p),
-      },
-      {
-        onSuccess: () => {
-          setExportComplete(true);
-          setDownloadProgress(null);
-        },
-        onError: (err) => {
-          toast.error(err.message ?? "Export failed");
-          setExportModalOpen(false);
-          setDownloadProgress(null);
-        },
-      },
+    if (!latestVideoData) return;
+    sessionStorage.setItem(
+      "video-download-payload",
+      JSON.stringify({ videoJson: latestVideoData.videoJson }),
     );
+    window.open("/video-gen/download", "_blank", "noopener,noreferrer");
   }
 
   function handleTtsVolumeChange(v: number) {
@@ -1547,8 +1460,7 @@ export default function VideoGeneratorPage() {
               BETA
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            {/* Credits pill — tapping opens the subscription modal */}
+          <div className="flex items-center gap-2 flex-wrap justify-end shrink-0">
             {userCredits !== null && (
               <CreditsPill
                 totalCredits={userCredits.totalCredits}
@@ -1594,31 +1506,35 @@ export default function VideoGeneratorPage() {
           </div>
         )}
 
-        {/* ── INITIAL INPUT (no messages yet) ── */}
-        {!hasResult && chatMessages.length === 0 && !isLoadingHistoryChat && (
+        {/* ── INITIAL INPUT — visible only when no result yet ── */}
+        {!hasResult && !isLoadingHistoryChat && (
           <div className="space-y-3">
-            {/* Hero */}
-            <div className="text-center space-y-2.5 py-4">
-              <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
-                <Sparkles className="h-3 w-3" />
-                prompt to video · remotion powered
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-sans font-bold tracking-tight text-foreground">
-                Describe your video.{" "}
-                <span className="text-muted-foreground/35">We'll build it.</span>
-              </h1>
-              <p className="text-xs text-muted-foreground font-mono">
-                Type a prompt · AI generates the composition · Preview it instantly
-              </p>
-            </div>
 
-            {/* Credit limit banner — shown above the input when out of credits */}
+            {/* Hero — only when no messages */}
+            {chatMessages.length === 0 && (
+              <div className="text-center space-y-2.5 py-4">
+                <div className="inline-flex items-center gap-1.5 text-[10px] font-mono text-primary bg-primary/10 border border-primary/20 px-3 py-1 rounded-full">
+                  <Sparkles className="h-3 w-3" />
+                  prompt to video · remotion powered
+                </div>
+                <h1 className="text-2xl sm:text-3xl font-sans font-bold tracking-tight text-foreground">
+                  Describe your video.{" "}
+                  <span className="text-muted-foreground/35">We'll build it.</span>
+                </h1>
+                <p className="text-xs text-muted-foreground font-mono">
+                  Type a prompt · AI generates the composition · Preview it instantly
+                </p>
+              </div>
+            )}
+
+            {/* Credit limit banner */}
             {isOutOfCredits && (
               <CreditLimitBanner onUpgrade={() => setSubscriptionModalOpen(true)} />
             )}
 
+            {/* Fix 3: wrap initial input in opacity overlay while busy */}
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="rounded-xl border border-border bg-muted/20 overflow-hidden">
+              <div className={`rounded-xl border border-border bg-muted/20 overflow-hidden transition-opacity ${isBusy ? "opacity-60 pointer-events-none" : ""}`}>
                 {/* Textarea */}
                 <div className="relative">
                   <textarea
@@ -1639,8 +1555,27 @@ export default function VideoGeneratorPage() {
                 </div>
 
                 {/* Duration + submit */}
-                <div className="border-t border-border px-4 py-3 flex items-center justify-between gap-3">
+                <div className="border-t border-border px-4 py-3 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setImagesOpen((v) => !v)}
+                        disabled={isBusy}
+                        title="Attach images"
+                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 ${imagesOpen || userImageEntries.length > 0
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                          }`}
+                      >
+                        <ImagePlus className="h-3.5 w-3.5" />
+                      </button>
+                      {userImageEntries.length > 0 && (
+                        <span className="absolute -top-1 -right-1 h-3.5 w-3.5 rounded-full bg-primary text-[8px] text-primary-foreground flex items-center justify-center font-bold pointer-events-none">
+                          {userImageEntries.length}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest shrink-0 hidden sm:block">
                       Duration
                     </span>
@@ -1650,8 +1585,12 @@ export default function VideoGeneratorPage() {
                           key={range.value}
                           type="button"
                           onClick={() => setSelectedRange(range)}
+                          disabled={isBusy}
                           aria-pressed={selectedRange.value === range.value}
-                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation ${selectedRange.value === range.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                          className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${selectedRange.value === range.value
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground"
+                            }`}
                         >
                           {range.label}
                         </button>
@@ -1675,7 +1614,7 @@ export default function VideoGeneratorPage() {
 
                 {/* Images */}
                 <div className="border-t border-border">
-                  <button type="button" onClick={() => setImagesOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                  <button type="button" onClick={() => !isBusy && setImagesOpen((v) => !v)} disabled={isBusy} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none">
                     <div className="flex items-center gap-2">
                       <ImagePlus className="h-3 w-3 text-muted-foreground/50" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Your images</span>
@@ -1692,7 +1631,7 @@ export default function VideoGeneratorPage() {
                         <ImageManager
                           existingImages={[]}
                           newEntries={userImageEntries}
-                          onExistingChange={() => {}}
+                          onExistingChange={() => { }}
                           onNewEntriesChange={setUserImageEntries}
                           disabled={isBusy}
                         />
@@ -1701,9 +1640,9 @@ export default function VideoGeneratorPage() {
                   )}
                 </div>
 
-                {/* Audio options */}
+                {/* Audio options — Fix 3: disabled while busy */}
                 <div className="border-t border-border">
-                  <button type="button" onClick={() => setOptionsOpen((v) => !v)} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors">
+                  <button type="button" onClick={() => !isBusy && setOptionsOpen((v) => !v)} disabled={isBusy} className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors disabled:pointer-events-none">
                     <div className="flex items-center gap-2">
                       <Volume2 className="h-3 w-3 text-muted-foreground/50" />
                       <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-widest">Audio options</span>
@@ -1722,7 +1661,7 @@ export default function VideoGeneratorPage() {
                             <Mic className="h-3.5 w-3.5 text-muted-foreground/50" />
                             <span className="text-[11px] font-mono text-muted-foreground">Narration (TTS)</span>
                           </div>
-                          <button type="button" onClick={() => setUseTTS((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}>
+                          <button type="button" disabled={isBusy} onClick={() => setUseTTS((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useTTS ? "bg-primary border-primary" : "bg-muted border-border"}`}>
                             <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useTTS ? "left-4" : "left-0.5"}`} />
                           </button>
                         </div>
@@ -1730,11 +1669,11 @@ export default function VideoGeneratorPage() {
                           <>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                              <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
+                              <input type="text" value={voiceId} disabled={isBusy} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                              <input type="range" min="0" max="1" step="0.05" value={ttsVolume0} onChange={(e) => setTtsVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                              <input type="range" min="0" max="1" step="0.05" value={ttsVolume0} disabled={isBusy} onChange={(e) => setTtsVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(ttsVolume0 * 100)}%</span>
                             </div>
                           </>
@@ -1746,7 +1685,7 @@ export default function VideoGeneratorPage() {
                             <Music className="h-3.5 w-3.5 text-muted-foreground/50" />
                             <span className="text-[11px] font-mono text-muted-foreground">Background music</span>
                           </div>
-                          <button type="button" onClick={() => setUseMusic((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}>
+                          <button type="button" disabled={isBusy} onClick={() => setUseMusic((v) => !v)} className={`relative h-5 w-9 rounded-full border transition-all disabled:opacity-40 ${useMusic ? "bg-primary border-primary" : "bg-muted border-border"}`}>
                             <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${useMusic ? "left-4" : "left-0.5"}`} />
                           </button>
                         </div>
@@ -1756,13 +1695,13 @@ export default function VideoGeneratorPage() {
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                               <div className="flex gap-1 flex-wrap">
                                 {MUSIC_GENRES.map((g) => (
-                                  <button key={g.value} type="button" onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                                  <button key={g.value} type="button" disabled={isBusy} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
                                 ))}
                               </div>
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
-                              <input type="range" min="0" max="1" step="0.05" value={musicVolume0} onChange={(e) => setMusicVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
+                              <input type="range" min="0" max="1" step="0.05" value={musicVolume0} disabled={isBusy} onChange={(e) => setMusicVolume0(parseFloat(e.target.value))} className="flex-1 h-1.5 rounded-full bg-muted appearance-none cursor-pointer disabled:opacity-40 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3.5 [&::-webkit-slider-thumb]:h-3.5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:cursor-pointer" />
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-8 text-right tabular-nums">{Math.round(musicVolume0 * 100)}%</span>
                             </div>
                           </>
@@ -1774,8 +1713,8 @@ export default function VideoGeneratorPage() {
               </div>
             </form>
 
-            {/* Generating state */}
-            {isBusy && (
+            {/* Generating state — shown above example prompts while no chat yet */}
+            {isBusy && chatMessages.length === 0 && (
               <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
                 <div className="relative h-14 w-14">
                   <div className="absolute inset-0 rounded-full border-2 border-border" />
@@ -1793,7 +1732,7 @@ export default function VideoGeneratorPage() {
             )}
 
             {/* Example prompts */}
-            {!isBusy && (
+            {!isBusy && chatMessages.length === 0 && (
               <div>
                 <p className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-2">Try an example</p>
                 <div className="flex flex-wrap gap-1.5">
@@ -1813,10 +1752,12 @@ export default function VideoGeneratorPage() {
           </div>
         )}
 
-        {/* ── CHAT THREAD ── */}
+        {/* ── CHAT THREAD ──
+            Fix 2: the thread (messages + video + follow-up) is always rendered
+            as a single vertical stack so messages never appear below the input. ── */}
         {chatMessages.length > 0 && (
           <div className="space-y-4">
-            {/* Render prompt and error messages chronologically */}
+            {/* Prompt and error messages chronologically */}
             {chatMessages.map((msg, idx) => {
               if (msg.type === "prompt") {
                 return (
@@ -1864,7 +1805,7 @@ export default function VideoGeneratorPage() {
               return null;
             })}
 
-            {/* Generating indicator — shown while waiting for a response */}
+            {/* Generating indicator */}
             {isBusy && (
               <div className="flex items-start gap-3">
                 <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
@@ -1892,27 +1833,28 @@ export default function VideoGeneratorPage() {
             {/* The single rendered video — always at the bottom of the thread */}
             {latestVideoData && !isBusy && (
               <div className="flex items-start gap-3">
-                <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
-                  <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-1">
+                  <Bot className="h-3.5 w-3.5 text-primary" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <VideoPanel
-                    data={latestVideoData}
-                    onExport={handleExport}
-                    isDownloading={isDownloading}
-                    downloadProgress={downloadProgress}
-                    ttsVolume={ttsVolume}
-                    musicVolume={musicVolume}
-                    onTtsVolumeChange={handleTtsVolumeChange}
-                    onMusicVolumeChange={handleMusicVolumeChange}
-                  />
+                <div className="flex-1 min-w-0 overflow-hidden space-y-1">
+                  <p className="text-[10px] font-mono text-muted-foreground/50 mb-2">Video ready</p>
+                  <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                    <VideoPanel
+                      data={latestVideoData}
+                      onExport={handleExport}
+                      ttsVolume={ttsVolume}
+                      musicVolume={musicVolume}
+                      onTtsVolumeChange={handleTtsVolumeChange}
+                      onMusicVolumeChange={handleMusicVolumeChange}
+                    />
+                  </div>
                 </div>
               </div>
             )}
 
             <div ref={chatBottomRef} />
 
-            {/* Follow-up input (shown after first video, when not busy) */}
+            {/* Fix 2: follow-up input always below the video, never above messages */}
             {hasResult && !isLoadingHistoryChat && (
               <div className="pt-2">
                 <FollowUpInput
@@ -1930,17 +1872,20 @@ export default function VideoGeneratorPage() {
             )}
 
             {/* New video footer */}
-            <div className="flex justify-center pb-6">
-              <button
-                onClick={handleReset}
-                className="inline-flex items-center gap-2 h-8 px-4 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground border border-transparent hover:border-border transition-all"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                Start new video
-              </button>
-            </div>
+            {!isBusy && (
+              <div className="flex justify-center pb-6">
+                <button
+                  onClick={handleReset}
+                  className="inline-flex items-center gap-2 h-8 px-4 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground border border-transparent hover:border-border transition-all"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Start new video
+                </button>
+              </div>
+            )}
           </div>
         )}
+
       </main>
 
       {/* History panel */}
@@ -1951,15 +1896,7 @@ export default function VideoGeneratorPage() {
         onSelectChat={handleSelectHistoryChat}
       />
 
-      {/* Export modal */}
-      <ExportModal
-        open={exportModalOpen}
-        progress={downloadProgress}
-        onClose={() => { setExportModalOpen(false); setExportComplete(false); }}
-        isComplete={exportComplete}
-      />
-
-      {/* Subscription modal — opened automatically on INSUFFICIENT_CREDITS error or credit pill click */}
+      {/* Subscription modal */}
       <SubscriptionModal
         open={subscriptionModalOpen}
         onOpenChange={setSubscriptionModalOpen}
