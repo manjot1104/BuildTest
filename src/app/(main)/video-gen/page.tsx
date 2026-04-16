@@ -20,12 +20,14 @@ import {
   useVideoChats,
   useVideoChat,
   useRenameVideoChat,
+  proxyS3Urls,
   type VideoMeta,
   type GenerateVideoOptions,
   type UserImageEntry,
   type UploadedUserImage,
   type VideoChatSummary,
 } from "@/client-api/query-hooks/use-video-hooks";
+
 import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
 import { SubscriptionModal } from "@/components/payments/subscription-modal";
@@ -864,7 +866,7 @@ function FollowUpInput({
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
-  const [voiceId, setVoiceId] = useState("aravind");
+  const [voiceId, setVoiceId] = useState("devansh");
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
 
@@ -1091,7 +1093,7 @@ function FollowUpInput({
                   <>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="aravind" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
+                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
@@ -1170,7 +1172,7 @@ export default function VideoGeneratorPage() {
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
-  const [voiceId, setVoiceId] = useState("aravind");
+  const [voiceId, setVoiceId] = useState("devansh");
   const [ttsVolume0, setTtsVolume0] = useState(0.8);
   const [musicVolume0, setMusicVolume0] = useState(0.3);
 
@@ -1345,7 +1347,7 @@ export default function VideoGeneratorPage() {
           setChatId(data.chatId);
           const fps = data.videoJson.fps ?? 30;
           setLatestVideoData({
-            videoJson: data.videoJson,
+            videoJson: proxyS3Urls(data.videoJson),
             meta: data.meta,
             uploadedImages: resolvedUserImages,
           });
@@ -1419,7 +1421,7 @@ export default function VideoGeneratorPage() {
         onSuccess: (data) => {
           // Replace the single video — same chatId, no new chat created
           setLatestVideoData({
-            videoJson: data.videoJson,
+            videoJson: proxyS3Urls(data.videoJson),
             meta: data.meta,
             uploadedImages: mergedImages,
           });
@@ -1728,7 +1730,7 @@ export default function VideoGeneratorPage() {
                           <>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                              <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="aravind" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
+                              <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50" />
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>

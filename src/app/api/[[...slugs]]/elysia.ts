@@ -2148,3 +2148,63 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({ chatId: t.String() }),
     },
   )
+
+  .get(
+    '/video/s3-proxy',
+    async ({ query, set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+
+      const { url } = query
+      if (!url) {
+        set.status = 400
+        return { error: 'Missing url param' }
+      }
+
+      // Build allowed hostname from env vars
+      const bucket = process.env.AWS_S3_BUCKET
+      const region = process.env.AWS_S3_REGION
+      if (!bucket || !region) {
+        set.status = 500
+        return { error: 'S3 not configured' }
+      }
+      const allowedHostname = `${bucket}.s3.${region}.amazonaws.com`
+
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        set.status = 400
+        return { error: 'Invalid url' }
+      }
+
+      if (parsed.hostname !== allowedHostname) {
+        set.status = 403
+        return { error: 'Forbidden' }
+      }
+
+      const response = await fetch(url)
+      if (!response.ok) {
+        set.status = 502
+        return { error: 'Failed to fetch image from S3' }
+      }
+
+      const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
+      const buffer = await response.arrayBuffer()
+
+      const headers: Record<string, string> = {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400',
+        'Content-Length': buffer.byteLength.toString(),
+      }
+
+      return new Response(buffer, { headers })
+    },
+    {
+      query: t.Object({ url: t.String() }),
+    },
+  )

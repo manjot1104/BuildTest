@@ -350,3 +350,30 @@ export function useRenameVideoChat() {
     },
   });
 }
+
+function isS3Url(url: string): boolean {
+  return url.includes('.s3.') && url.includes('amazonaws.com')
+}
+
+function toProxyUrl(url: string): string {
+  if (!url || !isS3Url(url)) return url
+  return `/api/video/s3-proxy?url=${encodeURIComponent(url)}`
+}
+
+export function proxyS3Urls(videoJson: VideoJson): VideoJson {
+  return {
+    ...videoJson,
+    bgmUrl: videoJson.bgmUrl ? toProxyUrl(videoJson.bgmUrl) : videoJson.bgmUrl,
+    scenes: videoJson.scenes.map((scene) => ({
+      ...scene,
+      ttsUrl: scene.ttsUrl ? toProxyUrl(scene.ttsUrl) : scene.ttsUrl,
+      background:
+        scene.background.type === 'image'
+          ? { ...scene.background, url: toProxyUrl(scene.background.url) }
+          : scene.background,
+      elements: scene.elements.map((el) =>
+        el.type === 'image' ? { ...el, url: toProxyUrl(el.url) } : el
+      ),
+    })),
+  }
+}
