@@ -14,12 +14,13 @@ import {
 import type { VideoJson } from "@/remotion-src/types";
 import type { UserImage } from "@/server/engines/video-gen-images.engine";
 import type { UploadedUserImage } from "@/server/api/controllers/video-upload.controller";
-// ── New: chat persistence ─────────────────────────────────────────────────────
+// ── chat persistence ─────────────────────────────────────────────────────
 import {
   createVideoChat,
   updateVideoChatAfterGeneration,
   appendPromptAndUpdateVideo,
   getVideoChatById,
+  countVideoPromptsTodayByUserId
 } from "@/server/db/queries";
 import {
   deleteVideoImageSession,
@@ -30,6 +31,7 @@ import {
   deductCreditsForVideo,
   addAdditionalCredits,
 } from "@/server/services/credits.service";
+import { getVideoPlanId, getVideoServerPlanLimits } from "@/server/services/video-limits.service";
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
@@ -151,6 +153,49 @@ export async function generateVideoHandler({
     };
 
     const isNewChat = !incomingChatId;
+
+    // ── Plan limits ───────────────────────────────────────────────────────────
+    const planId = await getVideoPlanId(userId);
+    const planLimits = getVideoServerPlanLimits(planId);
+
+    // ── Follow-up gate ────────────────────────────────────────────────────────
+    // Free plan users cannot send follow-up prompts to an existing chat.
+    if (incomingChatId && !planLimits.allowFollowUp) {
+      return {
+        error: `Follow-up prompts are not available on the ${planId ?? "free"} plan. Upgrade to continue refining your video.`,
+        status: 403,
+        code: "PLAN_LIMIT_FOLLOWUP",
+      };
+    }
+
+    // ── Daily prompt limit ────────────────────────────────────────────────────
+    const promptsToday = await countVideoPromptsTodayByUserId(userId);
+    if (promptsToday >= planLimits.dailyPrompts) {
+      return {
+        error: `Daily limit reached. Your ${planId ?? "free"} plan allows ${planLimits.dailyPrompts} prompt${planLimits.dailyPrompts !== 1 ? "s" : ""} per day. Resets at midnight UTC.`,
+        status: 429,
+        code: "DAILY_LIMIT_REACHED",
+      };
+    }
+
+    // ── Image count gate ──────────────────────────────────────────────────────
+    if (userImages.length > planLimits.maxImages) {
+      return {
+        error: `Your ${planId ?? "free"} plan allows a maximum of ${planLimits.maxImages} image${planLimits.maxImages !== 1 ? "s" : ""} per generation.`,
+        status: 403,
+        code: "PLAN_LIMIT_IMAGES",
+      };
+    }
+
+    // ── Duration gate ─────────────────────────────────────────────────────────
+    if (duration > planLimits.maxDurationSeconds) {
+      return {
+        error: `Your ${planId ?? "free"} plan allows a maximum duration of ${planLimits.maxDurationSeconds}s. Requested: ${duration}s.`,
+        status: 403,
+        code: "PLAN_LIMIT_DURATION",
+      };
+    }
+    // ── End plan limit enforcement ────────────────────────────────────────────
 
     // ── Credit check — before ANY work is done ────────────────────────────────
     const creditCheck = await hasEnoughCreditsForVideo(userId, isNewChat);

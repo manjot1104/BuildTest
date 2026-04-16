@@ -1602,3 +1602,38 @@ export async function deleteVideoChat({
 
   return { imageSessionId: row?.image_session_id ?? null }
 }
+
+/**
+ * Counts how many video generation prompts (initial + follow-up) a user has
+ * sent today (UTC calendar day). Used by generateVideoHandler to enforce the
+ * per-plan daily prompt limit server-side.
+ *
+ * Each row in video_chats.prompts is a PromptLogEntry[]. We sum the array
+ * lengths across all chats updated today, which counts every prompt (initial
+ * + follow-ups) sent in the current UTC day.
+ */
+export async function countVideoPromptsTodayByUserId(userId: string): Promise<number> {
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
+
+  const rows = await db
+  .select({ prompts: video_chats.prompts })
+  .from(video_chats)
+  .where(
+    and(
+      eq(video_chats.user_id, userId),
+      gte(video_chats.updated_at, startOfDay),
+    )
+  )
+
+  let count = 0
+  for (const row of rows) {
+      const prompts = (row.prompts as PromptLogEntry[]) ?? []
+      for (const entry of prompts) {
+        if (new Date(entry.sentAt) >= startOfDay) {
+          count++
+        }
+      } 
+    }
+  return count
+}

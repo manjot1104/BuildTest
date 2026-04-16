@@ -123,6 +123,11 @@ import {
   renameVideoChatHandler,
 } from '@/server/api/controllers/video-chat.controller'
 import { uploadUserImagesHandler } from '@/server/api/controllers/video-upload.controller'
+import {
+  getVideoPlanId,
+  getVideoServerPlanLimits,
+} from "@/server/services/video-limits.service";
+import { countVideoPromptsTodayByUserId } from "@/server/db/queries";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
 
@@ -2206,5 +2211,35 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       query: t.Object({ url: t.String() }),
+    },
+  )
+
+  // GET /api/video/usage — daily prompt quota for the authenticated user
+  // Used by useVideoDailyUsage() to render the usage pill and disable the
+  // Generate button when the daily limit is reached.
+  .get(
+    '/video/usage',
+    async ({ set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+
+      const planId = await getVideoPlanId(session.user.id)
+      const planLimits = getVideoServerPlanLimits(planId)
+      const promptsToday = await countVideoPromptsTodayByUserId(session.user.id)
+
+      // ISO timestamp for midnight UTC tonight — used by the frontend countdown
+      const resetsAt = new Date()
+      resetsAt.setUTCHours(24, 0, 0, 0)
+
+      return {
+        promptsToday,
+        dailyLimit: planLimits.dailyPrompts,
+        planId: planId ?? 'free',
+        isAuthenticated: true,
+        resetsAt: resetsAt.toISOString(),
+      }
     },
   )
