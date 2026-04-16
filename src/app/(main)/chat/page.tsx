@@ -22,8 +22,7 @@ import { KeyRound, SearchCheckIcon, Maximize2, Minimize2, Layout,
     Minimize,
     Download,
     Store,
-    Music,
-    Gamepad2,
+   Video, Play, Pause, Loader2,
     Palette,
     Briefcase,
 } from 'lucide-react'
@@ -78,26 +77,31 @@ const threeDTemplates = [
     label: 'Creative Portfolio',
     icon: Palette,
     prompt: `3D creative portfolio with floating glass sphere, soft lighting, minimal typography, elegant premium feel`,
+    videoFile: '3d-creative-portfolio.mp4',
   },
   {
     label: 'Tech Launch',
     icon: Store,
     prompt: `futuristic 3D tech product launch with metallic object, dark theme, neon rim lighting, cinematic depth`,
+     videoFile: '3d-tech-launch.mp4',
   },
   {
     label: 'Digital Agency',
     icon: Briefcase,
     prompt: `bold 3D digital agency hero with animated wave surface, dark aesthetic, smooth motion, premium look`,
+    videoFile: '3d-digital-agency.mp4',
   },
   {
     label: 'SaaS Hero',
     icon: Globe,
     prompt: `clean SaaS 3D hero with floating geometric shapes, white theme, soft shadows, modern minimal UI`,
+    videoFile: '3d-saas-hero.mp4',
   },
   {
     label: 'Art Gallery',
     icon: Palette,
     prompt: `minimal 3D art gallery with sculptural object, soft warm lighting, fog depth, luxury aesthetic`,
+     videoFile: '3d-art-gallery.mp4',
   },
 ]
 
@@ -186,9 +190,12 @@ function ThreeDToolbarBtn({ tooltip, onClick, disabled, children, active }: {
 }
 
 // ─── ThreeDPreview ────────────────────────────────────────────────────────────
-function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId, onSeoAudit }: {
-    html: string; loading: boolean; isFullscreen: boolean; setIsFullscreen: (v: boolean) => void; sceneId: string; onSeoAudit: (prompt: string, chatId: string, mode?: string) => void
+function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId, onSeoAudit, templateVideoFile,   setBuildMode,
+  setShowChatInterface }: {
+    html: string; loading: boolean; isFullscreen: boolean; setIsFullscreen: (v: boolean) => void; sceneId: string; onSeoAudit: (prompt: string, chatId: string, mode?: string) => void; templateVideoFile?: string | null ;  setBuildMode: (v: '2D' | '3D') => void
+  setShowChatInterface: (v: boolean) => void
 }) {
+    const router = useRouter()
     const loadingSteps = [
   'Initializing 3D engine...',
   'Crafting geometry...',
@@ -199,7 +206,11 @@ function ThreeDPreview({ html, loading, isFullscreen, setIsFullscreen, sceneId, 
 ]
 const [loadingStep, setLoadingStep] = useState(0)
 
-
+const [videoModalOpen, setVideoModalOpen] = useState(false)
+const [videoLoading, setVideoLoading] = useState(true)
+const [isPlaying, setIsPlaying] = useState(true)
+const [videoFullscreen, setVideoFullscreen] = useState(false)
+const [showVideoFallback, setShowVideoFallback] = useState(false)
     const iframeRef = useRef<HTMLIFrameElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [codeOpen, setCodeOpen] = useState(false)
@@ -327,6 +338,19 @@ useEffect(() => {
   }}
 >
   <SearchCheckIcon className="h-4 w-4" />
+</ThreeDToolbarBtn>
+
+<ThreeDToolbarBtn
+  tooltip={templateVideoFile ? 'AI Generated video' : 'Coming soon - click to learn more'}
+  onClick={() => {
+    if (templateVideoFile) {
+      setTimeout(() => setVideoModalOpen(true), 50)
+    } else {
+      setShowVideoFallback(true)
+    }
+  }}
+>
+  <Video className="h-4 w-4" />
 </ThreeDToolbarBtn>
                     <ThreeDToolbarBtn tooltip="View source HTML" disabled={!html} onClick={() => setCodeOpen(true)}>
                         <Code className="h-4 w-4" />
@@ -501,6 +525,194 @@ useEffect(() => {
                     </div>
                 </div>
             )}
+
+
+{/* ── Template Video Modal ── */}
+{videoModalOpen && templateVideoFile && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ contain: 'strict' }}>
+    <div
+      className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      onClick={() => { setVideoModalOpen(false); setVideoFullscreen(false) }}
+    />
+    <div className={cn(
+      "relative z-10 bg-card border border-border shadow-2xl transition-all duration-150",
+      videoFullscreen
+        ? "inset-0 fixed rounded-none w-screen h-screen flex flex-col"
+        : "w-full max-w-2xl mx-4 rounded-xl p-0 overflow-hidden"
+    )}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/10">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          <span className="text-xs font-medium text-muted-foreground ml-2">
+            {templateVideoFile.replace('.mp4', '').replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <a
+            href={`/template-videos/${templateVideoFile}`}
+            download={templateVideoFile}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title="Download video"
+            onClick={e => e.stopPropagation()}
+          >
+            <Download className="h-3.5 w-3.5" />
+          </a>
+          <button
+            onClick={(e) => { e.stopPropagation(); setVideoFullscreen(v => !v) }}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            title={videoFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {videoFullscreen ? <Minimize className="h-3.5 w-3.5" /> : <Maximize className="h-3.5 w-3.5" />}
+          </button>
+          <button
+            onClick={() => { setVideoModalOpen(false); setVideoFullscreen(false) }}
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div className="relative group">
+        {/* Loader */}
+        {videoLoading && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 backdrop-blur-sm z-20 gap-4">
+            <div className="relative w-12 h-12">
+              <div className="absolute inset-0 rounded-full border-2 border-white/10" />
+              <div className="absolute inset-0 rounded-full border-2 border-t-primary border-l-transparent border-r-transparent border-b-transparent animate-spin" />
+              <div className="absolute inset-2 rounded-full border border-t-primary/50 border-transparent animate-spin" style={{ animationDuration: '1.5s', animationDirection: 'reverse' }} />
+            </div>
+            <div className="flex flex-col items-center gap-1 text-center">
+              <p className="text-sm font-medium text-white">Loading Preview</p>
+              <p className="text-xs text-white/50">Preparing your template video…</p>
+            </div>
+          </div>
+        )}
+
+        {/* Video */}
+        <video
+          src={`/template-videos/${templateVideoFile}`}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedData={() => setVideoLoading(false)}
+          className={cn(
+            "w-full object-cover block",
+            videoFullscreen ? "flex-1 min-h-0" : "max-h-[70vh]"
+          )}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          style={{ transform: 'translateZ(0)' }}
+          id="threed-preview-video"
+        />
+
+        {/* Play/Pause overlay */}
+        {!videoLoading && (
+          <button
+            onClick={() => {
+              const video = document.getElementById('threed-preview-video') as HTMLVideoElement
+              if (!video) return
+              if (video.paused) { video.play(); setIsPlaying(true) }
+              else { video.pause(); setIsPlaying(false) }
+            }}
+            className="absolute inset-0 flex items-center justify-center z-30 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          >
+            <div className="bg-black/40 backdrop-blur-md rounded-full p-4 border border-white/20 shadow-xl hover:bg-black/60 hover:scale-105 transition-all duration-150">
+              {isPlaying
+                ? <Pause className="h-5 w-5 text-white fill-white" />
+                : <Play className="h-5 w-5 text-white fill-white ml-0.5" />
+              }
+            </div>
+          </button>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ── Video Fallback Modal ── */}
+{showVideoFallback && (
+  <div className="fixed inset-0 z-[70] flex items-center justify-center">
+    <div
+      className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+      onClick={() => setShowVideoFallback(false)}
+    />
+    <div className="relative z-10 w-full max-w-md mx-4 bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border/40 bg-muted/10">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-yellow-500" />
+          <span className="text-xs font-medium text-muted-foreground">Video preview</span>
+        </div>
+        <button
+          onClick={() => setShowVideoFallback(false)}
+          className="text-muted-foreground hover:text-foreground text-sm"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="p-8 text-center">
+        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+          <Video className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <h3 className="text-sm font-semibold text-foreground mb-2">
+          Custom video generation coming soon
+        </h3>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+          Video previews are currently available only for our curated templates.
+          Custom video generation is coming soon !! Explore templates below 🚀
+        </p>
+
+        {/* 3D Template suggestions */}
+        <div className="grid grid-cols-2 gap-4 mb-6 text-left">
+          {['Creative Portfolio', 'Tech Launch', 'Digital Agency', 'SaaS Hero', 'Art Gallery'].map((name, i, arr) => {
+            const isLast = i === arr.length - 1
+            return (
+              <div key={name} className={cn(isLast ? "col-span-2 flex justify-center" : "")}>
+                <div className="bg-muted/40 border border-border rounded-xl p-4 w-full max-w-[260px]">
+                  <div className="text-[10px] text-muted-foreground mb-1 uppercase tracking-wide">3D Template</div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-xs font-medium text-foreground">{name}</div>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary whitespace-nowrap">Video ready</span>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="flex gap-3 mt-2">
+          <button
+onClick={() => {
+  setShowVideoFallback(false)
+
+ setBuildMode('3D')
+  setShowChatInterface(false)
+}}
+  className="flex-1 py-2 text-sm font-medium rounded-lg bg-foreground text-background hover:opacity-90 transition"
+>
+  Explore Templates
+</button>
+          <button
+            onClick={() => setShowVideoFallback(false)}
+            className="px-4 py-2 text-sm rounded-lg border border-border text-muted-foreground hover:bg-muted transition"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+
         </div>
     )
 }
@@ -544,6 +756,28 @@ function ThreeDChatHistory({
             </div>
         )
     }
+
+if (m.content === '__credits_exhausted__') {
+  return (
+    <div key={i} className="self-start max-w-[88%] rounded-xl border border-red-500/20 bg-red-500/5 px-3 py-2.5 text-xs">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse shrink-0" />
+        <span className="font-medium text-red-400">You're out of credits</span>
+      </div>
+      <p className="text-muted-foreground leading-relaxed mb-2">
+        You've used all your available credits. Upgrade your plan to continue generating 3D websites.
+      </p>
+
+      <button
+        onClick={() => window.location.href = '/pricing'}
+        className="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:opacity-90 transition"
+      >
+        Upgrade Plan
+      </button>
+    </div>
+  )
+}
+
     return (
         <div key={i} className={cn(
             'rounded-xl px-3 py-2 text-xs max-w-[88%] leading-relaxed',
@@ -846,6 +1080,19 @@ No clutter.
             })
             const data = await res.json()
            
+
+
+//  CREDITS ERROR
+if (data?.error === 'credits_exhausted') {
+  setThreeDMessages(prev => [...prev, {
+    role: 'assistant',
+    content: '__credits_exhausted__'
+  }])
+  setThreeDLoading(false)
+  return ''
+}
+
+//  SERVICE DOWN
 if (data?.error === 'service_unavailable') {
   setThreeDMessages(prev => [...prev, {
     role: 'assistant',
@@ -963,11 +1210,18 @@ useEffect(() => {
 const getVideoFromPrompt = (prompt?: string) => {
   if (!prompt) return null
   const p = prompt.toLowerCase()
+  // 2D templates
   if (p.includes('landing')) return 'landing-page.mp4'
   if (p.includes('task')) return 'task-management.mp4'
   if (p.includes('dashboard')) return 'dashboard.mp4'
   if (p.includes('blog')) return 'blog.mp4'
   if (p.includes('shop') || p.includes('e-commerce') || p.includes('store')) return 'shop.mp4'
+  // 3D templates
+  if (p.includes('portfolio') || p.includes('glass sphere')) return '3d-creative-portfolio.mp4'
+  if (p.includes('tech') || p.includes('launch') || p.includes('metallic') || p.includes('neon')) return '3d-tech-launch.mp4'
+  if (p.includes('agency') || p.includes('wave surface')) return '3d-digital-agency.mp4'
+  if (p.includes('saas') || p.includes('geometric shapes')) return '3d-saas-hero.mp4'
+  if (p.includes('gallery') || p.includes('sculptural')) return '3d-art-gallery.mp4'
   return null
 }
     const handleStreamingComplete = async (finalContent: string | MessageBinaryFormat) => {
@@ -1107,7 +1361,10 @@ const getVideoFromPrompt = (prompt?: string) => {
   isFullscreen={threeDFullscreen}
   setIsFullscreen={setThreeDFullscreen}
   sceneId={threeDSceneId}
+   setBuildMode={setBuildMode}
+  setShowChatInterface={setShowChatInterface}
   onSeoAudit={handleAutoPrompt}
+  templateVideoFile={getVideoFromPrompt(lastUserPromptRef.current)}
 />
                                 ) : shouldShowPreview ? (
                                                                        <PreviewPanel currentChat={hookCurrentChat} isFullscreen={isFullscreen} setIsFullscreen={setIsFullscreen} isBuilding={false} onSeoAudit={handleAutoPrompt}  

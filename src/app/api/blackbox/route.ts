@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from '@/server/better-auth/server'
 import { deductCredits } from '@/server/services/credits.service'
 import { CREDIT_COSTS } from '@/config/credits.config'
-
+import { getUserTotalCredits } from '@/server/services/credits.service'
 // ─── Elite Three.js r128 System Prompt ────────────────────────────────────────
 const THREEJS_EXPERT_SYSTEM_PROMPT = `
 You are an elite 3D creative director and Three.js r128 engineer.
@@ -108,95 +108,147 @@ TEXT SAFETY (MANDATORY):
 
 // ─── Route Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-let body: any = {}
-try {
-  body = await req.json()
-} catch {
-  return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-}
-const { prompt, systemPrompt, isFollowUp = false } = body
-if (!prompt) {
-  return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
-}
+  let body: any = {}
 
-  const messages: { role: string; content: string }[] = [];
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+  }
+
+  const { prompt, systemPrompt, isFollowUp = false } = body
+
+  if (!prompt) {
+    return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+  }
+
+  const messages: { role: string; content: string }[] = []
 
   const is3D = true
-  let finalSystemPrompt: string;
+  let finalSystemPrompt: string
+
   if (is3D) {
-    finalSystemPrompt = THREEJS_EXPERT_SYSTEM_PROMPT;
+    finalSystemPrompt = THREEJS_EXPERT_SYSTEM_PROMPT
   } else {
     finalSystemPrompt =
       systemPrompt ||
-      "You are an expert web developer specializing in premium, production-ready websites. Output ONLY raw HTML. No markdown, no backticks, no explanation. ";
+      "You are an expert web developer specializing in premium, production-ready websites. Output ONLY raw HTML. No markdown, no backticks, no explanation."
   }
-messages.push({ role: "system", content: finalSystemPrompt });
 
-const optimizedPrompt = `
+  messages.push({ role: "system", content: finalSystemPrompt })
+
+
+  const session = await getSession()
+
+   let cost = 0
+  if (session?.user?.id) {
+    cost = isFollowUp
+      ? CREDIT_COSTS.FOLLOW_UP_PROMPT * 3
+      : CREDIT_COSTS.NEW_PROMPT * 3
+  }
+
+
+  if (session?.user?.id) {
+    const availableCredits = await getUserTotalCredits(session.user.id)
+
+    if (availableCredits < cost) {
+      return NextResponse.json(
+        { error: "credits_exhausted" },
+        { status: 402 }
+      )
+    }
+  }
+
+
+
+   const optimizedPrompt = `
 Create a premium multi-scene 3D website for: "${prompt}"
 
 - Maximum 3 scenes
 - fixed navbar
-- smooth scene transitions
-- click animations on buttons and nav items
-- no text cropping, fully responsive headings
-`;
-const session = await getSession();
+- smooth transitions
+- click animations
+- responsive layout
+`
 
-let deducted = false
-let cost = 0
+ messages.push({ role: "user", content: optimizedPrompt.trim() })
 
-if (session?.user?.id) {
-  cost = isFollowUp
-    ? CREDIT_COSTS.FOLLOW_UP_PROMPT * 3
-    : CREDIT_COSTS.NEW_PROMPT * 3
+  let data
+  let deducted = false
 
-  await deductCredits(
-    session.user.id,
-    cost,
-    '3d_builder',
-    undefined
-  )
+  try {
+    const response = await fetch("https://api.blackbox.ai/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.BLACKBOX_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "blackboxai/anthropic/claude-opus-4.6",
+        max_tokens: 12000,
+        messages,
+      }),
+    })
 
-  deducted = true
-}
-messages.push({ role: "user", content: optimizedPrompt.trim() });
- 
-let data
+    data = await response.json()
 
-try {
-  const response = await fetch("https://api.blackbox.ai/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${process.env.BLACKBOX_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "blackboxai/anthropic/claude-opus-4.6",
-      max_tokens: 12000,
-      messages,
-    }),
-  })
+   
+    if (!data?.choices?.[0]?.message?.content) {
+      return NextResponse.json(
+        { error: "service_unavailable" },
+        { status: 503 }
+      )
+    }
 
-  data = await response.json()
+  
+    if (data.error) {
+      const errMsg =
+        typeof data.error === "string"
+          ? data.error
+          : JSON.stringify(data.error)
 
-if (data.error) {
-  const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
-  const isBudgetError = errMsg.includes('ExceededBudget') || errMsg.includes('budget_exceeded') || errMsg.includes('over budget')
-  if (isBudgetError) {
-    return NextResponse.json({ error: "service_unavailable" }, { status: 503 })
+      if (
+        errMsg.toLowerCase().includes("credit") ||
+        errMsg.toLowerCase().includes("budget") ||
+        errMsg.toLowerCase().includes("exceeded") ||
+        errMsg.toLowerCase().includes("suspended")
+      ) {
+        return NextResponse.json(
+          { error: "credits_exhausted" },
+          { status: 402 }
+        )
+      }
+
+      return NextResponse.json(
+        { error: "service_unavailable" },
+        { status: 503 }
+      )
+    }
+
+  } catch (err) {
+    console.error("3D generation failed:", err)
+
+    return NextResponse.json(
+      { error: "service_unavailable" },
+      { status: 503 }
+    )
   }
-  throw new Error(errMsg)
+
+
+  if (session?.user?.id && !deducted) {
+    try {
+      await deductCredits(
+        session.user.id,
+        cost,
+        '3d_builder',
+        undefined
+      )
+      deducted = true
+    } catch (e) {
+      console.error('Credit deduction failed:', e)
+    }
+  }
+
+  return NextResponse.json(data)
 }
 
-} catch (err) {
-  console.error("3D generation failed:", err)
-  return NextResponse.json(
-    { error: "3D generation failed. Please try again." },
-    { status: 500 }
-  )
-}
-
-return NextResponse.json(data);
-
-}
