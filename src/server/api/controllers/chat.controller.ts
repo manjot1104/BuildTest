@@ -14,6 +14,9 @@ import {
   getCommunityChatsCount,
   getFeaturedChats,
 } from '@/server/db/queries'
+import { db } from '@/server/db'
+import { user_chats } from '@/server/db/schema'
+import { eq } from 'drizzle-orm'
 import {
   deductCreditsForPrompt,
   hasActiveSubscription,
@@ -76,7 +79,9 @@ type CreateChatResponse =
   | InsufficientCreditsResponse
 
 /** Response type for getChatDetailsHandler */
-type GetChatDetailsResponse = (ChatDetail & { isOwner?: boolean }) | ErrorResponse
+type GetChatDetailsResponse =
+  (ChatDetail & { isOwner?: boolean; demo_html?: string }) |
+  ErrorResponse
 
 /** Response type for createChatOwnershipHandler */
 type CreateChatOwnershipResponse = ChatOwnershipResponse | ErrorResponse
@@ -395,6 +400,24 @@ export async function getChatDetailsHandler({
         isOwner = true
       }
     }
+let localCheck = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+
+
+if (!localCheck) {
+  localCheck = await db.query.user_chats.findFirst({
+    where: eq(user_chats.id, chatId),
+  })
+}
+if (localCheck && (localCheck.demo_html || localCheck.demo_url?.startsWith('threed://'))) {
+  return {
+    id: chatId,
+    title: localCheck.title ?? chatId,
+    prompt: localCheck.prompt ?? undefined,
+    demo_html: localCheck.demo_html ?? undefined,
+    demo: undefined,
+    isOwner: true,
+  } as any
+}
 
     // Fetch chat details from v0 API
     const v0 = await getV0Client()
@@ -440,9 +463,20 @@ export async function getChatDetailsHandler({
       throw error
     }
 
-    const localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+   let localChat = await getUserChat({ v0ChatId: chatId }).catch(() => null)
+
+if (!localChat) {
+  localChat = await db.query.user_chats.findFirst({
+    where: eq(user_chats.id, chatId),
+  })
+}
 const resolvedDemo = chatDetails.demo ?? localChat?.demo_url ?? undefined
-return { ...chatDetails, demo: resolvedDemo, isOwner }
+return {
+  ...chatDetails,
+  demo: resolvedDemo,
+  demo_html: localChat?.demo_html ?? undefined,   
+  isOwner
+}
   } catch {
     return {
       error: 'Failed to fetch chat details',
@@ -457,14 +491,30 @@ return { ...chatDetails, demo: resolvedDemo, isOwner }
  * When streaming, the chat is created on the client side, so we need
  * to create the ownership record separately
  */
+function generateSmartTitle(prompt: string): string {
+  const stopWords = ['with', 'and', 'the', 'for', 'a', 'an', 'of', 'in']
+
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .split(' ')
+    .filter(w => w.length > 2 && !stopWords.includes(w))
+
+  const keywords = words.slice(0, 4) 
+
+  return keywords
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
 export async function createChatOwnershipHandler({
   body,
 }: {
-  body: { chatId: string; prompt?: string; demoUrl?: string }
+  body: { chatId: string; prompt?: string; demoUrl?: string; demoHtml?: string; demo_html?: string }
 }): Promise<CreateChatOwnershipResponse> {
   try {
     const session = await getSession()
-    const { chatId, prompt, demoUrl } = body
+  const { chatId, prompt, demoUrl, demoHtml, demo_html } = body
+const resolvedDemoHtml = demoHtml ?? demo_html
 
     if (!chatId) {
       return { error: 'Chat ID is required' }
@@ -485,15 +535,17 @@ export async function createChatOwnershipHandler({
       await updateUserChat({
         v0ChatId: chatId,
         demoUrl: demoUrl ?? undefined,
+        demoHtml: resolvedDemoHtml ?? undefined,
       })
     } else {
       // Create new chat record
       await createUserChat({
         v0ChatId: chatId,
         userId: session.user.id,
-        title: prompt ? generateTitleFromPrompt(prompt) : undefined,
+        title: prompt ? generateSmartTitle(prompt) : undefined,
         prompt: prompt ?? undefined,
         demoUrl: demoUrl ?? undefined,
+        demoHtml: resolvedDemoHtml ?? undefined,
       })
     }
 
@@ -679,6 +731,7 @@ export async function getCommunityBuildsHandler({
     prompt: chat.prompt,
     demoUrl: chat.demo_url,
     previewUrl: chat.preview_url,
+    demoHtml: chat.demo_html,
     createdAt: chat.created_at.toISOString(),
     updatedAt: chat.updated_at.toISOString(),
     authorName: chat.author_name,
@@ -709,6 +762,12 @@ const FEATURED_CHAT_IDS = [
   's9a45Mv5S5h',
   'pwAhgqhDp0K',
   'BiZl3MMj1fB',
+  '9145ad97-7a57-4c07-ae7c-35a6a2eb1d6b',
+  'bec47c32-97b6-4c91-9e79-e5f892450e76',
+  '65cb201b-53cf-4d29-b9d4-935ac14e8658',
+  'de225313-7cec-41ec-875c-c0d316d22a22',
+  '4a7d2b19-369f-4e99-b801-a54ea6b50385',
+  '2d0dd28c-f316-4c0e-bf2f-ddaa26a27756'
 ]
 
 /**
@@ -722,14 +781,15 @@ export async function getFeaturedBuildsHandler(): Promise<
     const chats = await getFeaturedChats(FEATURED_CHAT_IDS)
 
     const data: CommunityBuildItem[] = chats
-  .filter((chat) => chat.v0_chat_id)
+  .filter((chat) => chat.v0_chat_id || chat.demo_html)
   .map((chat) => ({
     id: chat.id,
-    v0ChatId: chat.v0_chat_id!,
+   v0ChatId: chat.v0_chat_id ?? chat.id,
     title: chat.title,
     prompt: chat.prompt,
     demoUrl: chat.demo_url,
     previewUrl: chat.preview_url,
+    demoHtml: chat.demo_html,
     createdAt: chat.created_at.toISOString(),
     updatedAt: chat.updated_at.toISOString(),
     authorName: chat.author_name,

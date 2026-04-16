@@ -54,7 +54,7 @@ function AuthorAvatar({ name, image }: { name: string; image?: string | null }) 
   )
 }
 
-function DemoThumbnail({ demoUrl, title }: { demoUrl: string; title?: string | null }) {
+function DemoThumbnail({ demoUrl, demoHtml, title }: { demoUrl: string; demoHtml?: string | null; title?: string | null }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [scale, setScale] = useState(0)
   const [iframeLoaded, setIframeLoaded] = useState(false)
@@ -72,6 +72,8 @@ function DemoThumbnail({ demoUrl, title }: { demoUrl: string; title?: string | n
     observer.observe(el)
     return () => observer.disconnect()
   }, [])
+
+  const is3D = demoUrl.startsWith('threed://')
 
   if (iframeError) {
     return (
@@ -96,15 +98,27 @@ function DemoThumbnail({ demoUrl, title }: { demoUrl: string; title?: string | n
             transform: `scale(${scale})`,
           }}
         >
-          <iframe
-            src={demoUrl}
-            title={title ?? 'Community build preview'}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin"
-            loading="lazy"
-            onLoad={() => setIframeLoaded(true)}
-            onError={() => setIframeError(true)}
-          />
+          {is3D && demoHtml ? (
+            <iframe
+              srcDoc={demoHtml}
+              title={title ?? 'Community build preview'}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin"
+              loading="lazy"
+              onLoad={() => setIframeLoaded(true)}
+              onError={() => setIframeError(true)}
+            />
+          ) : (
+            <iframe
+              src={demoUrl}
+              title={title ?? 'Community build preview'}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin"
+              loading="lazy"
+              onLoad={() => setIframeLoaded(true)}
+              onError={() => setIframeError(true)}
+            />
+          )}
         </div>
       )}
     </div>
@@ -130,10 +144,11 @@ function PreviewDialog({
   if (!build) return null
 
   const title = build.title ?? 'Untitled'
+  const is3D = build.demoUrl?.startsWith('threed://')
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-5xl max-h-[90vh] p-0 gap-0 overflow-hidden">
+     <DialogContent className="sm:max-w-5xl max-h-[90vh] p-0 gap-0 overflow-y-auto">
         <DialogHeader className="px-5 pt-5 pb-3">
           <DialogTitle className="truncate pr-8">{title}</DialogTitle>
           {build.prompt && (
@@ -153,7 +168,15 @@ function PreviewDialog({
               </div>
             </div>
           )}
-          {build.demoUrl ? (
+          {is3D && build.demoHtml ? (
+            <iframe
+              srcDoc={build.demoHtml}
+              title={title}
+              className="w-full h-full border-0"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+              onLoad={() => setIframeLoading(false)}
+            />
+          ) : build.demoUrl ? (
             <iframe
               src={build.demoUrl}
               title={title}
@@ -196,10 +219,16 @@ function PreviewDialog({
               Visit
             </button>
             <button
-              onClick={() => {
-                onOpenChange(false)
-                router.push(`/chat?chatId=${build.v0ChatId}`)
-              }}
+         onClick={() => {
+  const is3D = build.demoUrl?.startsWith('threed://')
+  const mode = is3D ? '3d' : '2d'
+
+  onOpenChange(false)
+
+  setTimeout(() => {
+    window.location.href = `/chat?chatId=${build.v0ChatId}&mode=${mode}`
+  }, 50)
+}}
               className={cn(
                 'inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium',
                 'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -239,7 +268,7 @@ function CommunityBuildCard({
       {/* Thumbnail — scaled iframe of the demo URL */}
       <div className="relative aspect-video bg-muted/30 overflow-hidden pointer-events-none">
         {build.demoUrl ? (
-          <DemoThumbnail demoUrl={build.demoUrl} title={build.title} />
+          <DemoThumbnail demoUrl={build.demoUrl} demoHtml={build.demoHtml} title={build.title} />
         ) : (
           <div className="w-full h-full bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 flex items-center justify-center">
             <Globe className="w-8 h-8 text-muted-foreground/30" />
@@ -263,9 +292,18 @@ function CommunityBuildCard({
       {/* Content */}
       <div className="p-3">
         {/* Title */}
-        <h3 className="text-sm font-medium text-foreground truncate">
-          {build.title ?? 'Untitled'}
-        </h3>
+        <div className="flex items-center gap-2">
+  <h3 className="text-sm font-medium text-foreground truncate">
+    {build.title ?? 'Untitled'}
+  </h3>
+
+{(build.demoUrl?.startsWith('threed://') || build.demoHtml) && (
+  <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+    3D
+  </span>
+)}
+ 
+</div>
 
         {/* Prompt excerpt */}
         {build.prompt && (
