@@ -22,10 +22,15 @@ import {
 } from "@/client-api/query-hooks/use-testing-hooks";
 
 // ─── Design tokens ─────────────────────────────────────────────────────────────
-// All accent colors now use CSS variables from global.css (Buildify blue theme).
-// --primary      = oklch(0.6907 0.1300 248.5133)  — Buildify brand blue
-// --secondary    = oklch(0.5360 0.0398 196.0280)  — teal complement
+// All accent colors use CSS variables from global.css (Buildify blue theme).
+// --primary   = oklch(0.6907 0.1300 248.5133)  — Buildify brand blue
+// --secondary = oklch(0.5360 0.0398 196.0280)  — teal complement
 // Font: AR One Sans (--font-sans) · Azeret Mono (--font-mono)
+//
+// RULE: Never hardcode color values. Use Tailwind semantic classes
+// (text-primary, bg-primary, border-primary, etc.) or var(--primary) /
+// var(--color-primary) for inline styles. This ensures light/dark theme
+// consistency and a single source of truth in global.css.
 
 export const CATEGORY_ICONS: Record<string, React.ElementType> = {
   navigation: Navigation, forms: FileText, visual: Eye,
@@ -46,7 +51,7 @@ export const PRIORITY_CONFIG = {
   P2: { color: "text-muted-foreground bg-muted/50 border-border"       },
 };
 
-// ── "passed" now uses Buildify primary blue instead of neon green ──
+// "passed" uses --primary (Buildify blue). All status classes are semantic.
 export const STATUS_CONFIG = {
   pending:  { icon: Clock,         color: "text-muted-foreground",  bg: "bg-muted/50 border-border",               label: "Pending"  },
   running:  { icon: Loader2,       color: "text-primary",           bg: "bg-primary/10 border-primary/20",          label: "Running"  },
@@ -475,14 +480,16 @@ export function BugScreenshot({ url, alt = "Bug screenshot" }: { url: string; al
 }
 
 // ─── Score Gauge ───────────────────────────────────────────────────────────────
+// Uses var(--primary) for the good/passing state — resolves to Buildify blue
+// from global.css. This is the correct approach vs hardcoding any hsl value.
 
 export function ScoreGauge({ score, size = 80 }: { score: number; size?: number }) {
   const r      = size * 0.38;
   const cx     = size / 2;
   const circ   = 2 * Math.PI * r;
   const offset = circ - (score / 100) * circ;
-  // Use Buildify blue palette: primary blue for good, yellow for medium, red for poor
-  const color  = score >= 90 ? "hsl(215 100% 58%)" : score >= 70 ? "#eab308" : "#ef4444";
+  // var(--primary) resolves to the Buildify blue from global.css
+  const color  = score >= 90 ? "var(--primary)" : score >= 70 ? "#eab308" : "#ef4444";
   const label  = score >= 90 ? "excellent" : score >= 70 ? "good" : "needs work";
 
   return (
@@ -511,6 +518,7 @@ export function ScoreGauge({ score, size = 80 }: { score: number; size?: number 
 }
 
 // ─── Category Donut ────────────────────────────────────────────────────────────
+// Uses var(--primary) for high-pass categories — consistent with ScoreGauge.
 
 export function CategoryDonut({ passed, total, category, onClick, active }: {
   passed: number; total: number; category: string; onClick: () => void; active: boolean;
@@ -518,8 +526,8 @@ export function CategoryDonut({ passed, total, category, onClick, active }: {
   const pct  = total > 0 ? passed / total : 0;
   const r    = 17;
   const circ = 2 * Math.PI * r;
-  // Blue-palette scoring colors
-  const col  = pct >= 0.8 ? "oklch(0.6907 0.1300 248.5133)" : pct >= 0.5 ? "#eab308" : "#ef4444";
+  // var(--primary) = Buildify blue from global.css
+  const col  = pct >= 0.8 ? "var(--primary)" : pct >= 0.5 ? "#eab308" : "#ef4444";
   const Icon = CATEGORY_ICONS[category] ?? Bug;
 
   return (
@@ -577,6 +585,7 @@ export function PerfGaugeRow({ label, value, unit, status }: {
 }
 
 // ─── Trend Sparkline ───────────────────────────────────────────────────────────
+// Uses var(--primary) for the line/dots — no hardcoded hsl values.
 
 export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
   if (data.length < 2) return (
@@ -600,8 +609,8 @@ export function TrendSparkline({ data }: { data: TrendDataPoint[] }) {
   const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
   const area = `${path} L${pts[pts.length - 1]!.x},${h} L${pts[0]!.x},${h} Z`;
   const score = pts[pts.length - 1]!.d.score ?? 0;
-  // Buildify blue for the sparkline
-  const color = score >= 90 ? "oklch(0.6907 0.1300 248.5133)" : score >= 70 ? "#eab308" : "#ef4444";
+  // var(--primary) from global.css — Buildify blue for good scores
+  const color = score >= 90 ? "var(--primary)" : score >= 70 ? "#eab308" : "#ef4444";
 
   return (
     <div>
@@ -768,9 +777,9 @@ export function TestCaseCard({ tc, liveStatus }: { tc: TestCase; liveStatus?: { 
             <div className={`rounded-lg border p-3 ${cfg.bg}`}>
               <p className={`text-[9px] font-mono mb-1 uppercase tracking-widest ${cfg.color}`}>actual</p>
               <p className="text-xs font-mono text-foreground">{result.actual_result}</p>
-              {/* {result.error_details && (
+              {result.error_details && (
                 <p className="mt-1.5 text-[10px] font-mono text-red-500">{result.error_details}</p>
-              )} actual result and error detail has same output so one is commented out */} 
+              )}
             </div>
           )}
           {result?.console_logs && result.console_logs.length > 0 && (
