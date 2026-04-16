@@ -84,6 +84,77 @@ function projectTriple(projects: string): [string, string, string] {
   }) as [string, string, string]
 }
 
+function normalizeProjectCardText(raw: string): string {
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length === 0) {
+    return 'Project\nAdd details and outcomes.'
+  }
+
+  const title = lines[0]!.slice(0, 42)
+  const detailPool = lines
+    .slice(1)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[•●▪]/g, '')
+    .trim()
+
+  if (!detailPool) return title
+
+  const detail = detailPool.length > 220 ? `${detailPool.slice(0, 217)}...` : detailPool
+  return `${title}\n${detail}`
+}
+
+function estimateProjectCardHeight(content: string): number {
+  const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
+  const lineCount = lines.reduce((acc, line) => {
+    // Approx chars-per-line for 360px card at 12px body text.
+    const wrapped = Math.max(1, Math.ceil(line.length / 44))
+    return acc + wrapped
+  }, 0)
+
+  // 124 was template default. Grow card for long content, cap to keep layout sane.
+  const estimated = 84 + lineCount * 16
+  return Math.max(124, Math.min(220, estimated))
+}
+
+function normalizeWorkCardText(raw: string): string {
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return 'Case study\nDetails coming soon.'
+
+  const title = (lines[0] ?? 'Work').slice(0, 34)
+  const detailPool = (lines.slice(1).join(' ') || '').replace(/\s+/g, ' ').trim()
+  if (!detailPool) return title
+
+  const detail = detailPool.length > 72 ? `${detailPool.slice(0, 69)}...` : detailPool
+  return `${title}\n${detail}`
+}
+
+function normalizeServiceCardText(raw: string): string {
+  const lines = raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return 'Service\nDetails coming soon.'
+
+  const title = (lines[0] ?? 'Service').slice(0, 30)
+  const detailPool = lines
+    .slice(1)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .replace(/[•●▪]/g, '')
+    .trim()
+  if (!detailPool) return title
+
+  const detail = detailPool.length > 78 ? `${detailPool.slice(0, 75)}...` : detailPool
+  return `${title}\n${detail}`
+}
+
 function workQuads(projects: string): [string, string, string, string] {
   const blocks = projects
     .split(/\n\s*\n/)
@@ -165,9 +236,22 @@ function personalizeDeveloperDark(elements: CanvasElement[], d: PortfolioStudioR
       content: `${SKILL_LABELS[i]}\n${chunks[i]}`,
     }))
   })
-  patchById(elements, 'd-proj1', (el) => ({ ...el, content: p1 }))
-  patchById(elements, 'd-proj2', (el) => ({ ...el, content: p2 }))
-  patchById(elements, 'd-proj3', (el) => ({ ...el, content: p3 }))
+  const proj1 = normalizeProjectCardText(p1)
+  const proj2 = normalizeProjectCardText(p2)
+  const proj3 = normalizeProjectCardText(p3)
+  const h1 = estimateProjectCardHeight(proj1)
+  const h2 = estimateProjectCardHeight(proj2)
+  const h3 = estimateProjectCardHeight(proj3)
+
+  patchById(elements, 'd-proj1', (el) => ({ ...el, content: proj1, height: h1 }))
+  patchById(elements, 'd-proj2', (el) => ({ ...el, content: proj2, height: h2 }))
+  patchById(elements, 'd-proj3', (el) => ({ ...el, content: proj3, height: h3 }))
+  patchById(elements, 'd-skillbg', (el) => {
+    const maxProjectBottom = Math.max(814 + h1, 814 + h2, 814 + h3)
+    const minSectionBottom = maxProjectBottom + 24
+    const nextHeight = Math.max(el.height, minSectionBottom - el.y)
+    return { ...el, height: nextHeight }
+  })
   patchById(elements, 'd-social', (el) => ({
     ...el,
     socialLinks: setSocialUrls(el.socialLinks, {
@@ -194,10 +278,10 @@ function personalizeDesignerClean(elements: CanvasElement[], d: PortfolioStudioR
   }))
   patchById(elements, 'dc-about', (el) => ({ ...el, content: about }))
   patchById(elements, 'dc-email', (el) => ({ ...el, content: email }))
-  patchById(elements, 'dc-w1', (el) => ({ ...el, content: w1 }))
-  patchById(elements, 'dc-w2', (el) => ({ ...el, content: w2 }))
-  patchById(elements, 'dc-w3', (el) => ({ ...el, content: w3 }))
-  patchById(elements, 'dc-w4', (el) => ({ ...el, content: w4 }))
+  patchById(elements, 'dc-w1', (el) => ({ ...el, content: normalizeWorkCardText(w1) }))
+  patchById(elements, 'dc-w2', (el) => ({ ...el, content: normalizeWorkCardText(w2) }))
+  patchById(elements, 'dc-w3', (el) => ({ ...el, content: normalizeWorkCardText(w3) }))
+  patchById(elements, 'dc-w4', (el) => ({ ...el, content: normalizeWorkCardText(w4) }))
   patchById(elements, 'dc-social', (el) => ({
     ...el,
     socialLinks: setSocialUrls(el.socialLinks, {
@@ -232,15 +316,15 @@ function personalizeFreelancerClean(elements: CanvasElement[], d: PortfolioStudi
   const sk = skillChunks(d.skills ?? '', 3)
   patchById(elements, 'fc-svc1', (el) => ({
     ...el,
-    content: `Build & ship\n\n${sk[0]}`,
+    content: normalizeServiceCardText(`Build & ship\n${sk[0]}`),
   }))
   patchById(elements, 'fc-svc2', (el) => ({
     ...el,
-    content: `Product & UX\n\n${sk[1]}`,
+    content: normalizeServiceCardText(`Product & UX\n${sk[1]}`),
   }))
   patchById(elements, 'fc-svc3', (el) => ({
     ...el,
-    content: `Performance & quality\n\n${sk[2]}`,
+    content: normalizeServiceCardText(`Performance & quality\n${sk[2]}`),
   }))
   const testimonial =
     d.achievements?.trim() ||
@@ -248,7 +332,7 @@ function personalizeFreelancerClean(elements: CanvasElement[], d: PortfolioStudi
     '"Great collaboration — clear communication and fast delivery."'
   patchById(elements, 'fc-t1', (el) => ({
     ...el,
-    content: `${testimonial}\n\n— Client reference`,
+    content: normalizeServiceCardText(`${testimonial}\n— Client reference`),
   }))
   patchById(elements, 'fc-social', (el) => ({
     ...el,

@@ -1,7 +1,8 @@
 "use client"
 
+import { useState } from "react"
 import { motion } from "framer-motion"
-import { FileText, Code, ArrowRight, FileCode, Target, LayoutTemplate } from "lucide-react"
+import { FileText, Code, ArrowRight, FileCode, Target, LayoutTemplate, Loader2 } from "lucide-react"
 
 interface Props {
   onSelect: (templateType: "latex" | "html") => void
@@ -11,6 +12,16 @@ interface Props {
 }
 
 export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Props) {
+  const [pendingCard, setPendingCard] = useState<"latex" | "html" | "portfolio" | "score" | null>(null)
+
+  const runWithTransition = (card: "latex" | "html" | "portfolio" | "score", cb: () => void) => {
+    if (pendingCard) return
+    setPendingCard(card)
+    window.setTimeout(() => {
+      cb()
+    }, 180)
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-full px-6">
       <motion.div
@@ -39,7 +50,8 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
           transition={{ duration: 0.5, delay: 0.1, ease: [0.25, 0.1, 0.25, 1] }}
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => onSelect("latex")}
+          onClick={() => runWithTransition("latex", () => onSelect("latex"))}
+          disabled={pendingCard !== null}
           className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-primary/50"
         >
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -48,7 +60,11 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
               <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 ring-1 ring-primary/20">
                 <FileText className="size-5 text-primary" />
               </div>
-              <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-primary" />
+              {pendingCard === "latex" ? (
+                <Loader2 className="size-4 animate-spin text-primary" />
+              ) : (
+                <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-primary" />
+              )}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">LaTeX → PDF</h2>
@@ -76,7 +92,8 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
           transition={{ duration: 0.5, delay: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
-          onClick={() => onSelect("html")}
+          onClick={() => runWithTransition("html", () => onSelect("html"))}
+          disabled={pendingCard !== null}
           className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-violet-500/50"
         >
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -85,7 +102,11 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
               <div className="flex size-12 items-center justify-center rounded-xl bg-violet-500/10 ring-1 ring-violet-500/20">
                 <Code className="size-5 text-violet-500" />
               </div>
-              <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-500" />
+              {pendingCard === "html" ? (
+                <Loader2 className="size-4 animate-spin text-violet-500" />
+              ) : (
+                <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-violet-500" />
+              )}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">HTML → PDF</h2>
@@ -114,7 +135,8 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
           type="button"
-          onClick={() => onPortfolio?.()}
+          onClick={() => runWithTransition("portfolio", () => onPortfolio?.())}
+          disabled={pendingCard !== null}
           className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-amber-500/50"
         >
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-amber-500/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -123,7 +145,11 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
               <div className="flex size-12 items-center justify-center rounded-xl bg-amber-500/10 ring-1 ring-amber-500/20">
                 <LayoutTemplate className="size-5 text-amber-500" />
               </div>
-              <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-amber-500" />
+              {pendingCard === "portfolio" ? (
+                <Loader2 className="size-4 animate-spin text-amber-500" />
+              ) : (
+                <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-amber-500" />
+              )}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">Portfolio</h2>
@@ -151,7 +177,8 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
           transition={{ duration: 0.5, delay: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
           whileHover={{ y: -4 }}
           whileTap={{ scale: 0.98 }}
-          onClick={onScoreResume}
+          onClick={() => runWithTransition("score", () => onScoreResume?.())}
+          disabled={pendingCard !== null}
           className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-emerald-500/50"
         >
           <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
@@ -160,7 +187,11 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
               <div className="flex size-12 items-center justify-center rounded-xl bg-emerald-500/10 ring-1 ring-emerald-500/20">
                 <Target className="size-5 text-emerald-500" />
               </div>
-              <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-emerald-500" />
+              {pendingCard === "score" ? (
+                <Loader2 className="size-4 animate-spin text-emerald-500" />
+              ) : (
+                <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-emerald-500" />
+              )}
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">Score Resume</h2>

@@ -237,6 +237,7 @@ export default function AIResumeBuilderPage() {
   const [isExtractingText, setIsExtractingText] = useState(false)
   /** JD text for optional job-fit panel only — not wired to generate resume. */
   const [jobFitJdDraft, setJobFitJdDraft] = useState('')
+  const [openingPortfolioExampleId, setOpeningPortfolioExampleId] = useState<string | null>(null)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -291,7 +292,9 @@ export default function AIResumeBuilderPage() {
 
   const openPortfolioStudioFromExample = useCallback(
     (example: (typeof PORTFOLIO_STUDIO_EXAMPLES)[number]) => {
+      if (openingPortfolioExampleId) return
       if (!applyPortfolioStudioExample(example.prompt, { scroll: false, silent: true })) return
+      setOpeningPortfolioExampleId(example.id)
       try {
         const data = form.getValues() as PortfolioStudioResumeInput
         writeResumeStudioBootstrap({ templateId: example.studioTemplateId, resume: data })
@@ -300,10 +303,11 @@ export default function AIResumeBuilderPage() {
         toast.success('Opening Buildify Studio with your portfolio draft…')
         router.push('/buildify-studio/new')
       } catch (e) {
+        setOpeningPortfolioExampleId(null)
         toast.error(e instanceof Error ? e.message : 'Could not prepare Buildify Studio draft.')
       }
     },
-    [applyPortfolioStudioExample, form, router],
+    [applyPortfolioStudioExample, form, openingPortfolioExampleId, router],
   )
 
   const navigateJobFitToGenerate = useCallback(() => {
@@ -2378,11 +2382,17 @@ export default function AIResumeBuilderPage() {
                       key={example.id}
                       type="button"
                       onClick={() => openPortfolioStudioFromExample(example)}
-                      className="rounded-lg border border-border/60 bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40"
+                      disabled={openingPortfolioExampleId !== null}
+                      className="rounded-lg border border-border/60 bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-70"
                     >
-                      <p className="text-xs font-medium text-foreground">{example.title}</p>
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        {openingPortfolioExampleId === example.id && <Loader2 className="size-3 animate-spin" />}
+                        {example.title}
+                      </p>
                       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-                        {example.description}
+                        {openingPortfolioExampleId === example.id
+                          ? 'Preparing your layout and opening Buildify Studio...'
+                          : example.description}
                       </p>
                     </button>
                   ))}
