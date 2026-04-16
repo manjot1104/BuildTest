@@ -19,6 +19,7 @@ import {
   useDownloadVideo,
   useVideoChats,
   useVideoChat,
+  useRenameVideoChat,
   type VideoMeta,
   type GenerateVideoOptions,
   type UserImageEntry,
@@ -486,31 +487,55 @@ function HistoryChatRow({
   chat,
   isActive,
   onClick,
+  onRename,
 }: {
   chat: VideoChatSummary;
   isActive: boolean;
   onClick: () => void;
+  onRename: (id: string, title: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(chat.title ?? "");
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors mb-0.5 border ${
+      className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors mb-0.5 border group ${
         isActive
           ? "bg-primary/10 border-primary/20"
           : "hover:bg-muted/50 border-transparent hover:border-border/50"
       }`}
     >
       <div className="flex items-center justify-between mb-1">
-        <span
-          className={`text-[9px] font-mono rounded-full px-2 py-0.5 border truncate max-w-[140px] ${
-            isActive
-              ? "text-primary bg-primary/10 border-primary/20"
-              : "text-muted-foreground/60 bg-muted border-border"
-          }`}
-        >
-          {chat.title ?? "Untitled"}
-        </span>
+        {editing ? (
+          <input
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { onRename(chat.id, draft); setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { onRename(chat.id, draft); setEditing(false); }
+              if (e.key === "Escape") { setDraft(chat.title ?? ""); setEditing(false); }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[9px] font-mono rounded-full px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none w-full max-w-[130px]"
+          />
+        ) : (
+          <>
+            <span className={`text-[9px] font-mono rounded-full px-2 py-0.5 border truncate max-w-[120px] ${isActive ? "text-primary bg-primary/10 border-primary/20" : "text-muted-foreground/60 bg-muted border-border"}`}>
+              {chat.title ?? "Untitled"}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setDraft(chat.title ?? ""); setEditing(true); }}
+              className="opacity-0 group-hover:opacity-100 h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0 ml-1"
+              aria-label="Rename"
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+          </>
+        )}
         <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums shrink-0 ml-1">
           {formatRelativeTime(chat.updatedAt)}
         </span>
@@ -540,7 +565,8 @@ function VideoHistoryPanel({
   onSelectChat: (chat: VideoChatSummary) => void;
 }) {
   const { data: chats, isLoading, isError } = useVideoChats();
-
+  const { mutate: renameChat } = useRenameVideoChat();
+  
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -601,6 +627,7 @@ function VideoHistoryPanel({
                 chat={chat}
                 isActive={activeChatId === chat.id}
                 onClick={() => { onSelectChat(chat); onClose(); }}
+                onRename={(id, title) => renameChat({ id, title })}
               />
             ))}
           </div>

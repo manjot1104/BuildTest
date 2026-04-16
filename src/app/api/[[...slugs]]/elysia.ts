@@ -120,6 +120,7 @@ import {
   getVideoChatsHandler,
   getVideoChatHandler,
   deleteVideoChatHandler,
+  renameVideoChatHandler,
 } from '@/server/api/controllers/video-chat.controller'
 import { uploadUserImagesHandler } from '@/server/api/controllers/video-upload.controller'
 import { env } from "@/env";
@@ -2110,6 +2111,24 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
     {
       params: t.Object({ chatId: t.String() }),
+    },
+  )
+  // PATCH /api/video/chats/:chatId — rename a video chat title
+  .patch(
+    '/video/chats/:chatId',
+    async ({ params, body, set }: any) => {
+      const result = await renameVideoChatHandler({ params, body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+      body: t.Object({
+        title: t.String(),
+      }),
     },
   )
 

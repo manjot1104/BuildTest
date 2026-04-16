@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Film, Mic, Music, Clock, Layers, X, Trash2, Loader2 } from "lucide-react";
-import { useVideoChats, type VideoChatSummary } from "@/client-api/query-hooks/use-video-hooks";
+import { useEffect, useRef, useState } from "react";
+import { Film, Mic, Music, Clock, Layers, X, Trash2, Loader2, Pencil } from "lucide-react";
+import { useVideoChats, useRenameVideoChat, type VideoChatSummary } from "@/client-api/query-hooks/use-video-hooks";
 
 interface VideoHistoryPanelProps {
   open: boolean;
@@ -28,11 +28,15 @@ function ChatRow({
   chat,
   isActive,
   onClick,
+  onRename,
 }: {
   chat: VideoChatSummary;
   isActive: boolean;
   onClick: () => void;
+  onRename: (id: string, title: string) => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(chat.title ?? "");
   return (
     <button
       type="button"
@@ -44,15 +48,34 @@ function ChatRow({
       }`}
     >
       <div className="flex items-center justify-between mb-1">
-        <span
-          className={`text-[9px] font-mono rounded-full px-2 py-0.5 border ${
-            isActive
-              ? "text-primary bg-primary/10 border-primary/20"
-              : "text-muted-foreground/60 bg-muted border-border"
-          }`}
-        >
-          {chat.title ?? "Untitled"}
-        </span>
+        {editing ? (
+          <input
+            value={draft}
+            autoFocus
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { onRename(chat.id, draft); setEditing(false); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") { onRename(chat.id, draft); setEditing(false); }
+              if (e.key === "Escape") { setDraft(chat.title ?? ""); setEditing(false); }
+            }}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[9px] font-mono rounded-full px-2 py-0.5 border border-primary/50 bg-background text-primary focus:outline-none w-full max-w-[130px]"
+          />
+        ) : (
+          <>
+            <span className={`text-[9px] font-mono rounded-full px-2 py-0.5 border ${isActive ? "text-primary bg-primary/10 border-primary/20" : "text-muted-foreground/60 bg-muted border-border"}`}>
+              {chat.title ?? "Untitled"}
+            </span>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setDraft(chat.title ?? ""); setEditing(true); }}
+              className="opacity-0 group-hover:opacity-100 h-4 w-4 flex items-center justify-center text-muted-foreground/40 hover:text-foreground transition-all shrink-0 ml-1"
+              aria-label="Rename"
+            >
+              <Pencil className="h-2.5 w-2.5" />
+            </button>
+          </>
+        )}
         <span className="text-[9px] font-mono text-muted-foreground/40 tabular-nums">
           {formatRelativeTime(chat.updatedAt)}
         </span>
@@ -77,6 +100,7 @@ export function VideoHistoryPanel({
   onSelectChat,
 }: VideoHistoryPanelProps) {
   const { data: chats, isLoading, isError } = useVideoChats();
+  const { mutate: renameChat } = useRenameVideoChat();
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Close on Escape
@@ -164,6 +188,7 @@ export function VideoHistoryPanel({
                   onSelectChat(chat);
                   onClose();
                 }}
+                onRename={(id, title) => renameChat({ id, title })}
               />
             ))}
           </div>

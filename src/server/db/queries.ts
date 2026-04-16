@@ -1561,6 +1561,20 @@ export async function getVideoChatsByUserId({
     .limit(limit)
     .offset(offset)
 }
+export async function renameVideoChat({
+  chatId,
+  userId,
+  title,
+}: {
+  chatId: string;
+  userId: string;
+  title: string;
+}) {
+  await db
+    .update(video_chats)
+    .set({ title, updated_at: new Date() })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)));
+}
 
 /**
  * Deletes a video chat (with ownership check).

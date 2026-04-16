@@ -329,3 +329,24 @@ export function useVideoChat(chatId: string | null) {
     },
   });
 }
+// Add after useVideoChat, before the final closing line
+
+export function useRenameVideoChat() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, title }: { id: string; title: string }): Promise<void> => {
+      const res = await fetch(`/api/video/chats/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error("error" in data ? data.error : "Failed to rename");
+      }
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: videoKeys.chats() });
+    },
+  });
+}

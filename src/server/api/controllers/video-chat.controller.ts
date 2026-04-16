@@ -8,6 +8,7 @@ import {
   getVideoChatById,
   getVideoChatsByUserId,
   deleteVideoChat,
+  renameVideoChat,
 } from '@/server/db/queries'
 import {
   deleteVideoAudioGeneration,
@@ -82,6 +83,29 @@ export async function getVideoChatHandler({
     options: (row.current_options as Record<string, unknown> | null) ?? null,
     userImages,
     updatedAt: row.updated_at.toISOString(),
+  }
+}
+
+// ── POST /api/video/chats/:chatId/rename ─────────────────────────────────────
+export async function renameVideoChatHandler({
+  params,
+  body,
+}: {
+  params: { chatId: string };
+  body: { title: string };
+}): Promise<{ success: true } | { error: string; status: number }> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  try {
+    await renameVideoChat({
+      chatId: params.chatId,
+      userId: session.user.id,
+      title: body.title,
+    });
+    return { success: true };
+  } catch (err) {
+    return { status: 500, error: "Failed to rename chat" };
   }
 }
 
