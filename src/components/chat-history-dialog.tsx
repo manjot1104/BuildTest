@@ -69,8 +69,11 @@ const [chatToDelete, setChatToDelete] = useState<string | null>(null)
     }, [filter])
 
     const handleChatClick = (chat: any) => {
-  if (chat.type === 'builder') {
-    router.push(`/chat?chatId=${chat.v0ChatId}`)
+if (chat.type === 'builder') {
+  const isThreeD = chat.demoUrl?.startsWith('threed://')
+  router.push(isThreeD 
+    ? `/chat?chatId=${chat.v0ChatId}&mode=3d`
+    : `/chat?chatId=${chat.v0ChatId}`)
   } else {
     router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
   }
@@ -298,9 +301,17 @@ const confirmDelete = async () => {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
-                                                        {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
-                                                    </p>
+                                                <div className="flex items-center gap-2">
+  <p className="text-sm font-medium truncate text-foreground/90 group-hover:text-foreground transition-colors">
+    {chat.title ?? chat.prompt ?? `Chat ${chat.v0ChatId.slice(0, 8)}...`}
+  </p>
+
+  {chat.type === 'builder' && chat.demoUrl?.startsWith('threed://') && (
+    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+      3D
+    </span>
+  )}
+</div>
                                                     {chat.createdAt && (
                                                         <p className="text-[10px] text-muted-foreground/50 mt-1 font-medium">
                                                             {formatDistanceToNow(new Date(chat.createdAt), {
@@ -322,15 +333,18 @@ const confirmDelete = async () => {
                                             </button>
                                             <button
                                                 type="button"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    if (chat.type === 'builder') {
-                                                        router.push(`/chat?chatId=${chat.v0ChatId}`)
-                                                    } else {
-                                                        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
-                                                    }
-                                                    toggleHistoryModal()
-                                                }}
+                                               onClick={(e) => {
+    e.stopPropagation()
+    if (chat.type === 'builder') {
+        const isThreeD = chat.demoUrl?.startsWith('threed://')
+        router.push(isThreeD 
+            ? `/chat?chatId=${chat.v0ChatId}&mode=3d`
+            : `/chat?chatId=${chat.v0ChatId}`)
+    } else {
+        router.push(`/ai-chat?chatId=${chat.v0ChatId}`)
+    }
+    toggleHistoryModal()
+}}
                                                 className="p-1.5 rounded-md transition-colors text-muted-foreground/40 hover:text-foreground hover:bg-background border border-transparent hover:border-border/50"
                                                 title="Open chat"
                                             >

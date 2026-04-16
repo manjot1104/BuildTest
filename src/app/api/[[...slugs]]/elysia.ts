@@ -1,6 +1,10 @@
 import { Elysia, t } from "elysia";
 import { getSession } from "@/server/better-auth/server";
 import {
+  generateVideoHandler,
+  getVideoStatusHandler,
+} from '@/server/api/controllers/video.controller'
+import {
   createChatOwnershipHandler,
   forkChatHandler,
   getChatDetailsHandler,
@@ -370,12 +374,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     "/apps/:chatId",
     async ({ params, set }) => {
       try {
-        const result = await getChatDemoUrl({ v0ChatId: params.chatId });
+       const chat = await getUserChat({ v0ChatId: params.chatId });
 
-        if (!result) {
-          set.status = 404;
-          return { error: "App not found" };
-        }
+if (!chat) {
+  set.status = 404;
+  return { error: "App not found" };
+}
 
         // Visit logging (non-critical, fire-and-forget)
         try {
@@ -405,7 +409,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           // Visit logging is non-critical — silently ignore failures
         }
 
-        return result;
+        return {
+  demoUrl: chat.demo_url,
+  demoHtml: chat.demo_html, 
+  title: chat.title ?? null,
+};
       } catch {
         set.status = 500;
         return { error: "Failed to fetch app" };
@@ -675,11 +683,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return result;
     },
     {
-      body: t.Object({
-        chatId: t.String(),
-        prompt: t.Optional(t.String()),
-        demoUrl: t.Optional(t.String()),
-      }),
+    body: t.Object({
+  chatId: t.String(),
+  prompt: t.Optional(t.String()),
+  demoUrl: t.Optional(t.String()),
+  demo_html: t.Optional(t.String()),
+}),
     },
   )
   // Chat history endpoint - GET /api/chats
@@ -1978,4 +1987,15 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     {
       params: t.Object({ token: t.String() }),
     },
-  );
+  )
+  
+  
+  // ============================================
+  // Video Generation Endpoints
+  // ============================================
+
+  // POST /api/video/generate — generate AI video background via kie.ai
+  .post('/video/generate', ({ request }) => generateVideoHandler(request))
+
+
+  ;
