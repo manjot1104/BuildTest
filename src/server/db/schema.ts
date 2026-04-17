@@ -943,6 +943,7 @@ export const test_cases = createTable(
     priority: testPriorityEnum("priority").default("P1"),
     tags: d.jsonb("tags"),            // string[]
     estimated_duration: d.integer("estimated_duration"), // ms
+    target_url: d.text("target_url"),    
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())

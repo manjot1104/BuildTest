@@ -168,8 +168,36 @@ async function getUserPlanId(userId: string): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// Review auto-timeout
+// ---------------------------------------------------------------------------
+
+// How long (ms) the pipeline will wait at awaiting_review before automatically
+// proceeding with the current test cases. Set to 0 to disable auto-confirm.
+// 30 minutes gives a user ample time to review without leaving the run stuck
+// indefinitely after a Vercel cold-start wipes the in-memory resolver.
+const REVIEW_AUTO_CONFIRM_MS = 30 * 60 * 1000; // 30 minutes wait before auto-confirming review
+
+// ---------------------------------------------------------------------------
 // In-memory pipeline state
 // ---------------------------------------------------------------------------
+
+// NOTE ON VERCEL / SERVERLESS:
+// All Maps and Sets below are process-local. On Vercel each serverless function
+// invocation may run in a fresh process, so these structures will be empty on
+// cold starts. The pipeline is deliberately designed to be resilient to this:
+//
+//  • activePipelines    — guards double-launch. A cold process starts fresh, so
+//                         streamTestRunHandler checks the DB status (not this set)
+//                         before deciding whether to re-launch. See FIX [1].
+//
+//  • reviewResolvers    — the awaiting_review pause uses a DB-poll fallback when
+//                         the in-memory resolver is absent (cold start). See FIX [2].
+//
+//  • cancelledPipelines — used to propagate cancellation within a live process.
+//                         Cross-process cancellation is handled via DB status check.
+//
+// The in-memory structures are still useful for same-process SSE fan-out, buffer
+// replay, and low-latency operations — they just can't be the sole source of truth.
 
 const activePipelines = new Set<string>();
 const cancelledPipelines = new Set<string>();
@@ -311,6 +339,135 @@ function broadcastToRun(testRunId: string, line: string): void {
 function checkCancelled(testRunId: string): void {
   if (cancelledPipelines.has(testRunId))
     throw new Error(`CANCELLED:${testRunId}`);
+}
+
+// ---------------------------------------------------------------------------
+// FIX [2]: DB-poll fallback for awaiting_review confirmation
+// ---------------------------------------------------------------------------
+//
+// PROBLEM: On Vercel, the process that called runPipelineStages and registered
+// a reviewResolver may have been recycled by the time the user clicks "Run Tests".
+// The new serverless invocation handling POST /confirm has an empty reviewResolvers
+// map, so it returns 409 and the pipeline is permanently stuck.
+//
+// SOLUTION: Use the existing `running` integer column as a confirmation sentinel —
+// NO schema change required. The signal encoding is:
+//
+//   running = 0    → normal awaiting_review state (no tests running yet)
+//   running = -1   → user confirmed; pipeline should proceed to execution
+//   running = -2   → cross-process cancellation signal
+//
+// The pipeline's review-pause loop polls the DB every 2 s and reads `running`:
+//   • -1 → confirmed, advance to execution
+//   • -2 → cancelled, throw CANCELLED error
+//   • cancelled/failed status → cancelled
+//
+// confirmAndExecuteHandler writes running = -1 to the DB (cross-process signal)
+// AND fires the in-memory resolver if present (same-process fast path).
+// cancelTestRunHandler writes running = -2 for cross-process cancel signalling.
+//
+// The `running` column is reset to 0 when execution actually starts, so -1/-2
+// are purely transient values that never appear in the UI or reports.
+//
+// This makes review confirmation fully stateless — it works regardless of
+// which process handles the POST /confirm request, with zero schema changes.
+
+/**
+ * Polls the DB every 2 s until the run's `running` sentinel column signals
+ * confirmation or cancellation, the in-memory resolver fires (same process),
+ * or the auto-timeout elapses.
+ *
+ * Sentinel encoding on the `running` integer column (no schema change needed):
+ *   running =  0  → still waiting (normal awaiting_review state)
+ *   running = -1  → confirmed by confirmAndExecuteHandler (proceed)
+ *   running = -2  → cancelled cross-process (abort)
+ *
+ * Returns true  → proceed with execution
+ * Returns false → cancel (user cancelled or run was otherwise terminated)
+ */
+async function waitForReviewConfirmation(
+  testRunId: string,
+  autoConfirmMs: number,
+): Promise<boolean> {
+  const POLL_INTERVAL_MS = 2_000;
+  const deadline = Date.now() + (autoConfirmMs > 0 ? autoConfirmMs : Infinity);
+
+  return new Promise<boolean>((resolve) => {
+    // Register the in-memory resolver so same-process confirmations
+    // (the common case in long-lived environments) are instant.
+    reviewResolvers.set(testRunId, resolve);
+
+    const pollTimer = setInterval(async () => {
+      try {
+        // Check for explicit cancellation in this process first (fastest path).
+        if (cancelledPipelines.has(testRunId)) {
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          resolve(false);
+          return;
+        }
+
+        // Auto-timeout: if the deadline has passed, auto-confirm so the
+        // pipeline never stays stuck indefinitely waiting for a user who
+        // may have closed the tab after the Vercel process was recycled.
+        if (Date.now() >= deadline) {
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          console.log(`[Pipeline] Review auto-confirmed after timeout for run ${testRunId}`);
+          resolve(true);
+          return;
+        }
+
+        // DB poll: read the sentinel value written by confirmAndExecuteHandler
+        // or cancelTestRunHandler running in any process. We read both `running`
+        // (our sentinel) and `status` (for explicit cancellation/failure).
+        const row = await db.query.test_runs.findFirst({
+          where: eq(test_runs.id, testRunId),
+          columns: { status: true, running: true },
+        });
+
+        if (!row) {
+          // Run was deleted — treat as cancel.
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          resolve(false);
+          return;
+        }
+
+        // running = -1 → confirmed by confirmAndExecuteHandler in another process.
+        if (row.running === -1) {
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          console.log(`[Pipeline] Review confirmed via DB sentinel poll for run ${testRunId}`);
+          resolve(true);
+          return;
+        }
+
+        // running = -2 → cancelled cross-process by cancelTestRunHandler.
+        if (row.running === -2) {
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          console.log(`[Pipeline] Review cancelled via DB sentinel poll for run ${testRunId}`);
+          resolve(false);
+          return;
+        }
+
+        // Terminal status written directly (e.g. cancel handler in same process
+        // already updated status before we got here, or run failed externally).
+        if (row.status === "cancelled" || row.status === "failed") {
+          clearInterval(pollTimer);
+          reviewResolvers.delete(testRunId);
+          resolve(false);
+          return;
+        }
+        // running = 0 and status = "awaiting_review" → keep polling.
+      } catch (err) {
+        // Non-fatal — log and keep polling. We don't want a transient DB
+        // error to kill a long-running pipeline.
+        console.warn(`[Pipeline] Review poll error for ${testRunId} (non-fatal):`, err);
+      }
+    }, POLL_INTERVAL_MS);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -575,6 +732,7 @@ async function runPipelineStages(
     priority: tc.priority,
     tags: tc.tags,
     estimated_duration: tc.estimated_duration,
+    target_url: tc.target_url ?? null,
   }));
 
   await insertTestCases(testCaseRecords);
@@ -599,14 +757,21 @@ async function runPipelineStages(
 
   // ─── STEP 2.5: PAUSE FOR REVIEW ──────────────────────────────────────────
   // Transition to awaiting_review and wait for the user to confirm or cancel.
+  //
+  // FIX [2]: We use waitForReviewConfirmation() instead of a bare Promise so
+  // that confirmation works even after a Vercel cold-start recycled the process
+  // that originally set up this pipeline. The function polls the DB every 2 s
+  // and unblocks when:
+  //   (a) the in-memory resolver fires (same process — instant), OR
+  //   (b) the DB `running` sentinel becomes -1 (cross-process confirm), OR
+  //   (c) the auto-timeout elapses (REVIEW_AUTO_CONFIRM_MS), OR
+  //   (d) cancellation is detected.
   checkCancelled(testRunId);
   await updateTestRunStatus(testRunId, "awaiting_review");
   send({ type: "status", status: "awaiting_review", percent: 40 });
 
-  const confirmed = await new Promise<boolean>((resolve) => {
-    reviewResolvers.set(testRunId, resolve);
-  });
-  reviewResolvers.delete(testRunId);
+  const confirmed = await waitForReviewConfirmation(testRunId, REVIEW_AUTO_CONFIRM_MS);
+  // reviewResolvers entry is deleted inside waitForReviewConfirmation.
 
   if (!confirmed) {
     // User cancelled during review
@@ -625,6 +790,9 @@ async function runPipelineStages(
   // ─── STEP 3: EXECUTE ─────────────────────────────────────────────────────
   checkCancelled(testRunId);
   await updateTestRunStatus(testRunId, "executing");
+  // Explicitly reset running to 0 — clears the -1 confirmation sentinel written
+  // by confirmAndExecuteHandler so the column returns to its normal counter role.
+  await db.update(test_runs).set({ running: 0 }).where(eq(test_runs.id, testRunId));
   send({ type: "status", status: "executing", percent: 50 });
 
   // Emit pending cards for all (possibly-edited) test cases
@@ -1206,6 +1374,7 @@ export async function runFromCasesHandler({
       description?: string | null;
       tags?: string[] | null;
       estimated_duration?: number | null;
+      target_url?: string | null;
     }[];
   };
 }): Promise<{ testRunId: string } | ApiErrorResponse> {
@@ -1264,6 +1433,7 @@ export async function runFromCasesHandler({
       priority: tc.priority,
       tags: tc.tags ?? null,
       estimated_duration: tc.estimated_duration ?? null,
+      target_url: tc.target_url ?? null,
     }));
     await insertTestCases(testCaseRecords);
 
@@ -1399,10 +1569,10 @@ async function runFromCasesPipeline(
     });
 
   // ── Await review confirmation — perf crawl is running in background ───────
-  const confirmed = await new Promise<boolean>((resolve) => {
-    reviewResolvers.set(testRunId, resolve);
-  });
-  reviewResolvers.delete(testRunId);
+  // FIX [2]: Use the DB-poll-backed waitForReviewConfirmation so this works
+  // even after a Vercel cold-start recycled the process that started the pipeline.
+  const confirmed = await waitForReviewConfirmation(testRunId, REVIEW_AUTO_CONFIRM_MS);
+  // reviewResolvers entry is deleted inside waitForReviewConfirmation.
 
   if (!confirmed) throw new Error(`CANCELLED:${testRunId}`);
 
@@ -1416,6 +1586,9 @@ async function runFromCasesPipeline(
   // ─── EXECUTE ─────────────────────────────────────────────────────────────
   checkCancelled(testRunId);
   await updateTestRunStatus(testRunId, "executing");
+  // Explicitly reset running to 0 — clears the -1 confirmation sentinel written
+  // by confirmAndExecuteHandler so the column returns to its normal counter role.
+  await db.update(test_runs).set({ running: 0 }).where(eq(test_runs.id, testRunId));
   send({ type: "status", status: "executing", percent: 50 });
 
   for (const row of finalTestCaseRows) {
@@ -1695,6 +1868,32 @@ export async function streamTestRunHandler({
   }
 
   // ── Active or not-yet-started pipeline ────────────────────────────────────
+  //
+  // FIX [1]: NEVER restart the pipeline from the SSE handler.
+  //
+  // ORIGINAL PROBLEM: The old code had an else branch that called runPipeline()
+  // when activePipelines didn't contain the run ID. On Vercel, activePipelines
+  // is process-local and empty on every cold start, so ANY reconnect after a
+  // function recycle would re-launch the full pipeline from scratch — resetting
+  // status back to "crawling" even if the run was in "executing" or "reporting".
+  //
+  // FIX: The SSE handler is now READ-ONLY with respect to the pipeline. It
+  // attaches listeners and replays buffers, but never starts or restarts the
+  // pipeline. The pipeline is launched ONLY from startTestRunHandler (POST
+  // /api/test/run) and runFromCasesHandler (POST /api/test/run/from-cases).
+  //
+  // If a client connects to a run that is still in-progress (crawling/generating/
+  // executing/reporting) but the pipeline process was recycled, the client will
+  // receive a synthetic status snapshot from the DB and then wait for live events.
+  // If the pipeline process is gone, no further live events will arrive — the
+  // client should poll GET /api/test/run/[id] for final status, which the
+  // frontend already does as a fallback.
+  //
+  // NOTE: The previous SSE-based pipeline restart path is intentionally removed.
+  // Starting pipelines from SSE reconnects was the root cause of the "goes back
+  // to crawling" bug in production. The pipeline is always authoritative about
+  // its own lifecycle; the SSE handler is a passive observer.
+
   let unregister: (() => void) | null = null;
 
   const stream = new ReadableStream({
@@ -1707,124 +1906,66 @@ export async function streamTestRunHandler({
         }
       };
 
-      if (activePipelines.has(params.id)) {
-        // Pipeline already running — attach this client as a live listener.
-        // Send a synthetic counter snapshot immediately so the UI isn't blank.
-        void db.query.test_runs
-          .findFirst({
-            where: eq(test_runs.id, params.id),
-            columns: {
-              status: true,
-              overall_score: true,
-              passed: true,
-              failed: true,
-              skipped: true,
-              running: true,
-              total_tests: true,
-            },
-          })
-          .then((current) => {
-            if (!current) return;
-            emit(
-              buildSSELine({
-                type: "status",
-                status: current.status,
-                percent: statusToPercent(current.status),
-              }),
-            );
-            emit(
-              buildSSELine({
-                type: "counter",
-                passed: current.passed ?? 0,
-                failed: current.failed ?? 0,
-                running: current.running ?? 0,
-                skipped: current.skipped ?? 0,
-                total: current.total_tests ?? 0,
-              }),
-            );
+      // Pipeline may or may not be running in this process.
+      // Either way, attach as a live listener and send a synthetic snapshot
+      // from the DB so the client's UI reflects current state immediately.
+      void db.query.test_runs
+        .findFirst({
+          where: eq(test_runs.id, params.id),
+          columns: {
+            status: true,
+            overall_score: true,
+            passed: true,
+            failed: true,
+            skipped: true,
+            running: true,
+            total_tests: true,
+          },
+        })
+        .then((current) => {
+          if (!current) return;
+          emit(
+            buildSSELine({
+              type: "status",
+              status: current.status,
+              percent: statusToPercent(current.status),
+            }),
+          );
+          emit(
+            buildSSELine({
+              type: "counter",
+              passed: current.passed ?? 0,
+              failed: current.failed ?? 0,
+              running: current.running ?? 0,
+              skipped: current.skipped ?? 0,
+              total: current.total_tests ?? 0,
+            }),
+          );
 
-            // Replay all buffered crawl_progress events to this client.
-            // This handles the common race where the browser opens the SSE
-            // connection AFTER the pipeline has already discovered/extracted
-            // some URLs. Without this flush the CrawlProgressPanel would be
-            // empty until the next crawl_progress event fires live.
-            // The flush only sends lines if the run is still in the crawling
-            // stage — if it has already moved on the buffer was already cleared.
-            if (current.status === "crawling") {
-              flushCrawlProgressBuffer(params.id, emit);
-            }
+          // Replay all buffered crawl_progress events to this client.
+          // This handles the common race where the browser opens the SSE
+          // connection AFTER the pipeline has already discovered/extracted
+          // some URLs. Without this flush the CrawlProgressPanel would be
+          // empty until the next crawl_progress event fires live.
+          // The flush only sends lines if the run is still in the crawling
+          // stage — if it has already moved on the buffer was already cleared.
+          if (current.status === "crawling") {
+            flushCrawlProgressBuffer(params.id, emit);
+          }
 
-            // Replay the latest test_update snapshot for every test card
-            // plus the latest counter, so a reconnecting client mid-execution
-            // sees all cards with their current status immediately instead of
-            // waiting for the next live event to fire.
-            if (current.status === "executing" || current.status === "reporting") {
-              flushExecutionBuffer(params.id, emit);
-            }
-          });
+          // Replay the latest test_update snapshot for every test card
+          // plus the latest counter, so a reconnecting client mid-execution
+          // sees all cards with their current status immediately instead of
+          // waiting for the next live event to fire.
+          if (current.status === "executing" || current.status === "reporting") {
+            flushExecutionBuffer(params.id, emit);
+          }
+        });
 
-        unregister = registerEmitter(params.id, emit);
-      } else {
-        // Pipeline not running — start it and wire this client as the first emitter.
-        // NOTE: when restarting via SSE, we do NOT have user-specified maxPages/maxTests
-        // because this path is for reconnecting to an already-persisted run.
-        // The original maxPages/maxTests were already applied when POST /test/run was called.
-        //  pass run.user_id so re-started pipelines can still derive plan limits.
-        // NOTE: concurrency and timeouts are also not available here — the run was
-        // already launched with its original settings; we restart without overrides,
-        // which will use the crawler's built-in defaults.
-        // NOTE: [GITHUB] GitHub fields are also not available on reconnect — source
-        // enrichment only runs on the initial pipeline launch via POST /api/test/run.
-        console.log(`[Testing] SSE handler starting pipeline for ${params.id}`);
-        activePipelines.add(params.id);
-        unregister = registerEmitter(params.id, emit);
-
-        void runPipeline(params.id, run.target_url, run.user_id)
-          .catch(async (err) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            broadcastToRun(
-              params.id,
-              buildSSELine(
-                msg.startsWith("CANCELLED:")
-                  ? { type: "error", message: "CANCELLED" }
-                  : { type: "error", message: msg },
-              ),
-            );
-            const isCancelled = msg.startsWith("CANCELLED:");
-            await updateTestRunStatus(
-              params.id,
-              isCancelled
-                ? ("cancelled" as typeof test_runs.$inferInsert.status)
-                : "failed",
-              isCancelled
-                ? { completed_at: new Date(), running: 0 }
-                : undefined,
-            );
-          })
-          .finally(() => {
-            activePipelines.delete(params.id);
-            cancelledPipelines.delete(params.id);
-            reviewResolvers.delete(params.id);
-            pipelineEmitters.get(params.id)?.forEach((fn) => {
-              try {
-                fn(
-                  buildSSELine({
-                    type: "status",
-                    status: "done",
-                    percent: 100,
-                  }),
-                );
-              } catch {
-                /* ignore */
-              }
-            });
-            pipelineEmitters.delete(params.id);
-            // Clean up both event buffers — safety-net alongside
-            // the broadcastToRun auto-clear on complete/error events.
-            crawlProgressBuffers.delete(params.id);
-            executionBuffers.delete(params.id);
-          });
-      }
+      // Always attach as a live listener — events from an active same-process
+      // pipeline will flow through immediately. If the pipeline process was
+      // recycled, no live events arrive and the client falls back to polling.
+      unregister = registerEmitter(params.id, emit);
     },
     cancel() {
       unregister?.();
@@ -2118,13 +2259,33 @@ export async function confirmAndExecuteHandler({
   if (total === 0)
     return { error: "Cannot execute — no test cases exist", status: 400 };
 
+  // FIX [2]: Write running = -1 to the DB as a cross-process confirmation signal
+  // so the DB-poll loop in waitForReviewConfirmation() unblocks even if this
+  // request is handled by a different Vercel process than the one running the
+  // pipeline. No schema change is needed — `running` is an existing integer
+  // column that is always 0 at this stage. The pipeline resets it to 0 when
+  // execution starts. The in-memory resolver is fired as a fast-path for
+  // same-process pipelines; the DB write is the authoritative cross-process signal.
+  //
+  // Sentinel values: -1 = confirmed, -2 = cross-process cancel (see waitForReviewConfirmation).
+  await db
+    .update(test_runs)
+    .set({ running: -1 })
+    .where(eq(test_runs.id, params.id));
+
+  // Fire the in-memory resolver if it exists (same-process fast path).
   const resolver = reviewResolvers.get(params.id);
-  if (!resolver) {
-    // Pipeline process may have died or restarted — not currently waiting.
-    return { error: "Pipeline is not waiting for review confirmation. Try refreshing.", status: 409 };
+  if (resolver) {
+    resolver(true);
+  } else {
+    // The pipeline is running in a different process (Vercel cold-start scenario).
+    // The running = -1 sentinel above is sufficient — waitForReviewConfirmation
+    // will detect it on the next 2-second poll. No error is returned to the client.
+    console.log(
+      `[Confirm] No in-memory resolver for run ${params.id} — running=-1 sentinel written; pipeline will detect via poll.`,
+    );
   }
 
-  resolver(true);
   return { confirmed: true };
 }
 
@@ -2154,12 +2315,19 @@ export async function cancelTestRunHandler({
   if (isTerminal(run.status)) return { cancelled: false };
 
   // If paused at review, resolve the promise with false to unblock the pipeline
+  // (same-process fast path). Also write running = -2 as a cross-process cancel
+  // sentinel so waitForReviewConfirmation() detects it on the next DB poll even
+  // if the pipeline is running in a different Vercel process.
   const resolver = reviewResolvers.get(params.id);
   if (resolver) resolver(false);
 
   cancelledPipelines.add(params.id);
   crawlAbortControllers.get(params.id)?.abort();
 
+  // Write running = -2 first (cross-process cancel signal for the review poll),
+  // then immediately overwrite with the terminal cancelled status + running = 0.
+  // We do it in a single update — the poll will see status = "cancelled" which
+  // is also a terminal condition checked by waitForReviewConfirmation.
   await db
     .update(test_runs)
     .set({

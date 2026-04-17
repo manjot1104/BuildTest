@@ -1,5 +1,5 @@
 {
-  "id": "bd511f8d-bf46-4da7-8fa8-350597888723",
+  "id": "7334268d-fc28-406b-8296-4460791fec1a",
   "prevId": "90bf4540-b947-4fc7-8aa6-b379626dfd99",
   "version": "7",
   "dialect": "postgresql",
@@ -811,12 +811,6 @@
         },
         "preview_url": {
           "name": "preview_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "demo_html": {
-          "name": "demo_html",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2926,6 +2920,12 @@
         "estimated_duration": {
           "name": "estimated_duration",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "target_url": {
+          "name": "target_url",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

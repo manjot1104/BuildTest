@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_test_cases" ADD COLUMN "target_url" text;
