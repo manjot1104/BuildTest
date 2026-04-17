@@ -1,3 +1,5 @@
+import { RESUME_PDF_MARGIN_MM } from '@/lib/text-layout/constants'
+
 /**
  * Tries to find Chrome/Chromium executable on Windows
  */
@@ -48,23 +50,24 @@ export async function generatePDFFromHtml(
     })
     
     // Set content with proper styling for print
-    await page.setContent(htmlContent, { 
-      waitUntil: 'networkidle0',
-      timeout: 30000,
+    // `networkidle0` waits for all network to go idle — very slow for resumes with no real network.
+    await page.setContent(htmlContent, {
+      waitUntil: 'load',
+      timeout: 25_000,
     })
 
-    // Wait a bit for any dynamic content to render (using Promise-based delay)
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise((resolve) => setTimeout(resolve, 120))
 
     // Generate PDF with minimal margins to avoid blank first page
+    const m = `${RESUME_PDF_MARGIN_MM}mm`
     const pdfBuffer = await page.pdf({
       format: 'A4',
       printBackground: true,
       margin: {
-        top: '10mm',
-        right: '10mm',
-        bottom: '10mm',
-        left: '10mm',
+        top: m,
+        right: m,
+        bottom: m,
+        left: m,
       },
       preferCSSPageSize: false,
       displayHeaderFooter: false,

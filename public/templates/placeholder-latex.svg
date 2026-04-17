@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="794" height="1123" viewBox="0 0 794 1123">
+  <rect width="794" height="1123" fill="#f4f4f5"/>
+  <text x="397" y="540" text-anchor="middle" fill="#71717a" font-family="system-ui,Segoe UI,sans-serif" font-size="18">
+    Template preview
+  </text>
+  <text x="397" y="575" text-anchor="middle" fill="#a1a1aa" font-family="system-ui,Segoe UI,sans-serif" font-size="13">
+    Add public/templates/{id}-1.jpg and -2.jpg
+  </text>
+</svg>

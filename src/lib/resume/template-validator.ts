@@ -83,10 +83,14 @@ const incomingResumeSchema = z.object({
   achievements: z.union([z.array(z.string()), z.string().max(MAX_TEXT)]).optional(),
   languagesKnown: z.union([z.array(z.string()), z.string().max(MAX_TEXT)]).optional(),
 
-  additionalInstructions: z.string().max(5000).optional(),
+  /** Long JD pastes + AI instructions (raw JD fallback can be ~12k+ chars) */
+  additionalInstructions: z.string().max(100_000).optional(),
   model: z.string().max(100).optional(),
   templateId: z.string().max(100).optional(),
-  templateStyleGuide: z.string().max(120000).optional(),
+  /** Large LaTeX/HTML template bundles from `templates.ts` */
+  templateStyleGuide: z.string().max(500_000).optional(),
+  /** Skip OpenRouter; return local `renderTemplate` output only (used after client timeout / offline AI). */
+  forceLocalOnly: z.boolean().optional(),
 })
 
 /**
@@ -114,6 +118,8 @@ export type NormalizedResumeInput = {
   model?: string
   templateId?: string
   templateStyleGuide?: string
+  /** When true, API routes skip AI and use template renderer only. */
+  forceLocalOnly?: boolean
   missingSections: string[]
 }
 
@@ -221,6 +227,7 @@ export function normalizeResumeInput(payload: unknown): NormalizedResumeInput {
     model: cleanText(parsed.model) || undefined,
     templateId: cleanText(parsed.templateId) || undefined,
     templateStyleGuide: cleanText(parsed.templateStyleGuide) || undefined,
+    forceLocalOnly: parsed.forceLocalOnly === true,
     missingSections,
   }
 }

@@ -134,7 +134,7 @@ export function TestingLaunchDialog({
   if (isLoading) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -164,7 +164,7 @@ export function TestingLaunchDialog({
   if (!isGithubConnected) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -184,13 +184,9 @@ export function TestingLaunchDialog({
                 number={1}
                 label="Test target"
                 description={
-                  demoUrl ? (
-                    <span className="break-all text-xs">
-                      Will crawl {demoUrl.replace(/^https?:\/\//, '')}
-                    </span>
-                  ) : (
-                    'No demo URL yet — you can enter one on the testing page.'
-                  )
+                  demoUrl
+                    ? `Will crawl ${demoUrl.replace(/^https?:\/\//, '')}`
+                    : 'No demo URL yet — you can enter one on the testing page.'
                 }
                 status="done"
               />
@@ -257,7 +253,7 @@ export function TestingLaunchDialog({
   if (isGithubConnected && !hasRepo) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FlaskConical className="size-5" />
@@ -345,8 +341,7 @@ export function TestingLaunchDialog({
   // Shows both URL and repo, with a toggleable source inclusion card.
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* FIX: added flex flex-col max-h-[90vh] to prevent overflow */}
-      <DialogContent className="sm:max-w-lg flex flex-col max-h-[90vh]">
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="size-5" />
