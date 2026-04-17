@@ -1066,7 +1066,7 @@ export default function TestingPage() {
                     </div>
                   )
                   : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
+                    <div className="flex flex-col gap-2" role="list">
                       {liveTestCases.map((tc) => (
                         <div key={tc.id} role="listitem"><LiveTestCaseCard tc={tc} /></div>
                       ))}
@@ -1239,7 +1239,7 @@ export default function TestingPage() {
                     </button>
                   ))}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
+                <div className="flex flex-col gap-2" role="list">
                   {filteredTestCases.length === 0
                     ? (
                       <div className="sm:col-span-2 rounded-xl border border-border bg-muted/20 p-6 text-center">

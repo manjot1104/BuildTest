@@ -522,6 +522,7 @@ if (!chat) {
       createdAt: chat.created_at.toISOString(),
       updatedAt: chat.updated_at.toISOString(),
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
+is3D: chat.demo_url?.startsWith('threed://') ?? false,
       folderId: chat.folder_id ?? null,
       is_starred: chat.is_starred,
     }))

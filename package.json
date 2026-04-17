@@ -127,6 +127,7 @@
     "@types/nodemailer": "^7.0.9",
     "@types/pdf-parse": "^1.1.5",
     "@types/pg": "^8.20.0",
+    "@types/puppeteer": "^7.0.4",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/react-syntax-highlighter": "^15.5.13",
