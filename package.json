@@ -93,6 +93,8 @@
     "postgres": "^3.4.4",
     "puppeteer": "^24.37.5",
     "puppeteer-core": "^24.39.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "razorpay": "^2.9.6",
     "react": "^19.0.0",
     "react-day-picker": "^9.13.0",
