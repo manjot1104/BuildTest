@@ -719,11 +719,12 @@ onClick={() => {
 
 // ─── 3D Chat History ──────────────────────────────────────────────────────────
 function ThreeDChatHistory({
-    messages, onRegenerate, loading,
+    messages, onRegenerate, loading, onUpgrade,
 }: {
     messages: { role: 'user' | 'assistant'; content: string }[]
     onRegenerate: () => void
     loading: boolean
+    onUpgrade: () => void
 }) {
     const bottomRef = useRef<HTMLDivElement>(null)
     useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -769,7 +770,7 @@ if (m.content === '__credits_exhausted__') {
       </p>
 
       <button
-        onClick={() => window.location.href = '/pricing'}
+       onClick={() => onUpgrade()}
         className="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white hover:opacity-90 transition"
       >
         Upgrade Plan
@@ -1334,7 +1335,7 @@ const getVideoFromPrompt = (prompt?: string) => {
                                                 </div>
                                               
                                             </div>
-                                            <ThreeDChatHistory messages={threeDMessages} onRegenerate={handleRegenerate} loading={threeDLoading} />
+                                            <ThreeDChatHistory messages={threeDMessages} onRegenerate={handleRegenerate} loading={threeDLoading} onUpgrade={() => setShowSubscriptionModal(true)} />
                                             <div className="border-t border-border/40 shrink-0">
                                                 <ChatInput message={message} setMessage={setMessage} onSubmit={handleSendMessage} isLoading={threeDLoading} showSuggestions={false} attachments={attachments} onAttachmentsChange={setAttachments} textareaRef={textareaRef} />
                                             </div>

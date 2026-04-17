@@ -193,12 +193,7 @@ Create a premium multi-scene 3D website for: "${prompt}"
     data = await response.json()
 
    
-    if (!data?.choices?.[0]?.message?.content) {
-      return NextResponse.json(
-        { error: "service_unavailable" },
-        { status: 503 }
-      )
-    }
+    
 
   
     if (data.error) {
@@ -219,6 +214,12 @@ Create a premium multi-scene 3D website for: "${prompt}"
         )
       }
 
+      return NextResponse.json(
+        { error: "service_unavailable" },
+        { status: 503 }
+      )
+    }
+    if (!data?.choices?.[0]?.message?.content) {
       return NextResponse.json(
         { error: "service_unavailable" },
         { status: 503 }
