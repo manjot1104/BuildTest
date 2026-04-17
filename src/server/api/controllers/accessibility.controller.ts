@@ -146,7 +146,18 @@ export async function startAccessibilityTestHandler({
       pageResults,
       }, browser)
 
-        send({ type: 'report:complete', testRunId })
+        // Try to upload to S3; fall back to storing inline base64
+let pdfStorageValue: string = pdfBase64
+try {
+  const hostname = new URL(normalizedUrl).hostname
+  const pdfBuffer = Buffer.from(pdfBase64, 'base64')
+  const s3Url = await uploadPdfReport({ buffer: pdfBuffer, testRunId, hostname })
+  if (s3Url) pdfStorageValue = s3Url
+} catch {
+  // S3 upload failed — keep inline base64 as fallback
+}
+
+send({ type: 'report:complete', testRunId })
 
         // Update test run with results + logs
         await db
