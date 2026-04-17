@@ -33,7 +33,7 @@ import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
 import { SubscriptionModal } from "@/components/payments/subscription-modal";
 import { useUserCredits } from "@/hooks/use-user-credits";
-import { useMusicPreview } from "@/client-api/query-hooks/use-music-preview"; 
+import { useMusicPreview, useTTSPreview, TTS_VOICES} from "@/client-api/query-hooks/use-audio-preview"; 
 
 // ─── Plan Limits Config ───────────────────────────────────────────────────────
 //
@@ -156,6 +156,53 @@ function MusicPreviewButton({
         <Play className="h-2.5 w-2.5 fill-current" />
       )}
     </button>
+  );
+}
+
+// ─── VoiceSelector — dropdown + preview button for TTS voices ────────────────
+
+function VoiceSelector({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  disabled: boolean;
+}) {
+  const { playingVoice, togglePreview } = useTTSPreview();
+
+  return (
+    <div className="flex items-center gap-1.5 flex-1">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground focus:outline-none focus:border-primary/50 disabled:opacity-40 cursor-pointer"
+      >
+        {TTS_VOICES.map((v : { id: string; label: string }) => (
+          <option key={v.id} value={v.id}>{v.label}</option>
+        ))}
+      </select>
+      {/* Preview button — plays /TTS/<voiceId>.mp3 */}
+      <button
+        type="button"
+        onClick={() => togglePreview(value)}
+        disabled={disabled}
+        className={`h-7 w-7 rounded-md flex items-center justify-center transition-all disabled:opacity-40 shrink-0 ${
+          playingVoice === value
+            ? "bg-primary/20 border border-primary/40 text-primary"
+            : "bg-muted border border-border text-muted-foreground/50 hover:text-foreground hover:bg-muted/80"
+        }`}
+        aria-label={playingVoice === value ? "Stop voice preview" : "Preview voice"}
+        title={playingVoice === value ? "Stop preview" : "Preview voice"}
+      >
+        {playingVoice === value
+          ? <Square className="h-2.5 w-2.5 fill-current" />
+          : <Play className="h-2.5 w-2.5 fill-current" />
+        }
+      </button>
+    </div>
   );
 }
 
@@ -1121,7 +1168,7 @@ function FollowUpInput({
   const [musicGenre, setMusicGenre] = useState("corporate");
   // music preview for follow-up input
   const { playingGenre: previewingGenre, togglePreview, stopPreview } = useMusicPreview();
-  const [voiceId, setVoiceId] = useState("devansh");
+  const [voiceId, setVoiceId] = useState("aarush");
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
 
@@ -1380,7 +1427,7 @@ function FollowUpInput({
                   <>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                      <input type="text" value={voiceId} onChange={(e) => setVoiceId(e.target.value)} disabled={isBlocked} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
+                      <VoiceSelector value={voiceId} onChange={setVoiceId} disabled={isBlocked} />
                     </div>
                     <div className="flex items-center gap-2 pl-5">
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
@@ -1477,7 +1524,7 @@ export default function VideoGeneratorPage() {
   const [musicGenre, setMusicGenre] = useState("corporate");
   // Music preview for initial prompt form
   const { playingGenre: previewingGenre0, togglePreview: togglePreview0, stopPreview: stopPreview0 } = useMusicPreview();
-  const [voiceId, setVoiceId] = useState("devansh");
+  const [voiceId, setVoiceId] = useState("aarush");
   const [ttsVolume0, setTtsVolume0] = useState(0.8);
   const [musicVolume0, setMusicVolume0] = useState(0.3);
 
@@ -2111,7 +2158,7 @@ export default function VideoGeneratorPage() {
                           <>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Voice</span>
-                              <input type="text" value={voiceId} disabled={isBusy} onChange={(e) => setVoiceId(e.target.value)} placeholder="devansh" className="flex-1 h-7 px-2 rounded-md border border-border bg-background text-[11px] font-mono text-foreground placeholder:text-muted-foreground/30 focus:outline-none focus:border-primary/50 disabled:opacity-40" />
+                              <VoiceSelector value={voiceId} onChange={setVoiceId} disabled={isBusy} />
                             </div>
                             <div className="flex items-center gap-2 pl-5">
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Volume</span>
