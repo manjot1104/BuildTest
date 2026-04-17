@@ -287,6 +287,7 @@ export interface CommunityBuildItem {
   prompt?: string | null
   demoUrl?: string | null
   previewUrl?: string | null
+  demoHtml?: string | null
   createdAt: string
   updatedAt: string
   authorName: string

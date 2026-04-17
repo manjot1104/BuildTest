@@ -149,6 +149,7 @@ const { getVariableNames } = useEnvVariables()
   const handleSendMessage = async (
     message: string,
     attachments?: Array<{ url: string }>,
+    overrideChatId?: string | null, 
   ) => {
     if (!message.trim() || isLoading) return
 
@@ -166,7 +167,7 @@ const { getVariableNames } = useEnvVariables()
         },
         body: JSON.stringify({
           message: userMessage,
-          chatId: chatId,
+          chatId: overrideChatId === null ? undefined : (overrideChatId ?? chatId),
           streaming: true,
           ...(attachments && attachments.length > 0 && { attachments }),
           envVarNames: getVariableNames(),

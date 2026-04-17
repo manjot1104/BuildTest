@@ -110,7 +110,7 @@ export async function startAccessibilityTestHandler({
         })
 
         // Run test
-        const { summary, pageResults, browser } = await runAccessibilityTest(config, send)
+        const { summary, pageResults , browser } = await runAccessibilityTest(config, send)
 
         // Update status
         await db
@@ -137,52 +137,16 @@ export async function startAccessibilityTestHandler({
           })
         }
 
-        // Generate PDF report (returns base64 string)
-        const pdfBase64 = await generateAccessibilityReport(
-          {
-            targetUrl: normalizedUrl,
-            standards: config.standards,
-            testDate: new Date().toISOString(),
-            summary,
-            pageResults,
-          },
-          browser,
-        )
+        // Generate PDF report
+       const pdfBase64 = await generateAccessibilityReport({
+      targetUrl: normalizedUrl,
+      standards: config.standards,
+      testDate: new Date().toISOString(),
+      summary,
+      pageResults,
+      }, browser)
 
-        // Decide storage method: if large, upload to S3 and store URL instead of base64
-        // Heuristic: if base64 length > ~6MB (approx 8,000,000 chars), avoid DB bloat/limits
-        const MAX_INLINE_BASE64_CHARS = 8_000_000
-        let pdfStorageValue: string | null = null
-        let storedAsUrl = false
-
-        try {
-          const hostname = new URL(normalizedUrl).hostname.replace(/[^a-z0-9.-]/gi, '-')
-          const pdfBuffer = Buffer.from(pdfBase64, 'base64')
-
-          if (pdfBase64.length > MAX_INLINE_BASE64_CHARS) {
-            const url = await uploadPdfReport({
-              buffer: pdfBuffer,
-              testRunId,
-              hostname,
-            })
-            if (url) {
-              pdfStorageValue = url
-              storedAsUrl = true
-            } else {
-              // Fallback: only store a small placeholder marker to avoid huge statements
-              pdfStorageValue = '__A11Y_PDF_STORED_EXTERNALLY_BUT_UPLOAD_FAILED__'
-            }
-          } else {
-            // Small enough — store inline (maintains backward compatibility)
-            pdfStorageValue = pdfBase64
-          }
-        } catch (e) {
-          // As a last resort, store a marker; never crash the flow here
-          pdfStorageValue = '__A11Y_PDF_STORAGE_ERROR__'
-        }
-
-        // Emit completion only after storage step, so UI reflects durable success
-        send({ type: 'report:complete', testRunId, storedAsUrl })
+        send({ type: 'report:complete', testRunId })
 
         // Update test run with results + logs
         await db

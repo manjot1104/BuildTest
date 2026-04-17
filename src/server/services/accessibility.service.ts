@@ -10,6 +10,7 @@ import type {
   ComplianceStandard,
 } from '@/types/accessibility.types'
 import path from 'path'
+import path from 'path'
 
 let activeTests = 0
 const MAX_CONCURRENT_TESTS = 3
@@ -37,7 +38,7 @@ function normalizeUrl(raw: string, base: string): string | null {
   try {
     const url = new URL(raw, base)
     url.hash = ''
-    //url.search = '' // strip query params to avoid duplicates like ?ref=...
+    // url.search = '' // strip query params to avoid duplicates like ?ref=...
     // Always strip trailing slash for dedup (including root "/")
     let normalized = url.href
     if (normalized.endsWith('/')) {
@@ -50,6 +51,36 @@ function normalizeUrl(raw: string, base: string): string | null {
 }
 
 function mapAxeTags(standards: ComplianceStandard[]): string[] {
+  const tags = new Set<string>()
+
+  for (const standard of standards) {
+    switch (standard) {
+      case 'wcag2a':
+        tags.add('wcag2a')
+        break
+      case 'wcag2aa':
+        // wcag2aa builds on top of wcag2a — need both
+        tags.add('wcag2a')
+        tags.add('wcag2aa')
+        break
+      case 'wcag21a':
+        tags.add('wcag2a')
+        tags.add('wcag21a')
+        break
+      case 'wcag21aa':
+        // wcag21aa builds on top of all previous levels
+        tags.add('wcag2a')
+        tags.add('wcag2aa')
+        tags.add('wcag21a')
+        tags.add('wcag21aa')
+        break
+      case 'best-practice':
+        tags.add('best-practice')
+        break
+    }
+  }
+
+  return Array.from(tags)
   const tags = new Set<string>()
 
   for (const standard of standards) {
@@ -100,10 +131,6 @@ async function crawlPages(
     if (visited.has(item.url) || item.depth > maxDepth) continue
     visited.add(item.url)
     discovered.push(item.url)
-    if (visited.size > maxPages * 10) {
-      console.warn('⚠️ [A11Y] Visited set too large, stopping crawl early')
-      break
-    }
     console.log(`🔍 [A11Y] Crawled (${discovered.length}/${maxPages}): ${item.url}`)
 
     onEvent({ type: 'crawl:page_discovered', url: item.url, count: discovered.length })
@@ -206,6 +233,7 @@ export async function runAccessibilityTest(
   config: AccessibilityTestConfig,
   onEvent: (event: SSEEvent) => void,
 ): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
+): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
   if (activeTests >= MAX_CONCURRENT_TESTS) {
     throw new Error('Too many concurrent tests. Please try again later.')
   }
@@ -237,6 +265,13 @@ export async function runAccessibilityTest(
   console.log('   Max Pages:', maxPages, '| Max Depth:', maxDepth)
   console.log('   Active Tests Running:', activeTests)
   console.log('========================================\n')
+  console.log('\n========================================')
+  console.log('🚀 [A11Y] Test started')
+  console.log('   URL      :', config.url)
+  console.log('   Standards:', config.standards)
+  console.log('   Max Pages:', maxPages, '| Max Depth:', maxDepth)
+  console.log('   Active Tests Running:', activeTests)
+  console.log('========================================\n')
   let browser: Browser | null = null
 
   try {
@@ -257,6 +292,7 @@ export async function runAccessibilityTest(
     let axeSource: string | undefined
     try {
       const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
+      const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
       axeSource = readFileSync(axeCorePath, 'utf-8')
     } catch {
       try {
@@ -271,9 +307,9 @@ export async function runAccessibilityTest(
       console.error('❌ [A11Y] axe-core failed to load — tests will return empty results')
     } else {
       console.log('✅ [A11Y] axe-core loaded successfully, size:', Math.round(axeSource.length / 1024), 'KB')
-      // Debug logs to verify axeSource content 
-      //console.log('   axeSource type:', typeof axeSource)
-      //console.log('   axeSource preview:', axeSource?.slice(0, 80))
+      // ADD THESE TWO LINES
+      console.log('   axeSource type:', typeof axeSource)
+      console.log('   axeSource preview:', axeSource?.slice(0, 80))
     }
     const pageResults: PageResult[] = []
     const summary: TestSummary = {
@@ -323,26 +359,22 @@ export async function runAccessibilityTest(
         await new Promise((r) => setTimeout(r, 3000))
 
         // Step 3: Verify page is actually ready before handing to axe
-        const isReady = await page.evaluate(() => {
-          return (
-            document.readyState === 'complete' &&
-            document.body !== null &&
-            document.body.children.length > 0
-          )
-        }).catch(() => false)
+       const isReady = await page.evaluate(() => {
+  return document.body !== null && document.body.children.length > 0
+}).catch(() => false)
 
-        console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
+console.log(`   Page ready state: ${isReady ? '✅ ready' : '❌ not ready'}`)
 
-        if (!isReady) {
-          console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
-          onEvent({
-            type: 'error',
-            message: `Skipping ${pageUrl}: page not ready for analysis`,
-            fatal: false,
-          })
-          continue
-        }
-
+if (!isReady) {
+  console.warn(`   ⚠️ Page not ready, skipping: ${pageUrl}`)
+  onEvent({
+    type: 'error',
+    message: `Skipping ${pageUrl}: page not ready for analysis`,
+    fatal: false,
+  })
+  continue
+}
+        console.log(`   Running axe-core analysis...`)
         const pageInfo = await page.evaluate(() => ({
           elementCount: document.querySelectorAll('*').length,
           bodyText: document.body?.innerText?.slice(0, 200) ?? '',
@@ -352,49 +384,48 @@ export async function runAccessibilityTest(
         console.log(`   Body preview : ${pageInfo.bodyText.replace(/\n/g, ' ').slice(0, 150)}`)
 
         let results
-        let retries = 0
-        const maxRetries = 2
+let retries = 0
+const maxRetries = 2
 
-        while (retries <= maxRetries) {
-          try {
-            console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
-            console.log(`   Tags passed to axe:`, tags)
-            console.log(`   Standards received:`, config.standards)
-            console.log('   @axe-core/puppeteer imported:', !!AxePuppeteer)
+while (retries <= maxRetries) {
+  try {
+    console.log(`   Running axe-core analysis... (attempt ${retries + 1})`)
+    results = await Promise.race([
+      new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
+      ),
+    ])
+    break // success — exit retry loop
+  } catch (axeErr) {
+    const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
+    if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
+      retries++
+      console.warn(`   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`)
+      await new Promise((r) => setTimeout(r, 3000 * retries)) // wait longer each retry
+      continue
+    }
+    // not retryable or max retries reached
+    console.error(`   ❌ axe-core failed: ${message}`)
+    onEvent({
+      type: 'error',
+      message: `Skipping ${pageUrl}: ${message}`,
+      fatal: false,
+    })
+    break
+  }
+}
 
-            results = await Promise.race([
-              new AxePuppeteer(page as any, axeSource).withTags(tags).analyze(),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error('axe-core timed out after 30s')), 30_000)
-              ),
-            ])
-            break
-          } catch (axeErr) {
-            const message = axeErr instanceof Error ? axeErr.message : 'axe analysis failed'
-            if (message.includes('Page/Frame is not ready') && retries < maxRetries) {
-              retries++
-              console.warn(
-                `   ⚠️ Page/Frame not ready, waiting and retrying (${retries}/${maxRetries})...`,
-              )
-              await new Promise((r) => setTimeout(r, 3000 * retries))
-              continue
-            }
-            console.error(`   ❌ axe-core failed: ${message}`)
-            onEvent({
-              type: 'error',
-              message: `Skipping ${pageUrl}: ${message}`,
-              fatal: false,
-            })
-            break
-          }
-        }
-
-        if (!results) continue
+if (!results) continue // skip this page if all retries failed
 
         console.log(`   ✅ axe-core analysis complete`)
         console.log(`   Rules that ran:`, results.passes.map(p => p.id))
         console.log(`   Violations found:`, results.violations.map(v => v.id))
         const title = await page.title()
+        console.log(`   Title     : "${title}"`)
+        console.log(`   Violations: ${results.violations.length}`)
+        console.log(`   Passes    : ${results.passes.length}`)
+        console.log(`   Incomplete: ${results.incomplete.length}`)
         console.log(`   Title     : "${title}"`)
         console.log(`   Violations: ${results.violations.length}`)
         console.log(`   Passes    : ${results.passes.length}`)
@@ -423,6 +454,7 @@ export async function runAccessibilityTest(
             description: v.description,
             nodeCount: v.nodes.length,
           })
+          console.log(`   ⚠️  [${(v.impact ?? 'unknown').toUpperCase()}] ${v.id}: ${v.help}`)
           console.log(`   ⚠️  [${(v.impact ?? 'unknown').toUpperCase()}] ${v.id}: ${v.help}`)
         }
 
@@ -475,9 +507,13 @@ export async function runAccessibilityTest(
         })
       } catch (err) {
         /*onEvent({
+        /*onEvent({
           type: 'error',
           message: `Failed to test ${pageUrl}: ${err instanceof Error ? err.message : 'Unknown error'}`,
           fatal: false,
+        })*/
+        console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
+        console.error(`   Reason:`, err instanceof Error ? err.message : err)
         })*/
         console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
         console.error(`   Reason:`, err instanceof Error ? err.message : err)
@@ -498,11 +534,22 @@ export async function runAccessibilityTest(
     console.log('   Minor    :', summary.minorCount)
     console.log('========================================\n')
     return { summary, pageResults, browser }
+    console.log('\n========================================')
+    console.log('🏁 [A11Y] Test complete')
+    console.log('   Pages tested :', summary.totalPages)
+    console.log('   Total violations:', summary.totalViolations)
+    console.log('   Total passes    :', summary.totalPasses)
+    console.log('   Critical :', summary.criticalCount)
+    console.log('   Serious  :', summary.seriousCount)
+    console.log('   Moderate :', summary.moderateCount)
+    console.log('   Minor    :', summary.minorCount)
+    console.log('========================================\n')
+    return { summary, pageResults, browser }
   } finally {
     activeTests--
 
     //if (browser) void browser.close().catch(() => undefined)
-    // browser is NOT closed here anymore
-    // it is passed to generateAccessibilityReport and closed there
+     // browser is NOT closed here anymore
+  // it is passed to generateAccessibilityReport and closed there
   }
 }

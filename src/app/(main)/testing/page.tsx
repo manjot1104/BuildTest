@@ -1374,9 +1374,23 @@ export default function TestingPage() {
                   {copied ? "copied!" : "share"}
                 </button>
               )}
-              <button onClick={handleReset} className="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground transition-all ml-auto touch-manipulation">
-                <RotateCcw className="h-3.5 w-3.5" /> new test
-              </button>
+               {report.embedBadgeToken && (
+                <button
+                  onClick={() => {
+                    const badgeUrl = `${window.location.origin}/api/badge/${report.embedBadgeToken}/svg`;
+                    const reportUrl = report.shareableSlug
+                      ? `${window.location.origin}/report/${report.shareableSlug}`
+                      : window.location.href;
+                    const markdown = `[![Tested by Buildify](${badgeUrl})](${reportUrl})`;
+                    void navigator.clipboard.writeText(markdown);
+                    toast.success("Badge markdown copied!");
+                  }}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" /> Badge
+                </button>
+              )}
+
             </div>
           </div>
         )}
