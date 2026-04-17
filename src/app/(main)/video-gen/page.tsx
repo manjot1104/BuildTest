@@ -12,7 +12,7 @@ import {
   CheckCircle2, AlertCircle, History, Download,
   SendHorizonal, MessageSquarePlus, RefreshCw,
   AlertTriangle, Pencil, Trash2, User, Bot, Zap,
-  Lock, Info,
+  Lock, Info, Play, Square,
 } from "lucide-react";
 import {
   useGenerateVideo,
@@ -33,6 +33,7 @@ import { VideoComposition } from "@/remotion-src/VideoComposition";
 import type { VideoJson } from "@/remotion-src/types";
 import { SubscriptionModal } from "@/components/payments/subscription-modal";
 import { useUserCredits } from "@/hooks/use-user-credits";
+import { useMusicPreview } from "@/client-api/query-hooks/use-music-preview"; 
 
 // ─── Plan Limits Config ───────────────────────────────────────────────────────
 //
@@ -122,6 +123,41 @@ const MUSIC_GENRES = [
   { label: "Upbeat", value: "upbeat" },
   { label: "Lo-fi", value: "lofi" },
 ] as const;
+
+// ─── MusicPreviewButton — plays a 10s preview of a genre track ───────────────
+// allows users to audition background music before generating
+
+function MusicPreviewButton({
+  genre,
+  isPlaying,
+  onToggle,
+  disabled,
+}: {
+  genre: string;
+  isPlaying: boolean;
+  onToggle: (genre: string) => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(genre)}
+      disabled={disabled}
+      className={`h-5 w-5 rounded-md flex items-center justify-center transition-all disabled:opacity-40 shrink-0 ${isPlaying
+        ? "bg-primary/20 border border-primary/40 text-primary"
+        : "bg-muted border border-border text-muted-foreground/50 hover:text-foreground hover:bg-muted/80"
+        }`}
+      aria-label={isPlaying ? `Stop ${genre} preview` : `Preview ${genre} music`}
+      title={isPlaying ? "Stop preview" : "Preview music"}
+    >
+      {isPlaying ? (
+        <Square className="h-2.5 w-2.5 fill-current" />
+      ) : (
+        <Play className="h-2.5 w-2.5 fill-current" />
+      )}
+    </button>
+  );
+}
 
 const EXAMPLE_PROMPTS = [
   "Explain photosynthesis in 3 scenes with a clean educational style",
@@ -214,35 +250,33 @@ function PlanLimitsPanel({
   const barColor = isAtLimit
     ? "bg-red-500"
     : isNearLimit
-    ? "bg-amber-500"
-    : "bg-primary";
+      ? "bg-amber-500"
+      : "bg-primary";
 
   const maxDurLabel =
     limits.maxDurationSeconds >= 25
       ? "30s"
       : limits.maxDurationSeconds >= 16
-      ? "20s"
-      : "10s";
+        ? "20s"
+        : "10s";
 
   return (
     <div
-      className={`rounded-xl border bg-muted/20 overflow-hidden transition-all ${
-        isAtLimit
-          ? "border-red-500/20"
-          : isNearLimit
+      className={`rounded-xl border bg-muted/20 overflow-hidden transition-all ${isAtLimit
+        ? "border-red-500/20"
+        : isNearLimit
           ? "border-amber-500/20"
           : "border-border"
-      }`}
+        }`}
     >
       {/* Header row */}
       <div className="flex items-center justify-between px-4 py-3 gap-3 flex-wrap">
         <div className="flex items-center gap-2 min-w-0">
           <div
-            className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${
-              isFree
-                ? "bg-muted border border-border"
-                : "bg-primary/10 border border-primary/20"
-            }`}
+            className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 ${isFree
+              ? "bg-muted border border-border"
+              : "bg-primary/10 border border-primary/20"
+              }`}
           >
             {isFree ? (
               <Lock className="h-3 w-3 text-muted-foreground/50" />
@@ -262,13 +296,12 @@ function PlanLimitsPanel({
               />
             </div>
             <span
-              className={`text-[10px] font-mono tabular-nums ${
-                isAtLimit
-                  ? "text-red-400 font-semibold"
-                  : isNearLimit
+              className={`text-[10px] font-mono tabular-nums ${isAtLimit
+                ? "text-red-400 font-semibold"
+                : isNearLimit
                   ? "text-amber-400"
                   : "text-muted-foreground/50"
-              }`}
+                }`}
             >
               {isAtLimit ? "limit reached" : `${remaining} left today`}
             </span>
@@ -279,11 +312,10 @@ function PlanLimitsPanel({
         <button
           type="button"
           onClick={onUpgrade}
-          className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold underline underline-offset-2 transition-colors shrink-0 ${
-            isFree || isAtLimit
-              ? "text-primary hover:text-primary/80"
-              : "text-muted-foreground/40 hover:text-muted-foreground"
-          }`}
+          className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold underline underline-offset-2 transition-colors shrink-0 ${isFree || isAtLimit
+            ? "text-primary hover:text-primary/80"
+            : "text-muted-foreground/40 hover:text-muted-foreground"
+            }`}
         >
           {isFree ? "Upgrade for more ↗" : isAtLimit ? "Upgrade plan ↗" : "Manage plan ↗"}
         </button>
@@ -1087,6 +1119,8 @@ function FollowUpInput({
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
+  // music preview for follow-up input
+  const { playingGenre: previewingGenre, togglePreview, stopPreview } = useMusicPreview();
   const [voiceId, setVoiceId] = useState("devansh");
   const [ttsVolume, setTtsVolume] = useState(0.8);
   const [musicVolume, setMusicVolume] = useState(0.3);
@@ -1133,6 +1167,7 @@ function FollowUpInput({
     setNewImageEntries([]);
     setOptionsOpen(false);
     setImagesOpen(false);
+    stopPreview(); // stop any music preview on submit
   }
 
   const hasImageChanges =
@@ -1223,13 +1258,12 @@ function FollowUpInput({
                       disabled={isBusy || isDisabled}
                       title={isDisabled ? `Max ${planLimits.maxDurationSeconds}s on ${planLimits.label} plan` : undefined}
                       aria-pressed={selectedRange.value === range.value}
-                      className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${
-                        isDisabled
-                          ? "border-border/50 text-muted-foreground/30 cursor-not-allowed"
-                          : selectedRange.value === range.value
+                      className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:opacity-40 ${isDisabled
+                        ? "border-border/50 text-muted-foreground/30 cursor-not-allowed"
+                        : selectedRange.value === range.value
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border text-muted-foreground hover:text-foreground"
-                      }`}
+                        }`}
                     >
                       {range.label}
                       {isDisabled && <Lock className="inline h-2.5 w-2.5 ml-0.5 mb-px" />}
@@ -1378,7 +1412,23 @@ function FollowUpInput({
                       <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                       <div className="flex gap-1 flex-wrap">
                         {MUSIC_GENRES.map((g) => (
-                          <button key={g.value} type="button" disabled={isBlocked} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                          // each genre chip now has an inline preview button
+                          <div key={g.value} className="flex items-center gap-0.5">
+                            <button
+                              type="button"
+                              disabled={isBlocked}
+                              onClick={() => setMusicGenre(g.value)}
+                              className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                            >
+                              {g.label}
+                            </button>
+                            <MusicPreviewButton
+                              genre={g.value}
+                              isPlaying={previewingGenre === g.value}
+                              onToggle={togglePreview}
+                              disabled={isBlocked}
+                            />
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -1425,6 +1475,8 @@ export default function VideoGeneratorPage() {
   const [useTTS, setUseTTS] = useState(true);
   const [useMusic, setUseMusic] = useState(true);
   const [musicGenre, setMusicGenre] = useState("corporate");
+  // Music preview for initial prompt form
+  const { playingGenre: previewingGenre0, togglePreview: togglePreview0, stopPreview: stopPreview0 } = useMusicPreview();
   const [voiceId, setVoiceId] = useState("devansh");
   const [ttsVolume0, setTtsVolume0] = useState(0.8);
   const [musicVolume0, setMusicVolume0] = useState(0.3);
@@ -1598,6 +1650,7 @@ export default function VideoGeneratorPage() {
     }
 
     setLastFailedPrompt(null);
+    stopPreview0(); // stop any music preview when generation starts
 
     generate(
       {
@@ -1916,13 +1969,12 @@ export default function VideoGeneratorPage() {
                             ? `Image uploads are not available on the ${planLimits.label} plan`
                             : "Attach images"
                         }
-                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 ${
-                          planLimits.maxImages === 0
-                            ? "border-border text-muted-foreground/30 cursor-not-allowed"
-                            : imagesOpen || userImageEntries.length > 0
+                        className={`h-7 w-7 rounded-lg border flex items-center justify-center transition-all disabled:opacity-40 ${planLimits.maxImages === 0
+                          ? "border-border text-muted-foreground/30 cursor-not-allowed"
+                          : imagesOpen || userImageEntries.length > 0
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                        }`}
+                          }`}
                       >
                         {planLimits.maxImages === 0 ? (
                           <Lock className="h-3.5 w-3.5" />
@@ -1957,13 +2009,12 @@ export default function VideoGeneratorPage() {
                             disabled={isBusy}
                             aria-pressed={selectedRange.value === range.value}
                             title={isLocked ? `Locked on ${planLimits.label} plan — upgrade to unlock` : undefined}
-                            className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:cursor-not-allowed ${
-                              isLocked
-                                ? "border-border/50 text-muted-foreground/30 cursor-pointer"
-                                : selectedRange.value === range.value
+                            className={`px-2.5 py-1 text-[10px] font-mono rounded-md border transition-all touch-manipulation disabled:cursor-not-allowed ${isLocked
+                              ? "border-border/50 text-muted-foreground/30 cursor-pointer"
+                              : selectedRange.value === range.value
                                 ? "border-primary bg-primary/10 text-primary"
                                 : "border-border text-muted-foreground hover:text-foreground"
-                            }`}
+                              }`}
                           >
                             {range.label}
                             {isLocked && <Lock className="inline h-2.5 w-2.5 ml-0.5 mb-px opacity-50" />}
@@ -2086,7 +2137,23 @@ export default function VideoGeneratorPage() {
                               <span className="text-[10px] font-mono text-muted-foreground/50 w-10 shrink-0">Genre</span>
                               <div className="flex gap-1 flex-wrap">
                                 {MUSIC_GENRES.map((g) => (
-                                  <button key={g.value} type="button" disabled={isBusy} onClick={() => setMusicGenre(g.value)} className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>{g.label}</button>
+                                  // NEW: preview button alongside each genre chip in the initial form
+                                  <div key={g.value} className="flex items-center gap-0.5">
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() => setMusicGenre(g.value)}
+                                      className={`px-2 py-1 text-[10px] font-mono rounded-md border transition-all disabled:opacity-40 ${musicGenre === g.value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}
+                                    >
+                                      {g.label}
+                                    </button>
+                                    <MusicPreviewButton
+                                      genre={g.value}
+                                      isPlaying={previewingGenre0 === g.value}
+                                      onToggle={togglePreview0}
+                                      disabled={isBusy}
+                                    />
+                                  </div>
                                 ))}
                               </div>
                             </div>
