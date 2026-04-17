@@ -219,6 +219,22 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
 }
 
 /**
+ * When OpenRouter returns 429 / errors, we still have plain JD text from the PDF.
+ * Shape matches AI JSON so the client can append to additionalInstructions the same way.
+ */
+function buildJdRequirementsFromRawText(jdText: string): Record<string, string | string[] | undefined> {
+  const excerpt = jdText.trim().substring(0, 12_000)
+  return {
+    requiredSkills: [],
+    /** Keep short — full JD is only under keyRequirements (avoids reading the same text twice). */
+    qualifications:
+      'AI summary unavailable (rate limit / quota). Use Key Requirements below for the full job description.',
+    responsibilities: '',
+    keyRequirements: excerpt,
+  }
+}
+
+/**
  * Parse uploaded resume and JD files to extract text content
  * POST /api/resume/parse-files
  */
@@ -575,20 +591,31 @@ Resume text:\n${resumeText.substring(0, 6000)}`,
     const extractedResumeData =
       aiExtractedResumeData || (resumeText && resumeText.trim().length > 0 ? buildFallbackResumeData(resumeText) : null)
     console.log('[parse-files] Extracted resume data:', extractedResumeData)
-    console.log('[parse-files] JD requirements:', jdRequirements)
-    
+    console.log('[parse-files] JD requirements (AI):', jdRequirements)
+
+    let jdRequirementsOut = jdRequirements
+    let jdUsedRawFallback = false
+    if (!jdRequirementsOut && jdText.trim().length > 0) {
+      jdRequirementsOut = buildJdRequirementsFromRawText(jdText)
+      jdUsedRawFallback = true
+      console.log('[parse-files] JD: using raw-text fallback (AI parse failed or rate limited)')
+    }
+
     // Ensure we return the data even if AI parsing failed
     const response = {
       success: true,
       resumeText: resumeText.substring(0, 5000), // Limit response size
       jdText: jdText.substring(0, 3000),
       extractedResumeData: extractedResumeData || null,
-      jdRequirements: jdRequirements || null,
+      jdRequirements: jdRequirementsOut || null,
+      /** True when structured AI JD parse failed but raw JD text was folded into jdRequirements */
+      jdUsedRawFallback,
     }
-    
+
     console.log('[parse-files] Final response:', {
       hasResumeData: !!response.extractedResumeData,
       hasJdRequirements: !!response.jdRequirements,
+      jdUsedRawFallback: response.jdUsedRawFallback,
       resumeDataKeys: response.extractedResumeData ? Object.keys(response.extractedResumeData) : [],
     })
     

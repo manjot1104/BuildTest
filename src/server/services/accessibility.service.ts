@@ -10,6 +10,7 @@ import type {
   ComplianceStandard,
 } from '@/types/accessibility.types'
 import path from 'path'
+import path from 'path'
 
 let activeTests = 0
 const MAX_CONCURRENT_TESTS = 3
@@ -80,6 +81,36 @@ function mapAxeTags(standards: ComplianceStandard[]): string[] {
   }
 
   return Array.from(tags)
+  const tags = new Set<string>()
+
+  for (const standard of standards) {
+    switch (standard) {
+      case 'wcag2a':
+        tags.add('wcag2a')
+        break
+      case 'wcag2aa':
+        // wcag2aa builds on top of wcag2a — need both
+        tags.add('wcag2a')
+        tags.add('wcag2aa')
+        break
+      case 'wcag21a':
+        tags.add('wcag2a')
+        tags.add('wcag21a')
+        break
+      case 'wcag21aa':
+        // wcag21aa builds on top of all previous levels
+        tags.add('wcag2a')
+        tags.add('wcag2aa')
+        tags.add('wcag21a')
+        tags.add('wcag21aa')
+        break
+      case 'best-practice':
+        tags.add('best-practice')
+        break
+    }
+  }
+
+  return Array.from(tags)
 }
 
 async function crawlPages(
@@ -109,8 +140,61 @@ async function crawlPages(
     let page: Page | null = null
     try {
       page = await browser.newPage()
-      page.setDefaultNavigationTimeout(10000)
-      await page.goto(item.url, { waitUntil: 'domcontentloaded', timeout: 10000 })
+      page.setDefaultNavigationTimeout(20000)
+
+      await page.setRequestInterception(true)
+      page.on('request', (req) => {
+        if (['image', 'font', 'media'].includes(req.resourceType())) {
+          req.abort()
+        } else {
+          req.continue()
+        }
+      })
+
+      await page.goto(item.url, { waitUntil: 'networkidle2', timeout: 30000 })
+      // Universal bot-check detector — wait for it to resolve
+      const isBotCheck = await page.evaluate(() => {
+        const bodyText = document.body?.innerText?.toLowerCase() ?? ''
+        const indicators = [
+          'are you a human',
+          'confirming',
+          'captcha',
+          'verify you are human',
+          'checking your browser',
+          'please wait',
+          'just a moment',
+          'enable javascript',
+          'ddos protection',
+          'ray id',
+          'cloudflare',
+        ]
+        return indicators.some((i) => bodyText.includes(i))
+      })
+
+      if (isBotCheck) {
+        console.warn(`   ⚠️ [CRAWL] Bot check detected on ${item.url}, waiting for resolve...`)
+        await page.waitForFunction(
+          () => {
+            const text = document.body?.innerText?.toLowerCase() ?? ''
+            const indicators = [
+              'are you a human',
+              'confirming',
+              'captcha',
+              'verify you are human',
+              'checking your browser',
+              'please wait',
+              'just a moment',
+              'enable javascript',
+              'ddos protection',
+              'cloudflare',
+            ]
+            return !indicators.some((i) => text.includes(i))
+          },
+          { timeout: 20000, polling: 1000 }
+        ).catch(() => console.warn(`   ❌ [CRAWL] Bot check did not resolve for ${item.url}`))
+      }
+
+      await new Promise((r) => setTimeout(r, 3000))
 
       const links: string[] = await page.evaluate(() =>
         Array.from(document.querySelectorAll('a[href]'), (a) => a.getAttribute('href') ?? ''),
@@ -135,8 +219,8 @@ async function crawlPages(
       }
 
       await new Promise((r) => setTimeout(r, 500))
-    } catch {
-      // Page failed to load — skip but continue crawling
+    } catch (err) {
+      console.error(`❌ [CRAWL] Failed to load ${item.url}:`, err instanceof Error ? err.message : err)
     } finally {
       if (page) void page.close().catch(() => undefined)
     }
@@ -148,6 +232,7 @@ async function crawlPages(
 export async function runAccessibilityTest(
   config: AccessibilityTestConfig,
   onEvent: (event: SSEEvent) => void,
+): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
 ): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
   if (activeTests >= MAX_CONCURRENT_TESTS) {
     throw new Error('Too many concurrent tests. Please try again later.')
@@ -180,6 +265,13 @@ export async function runAccessibilityTest(
   console.log('   Max Pages:', maxPages, '| Max Depth:', maxDepth)
   console.log('   Active Tests Running:', activeTests)
   console.log('========================================\n')
+  console.log('\n========================================')
+  console.log('🚀 [A11Y] Test started')
+  console.log('   URL      :', config.url)
+  console.log('   Standards:', config.standards)
+  console.log('   Max Pages:', maxPages, '| Max Depth:', maxDepth)
+  console.log('   Active Tests Running:', activeTests)
+  console.log('========================================\n')
   let browser: Browser | null = null
 
   try {
@@ -196,9 +288,10 @@ export async function runAccessibilityTest(
     // Phase 2: Test each page
     const { AxePuppeteer } = await import('@axe-core/puppeteer')
     const { readFileSync } = await import('fs')
-    const { resolve, dirname } = await import('path')
+    //const { resolve, dirname } = await import('path')
     let axeSource: string | undefined
     try {
+      const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
       const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
       axeSource = readFileSync(axeCorePath, 'utf-8')
     } catch {
@@ -333,6 +426,10 @@ if (!results) continue // skip this page if all retries failed
         console.log(`   Violations: ${results.violations.length}`)
         console.log(`   Passes    : ${results.passes.length}`)
         console.log(`   Incomplete: ${results.incomplete.length}`)
+        console.log(`   Title     : "${title}"`)
+        console.log(`   Violations: ${results.violations.length}`)
+        console.log(`   Passes    : ${results.passes.length}`)
+        console.log(`   Incomplete: ${results.incomplete.length}`)
 
         const violations: AxeViolation[] = results.violations.map((v) => ({
           id: v.id,
@@ -357,6 +454,7 @@ if (!results) continue // skip this page if all retries failed
             description: v.description,
             nodeCount: v.nodes.length,
           })
+          console.log(`   ⚠️  [${(v.impact ?? 'unknown').toUpperCase()}] ${v.id}: ${v.help}`)
           console.log(`   ⚠️  [${(v.impact ?? 'unknown').toUpperCase()}] ${v.id}: ${v.help}`)
         }
 
@@ -409,9 +507,13 @@ if (!results) continue // skip this page if all retries failed
         })
       } catch (err) {
         /*onEvent({
+        /*onEvent({
           type: 'error',
           message: `Failed to test ${pageUrl}: ${err instanceof Error ? err.message : 'Unknown error'}`,
           fatal: false,
+        })*/
+        console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
+        console.error(`   Reason:`, err instanceof Error ? err.message : err)
         })*/
         console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
         console.error(`   Reason:`, err instanceof Error ? err.message : err)
@@ -421,6 +523,17 @@ if (!results) continue // skip this page if all retries failed
     }
 
     onEvent({ type: 'test:complete', summary })
+    console.log('\n========================================')
+    console.log('🏁 [A11Y] Test complete')
+    console.log('   Pages tested :', summary.totalPages)
+    console.log('   Total violations:', summary.totalViolations)
+    console.log('   Total passes    :', summary.totalPasses)
+    console.log('   Critical :', summary.criticalCount)
+    console.log('   Serious  :', summary.seriousCount)
+    console.log('   Moderate :', summary.moderateCount)
+    console.log('   Minor    :', summary.minorCount)
+    console.log('========================================\n')
+    return { summary, pageResults, browser }
     console.log('\n========================================')
     console.log('🏁 [A11Y] Test complete')
     console.log('   Pages tested :', summary.totalPages)

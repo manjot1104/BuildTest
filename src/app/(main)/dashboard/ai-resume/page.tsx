@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import React, { useState, useMemo, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { useForm, useWatch, type FieldErrors } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { motion } from 'framer-motion'
@@ -24,14 +25,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target } from 'lucide-react'
+import { Loader2, FileDown, Edit, Check, X, Sparkles, Send, BrainCircuit, FileText, User, Briefcase, GraduationCap, FolderKanban, Settings2, ArrowLeft, ChevronDown, Copy, RotateCcw, Code, Upload, FileCheck, Link2, Award, MessageSquare, Target, LayoutGrid } from 'lucide-react'
 import { TemplateSelection } from './components/template-selection'
 import { ResumeTemplateBrowser } from './components/template-browser'
-import type { ResumeTemplate } from './templates'
+import { RESUME_TEMPLATES, type ResumeTemplate } from './templates'
 import { toast } from 'sonner'
 import { useHighlightCode } from '@/hooks/use-shiki'
 import { cn } from '@/lib/utils'
 import { ResumeScorePanel, type ResumeScoreData } from './components/resume-score-panel'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ResumeLayoutPreview } from './components/resume-layout-preview'
+import { ResumeLayoutInsights } from './components/resume-layout-insights'
+import {
+  ParsedResumeLayoutStrip,
+  type ParsedResumeLayoutEstimate,
+} from './components/parsed-resume-layout-strip'
+import { ScoreLayoutInsights } from './components/score-layout-insights'
+import { JobFitEvaluationPanel } from './components/job-fit-evaluation-panel'
+import {
+  pickAiResumeLayoutFields,
+  resumeFormToResumeData,
+} from '@/lib/text-layout/form-to-resume-data'
+import { computeResumeLayoutStatsFromResumeCode } from '@/lib/text-layout/layout-from-resume-code'
+import { plainResumeTextToResumeData } from '@/lib/text-layout/plain-text-to-resume-data'
+import {
+  computeResumeLayoutStats,
+  formatLayoutContextForScoring,
+  TEXT_LAYOUT_CLIENT_OPTIONS,
+} from '@/lib/text-layout/layout-stats'
+import {
+  buildPersonalizedStudioDraft,
+  writeBuildifyStudioLegacyDraft,
+  type PortfolioStudioResumeInput,
+} from '@/lib/ai-resume/portfolio-studio-bridge'
+import { writeResumeStudioBootstrap } from '@/components/buildify-studio/resume-studio-bootstrap'
+
+function parsedExtractedFieldToString(
+  v: string | string[] | null | undefined,
+): string | undefined {
+  if (v == null) return undefined
+  const s = Array.isArray(v) ? v.filter(Boolean).join(', ') : v
+  const t = s.trim()
+  return t.length > 0 ? t : undefined
+}
 
 // ─── OpenRouter Models ───────────────────────────────────────────────────────
 
@@ -102,14 +138,20 @@ function getModelName(modelId: string): string {
   return modelId.replace(/^[^/]+\//, '').replace(/:free$/, '')
 }
 
+/** Strips the block appended after JD parse (re-parse / new JD must not stack duplicates). */
+function stripJobDescriptionInstructions(text: string): string {
+  return text.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '').trimEnd()
+}
+
 // ─── Schema ──────────────────────────────────────────────────────────────────
 
 const resumeSchema = z.object({
   templateType: z.enum(['latex', 'html']),
-  fullName: z.string().min(1, 'Full name is required').max(100),
+  fullName: z.string().trim().min(1, 'Full name is required').max(100),
   title: z.string().max(200).optional(),
-  email: z.string().email('Invalid email address'),
-  phone: z.string().min(1, 'Phone number is required').max(20),
+  email: z.string().trim().min(1, 'Email is required').email('Invalid email address'),
+  /** International numbers + spaces — was max(20), too tight for many users */
+  phone: z.string().trim().min(1, 'Phone number is required').max(40),
   location: z.string().max(200).optional(),
   linkedin: z.string().max(300).optional(),
   github: z.string().max(300).optional(),
@@ -122,14 +164,44 @@ const resumeSchema = z.object({
   certifications: z.string().optional(),
   achievements: z.string().optional(),
   languagesKnown: z.string().optional(),
-  additionalInstructions: z.string().optional(),
+  additionalInstructions: z.string().max(100_000).optional(),
 })
 
 type ResumeFormData = z.infer<typeof resumeSchema>
 
 type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling' | 'score'
 
+const PORTFOLIO_STUDIO_EXAMPLES = [
+  {
+    id: 'developer-portfolio',
+    studioTemplateId: 'developer-dark' as const,
+    title: 'Developer Portfolio',
+    description: 'Use shared resume to create a clean dev portfolio in Studio.',
+    prompt:
+      'Convert this shared resume into a single-page developer portfolio in Buildify Studio. Keep a dark modern UI, add sections for About, Skills, Experience, Featured Projects, and Contact. Highlight measurable impact from experience bullets and make CTA buttons clear.',
+  },
+  {
+    id: 'designer-portfolio',
+    studioTemplateId: 'designer-clean' as const,
+    title: 'Designer Portfolio',
+    description: 'Turn resume highlights into a visual design portfolio.',
+    prompt:
+      'Create a visual portfolio website from this resume for a product/designer profile. Prioritize hero intro, case-study style project cards, tools/skills chips, and social links. Keep typography elegant and spacing premium with a clean light theme.',
+  },
+  {
+    id: 'freelancer-landing',
+    studioTemplateId: 'freelancer-clean' as const,
+    title: 'Freelancer Landing',
+    description: 'Generate a service-focused portfolio + inquiry form.',
+    prompt:
+      'Build a freelancer portfolio from this resume with sections: Hero, Services, Selected Work, Testimonials, and Contact Form. Add trust signals from achievements/certifications and include a clear "Book a Call" call-to-action above the fold.',
+  },
+] as const
+
 export default function AIResumeBuilderPage() {
+  const router = useRouter()
+  /** `portfolio`: entered via Portfolio card — show Buildify Studio examples only in this path. */
+  const [resumeBuilderMode, setResumeBuilderMode] = useState<'resume' | 'portfolio'>('resume')
   const [currentStep, setCurrentStep] = useState<Step>('format-selection')
   const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -153,6 +225,8 @@ export default function AIResumeBuilderPage() {
   const [parsedData, setParsedData] = useState<{
     resumeData?: Record<string, string | string[] | undefined>
     jdRequirements?: Record<string, string | string[] | undefined>
+    /** A4 text-layout estimate from raw uploaded resume text (parse-files API). */
+    resumeLayoutEstimate?: ParsedResumeLayoutEstimate | null
   } | null>(null)
   const [isScoring, setIsScoring] = useState(false)
   const [scoreData, setScoreData] = useState<ResumeScoreData | null>(null)
@@ -161,6 +235,9 @@ export default function AIResumeBuilderPage() {
   const [scoreFormat, setScoreFormat] = useState<'html' | 'latex' | 'text'>('text')
   const [scoreFile, setScoreFile] = useState<File | null>(null)
   const [isExtractingText, setIsExtractingText] = useState(false)
+  /** JD text for optional job-fit panel only — not wired to generate resume. */
+  const [jobFitJdDraft, setJobFitJdDraft] = useState('')
+  const [openingPortfolioExampleId, setOpeningPortfolioExampleId] = useState<string | null>(null)
 
   const form = useForm<ResumeFormData>({
     resolver: zodResolver(resumeSchema),
@@ -186,9 +263,121 @@ export default function AIResumeBuilderPage() {
     },
   })
 
+  const additionalInstructionsSectionRef = useRef<HTMLDivElement | null>(null)
+
+  const applyPortfolioStudioExample = useCallback(
+    (examplePrompt: string, options?: { scroll?: boolean; silent?: boolean }) => {
+      const current = form.getValues('additionalInstructions')?.trim() ?? ''
+      const nextValue = current ? `${current}\n\n${examplePrompt}` : examplePrompt
+      if (nextValue.length > 100_000) {
+        toast.error(
+          'Additional instructions would exceed the limit. Remove some text and try again.',
+        )
+        return false
+      }
+      form.setValue('additionalInstructions', nextValue, { shouldDirty: true })
+      if (!options?.silent) {
+        toast.success('Portfolio Studio example added to instructions')
+      }
+      if (options?.scroll !== false) {
+        additionalInstructionsSectionRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      }
+      return true
+    },
+    [form],
+  )
+
+  const openPortfolioStudioFromExample = useCallback(
+    (example: (typeof PORTFOLIO_STUDIO_EXAMPLES)[number]) => {
+      if (openingPortfolioExampleId) return
+      if (!applyPortfolioStudioExample(example.prompt, { scroll: false, silent: true })) return
+      setOpeningPortfolioExampleId(example.id)
+      try {
+        const data = form.getValues() as PortfolioStudioResumeInput
+        writeResumeStudioBootstrap({ templateId: example.studioTemplateId, resume: data })
+        const draft = buildPersonalizedStudioDraft(example.studioTemplateId, data)
+        writeBuildifyStudioLegacyDraft(draft.elements, draft.background)
+        toast.success('Opening Buildify Studio with your portfolio draft…')
+        router.push('/buildify-studio/new')
+      } catch (e) {
+        setOpeningPortfolioExampleId(null)
+        toast.error(e instanceof Error ? e.message : 'Could not prepare Buildify Studio draft.')
+      }
+    },
+    [applyPortfolioStudioExample, form, openingPortfolioExampleId, router],
+  )
+
+  const navigateJobFitToGenerate = useCallback(() => {
+    additionalInstructionsSectionRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+    window.setTimeout(() => {
+      void form.setFocus('additionalInstructions')
+    }, 450)
+  }, [form])
+
+  const watchedResumeFields = useWatch({ control: form.control }) as ResumeFormData
+
+  const resumeContextForJobFit = useMemo(() => {
+    const w = watchedResumeFields
+    if (!w) return ''
+    const parts = [
+      w.fullName && `Name: ${w.fullName}`,
+      w.title && `Target title: ${w.title}`,
+      w.summary && `Summary: ${w.summary}`,
+      w.skills && `Skills: ${w.skills}`,
+      w.experience && `Experience:\n${w.experience}`,
+      w.education && `Education:\n${w.education}`,
+      w.projects && `Projects:\n${w.projects}`,
+      w.certifications && `Certifications:\n${w.certifications}`,
+      w.achievements && `Achievements:\n${w.achievements}`,
+      w.languagesKnown && `Languages: ${w.languagesKnown}`,
+    ].filter(Boolean) as string[]
+    return parts.join('\n\n').slice(0, 12_000)
+  }, [watchedResumeFields])
+
+  const layoutPreviewForm = pickAiResumeLayoutFields(watchedResumeFields ?? {})
+
+  const previewLayoutStats = useMemo(() => {
+    const formStats = computeResumeLayoutStats(
+      resumeFormToResumeData(layoutPreviewForm),
+      TEXT_LAYOUT_CLIENT_OPTIONS,
+    )
+    const fmt = templateType === 'latex' ? 'latex' : 'html'
+    const code =
+      templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+    const fromCode = computeResumeLayoutStatsFromResumeCode(code, fmt, TEXT_LAYOUT_CLIENT_OPTIONS)
+    return fromCode ?? formStats
+  }, [
+    templateType,
+    editedLatex,
+    latexCode,
+    editedHtml,
+    htmlCode,
+    JSON.stringify(layoutPreviewForm),
+  ])
+
   const currentModelInfo = RESUME_MODELS.find((m) => m.id === selectedModel)
 
   // Generate Resume code (LaTeX or HTML)
+  const onGenerateInvalid = (errors: FieldErrors<ResumeFormData>) => {
+    const keys = Object.keys(errors) as (keyof ResumeFormData)[]
+    const first = keys[0]
+    const fieldErr = first ? errors[first] : undefined
+    const msg =
+      fieldErr && typeof fieldErr === 'object' && 'message' in fieldErr && typeof fieldErr.message === 'string'
+        ? fieldErr.message
+        : 'Please fix the highlighted fields. Name, email, and phone are required.'
+    if (first) {
+      void form.setFocus(first)
+    }
+    toast.error(msg, { duration: 6000, id: 'resume-generate' })
+  }
+
   const onGenerateResume = async (data: ResumeFormData) => {
     setIsGenerating(true)
     const isLaTeX = data.templateType === 'latex'
@@ -197,52 +386,96 @@ export default function AIResumeBuilderPage() {
 
     try {
       const endpoint = isLaTeX ? '/api/resume/generate-latex' : '/api/resume/generate-html'
-      
-      // Create AbortController for timeout
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes timeout
 
+      const layoutStatsForUi = computeResumeLayoutStats(
+        resumeFormToResumeData(pickAiResumeLayoutFields(data)),
+        TEXT_LAYOUT_CLIENT_OPTIONS,
+      )
+
+      // Server: up to 3 OpenRouter attempts × ~78s + JSON/processing — must exceed that budget.
+      const GENERATE_FETCH_MS = 260_000
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), GENERATE_FETCH_MS)
+
+      const buildGenerateBody = (forceLocalOnly: boolean) =>
+        JSON.stringify({
+          ...data,
+          model: selectedModel,
+          templateId: selectedTemplate?.id,
+          // Keep generation format-specific to avoid mixed HTML/LaTeX outputs.
+          templateStyleGuide: selectedTemplate?.styleGuide,
+          ...(forceLocalOnly ? { forceLocalOnly: true as const } : {}),
+        })
+
+      let usedLocalTimeoutFallback = false
       let response: Response
       try {
         response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            ...data, 
-            model: selectedModel,
-            templateId: selectedTemplate?.id,
-            templateStyleGuide: selectedTemplate?.styleGuide,
-          }),
+          credentials: 'include',
+          body: buildGenerateBody(false),
           signal: controller.signal,
         })
         clearTimeout(timeoutId)
       } catch (fetchError) {
         clearTimeout(timeoutId)
-        
+
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
-          throw new Error('Request timed out. Please try again with a smaller template or simpler data.')
-        }
-        
-        if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
+          usedLocalTimeoutFallback = true
+          toast.loading('AI took too long — generating with local template...', { id: 'resume-generate' })
+          try {
+            response = await fetch(endpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: buildGenerateBody(true),
+            })
+          } catch (retryErr) {
+            if (retryErr instanceof TypeError && retryErr.message === 'Failed to fetch') {
+              throw new Error(
+                'Unable to connect to server. Please check your internet connection and try again.',
+              )
+            }
+            throw retryErr
+          }
+        } else if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
           throw new Error('Unable to connect to server. Please check your internet connection and try again.')
+        } else {
+          throw fetchError
         }
-        
-        throw fetchError
       }
 
       if (!response.ok) {
-        const error = await response.json().catch(() => ({ 
-          error: `Server returned error: ${response.status} ${response.statusText}` 
-        }))
-        const message = error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        const error = (await response.json().catch(() => ({
+          error: `Server returned error: ${response.status} ${response.statusText}`,
+        }))) as {
+          error?: string
+          details?: Array<{ path?: (string | number)[]; message?: string }>
+        }
+        let message =
+          response.status === 401
+            ? 'Please sign in to generate a resume.'
+            : error.error || `Failed to generate ${isLaTeX ? 'LaTeX' : 'HTML'} code`
+        if (response.status === 400 && Array.isArray(error.details) && error.details[0]?.message) {
+          const d = error.details[0]
+          const path = Array.isArray(d.path) ? d.path.join('.') : ''
+          message = path ? `${path}: ${d.message}` : (d.message ?? message)
+        }
         toast.error(message, {
           id: 'resume-generate',
-          duration: 7000,
+          duration: 9000,
         })
         return
       }
 
-      const result = await response.json()
+      const result = await response.json() as {
+        latex?: string
+        html?: string
+        model?: string
+        isFallback?: boolean
+        warning?: string
+      }
       const generatedCode = isLaTeX ? result.latex : result.html
       const rawResponse = ''
 
@@ -262,10 +495,20 @@ export default function AIResumeBuilderPage() {
       setIsFallback(result.isFallback || false)
       setCurrentStep('preview')
 
-      if (result.isFallback && result.model) {
+      if (typeof result.warning === 'string' && result.warning.trim()) {
+        toast.warning(
+          usedLocalTimeoutFallback
+            ? 'AI timed out — your resume was generated with the local template.'
+            : result.warning,
+          { id: 'resume-generate', duration: 8000 },
+        )
+      } else if (result.isFallback && result.model) {
         toast.warning(`Model unavailable. Used fallback: ${getModelName(result.model)}`, { id: 'resume-generate' })
       } else {
-        toast.success(`${isLaTeX ? 'LaTeX' : 'HTML'} code generated successfully!`, { id: 'resume-generate' })
+        toast.success(
+          `${isLaTeX ? 'LaTeX' : 'HTML'} generated · ~${layoutStatsForUi.pageCount} pg text estimate (see Layout tab)`,
+          { id: 'resume-generate' },
+        )
       }
     } catch (error) {
       console.error(`Error generating ${isLaTeX ? 'LaTeX' : 'HTML'}:`, error)
@@ -288,6 +531,23 @@ export default function AIResumeBuilderPage() {
   // Compile to PDF (LaTeX or HTML)
   const onCompilePDF = async () => {
     setIsCompiling(true)
+
+    const fmt = templateType === 'latex' ? 'latex' : 'html'
+    const codeForLayout =
+      templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
+    const compileLayoutStats =
+      computeResumeLayoutStatsFromResumeCode(codeForLayout, fmt, TEXT_LAYOUT_CLIENT_OPTIONS) ??
+      computeResumeLayoutStats(
+        resumeFormToResumeData(layoutPreviewForm),
+        TEXT_LAYOUT_CLIENT_OPTIONS,
+      )
+    if (compileLayoutStats.exceedsTwoPages) {
+      toast.info(
+        `Your resume content estimates ~${compileLayoutStats.pageCount} A4 pages (text layout). The PDF may be long.`,
+        { duration: 4500 },
+      )
+    }
+
     toast.loading('Generating PDF...', { id: 'resume-compile' })
 
     try {
@@ -303,7 +563,8 @@ export default function AIResumeBuilderPage() {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Failed to generate PDF' }))
-        throw new Error(error.error || 'Failed to generate PDF')
+        toast.error(error.error || 'Failed to generate PDF', { id: 'resume-compile' })
+        return
       }
 
       const blob = await response.blob()
@@ -318,7 +579,7 @@ export default function AIResumeBuilderPage() {
 
       toast.success('PDF generated successfully!', { id: 'resume-compile' })
     } catch (error) {
-      console.error('Error generating PDF:', error)
+      console.warn('Error generating PDF:', error)
       toast.error(
         error instanceof Error ? error.message : 'Failed to generate PDF. Please try again.',
         { id: 'resume-compile' }
@@ -362,7 +623,7 @@ export default function AIResumeBuilderPage() {
     try {
       const endpoint = templateType === 'latex' ? '/api/resume/follow-up' : '/api/resume/follow-up-html'
       const currentCode = templateType === 'latex' ? (editedLatex || latexCode) : (editedHtml || htmlCode)
-      
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -426,6 +687,35 @@ export default function AIResumeBuilderPage() {
     setIsScoring(true)
     toast.loading('Analyzing your resume...', { id: 'resume-score' })
 
+    let layoutContext: string | undefined
+    try {
+      const usePlainTextLayout = formatOverride === 'text'
+      let s
+      if (usePlainTextLayout) {
+        s = computeResumeLayoutStats(
+          plainResumeTextToResumeData(currentCode.trim()),
+          TEXT_LAYOUT_CLIENT_OPTIONS,
+        )
+      } else {
+        const fmt = currentFormat === 'latex' ? 'latex' : 'html'
+        s =
+          computeResumeLayoutStatsFromResumeCode(
+            currentCode,
+            fmt,
+            TEXT_LAYOUT_CLIENT_OPTIONS,
+          ) ??
+          computeResumeLayoutStats(
+            resumeFormToResumeData(pickAiResumeLayoutFields(form.getValues())),
+            TEXT_LAYOUT_CLIENT_OPTIONS,
+          )
+      }
+      if (s.lineCount > 0) {
+        layoutContext = formatLayoutContextForScoring(s)
+      }
+    } catch {
+      // Ignore layout failures; scoring still runs without layout context.
+    }
+
     try {
       const response = await fetch('/api/resume/score', {
         method: 'POST',
@@ -434,6 +724,7 @@ export default function AIResumeBuilderPage() {
           code: currentCode,
           format: currentFormat,
           model: selectedModel,
+          ...(layoutContext ? { layoutContext } : {}),
         }),
       })
 
@@ -459,6 +750,7 @@ export default function AIResumeBuilderPage() {
 
   const handleReset = () => {
     setCurrentStep('format-selection')
+    setResumeBuilderMode('resume')
     setSelectedTemplate(null)
     setLatexCode('')
     setEditedLatex('')
@@ -553,7 +845,22 @@ export default function AIResumeBuilderPage() {
       }
       toast.loading('Processing extracted data...', { id: 'parse-files' })
 
-      const result = await response.json()
+      const result = await response.json() as {
+        success?: boolean
+        error?: string
+        details?: string
+        extractedResumeData?: Record<string, string | string[] | undefined> | null
+        jdRequirements?: Record<string, string | string[] | undefined> | null
+        /** Raw JD excerpt from upload — for optional job-fit panel only */
+        jdText?: string
+        /** Server set when AI JD parse failed (e.g. 429) but raw JD text was attached */
+        jdUsedRawFallback?: boolean
+        resumeLayoutEstimate?: {
+          pageCount: number
+          lineCount: number
+          exceedsTwoPages: boolean
+        } | null
+      }
       console.log('[parse-files] API response:', result)
       console.log('[parse-files] Extracted resume data:', result.extractedResumeData)
       console.log('[parse-files] JD requirements:', result.jdRequirements)
@@ -596,41 +903,46 @@ export default function AIResumeBuilderPage() {
       }
       
       setParsedData({
-        resumeData: result.extractedResumeData,
-        jdRequirements: result.jdRequirements,
+        resumeData: result.extractedResumeData ?? undefined,
+        jdRequirements: result.jdRequirements ?? undefined,
+        resumeLayoutEstimate: result.resumeLayoutEstimate ?? null,
       })
+
+      if (result.jdText?.trim()) {
+        setJobFitJdDraft((prev) => (prev.trim().length > 0 ? prev : result.jdText!.trim()))
+      }
 
       // Auto-fill form if resume data is extracted
       let fieldsFilled = 0
       if (result.extractedResumeData) {
         const data = result.extractedResumeData
         console.log('[parse-files] Auto-filling form with data:', data)
-        
+
         // Simple string fields — set if present
         const fieldMap: Array<[keyof ResumeFormData, string | undefined]> = [
-          ['fullName', data.fullName],
-          ['title', data.title],
-          ['email', data.email],
-          ['phone', data.phone],
-          ['location', data.location],
-          ['linkedin', data.linkedin],
-          ['github', data.github],
-          ['portfolio', data.portfolio],
-          ['summary', data.summary],
-          ['skills', data.skills],
-          ['experience', data.experience],
-          ['education', data.education],
-          ['projects', data.projects],
-          ['certifications', data.certifications],
-          ['achievements', data.achievements],
-          ['languagesKnown', data.languagesKnown],
+          ['fullName', parsedExtractedFieldToString(data.fullName)],
+          ['title', parsedExtractedFieldToString(data.title)],
+          ['email', parsedExtractedFieldToString(data.email)],
+          ['phone', parsedExtractedFieldToString(data.phone)],
+          ['location', parsedExtractedFieldToString(data.location)],
+          ['linkedin', parsedExtractedFieldToString(data.linkedin)],
+          ['github', parsedExtractedFieldToString(data.github)],
+          ['portfolio', parsedExtractedFieldToString(data.portfolio)],
+          ['summary', parsedExtractedFieldToString(data.summary)],
+          ['skills', parsedExtractedFieldToString(data.skills)],
+          ['experience', parsedExtractedFieldToString(data.experience)],
+          ['education', parsedExtractedFieldToString(data.education)],
+          ['projects', parsedExtractedFieldToString(data.projects)],
+          ['certifications', parsedExtractedFieldToString(data.certifications)],
+          ['achievements', parsedExtractedFieldToString(data.achievements)],
+          ['languagesKnown', parsedExtractedFieldToString(data.languagesKnown)],
         ]
-        
+
         for (const [field, value] of fieldMap) {
-          if (value?.trim()) {
+          if (value) {
             form.setValue(field, value)
-          fieldsFilled++
-        }
+            fieldsFilled++
+          }
         }
         
         console.log(`[parse-files] Filled ${fieldsFilled} form fields`)
@@ -643,17 +955,37 @@ export default function AIResumeBuilderPage() {
         const jdReqs = result.jdRequirements as Record<string, string | string[] | undefined>
         const requiredSkills = Array.isArray(jdReqs.requiredSkills) ? jdReqs.requiredSkills.join(', ') : (jdReqs.requiredSkills || 'N/A')
         const jdInstructions = `\n\nJOB DESCRIPTION REQUIREMENTS:\n- Required Skills: ${requiredSkills}\n- Qualifications: ${jdReqs.qualifications || 'N/A'}\n- Key Requirements: ${jdReqs.keyRequirements || 'N/A'}\n\nPlease tailor the resume to match these requirements and highlight relevant experience and skills.`
-        const currentInstructions = form.getValues('additionalInstructions') || ''
-        form.setValue('additionalInstructions', currentInstructions + jdInstructions)
+        const base = stripJobDescriptionInstructions(form.getValues('additionalInstructions') || '')
+        form.setValue('additionalInstructions', base + jdInstructions)
         console.log('[parse-files] Added JD requirements to instructions')
       }
 
+      const layoutNote =
+        result.resumeLayoutEstimate && result.resumeLayoutEstimate.lineCount > 0
+          ? ` · ~${result.resumeLayoutEstimate.pageCount} pg text estimate`
+          : ''
+
       if (fieldsFilled > 0) {
-        toast.success(`Files parsed successfully! ${fieldsFilled} form fields auto-filled.`, { id: 'parse-files' })
+        toast.success(
+          `Files parsed successfully! ${fieldsFilled} form fields auto-filled.${layoutNote}`,
+          {
+            id: 'parse-files',
+            description: result.jdUsedRawFallback
+              ? 'JD added as full text (AI summarization hit rate limit).'
+              : undefined,
+          },
+        )
       } else if (result.extractedResumeData) {
-        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', { id: 'parse-files' })
+        toast.warning('Files parsed but no data could be extracted. Please fill the form manually.', {
+          id: 'parse-files',
+        })
       } else {
-        toast.success('Files parsed successfully!', { id: 'parse-files' })
+        toast.success(`Files parsed successfully!${layoutNote}`, {
+          id: 'parse-files',
+          description: result.jdUsedRawFallback
+            ? 'JD added as full text (AI summarization hit rate limit).'
+            : undefined,
+        })
       }
     } catch (error) {
       if (aiProgressTimer) {
@@ -679,6 +1011,7 @@ export default function AIResumeBuilderPage() {
   }
 
   const handleFormatSelect = (selectedType: 'latex' | 'html') => {
+    setResumeBuilderMode('resume')
     setTemplateType(selectedType)
     form.setValue('templateType', selectedType)
     
@@ -686,11 +1019,26 @@ export default function AIResumeBuilderPage() {
     setCurrentStep('template-browser')
   }
 
+  const handlePortfolioEntry = () => {
+    setResumeBuilderMode('portfolio')
+    setTemplateType('html')
+    form.setValue('templateType', 'html')
+    setSelectedTemplate(null)
+    setCurrentStep('form')
+  }
+
   // Show format selection first
   if (currentStep === 'format-selection') {
     return (
       <div className="bg-background h-[calc(100vh-48px)] flex items-center justify-center">
-        <TemplateSelection onSelect={handleFormatSelect} onScoreResume={() => setCurrentStep('score')} />
+        <TemplateSelection
+          onSelect={handleFormatSelect}
+          onScoreResume={() => {
+            setResumeBuilderMode('resume')
+            setCurrentStep('score')
+          }}
+          onPortfolio={handlePortfolioEntry}
+        />
       </div>
     )
   }
@@ -728,6 +1076,7 @@ export default function AIResumeBuilderPage() {
       const result = await response.json() as {
         extractedResumeData?: Record<string, string | string[] | undefined>
         resumeText?: string
+        resumeLayoutEstimate?: { pageCount: number; lineCount: number } | null
       }
 
       // Build readable resume text from parsed data
@@ -761,7 +1110,12 @@ export default function AIResumeBuilderPage() {
 
       if (extractedText.trim()) {
         setScoreInput(extractedText)
-        toast.success('Resume text extracted successfully')
+        const est = result.resumeLayoutEstimate
+        toast.success(
+          est && est.lineCount > 0
+            ? `Resume text extracted · ~${est.pageCount} pg text estimate`
+            : 'Resume text extracted successfully',
+        )
       } else {
         toast.error('Could not extract text from file. Try pasting your resume text directly.')
       }
@@ -786,7 +1140,14 @@ export default function AIResumeBuilderPage() {
           <div className="mb-6 flex flex-col gap-4">
             <div className="flex items-start gap-3 sm:gap-4">
               <button
-                onClick={() => { setCurrentStep('format-selection'); setScoreData(null); setShowScore(false); setScoreInput(''); setScoreFile(null) }}
+                onClick={() => {
+                  setResumeBuilderMode('resume')
+                  setCurrentStep('format-selection')
+                  setScoreData(null)
+                  setShowScore(false)
+                  setScoreInput('')
+                  setScoreFile(null)
+                }}
                 className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <ArrowLeft className="size-4" />
@@ -930,6 +1291,7 @@ export default function AIResumeBuilderPage() {
                 )}
                 placeholder={"Paste your resume content here...\n\nExample:\nJohn Doe\nSoftware Engineer\njohn@email.com | (555) 123-4567\n\nSummary:\nExperienced software engineer with 5+ years...\n\nExperience:\nSenior Engineer at Google (2021-Present)\n• Built scalable microservices...\n• Led team of 8 engineers..."}
               />
+              <ScoreLayoutInsights pastedText={scoreInput} className="border-t border-border/60" />
             </div>
 
             {/* Score Button */}
@@ -1003,6 +1365,14 @@ export default function AIResumeBuilderPage() {
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{templateType === 'latex' ? 'LaTeX' : 'HTML'} Preview</h1>
+                  {previewLayoutStats.lineCount > 0 && (
+                    <span
+                      className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground ring-1 ring-border/60"
+                      title="A4 estimate from your HTML/LaTeX (plain-text model): margins & type scale aligned with PDF export; complex template layouts may still differ slightly"
+                    >
+                      ~{previewLayoutStats.pageCount} pg
+                    </span>
+                  )}
                   {usedModel && (
                     <span className={cn(
                       "shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
@@ -1108,65 +1478,92 @@ export default function AIResumeBuilderPage() {
               </motion.div>
             )}
 
-            {/* Code Display/Editor */}
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
-              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
-                    <FileText className="size-3 text-primary" />
-                  </div>
-                  <span className="truncate font-mono text-xs font-medium text-muted-foreground">
-                    {templateType === 'latex' ? 'resume.tex' : 'resume.html'}
-                  </span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {!isEditing ? (
-                    <Button variant="ghost" size="sm" onClick={handleEdit} className="h-7 gap-1.5 text-xs">
-                      <Edit className="size-3" />
-                      <span className="hidden xs:inline">Edit</span>
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleSaveEdit}
-                        className="h-7 gap-1.5 text-xs text-green-600 hover:text-green-700"
-                      >
-                        <Check className="size-3" />
-                        <span className="hidden xs:inline">Save</span>
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-7 gap-1.5 text-xs">
-                        <X className="size-3" />
-                        <span className="hidden xs:inline">Cancel</span>
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
+            {/* Code display / structured layout (pretext-style engine from form data) */}
+            <Tabs defaultValue="code" className="w-full">
+              <TabsList variant="line" className="h-auto w-full flex-wrap justify-start gap-1 sm:w-auto">
+                <TabsTrigger value="code" className="gap-1.5">
+                  <FileText className="size-3.5 shrink-0" />
+                  {templateType === 'latex' ? 'LaTeX' : 'HTML'}
+                </TabsTrigger>
+                <TabsTrigger value="layout" className="gap-1.5">
+                  <LayoutGrid className="size-3.5 shrink-0" />
+                  Layout preview
+                </TabsTrigger>
+              </TabsList>
 
-              {isEditing ? (
-                <Textarea
-                  value={templateType === 'latex' ? editedLatex : editedHtml}
-                  onChange={(e) => {
-                    if (templateType === 'latex') {
-                      setEditedLatex(e.target.value)
-                    } else {
-                      setEditedHtml(e.target.value)
-                    }
-                  }}
-                  className={cn(
-                    "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
-                    "resize-none border-0 rounded-none focus-visible:ring-0"
+              <TabsContent value="code" className="mt-4">
+                <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <div className="flex size-5 shrink-0 items-center justify-center rounded bg-primary/10">
+                        <FileText className="size-3 text-primary" />
+                      </div>
+                      <span className="truncate font-mono text-xs font-medium text-muted-foreground">
+                        {templateType === 'latex' ? 'resume.tex' : 'resume.html'}
+                      </span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      {!isEditing ? (
+                        <Button variant="ghost" size="sm" onClick={handleEdit} className="h-7 gap-1.5 text-xs">
+                          <Edit className="size-3" />
+                          <span className="hidden xs:inline">Edit</span>
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleSaveEdit}
+                            className="h-7 gap-1.5 text-xs text-green-600 hover:text-green-700"
+                          >
+                            <Check className="size-3" />
+                            <span className="hidden xs:inline">Save</span>
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={handleCancelEdit} className="h-7 gap-1.5 text-xs">
+                            <X className="size-3" />
+                            <span className="hidden xs:inline">Cancel</span>
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {isEditing ? (
+                    <Textarea
+                      value={templateType === 'latex' ? editedLatex : editedHtml}
+                      onChange={(e) => {
+                        if (templateType === 'latex') {
+                          setEditedLatex(e.target.value)
+                        } else {
+                          setEditedHtml(e.target.value)
+                        }
+                      }}
+                      className={cn(
+                        "min-h-[400px] font-mono text-sm leading-relaxed sm:min-h-[600px]",
+                        "resize-none border-0 rounded-none focus-visible:ring-0"
+                      )}
+                      placeholder={`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code will appear here...`}
+                    />
+                  ) : templateType === 'latex' ? (
+                    <LaTeXPreview code={latexCode} />
+                  ) : (
+                    <HTMLPreview code={htmlCode} />
                   )}
-                  placeholder={`${templateType === 'latex' ? 'LaTeX' : 'HTML'} code will appear here...`}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="layout" className="mt-4 space-y-2">
+                <ResumeLayoutPreview
+                  formValues={layoutPreviewForm}
+                  emptyHint="Go back to the form and fill your details to populate this preview."
                 />
-              ) : templateType === 'latex' ? (
-                <LaTeXPreview code={latexCode} />
-              ) : (
-                <HTMLPreview code={htmlCode} />
-              )}
-            </div>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Pretext-style pipeline on your form: canvas prepare + deterministic wrap. Generated{" "}
+                  {templateType === 'latex' ? 'LaTeX' : 'HTML'} for PDF is separate; use this to sanity-check length
+                  and line breaks.
+                </p>
+              </TabsContent>
+            </Tabs>
 
             {/* Follow-up Prompt Section */}
             <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
@@ -1246,13 +1643,19 @@ export default function AIResumeBuilderPage() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl md:text-4xl">Build Your Resume</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground sm:text-base">
-            Fill in your details and AI will craft a professional resume you can edit and download as PDF.
+            {resumeBuilderMode === 'portfolio'
+              ? 'Fill in your details, then use the Portfolio Studio examples below to open Buildify Studio with your content. Resume output uses HTML → PDF.'
+              : 'Fill in your details and AI will craft a professional resume you can edit and download as PDF.'}
           </p>
         </div>
       </motion.div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onGenerateResume)} className="space-y-6">
+        <form
+          onSubmit={form.handleSubmit(onGenerateResume, onGenerateInvalid)}
+          noValidate
+          className="space-y-6"
+        >
           {/* File Upload Section */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
@@ -1333,9 +1736,9 @@ export default function AIResumeBuilderPage() {
                               e.stopPropagation()
                               setJdFile(null)
                               if (parsedData) {
-                                const currentInstructions = form.getValues('additionalInstructions') || ''
-                                // Remove JD instructions if they exist
-                                const cleaned = currentInstructions.replace(/\n\nJOB DESCRIPTION REQUIREMENTS:[\s\S]*/g, '')
+                                const cleaned = stripJobDescriptionInstructions(
+                                  form.getValues('additionalInstructions') || '',
+                                )
                                 form.setValue('additionalInstructions', cleaned)
                               }
                             }}
@@ -1367,10 +1770,42 @@ export default function AIResumeBuilderPage() {
                   </p>
                 </div>
               )}
+              {parsedData?.resumeLayoutEstimate &&
+                parsedData.resumeLayoutEstimate.lineCount > 0 &&
+                !isParsingFiles && (
+                  <ParsedResumeLayoutStrip estimate={parsedData.resumeLayoutEstimate} />
+                )}
               <p className="mt-2 text-[11px] text-muted-foreground">
                 Upload your existing resume to auto-fill the form, or upload a job description to tailor your resume to specific requirements.
               </p>
             </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.015, ease: [0.25, 0.1, 0.25, 1] }}
+          >
+            <JobFitEvaluationPanel
+              jobDescription={jobFitJdDraft}
+              onJobDescriptionChange={setJobFitJdDraft}
+              resumeContext={resumeContextForJobFit}
+              selectedModel={selectedModel}
+              onNavigateToGenerate={navigateJobFitToGenerate}
+              onAppendTailoringToInstructions={(block) => {
+                const cur = form.getValues('additionalInstructions') ?? ''
+                const next = cur.trim() ? `${cur.trim()}\n\n${block}` : block
+                if (next.length > 100_000) {
+                  toast.error(
+                    'Additional instructions would exceed the limit. Shorten existing text or use Copy instead.',
+                  )
+                  return
+                }
+                form.setValue('additionalInstructions', next)
+                toast.success('Tailoring ideas appended to Additional instructions')
+                navigateJobFitToGenerate()
+              }}
+            />
           </motion.div>
 
           {/* Selected Template & Format Display */}
@@ -1392,6 +1827,7 @@ export default function AIResumeBuilderPage() {
                     variant="ghost"
                     size="sm"
                     onClick={() => {
+                      setResumeBuilderMode('resume')
                       if (templateType === 'html') {
                         setCurrentStep('template-browser')
                       } else {
@@ -1429,6 +1865,7 @@ export default function AIResumeBuilderPage() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
+                    setResumeBuilderMode('resume')
                     if (templateType === 'html' && selectedTemplate) {
                       setCurrentStep('template-browser')
                     } else {
@@ -1875,12 +2312,14 @@ export default function AIResumeBuilderPage() {
             </div>
           </motion.div>
 
-          {/* Additional Instructions Section */}
+          {/* Additional Instructions Section — job fit Step 3 scroll target */}
           <motion.div
+            ref={additionalInstructionsSectionRef}
+            id="ai-resume-additional-instructions"
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
-            className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
+            className="scroll-mt-20 overflow-hidden rounded-xl border border-dashed border-border/60 bg-card"
           >
             <div className="flex flex-wrap items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
               <Settings2 className="size-4 text-muted-foreground" />
@@ -1909,6 +2348,60 @@ export default function AIResumeBuilderPage() {
               />
             </div>
           </motion.div>
+
+          {resumeBuilderMode === 'portfolio' && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, delay: 0.37, ease: [0.25, 0.1, 0.25, 1] }}
+              className="overflow-hidden rounded-xl border border-border/60 bg-card"
+            >
+              <div className="flex flex-wrap items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <FolderKanban className="size-4 text-violet-500" />
+                <span className="text-sm font-medium">Portfolio Studio Examples</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  Working examples
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-7 gap-1.5 text-xs"
+                  onClick={() => router.push('/buildify-studio/new')}
+                >
+                  Open Studio
+                </Button>
+              </div>
+              <div className="space-y-3 p-4">
+                <p className="text-xs text-muted-foreground">
+                  Pick an example to quickly generate a portfolio from a person&apos;s shared resume, then refine in Buildify Studio.
+                </p>
+                <div className="grid gap-2 md:grid-cols-3">
+                  {PORTFOLIO_STUDIO_EXAMPLES.map((example) => (
+                    <button
+                      key={example.id}
+                      type="button"
+                      onClick={() => openPortfolioStudioFromExample(example)}
+                      disabled={openingPortfolioExampleId !== null}
+                      className="rounded-lg border border-border/60 bg-muted/20 p-3 text-left transition-colors hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-70"
+                    >
+                      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                        {openingPortfolioExampleId === example.id && <Loader2 className="size-3 animate-spin" />}
+                        {example.title}
+                      </p>
+                      <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                        {openingPortfolioExampleId === example.id
+                          ? 'Preparing your layout and opening Buildify Studio...'
+                          : example.description}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          <ResumeLayoutInsights formValues={layoutPreviewForm} />
 
           {/* Submit */}
           <motion.div

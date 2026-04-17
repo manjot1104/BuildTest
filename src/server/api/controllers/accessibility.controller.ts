@@ -8,6 +8,7 @@ import { eq, desc, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { runAccessibilityTest } from '@/server/services/accessibility.service'
 import { generateAccessibilityReport } from '@/server/services/accessibility-report.service'
+import { uploadPdfReport } from '@/server/services/s3.service'
 import type {
   AccessibilityTestConfig,
   SSEEvent,
@@ -157,7 +158,8 @@ export async function startAccessibilityTestHandler({
             total_passes: summary.totalPasses,
             total_incomplete: summary.totalIncomplete,
             logs: JSON.stringify(collectedLogs),
-            pdf_report_base64: pdfBase64,
+            // Back-compat: same column now stores either base64 or a public https URL string
+            pdf_report_base64: pdfStorageValue,
             completed_at: new Date(),
             updated_at: new Date(),
           })
@@ -386,16 +388,33 @@ export async function downloadReportHandler({
     return { error: 'Report not yet generated', status: 404 }
   }
 
-  const pdfBuffer = Buffer.from(testRun.pdf_report_base64, 'base64')
   const hostname = new URL(testRun.target_url).hostname.replace(/[^a-z0-9]/gi, '-')
 
-  return new Response(pdfBuffer, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
-      'Content-Length': String(pdfBuffer.length),
-    },
-  })
+  // If the stored value looks like a public URL, redirect/stream from S3
+  if (/^https?:\/\//i.test(testRun.pdf_report_base64)) {
+    // 302 redirect allows browser to download directly from S3
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: testRun.pdf_report_base64,
+        'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
+      },
+    })
+  }
+
+  // Backward compatibility: value is inline base64
+  try {
+    const pdfBuffer = Buffer.from(testRun.pdf_report_base64, 'base64')
+    return new Response(pdfBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
+        'Content-Length': String(pdfBuffer.length),
+      },
+    })
+  } catch {
+    return { error: 'Stored report is not available', status: 404 }
+  }
 }
 
 export async function deleteTestRunHandler({
