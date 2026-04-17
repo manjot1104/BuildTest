@@ -23,6 +23,7 @@ interface StarredChat {
     createdAt: string
     type: 'builder' | 'openrouter'
     is_starred?: boolean
+    is3D?: boolean
 }
 
 async function fetchStarredChats(): Promise<StarredChat[]> {
@@ -52,6 +53,10 @@ const [chatToDelete, setChatToDelete] = useState<StarredChat | null>(null)
  const handleChatClick = (chat: StarredChat) => {
     if (chat.type === "openrouter") {
         router.push(`/ai-chat?chatId=${chat.conversationId}`) 
+    }
+        else if (chat.is3D) {
+        router.push(`/chat?chatId=${chat.v0ChatId}&mode=3d`)  
+    
     } else {
         router.push(`/chat?chatId=${chat.v0ChatId}`) 
     }
@@ -202,16 +207,23 @@ const confirmDelete = async () => {
                                     >
                                         <Star className="size-3.5 fill-amber-400 text-amber-400 shrink-0" />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium truncate">
-                                                {chat.title ?? chat.prompt ?? 'Untitled Chat'}
-                                            </p>
-                                            {chat.createdAt && (
-                                                <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                                                    {formatDistanceToNow(new Date(chat.createdAt), {
-                                                        addSuffix: true,
-                                                    })}
-                                                </p>
-                                            )}
+                                        <div className="flex items-center gap-1.5 min-w-0">
+    <p className="text-sm font-medium truncate">
+        {chat.title ?? chat.prompt ?? 'Untitled Chat'}
+    </p>
+    {chat.is3D && (
+    <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400">
+    3D
+</span>
+    )}
+</div>
+{chat.createdAt && (
+    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+        {formatDistanceToNow(new Date(chat.createdAt), {
+            addSuffix: true,
+        })}
+    </p>
+)}
                                         </div>
 
                                         <button
