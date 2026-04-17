@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_user_chats" ADD COLUMN "demo_html" text;
