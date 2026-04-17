@@ -10,7 +10,6 @@ import type {
   ComplianceStandard,
 } from '@/types/accessibility.types'
 import path from 'path'
-import path from 'path'
 
 let activeTests = 0
 const MAX_CONCURRENT_TESTS = 3
@@ -51,36 +50,6 @@ function normalizeUrl(raw: string, base: string): string | null {
 }
 
 function mapAxeTags(standards: ComplianceStandard[]): string[] {
-  const tags = new Set<string>()
-
-  for (const standard of standards) {
-    switch (standard) {
-      case 'wcag2a':
-        tags.add('wcag2a')
-        break
-      case 'wcag2aa':
-        // wcag2aa builds on top of wcag2a — need both
-        tags.add('wcag2a')
-        tags.add('wcag2aa')
-        break
-      case 'wcag21a':
-        tags.add('wcag2a')
-        tags.add('wcag21a')
-        break
-      case 'wcag21aa':
-        // wcag21aa builds on top of all previous levels
-        tags.add('wcag2a')
-        tags.add('wcag2aa')
-        tags.add('wcag21a')
-        tags.add('wcag21aa')
-        break
-      case 'best-practice':
-        tags.add('best-practice')
-        break
-    }
-  }
-
-  return Array.from(tags)
   const tags = new Set<string>()
 
   for (const standard of standards) {
@@ -233,7 +202,6 @@ export async function runAccessibilityTest(
   config: AccessibilityTestConfig,
   onEvent: (event: SSEEvent) => void,
 ): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
-): Promise<{ summary: TestSummary; pageResults: PageResult[]; browser: Browser }> {
   if (activeTests >= MAX_CONCURRENT_TESTS) {
     throw new Error('Too many concurrent tests. Please try again later.')
   }
@@ -291,7 +259,6 @@ export async function runAccessibilityTest(
     //const { resolve, dirname } = await import('path')
     let axeSource: string | undefined
     try {
-      const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
       const axeCorePath = path.join(process.cwd(), 'node_modules', 'axe-core', 'axe.min.js')
       axeSource = readFileSync(axeCorePath, 'utf-8')
     } catch {
@@ -514,26 +481,12 @@ if (!results) continue // skip this page if all retries failed
         })*/
         console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
         console.error(`   Reason:`, err instanceof Error ? err.message : err)
-        })*/
-        console.error(`❌ [A11Y] Page failed: ${pageUrl}`)
-        console.error(`   Reason:`, err instanceof Error ? err.message : err)
       } finally {
         if (page) void page.close().catch(() => undefined)
       }
     }
 
     onEvent({ type: 'test:complete', summary })
-    console.log('\n========================================')
-    console.log('🏁 [A11Y] Test complete')
-    console.log('   Pages tested :', summary.totalPages)
-    console.log('   Total violations:', summary.totalViolations)
-    console.log('   Total passes    :', summary.totalPasses)
-    console.log('   Critical :', summary.criticalCount)
-    console.log('   Serious  :', summary.seriousCount)
-    console.log('   Moderate :', summary.moderateCount)
-    console.log('   Minor    :', summary.minorCount)
-    console.log('========================================\n')
-    return { summary, pageResults, browser }
     console.log('\n========================================')
     console.log('🏁 [A11Y] Test complete')
     console.log('   Pages tested :', summary.totalPages)
