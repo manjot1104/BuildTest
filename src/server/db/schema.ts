@@ -1214,3 +1214,66 @@ export const video_chats = createTable(
 export const videoChatsRelations = relations(video_chats, ({ one }) => ({
   user: one(user, { fields: [video_chats.user_id], references: [user.id] }),
 }));
+
+
+export const video_render_jobs = createTable(
+  "video_render_jobs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+ 
+    chat_id: d
+      .text("chat_id")
+      .notNull()
+      .references(() => video_chats.id, { onDelete: "cascade" }),
+ 
+    // ── Job lifecycle ──────────────────────────────────────────────────────────
+    // pending  → queued, not yet picked up by the worker
+    // running  → a serverless function is currently rendering
+    // done     → output_url is populated, MP4 is in S3
+    // failed   → error_message is populated, client should show retry/fallback
+    status: d
+      .text("status", { enum: ["pending", "running", "done", "failed"] })
+      .notNull()
+      .default("pending"),
+ 
+    // ── Payload ────────────────────────────────────────────────────────────────
+    // Snapshot of the VideoJson at the time the render was requested.
+    // Stored separately from video_chats.video_json so a follow-up prompt
+    // on the chat doesn't affect an in-flight render.
+    video_json: d.text("video_json").notNull(),
+ 
+    // ── Output ─────────────────────────────────────────────────────────────────
+    output_url: d.text("output_url"),    // S3 URL of the finished MP4
+    error_message: d.text("error_message"),
+    progress: d.integer("progress").default(0), // 0–100, updated during render
+ 
+    // ── Stuck-job detection ────────────────────────────────────────────────────
+    // started_at is set when status transitions to "running".
+    // Any job still "running" after STUCK_JOB_TIMEOUT_MS (15 min) is
+    // automatically reset to "failed" so users aren't permanently blocked.
+    started_at: d.timestamp("started_at", { withTimezone: true }),
+ 
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("video_render_jobs_user_id_idx").on(t.user_id),
+    index("video_render_jobs_status_idx").on(t.status),
+    index("video_render_jobs_chat_id_idx").on(t.chat_id),
+  ],
+);
+ 
+export const videoRenderJobsRelations = relations(video_render_jobs, ({ one }) => ({
+  user: one(user, { fields: [video_render_jobs.user_id], references: [user.id] }),
+  chat: one(video_chats, { fields: [video_render_jobs.chat_id], references: [video_chats.id] }),
+}));

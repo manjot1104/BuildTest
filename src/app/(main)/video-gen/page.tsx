@@ -1090,13 +1090,18 @@ function VideoPanel({
         </div>
       )}
 
-      {/* Fix 4: Export opens a dedicated download page in a new tab */}
+      {/* Fix 4: Export opens a dedicated download page in a new tab.
+          Both client and server render options are available there. */}
       <button
         type="button"
         onClick={onExport}
         className="w-full flex items-center justify-center gap-2 h-9 rounded-xl border border-border bg-muted/20 text-[11px] font-mono text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all"
       >
-        <Download className="h-3.5 w-3.5" /> Export MP4
+        <Download className="h-3.5 w-3.5" />
+        Export MP4
+        <span className="text-[9px] font-mono text-muted-foreground/35 ml-0.5">
+          · Client or Server
+        </span>
       </button>
 
       {/* JSON debug panel */}
@@ -1837,14 +1842,15 @@ export default function VideoGeneratorPage() {
     setTimeout(() => textareaRef.current?.focus(), 100);
   }
 
-  // Fix 4: write videoJson to localStorage and open /video-download in a new tab
+  // Fix 4: write videoJson + chatId to localStorage and open /video-download in a new tab.
+  // chatId is included so the download page can use it for server-side renders.
   function handleExport() {
     if (!latestVideoData) return;
     // Use localStorage so the payload survives cross-tab navigation
     // (sessionStorage is NOT shared with tabs opened via window.open + noopener)
     localStorage.setItem(
       "video-download-payload",
-      JSON.stringify({ videoJson: latestVideoData.videoJson }),
+      JSON.stringify({ videoJson: latestVideoData.videoJson, chatId }),
     );
     window.open("/video-gen/download", "_blank", "noreferrer");
   }

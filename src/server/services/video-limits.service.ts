@@ -13,13 +13,14 @@ export interface VideoPlanLimits {
   maxImages: number;
   maxDurationSeconds: number;
   label: string;
+  dailyServerRenders?: number; // Optional: only applies to server-side rendering
 }
 
 export const VIDEO_SERVER_PLAN_LIMITS: Record<string, VideoPlanLimits> = {
-  free:       { dailyPrompts: 1,  allowFollowUp: false, maxImages: 1, maxDurationSeconds: 20, label: "Free"       },
-  starter:    { dailyPrompts: 10, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Starter"    },
-  pro:        { dailyPrompts: 15, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Pro"        },
-  enterprise: { dailyPrompts: 20, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Enterprise" },
+  free:       { dailyPrompts: 1,  allowFollowUp: false, maxImages: 1, maxDurationSeconds: 20, label: "Free",     dailyServerRenders: 1 },
+  starter:    { dailyPrompts: 10, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Starter", dailyServerRenders: 3 },
+  pro:        { dailyPrompts: 15, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Pro",     dailyServerRenders: 5 },
+  enterprise: { dailyPrompts: 20, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Enterprise", dailyServerRenders: 8 },
 };
 
 export function getVideoServerPlanLimits(planId: string | null | undefined): VideoPlanLimits {

@@ -20,7 +20,12 @@ import {
   updateVideoChatAfterGeneration,
   appendPromptAndUpdateVideo,
   getVideoChatById,
-  countVideoPromptsTodayByUserId
+  countVideoPromptsTodayByUserId,
+  // Render job queries
+  createRenderJob,
+  getRenderJobById,
+  countActiveRenderJobsForUser,
+  countServerRenderJobsToday,
 } from "@/server/db/queries";
 import {
   deleteVideoImageSession,
@@ -32,6 +37,8 @@ import {
   addAdditionalCredits,
 } from "@/server/services/credits.service";
 import { getVideoPlanId, getVideoServerPlanLimits } from "@/server/services/video-limits.service";
+// ── Server-side render ────────────────────────────────────────────────────────
+import { renderVideoJob } from "@/server/services/video-render.service";
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
@@ -440,21 +447,78 @@ export async function generateRemotionVideoHandler({
 }
 
 // ── POST /api/video/render ────────────────────────────────────────────────────
-// Phase 5 stub — accepts VideoJson and queues a render job.
+//
+// Server-side Remotion render running directly on Vercel (no Lambda).
+//
+// Flow:
+//   1. Auth + input validation
+//   2. Plan limits: daily server render quota + one concurrent render per user
+//   3. Create a render job row (status = "pending")
+//   4. Start rendering synchronously in this request — Vercel Pro allows up to
+//      60 s; set maxDuration = 300 in the route config for Enterprise (needed
+//      for videos close to 40 s which take ~30–60 s to render).
+//   5. renderVideoJob() transitions: pending → running → done | failed
+//   6. On success: return { jobId, outputUrl } immediately (no polling needed)
+//      On failure: return the error so the client can surface a retry button.
+//
+// Polling endpoint: GET /api/video/render-status/[jobId]
+//   Used if the client wants live progress (0–100) while the render runs.
+//   The render service writes progress to DB every ~5%; the polling endpoint
+//   reads video_render_jobs.progress and returns it alongside the status.
+//   This is optional — for short videos (≤ 40 s) the render completes before
+//   the user would notice, so polling is a UX nicety rather than a necessity.
+
+// ── Render result shape ───────────────────────────────────────────────────────
+// Using a discriminated union instead of `status: "done" | "failed"` so there
+// is no collision between the HTTP status code (a number) and a render state
+// string when elysia inspects the return value.
+
+export type RenderSuccessResponse = {
+  jobId: string;
+  outputUrl: string;
+  renderStatus: "done";
+};
+
+export type RenderFailedResponse = {
+  jobId: string;
+  renderStatus: "failed";
+  renderError: string;
+};
+
+export type RenderErrorResponse = {
+  error: string;
+  status: number;
+  code?: string;
+};
 
 export async function renderRemotionVideoHandler({
   body,
 }: {
-  body: { videoJson: VideoJson };
-}): Promise<
-  | { jobId: string; status: "queued"; message: string }
-  | { error: string; status: number }
-> {
+  body: {
+    /**
+     * The VideoJson to render. Must have at least one scene.
+     * Snapshot the current chat's video_json on the client before calling
+     * so a concurrent follow-up prompt doesn't affect the render payload.
+     */
+    videoJson: VideoJson;
+    /**
+     * The chatId that owns this render. Used for ownership checks and
+     * to associate the render job with a chat in the DB.
+     */
+    chatId: string;
+  };
+}): Promise<RenderSuccessResponse | RenderFailedResponse | RenderErrorResponse> {
   try {
     const session = await getSession();
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
 
-    const { videoJson } = body;
+    const userId = session.user.id;
+    const { videoJson, chatId } = body;
+
+    // ── Input validation ──────────────────────────────────────────────────────
+    if (!chatId?.trim()) {
+      return { error: "chatId is required", status: 400 };
+    }
 
     if (!videoJson?.scenes?.length) {
       return {
@@ -463,19 +527,144 @@ export async function renderRemotionVideoHandler({
       };
     }
 
-    const result = await renderVideo(videoJson);
+    // Guard: max 40 s to keep renders within Vercel's function timeout budget.
+    // (Client should enforce this too, but we validate server-side as well.)
+    const fps = videoJson.fps ?? 30;
+    const durationSeconds = videoJson.duration / fps;
+    if (durationSeconds > 40) {
+      return {
+        error: `Server render supports videos up to 40 s. This video is ${durationSeconds.toFixed(1)} s. Use the client-side renderer for longer videos.`,
+        status: 400,
+        code: "RENDER_DURATION_EXCEEDED",
+      };
+    }
 
-    if (!result.success) {
-      return { error: result.error, status: 500 };
+    // ── Ownership check ───────────────────────────────────────────────────────
+    // Verify the chatId belongs to this user before creating a render job.
+    const chat = await getVideoChatById({ chatId, userId });
+    if (!chat) {
+      return { error: "Chat not found", status: 404 };
+    }
+
+    // ── Plan limits ───────────────────────────────────────────────────────────
+    const planId = await getVideoPlanId(userId);
+    const planLimits = getVideoServerPlanLimits(planId);
+
+    // Daily server render quota (separate from prompt quota).
+    // `dailyServerRenders` is optional in the type; fall back to 0 (no renders
+    // allowed) for plan configs that haven't set it — safer than allowing
+    // unlimited renders on an unconfigured plan.
+    const dailyServerRenderLimit = planLimits.dailyServerRenders ?? 0;
+    const serverRendersToday = await countServerRenderJobsToday(userId);
+    if (serverRendersToday >= dailyServerRenderLimit) {
+      return {
+        error: `Daily server render limit reached. Your ${planId ?? "free"} plan allows ${dailyServerRenderLimit} server render${dailyServerRenderLimit !== 1 ? "s" : ""} per day. Use the client-side renderer or upgrade your plan.`,
+        status: 429,
+        code: "DAILY_RENDER_LIMIT_REACHED",
+      };
+    }
+
+    // One concurrent render per user to avoid overwhelming the server
+    const activeJobs = await countActiveRenderJobsForUser(userId);
+    if (activeJobs > 0) {
+      return {
+        error: "You already have a render in progress. Please wait for it to complete before starting another.",
+        status: 429,
+        code: "RENDER_ALREADY_IN_PROGRESS",
+      };
+    }
+
+    // ── Create the DB job row (status = "pending") ────────────────────────────
+    // Snapshot video_json now so a concurrent follow-up prompt on the same chat
+    // doesn't mutate the payload mid-render.
+    const job = await createRenderJob({
+      userId,
+      chatId,
+      videoJson: JSON.stringify(videoJson),
+    });
+
+    console.log(`[RemotionVideoController] Render job ${job.id} created for chat ${chatId}`);
+
+    // ── Render synchronously in this request ──────────────────────────────────
+    // renderVideoJob() owns the full lifecycle:
+    //   pending → running → done | failed
+    // It writes progress to DB every ~5% and uploads the MP4 to S3 on success.
+    //
+    // For Vercel Pro (60 s limit): videos ≤ 40 s typically render in 20–50 s.
+    // For Vercel Enterprise: set `export const maxDuration = 300` in the route.
+    const renderResult = await renderVideoJob({
+      jobId: job.id,
+      userId,
+      videoJson,
+    });
+
+    if (!renderResult.success) {
+      // renderVideoJob already called markJobFailed — just surface the error.
+      // Using `renderStatus` and `renderError` fields (not `status`/`error`) so
+      // elysia's error-detection pattern `"error" in result && "status" in result`
+      // doesn't confuse render failure with an HTTP error response.
+      return {
+        jobId: job.id,
+        renderStatus: "failed",
+        renderError: renderResult.error,
+      };
     }
 
     return {
-      jobId: result.jobId,
-      status: "queued",
-      message: "Render job queued. MP4 export is coming in Phase 5.",
+      jobId: job.id,
+      outputUrl: renderResult.outputUrl,
+      renderStatus: "done",
     };
   } catch (err) {
     console.error("[RemotionVideoController] renderRemotionVideoHandler error:", err);
+    return { error: "Internal server error", status: 500 };
+  }
+}
+
+// ── GET /api/video/render-status ─────────────────────────────────────────────
+//
+// Polling endpoint for live render progress.
+// Returns the current job status and progress (0–100).
+//
+// Since renderRemotionVideoHandler renders synchronously and returns the
+// final outputUrl in the same response, polling is only needed if the client
+// wants a progress bar during the render (e.g. shown while the POST is in
+// flight via a streaming UI pattern) or for resilience against network drops.
+//
+// Usage: GET /api/video/render-status?jobId=<id>
+
+export async function getRenderStatusHandler({
+  jobId,
+}: {
+  jobId: string;
+}): Promise<
+  | {
+      jobId: string;
+      renderStatus: "pending" | "running" | "done" | "failed";
+      progress: number;
+      outputUrl?: string;
+      renderError?: string;
+    }
+  | { error: string; status: number }
+> {
+  try {
+    const session = await getSession();
+    if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+    if (!jobId?.trim()) return { error: "jobId is required", status: 400 };
+
+    const job = await getRenderJobById(jobId, session.user.id);
+    if (!job) return { error: "Render job not found", status: 404 };
+
+    return {
+      jobId: job.id,
+      renderStatus: job.status as "pending" | "running" | "done" | "failed",
+      progress: job.progress ?? 0,
+      ...(job.output_url ? { outputUrl: job.output_url } : {}),
+      ...(job.error_message ? { renderError: job.error_message } : {}),
+    };
+  } catch (err) {
+    console.error("[RemotionVideoController] getRenderStatusHandler error:", err);
     return { error: "Internal server error", status: 500 };
   }
 }

@@ -15,6 +15,7 @@ const config = {
     "@axe-core/puppeteer",
     "axe-core",
     "pdf-parse",
+    "@remotion/bundler",
   ],
   webpack: (config, { isServer }) => {
     if (!isServer) {

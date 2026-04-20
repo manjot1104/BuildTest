@@ -1,6 +1,6 @@
 {
-  "id": "dfe43bdf-81a3-4517-ae75-ac347750252d",
-  "prevId": "9bff0c62-0fa8-4372-8fc2-9c27624068d6",
+  "id": "87fe3911-7dd0-451d-a253-959f5a563386",
+  "prevId": "dfe43bdf-81a3-4517-ae75-ac347750252d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -811,6 +811,12 @@
         },
         "preview_url": {
           "name": "preview_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "demo_html": {
+          "name": "demo_html",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2923,6 +2929,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_url": {
+          "name": "target_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3798,6 +3810,160 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.pg-drizzle_video_render_jobs": {
+      "name": "pg-drizzle_video_render_jobs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "chat_id": {
+          "name": "chat_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "video_json": {
+          "name": "video_json",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "output_url": {
+          "name": "output_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error_message": {
+          "name": "error_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "progress": {
+          "name": "progress",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "video_render_jobs_user_id_idx": {
+          "name": "video_render_jobs_user_id_idx",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_render_jobs_status_idx": {
+          "name": "video_render_jobs_status_idx",
+          "columns": [
+            {
+              "expression": "status",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "video_render_jobs_chat_id_idx": {
+          "name": "video_render_jobs_chat_id_idx",
+          "columns": [
+            {
+              "expression": "chat_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "pg-drizzle_video_render_jobs_user_id_user_id_fk": {
+          "name": "pg-drizzle_video_render_jobs_user_id_user_id_fk",
+          "tableFrom": "pg-drizzle_video_render_jobs",
+          "tableTo": "user",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "pg-drizzle_video_render_jobs_chat_id_pg-drizzle_video_chats_id_fk": {
+          "name": "pg-drizzle_video_render_jobs_chat_id_pg-drizzle_video_chats_id_fk",
+          "tableFrom": "pg-drizzle_video_render_jobs",
+          "tableTo": "pg-drizzle_video_chats",
+          "columnsFrom": [
+            "chat_id"
           ],
           "columnsTo": [
             "id"

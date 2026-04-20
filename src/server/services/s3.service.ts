@@ -1,5 +1,5 @@
 // src/server/services/s3.service.ts
-// Stores screenshots, video-generation images, and TTS audio in AWS S3.
+// Stores screenshots, video-generation images, TTS audio, and rendered MP4s in AWS S3.
 
 import { S3Client, PutObjectCommand, DeleteObjectsCommand, ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { env } from "@/env";
@@ -354,5 +354,71 @@ export async function deleteVideoAudioGeneration(generationId: string): Promise<
     console.log(`[S3] ✓ Deleted ${objects.length} audio file(s) for generation: ${generationId}`);
   } catch (err) {
     console.error(`[S3] deleteVideoAudioGeneration error for ${generationId}:`, err);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// uploadRenderedVideo
+//
+// Uploads a fully-rendered MP4 (from Remotion server-side render) to S3.
+// Called by video-render.service.ts after renderMedia() completes.
+//
+// Key format: rendered-videos/{jobId}/output.mp4
+//
+// The URL is stored in video_render_jobs.output_url and returned to the
+// client via the polling endpoint once the job status is "done".
+//
+// Returns the public HTTPS URL, or throws on failure (render service will
+// catch and markJobFailed).
+// ---------------------------------------------------------------------------
+
+export async function uploadRenderedVideo(params: {
+  buffer: Buffer;
+  jobId:  string;
+}): Promise<string> {
+  const { buffer, jobId } = params;
+  const client = getClient();
+
+  const key = `rendered-videos/${jobId}/output.mp4`;
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket:      AWS_S3_BUCKET,
+      Key:         key,
+      Body:        buffer,
+      ContentType: "video/mp4",
+      // Rendered videos are immutable (one per jobId) — long cache is fine
+      CacheControl: "public, max-age=86400",
+    }),
+  );
+
+  const url = `https://${AWS_S3_BUCKET}.s3.${AWS_S3_REGION}.amazonaws.com/${key}`;
+  console.log(`[S3] ✓ Rendered video uploaded: ${url}`);
+  return url;
+}
+
+// ---------------------------------------------------------------------------
+// deleteRenderedVideo
+//
+// Deletes the rendered MP4 for a given jobId from S3.
+// Call when the user deletes the associated chat or on cleanup jobs.
+// Failures are logged but not thrown (non-fatal).
+// ---------------------------------------------------------------------------
+
+export async function deleteRenderedVideo(jobId: string): Promise<void> {
+  try {
+    const client = getClient();
+    const key = `rendered-videos/${jobId}/output.mp4`;
+
+    await client.send(
+      new DeleteObjectsCommand({
+        Bucket: AWS_S3_BUCKET,
+        Delete: { Objects: [{ Key: key }], Quiet: true },
+      }),
+    );
+
+    console.log(`[S3] ✓ Deleted rendered video for job: ${jobId}`);
+  } catch (err) {
+    console.error(`[S3] deleteRenderedVideo error for ${jobId}:`, err);
   }
 }

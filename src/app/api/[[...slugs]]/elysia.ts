@@ -112,6 +112,7 @@ import {
 import {
   generateRemotionVideoHandler,
   renderRemotionVideoHandler,
+  getRenderStatusHandler,
 } from '@/server/api/controllers/video-remotion.controller';
 import {
   getVideoChatsHandler,
@@ -127,6 +128,8 @@ import {
 import { countVideoPromptsTodayByUserId } from "@/server/db/queries";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
+
+export const maxDuration = 300;
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -1907,12 +1910,11 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         images: t.Files({ maxSize: '5m', type: ['image/jpeg', 'image/png', 'image/webp'] }),
         descriptions: t.Union([t.Array(t.String()), t.String()]), // Elysia sends single string when array has 1 item
       }),
-    },
-  )
+    })
  
   // POST /api/remotion-video/generate — prompt → VideoJson
-// Returns validated VideoJson ready to pass to the Remotion Player.
-.post(
+ // Returns validated VideoJson ready to pass to the Remotion Player.
+ .post(
   '/remotion-video/generate',
   async ({ body, set }: any) => {
     const result = await generateRemotionVideoHandler({ body })
@@ -1948,30 +1950,6 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
   },
 )
  
-  // POST /api/remotion-video/render — VideoJson → render job
-  .post(
-    '/remotion-video/render',
-    async ({ body, set }) => {
-      const result = await renderRemotionVideoHandler({ body })
-      if ('status' in result && 'error' in result) {
-        set.status = result.status
-        return result
-      }
-      return result
-    },
-    {
-      body: t.Object({
-        videoJson: t.Object({
-          duration: t.Number(),
-          fps: t.Optional(t.Number()),
-          width: t.Optional(t.Number()),
-          height: t.Optional(t.Number()),
-          scenes: t.Array(t.Any()),
-          globalFontFamily: t.Optional(t.String()),
-        }),
-      }),
-    },
-  )
   // GET /api/remotion-video/chats — list all video chats for the authenticated user
   // Used by useVideoChats() in the history panel to populate the sidebar/drawer.
   // IMPORTANT: declared before /remotion-video/chats/:chatId to avoid route collision.
@@ -2128,5 +2106,72 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         isAuthenticated: true,
         resetsAt: resetsAt.toISOString(),
       }
+    },
+  )
+
+  // POST /api/remotion-video/render — VideoJson + chatId → MP4 (server-side render)
+  //
+  // Renders the VideoJson synchronously on Vercel and returns the S3 URL when done.
+  // The render job is tracked in video_render_jobs so the client can poll progress
+  // via GET /api/remotion-video/render?jobId=<id> while the POST is in flight.
+  //
+  // Body:
+  //   chatId   — required; must belong to the authenticated user
+  //   videoJson — snapshot of the current video (not mutated by follow-ups mid-render)
+  .post(
+    '/remotion-video/render',
+    async ({ body, set }: any) => {
+      const result = await renderRemotionVideoHandler({ body });
+ 
+      // HTTP error responses carry numeric `status` + string `error` fields.
+      // Render-level failures use `renderStatus`/`renderError` — different fields
+      // so this guard only triggers for real HTTP errors (auth, validation, etc.).
+      if ('error' in result && 'status' in result && typeof (result as any).status === 'number') {
+        set.status = (result as any).status;
+        return result;
+      }
+ 
+      return result;
+    },
+    {
+      body: t.Object({
+        // chatId is required — the render is always associated with a chat so
+        // we can verify ownership and enforce per-user concurrency limits.
+        chatId: t.String(),
+        videoJson: t.Object({
+          duration: t.Number(),
+          fps: t.Optional(t.Number()),
+          width: t.Optional(t.Number()),
+          height: t.Optional(t.Number()),
+          scenes: t.Array(t.Any()),
+          globalFontFamily: t.Optional(t.String()),
+        }),
+      }),
+    },
+  )
+ 
+  // GET /api/remotion-video/render?jobId=<id> — poll render progress
+  //
+  // Returns:
+  //   { jobId, renderStatus, progress, outputUrl? }  — on success
+  //   { jobId, renderStatus, progress, renderError? } — on render failure
+  //   { error, status }                               — on HTTP error (auth, not found)
+  .get(
+    '/remotion-video/render',
+    async ({ query, set }: any) => {
+      const jobId: string = query?.jobId ?? '';
+      const result = await getRenderStatusHandler({ jobId });
+ 
+      if ('error' in result && 'status' in result && typeof (result as any).status === 'number') {
+        set.status = (result as any).status;
+        return result;
+      }
+ 
+      return result;
+    },
+    {
+      query: t.Object({
+        jobId: t.String(),
+      }),
     },
   )

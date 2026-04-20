@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNotNull, inArray, or } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull, inArray, or, lt } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts, chat_folders } from './schema'
@@ -13,7 +13,7 @@ import {
   performance_metrics,
 } from './schema'
 
-import { video_chats } from './schema'
+import { video_chats, video_render_jobs } from './schema'
 import type { VideoJson } from '@/remotion-src/types'
 import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
 
@@ -1646,4 +1646,213 @@ export async function countVideoPromptsTodayByUserId(userId: string): Promise<nu
       } 
     }
   return count
+}
+
+
+// ── Video Render Jobs ───────────────────────────────────────────────────────────────
+export type RenderJobStatus = "pending" | "running" | "done" | "failed";
+export type RenderJob = typeof video_render_jobs.$inferSelect;
+const STUCK_JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+export async function createRenderJob({
+  userId,
+  chatId,
+  videoJson,
+}: {
+  userId: string;
+  chatId: string;
+  videoJson: string; // JSON.stringify(videoJson) — snapshot at queue time
+}): Promise<RenderJob> {
+  const id = randomUUID();
+  const [job] = await db
+    .insert(video_render_jobs)
+    .values({
+      id,
+      user_id: userId,
+      chat_id: chatId,
+      video_json: videoJson,
+      status: "pending",
+    })
+    .returning();
+  return job!;
+}
+ 
+// ── Read ──────────────────────────────────────────────────────────────────────
+ 
+/** Fetch a single job with ownership check. Used by the polling endpoint. */
+export async function getRenderJobById(
+  jobId: string,
+  userId: string,
+): Promise<RenderJob | undefined> {
+  const [job] = await db
+    .select()
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.id, jobId),
+        eq(video_render_jobs.user_id, userId),
+      ),
+    )
+    .limit(1);
+  return job;
+}
+ 
+/** Get the most recent render job for a chat (any status). */
+export async function getLatestRenderJobForChat(
+  chatId: string,
+  userId: string,
+): Promise<RenderJob | undefined> {
+  const [job] = await db
+    .select()
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.chat_id, chatId),
+        eq(video_render_jobs.user_id, userId),
+      ),
+    )
+    .orderBy(desc(video_render_jobs.created_at))
+    .limit(1);
+  return job;
+}
+ 
+/**
+ * Count active (pending + running) server render jobs for a user.
+ * Called before creating a new job to enforce the "one concurrent render" limit.
+ * Also resets stuck jobs first so a crashed render doesn't block the user forever.
+ */
+export async function countActiveRenderJobsForUser(userId: string): Promise<number> {
+  // Reset stuck jobs before counting so crashes don't permanently block the user
+  await resetStuckJobs();
+ 
+  const [result] = await db
+    .select({ count: count() })
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.user_id, userId),
+        or(
+          eq(video_render_jobs.status, "pending"),
+          eq(video_render_jobs.status, "running"),
+        ),
+      ),
+    );
+  return result?.count ?? 0;
+}
+ 
+/**
+ * Count render jobs created today (UTC) for a user.
+ * Used to enforce per-plan daily server render limits.
+ * Counts all statuses (including failed) to prevent re-queue abuse.
+ */
+export async function countServerRenderJobsToday(userId: string): Promise<number> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+ 
+  const [result] = await db
+    .select({ count: count() })
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.user_id, userId),
+        gte(video_render_jobs.created_at, startOfDay),
+      ),
+    );
+  return result?.count ?? 0;
+}
+ 
+// ── Update ────────────────────────────────────────────────────────────────────
+ 
+export async function markJobRunning(jobId: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({ status: "running", started_at: new Date(), updated_at: new Date() })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+/** Throttle calls to this — it writes to DB on every invocation. */
+export async function updateJobProgress(jobId: string, progress: number): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({ progress: Math.round(progress), updated_at: new Date() })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+export async function markJobDone(jobId: string, outputUrl: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "done",
+      output_url: outputUrl,
+      progress: 100,
+      updated_at: new Date(),
+    })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+export async function markJobFailed(jobId: string, errorMessage: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "failed",
+      error_message: errorMessage,
+      updated_at: new Date(),
+    })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+/**
+ * Reset jobs that have been "running" for too long (Vercel function timed out
+ * or crashed mid-render). Called automatically before any active-count check.
+ */
+async function resetStuckJobs(): Promise<void> {
+  const stuckBefore = new Date(Date.now() - STUCK_JOB_TIMEOUT_MS);
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "failed",
+      error_message: "Render timed out. Please try again.",
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(video_render_jobs.status, "running"),
+        lt(video_render_jobs.started_at, stuckBefore),
+      ),
+    );
+}
+ 
+/**
+ * Atomically claim the next pending job for the render worker.
+ * Uses update-returning so two concurrent function invocations can't grab
+ * the same job (last-writer-wins at DB level; only one gets status=running).
+ * Jobs are processed FIFO by created_at.
+ */
+export async function claimNextPendingJob(): Promise<RenderJob | undefined> {
+  await resetStuckJobs();
+ 
+  // Drizzle doesn't support "UPDATE ... WHERE id = (SELECT MIN(id) ...)" directly,
+  // so we fetch the oldest pending job id first, then claim it atomically.
+  const [oldest] = await db
+    .select({ id: video_render_jobs.id })
+    .from(video_render_jobs)
+    .where(eq(video_render_jobs.status, "pending"))
+    .orderBy(video_render_jobs.created_at)
+    .limit(1);
+ 
+  if (!oldest) return undefined;
+ 
+  const [claimed] = await db
+    .update(video_render_jobs)
+    .set({ status: "running", started_at: new Date(), updated_at: new Date() })
+    .where(
+      and(
+        eq(video_render_jobs.id, oldest.id),
+        // Double-check status hasn't changed since the SELECT (race guard)
+        eq(video_render_jobs.status, "pending"),
+      ),
+    )
+    .returning();
+ 
+  return claimed;
 }
