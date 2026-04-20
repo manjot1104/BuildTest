@@ -1887,6 +1887,12 @@ export default function VideoGeneratorPage() {
   // Whether the current selected range is allowed by the plan
   const isDurationAllowed = (range: DurationRange) => range.seconds <= planLimits.maxDurationSeconds;
 
+  // ── Derived booleans for layout decisions ─────────────────────────────────
+  // Show the initial input form when: no result yet OR still generating the first video
+  const showInitialForm = !hasResult || (isBusy && chatMessages.length <= 1);
+  // Show the chat thread whenever there are messages (even while generating)
+  const showChatThread = chatMessages.length > 0;
+
   return (
     <div className="relative -m-4 w-[calc(100%+2rem)] min-h-screen bg-sidebar">
       <main className="w-full max-w-2xl mx-auto px-4 py-6 space-y-4">
@@ -1948,8 +1954,148 @@ export default function VideoGeneratorPage() {
           </div>
         )}
 
-        {/* ── INITIAL INPUT — visible only when no result yet ── */}
-        {!hasResult && !isLoadingHistoryChat && (
+        {/* ── CHAT THREAD ──
+            Always rendered above the input form so messages never appear below
+            the prompt box. The thread includes: prompt bubbles, error messages,
+            the generating indicator, the rendered video, and the follow-up input. ── */}
+        {showChatThread && (
+          <div className="space-y-4">
+            {/* Prompt and error messages chronologically */}
+            {chatMessages.map((msg, idx) => {
+              if (msg.type === "prompt") {
+                return (
+                  <div key={idx} className="flex items-start gap-3 justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3">
+                      <p className="text-sm font-mono text-primary-foreground leading-relaxed break-words">
+                        {msg.text}
+                      </p>
+                      <p className="text-[9px] font-mono text-primary-foreground/40 mt-1.5 text-right">
+                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mt-1">
+                      <User className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                  </div>
+                );
+              }
+
+              if (msg.type === "error") {
+                return (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
+                      <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                    </div>
+                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-500/20 bg-red-500/5 px-4 py-3 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        <p className="text-[11px] font-mono text-red-500/80 leading-relaxed">
+                          {msg.text}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRetry}
+                        className="inline-flex items-center gap-1.5 text-[10px] font-mono text-red-500/70 hover:text-red-500 transition-colors"
+                      >
+                        <RefreshCw className="h-3 w-3" /> Retry
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
+            })}
+
+            {/* Generating indicator */}
+            {isBusy && (
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
+                  <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
+                </div>
+                <div className="rounded-2xl rounded-tl-sm border border-border bg-muted/20 px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
+                          style={{ animationDelay: `${i * 150}ms` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[11px] font-mono text-muted-foreground/60">
+                      {isUploading ? "Uploading images…" : "Generating video…"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* The single rendered video — always at the bottom of the thread */}
+            {latestVideoData && !isBusy && (
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-1">
+                  <Bot className="h-3.5 w-3.5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0 overflow-hidden space-y-1">
+                  <p className="text-[10px] font-mono text-muted-foreground/50 mb-2">Video ready</p>
+                  <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+                    <VideoPanel
+                      data={latestVideoData}
+                      onExport={handleExport}
+                      ttsVolume={ttsVolume}
+                      musicVolume={musicVolume}
+                      onTtsVolumeChange={handleTtsVolumeChange}
+                      onMusicVolumeChange={handleMusicVolumeChange}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div ref={chatBottomRef} />
+
+            {/* Fix 2: follow-up input always below the video, never above messages.
+                Only shown once a result exists and we're not loading history. */}
+            {hasResult && !isLoadingHistoryChat && (
+              <div className="pt-2">
+                <FollowUpInput
+                  isBusy={isBusy}
+                  isOutOfCredits={isOutOfCredits}
+                  isAtDailyLimit={isAtDailyLimit}
+                  isFollowUpLocked={isFollowUpLocked}
+                  uploadedImages={uploadedImages}
+                  selectedRange={selectedRange}
+                  onRangeChange={setSelectedRange}
+                  onSubmit={handleFollowUp}
+                  lastFailedPrompt={lastFailedPrompt}
+                  onRetry={handleRetry}
+                  onUpgrade={() => setSubscriptionModalOpen(true)}
+                  planLimits={planLimits}
+                />
+              </div>
+            )}
+
+            {/* New video footer */}
+            {!isBusy && (
+              <div className="flex justify-center pb-6">
+                <button
+                  onClick={handleReset}
+                  className="inline-flex items-center gap-2 h-8 px-4 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground border border-transparent hover:border-border transition-all"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Start new video
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── INITIAL INPUT — visible when no result yet, OR while generating the
+            first video so users can see the form during generation ── */}
+        {showInitialForm && !isLoadingHistoryChat && (
           <div className="space-y-3">
 
             {/* Hero — only when no messages */}
@@ -2224,7 +2370,7 @@ export default function VideoGeneratorPage() {
               </div>
             </form>
 
-            {/* Generating state — shown above example prompts while no chat yet */}
+            {/* Generating state — shown below the form while no chat yet */}
             {isBusy && chatMessages.length === 0 && (
               <div className="rounded-xl border border-border bg-muted/20 p-6 flex flex-col items-center gap-4">
                 <div className="relative h-14 w-14">
@@ -2258,143 +2404,6 @@ export default function VideoGeneratorPage() {
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── CHAT THREAD ──
-            Fix 2: the thread (messages + video + follow-up) is always rendered
-            as a single vertical stack so messages never appear below the input. ── */}
-        {chatMessages.length > 0 && (
-          <div className="space-y-4">
-            {/* Prompt and error messages chronologically */}
-            {chatMessages.map((msg, idx) => {
-              if (msg.type === "prompt") {
-                return (
-                  <div key={idx} className="flex items-start gap-3 justify-end">
-                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-primary px-4 py-3">
-                      <p className="text-sm font-mono text-primary-foreground leading-relaxed break-words">
-                        {msg.text}
-                      </p>
-                      <p className="text-[9px] font-mono text-primary-foreground/40 mt-1.5 text-right">
-                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </p>
-                    </div>
-                    <div className="shrink-0 h-7 w-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center mt-1">
-                      <User className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                  </div>
-                );
-              }
-
-              if (msg.type === "error") {
-                return (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
-                      <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
-                    </div>
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-sm border border-red-500/20 bg-red-500/5 px-4 py-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                        <p className="text-[11px] font-mono text-red-500/80 leading-relaxed">
-                          {msg.text}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleRetry}
-                        className="inline-flex items-center gap-1.5 text-[10px] font-mono text-red-500/70 hover:text-red-500 transition-colors"
-                      >
-                        <RefreshCw className="h-3 w-3" /> Retry
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
-
-              return null;
-            })}
-
-            {/* Generating indicator */}
-            {isBusy && (
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 h-7 w-7 rounded-full bg-muted border border-border flex items-center justify-center mt-1">
-                  <Bot className="h-3.5 w-3.5 text-muted-foreground/60" />
-                </div>
-                <div className="rounded-2xl rounded-tl-sm border border-border bg-muted/20 px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <div className="flex gap-1">
-                      {[0, 1, 2].map((i) => (
-                        <div
-                          key={i}
-                          className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce"
-                          style={{ animationDelay: `${i * 150}ms` }}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-[11px] font-mono text-muted-foreground/60">
-                      {isUploading ? "Uploading images…" : "Generating video…"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* The single rendered video — always at the bottom of the thread */}
-            {latestVideoData && !isBusy && (
-              <div className="flex items-start gap-3">
-                <div className="shrink-0 h-7 w-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-1">
-                  <Bot className="h-3.5 w-3.5 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0 overflow-hidden space-y-1">
-                  <p className="text-[10px] font-mono text-muted-foreground/50 mb-2">Video ready</p>
-                  <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
-                    <VideoPanel
-                      data={latestVideoData}
-                      onExport={handleExport}
-                      ttsVolume={ttsVolume}
-                      musicVolume={musicVolume}
-                      onTtsVolumeChange={handleTtsVolumeChange}
-                      onMusicVolumeChange={handleMusicVolumeChange}
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={chatBottomRef} />
-
-            {/* Fix 2: follow-up input always below the video, never above messages */}
-            {hasResult && !isLoadingHistoryChat && (
-              <div className="pt-2">
-                <FollowUpInput
-                  isBusy={isBusy}
-                  isOutOfCredits={isOutOfCredits}
-                  isAtDailyLimit={isAtDailyLimit}
-                  isFollowUpLocked={isFollowUpLocked}
-                  uploadedImages={uploadedImages}
-                  selectedRange={selectedRange}
-                  onRangeChange={setSelectedRange}
-                  onSubmit={handleFollowUp}
-                  lastFailedPrompt={lastFailedPrompt}
-                  onRetry={handleRetry}
-                  onUpgrade={() => setSubscriptionModalOpen(true)}
-                  planLimits={planLimits}
-                />
-              </div>
-            )}
-
-            {/* New video footer */}
-            {!isBusy && (
-              <div className="flex justify-center pb-6">
-                <button
-                  onClick={handleReset}
-                  className="inline-flex items-center gap-2 h-8 px-4 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground border border-transparent hover:border-border transition-all"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  Start new video
-                </button>
               </div>
             )}
           </div>

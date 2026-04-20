@@ -16,6 +16,9 @@ export function useAudioPreview(getUrl: (id: string) => string | undefined) {
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+      // Properly release the audio resource so it isn't GC'd while still "open"
+      audioRef.current.src = "";
+      audioRef.current.load();
       audioRef.current = null;
     }
     if (timeoutRef.current) {
@@ -28,6 +31,10 @@ export function useAudioPreview(getUrl: (id: string) => string | undefined) {
   const togglePreview = useCallback(
     (id: string) => {
       if (playingId === id) { stopPreview(); return; }
+      // Explicitly remove the ended listener from any prior element before stopPreview nulls it
+      if (audioRef.current) {
+        audioRef.current.removeEventListener("ended", stopPreview);
+      }
       stopPreview();
       const url = getUrl(id);
       if (!url) return;
