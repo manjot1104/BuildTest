@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+export const maxDuration = 260
 import { z } from 'zod'
 import { followUpHtml } from '@/lib/openrouter'
 import { validateHtmlFollowUpInput } from '@/lib/resume/code-validator'
+import { mergeFollowUpPromptWithLayoutHintFromCode } from '@/lib/text-layout/layout-from-resume-code'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
 
@@ -26,7 +29,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await followUpHtml(currentHtml, prompt, model)
+    const promptWithLayout = mergeFollowUpPromptWithLayoutHintFromCode(
+      currentHtml,
+      'html',
+      prompt,
+    )
+
+    const result = await followUpHtml(currentHtml, promptWithLayout, model)
 
     return NextResponse.json({
       html: result.cleaned,

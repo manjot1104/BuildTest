@@ -57,6 +57,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: error.message || 'Failed to compile PDF' },
+        { status: 500 }
+      )
+    }
+
     return NextResponse.json(
       { error: 'Failed to compile PDF' },
       { status: 500 }

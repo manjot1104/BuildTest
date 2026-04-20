@@ -129,7 +129,6 @@ function StaticElement({ el }: { el: CanvasElement }) {
               whiteSpace: 'normal',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: styles.textAlign === 'center' ? 'center' : styles.textAlign === 'right' ? 'flex-end' : 'flex-start',
             } as React.CSSProperties}>{el.content}</Tag>
         )
       }
@@ -325,14 +324,9 @@ export default async function PublishedPage({ params }: { params: Promise<{ user
         .pb-desktop,.pb-tablet,.pb-mobile{display:none}
         .pb-desktop{display:block}
         .pb-desktop{position:relative;width:1440px;min-height:${desktopH}px;margin:0 auto;${bgCss};overflow-x:hidden}
-        @media(max-width:1439px) and (min-width:769px){
-          html{overflow-x:hidden}
-          body{overflow-x:hidden;width:100vw}
-          .pb-desktop{
-            transform:scale(calc(100vw / 1440));
-            transform-origin:top left;
-            margin-left:calc((100vw - 1440px) / 2);
-          }
+        @media(max-width:1460px) and (min-width:769px){
+          .pb-desktop{transform-origin:top left;transform:scale(calc(100vw / 1440))}
+          body{height:calc(${desktopH}px * (100vw / 1440));overflow-x:hidden;overflow-y:hidden}
         }
         @media(max-width:768px) and (min-width:481px){
           .pb-desktop{display:none}

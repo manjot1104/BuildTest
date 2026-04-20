@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+
+/** LaTeX AI + remote compile can exceed 120s on slow providers. */
+export const maxDuration = 260
 import { z } from 'zod'
 import { generateLaTeXResume } from '@/lib/openrouter'
 import { compileLaTeXToPDF } from '@/lib/latex-to-pdf'
+import { pickAiResumeLayoutFields, resumeFormToResumeData } from '@/lib/text-layout/form-to-resume-data'
+import {
+  appendLayoutHintToAdditionalInstructions,
+  computeResumeLayoutStats,
+  TEXT_LAYOUT_SERVER_OPTIONS,
+} from '@/lib/text-layout/layout-stats'
 import { env } from '@/env'
 import { getSession } from '@/server/better-auth/server'
 
@@ -38,7 +47,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const result = await generateLaTeXResume(validatedData)
+    const layoutStats = computeResumeLayoutStats(
+      resumeFormToResumeData(pickAiResumeLayoutFields(validatedData)),
+      TEXT_LAYOUT_SERVER_OPTIONS,
+    )
+    const result = await generateLaTeXResume({
+      ...validatedData,
+      additionalInstructions: appendLayoutHintToAdditionalInstructions(
+        validatedData.additionalInstructions,
+        layoutStats,
+      ),
+    })
 
     if (!result?.cleaned?.trim()) {
       return NextResponse.json(
