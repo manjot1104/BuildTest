@@ -51,7 +51,7 @@ export interface UserImageEntry {
   description: string;
 }
 
-/** Shape returned by GET /api/video/chats */
+/** Shape returned by GET /api/remotion-video/chats */
 export interface VideoChatSummary {
   id: string;
   title: string | null;
@@ -59,7 +59,7 @@ export interface VideoChatSummary {
   updatedAt: string;
 }
 
-/** Shape returned by GET /api/video/chats/:chatId */
+/** Shape returned by GET /api/remotion-video/chats/:chatId */
 export interface VideoChatDetail {
   id: string;
   title: string | null;
@@ -70,7 +70,7 @@ export interface VideoChatDetail {
   updatedAt: string;
 }
 
-/** Shape returned by GET /api/video/usage */
+/** Shape returned by GET /api/remotion-video/usage */
 export interface VideoUsageData {
   promptsToday: number;
   dailyLimit: number;
@@ -95,7 +95,7 @@ export const videoKeys = {
 /**
  * useUploadUserImages
  *
- * Calls POST /api/video/upload-images (multipart/form-data).
+ * Calls POST /api/remotion-video/upload-images (multipart/form-data).
  * Returns { images, sessionId } — pass both to useGenerateVideo.
  */
 export function useUploadUserImages() {
@@ -110,7 +110,7 @@ export function useUploadUserImages() {
         formData.append("descriptions", entry.description || `Image ${i + 1}`);
       });
 
-      const res = await fetch("/api/video/upload-images", {
+      const res = await fetch("/api/remotion-video/upload-images", {
         method: "POST",
         body: formData,
         // NOTE: Do NOT set Content-Type — browser sets it with the boundary automatically
@@ -134,7 +134,7 @@ export function useUploadUserImages() {
 /**
  * useGenerateVideo
  *
- * Calls POST /api/video/generate with a prompt and optional user images.
+ * Calls POST /api/remotion-video/generate with a prompt and optional user images.
  * Pass chatId to continue an existing video chat (follow-up prompt).
  * 
  * For follow-ups:
@@ -164,7 +164,7 @@ export function useGenerateVideo() {
       /** Session ID from the most recent upload (if any new images were added) */
       imageSessionId?: string;
     }): Promise<GenerateVideoResponse> => {
-      const res = await fetch("/api/video/generate", {
+      const res = await fetch("/api/remotion-video/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
@@ -194,14 +194,14 @@ export function useGenerateVideo() {
 /**
  * useRenderVideo
  *
- * Calls POST /api/video/render with a VideoJson.
+ * Calls POST /api/remotion-video/render with a VideoJson.
  */
 export function useRenderVideo() {
   return useMutation({
     mutationFn: async (
       videoJson: VideoJson,
     ): Promise<{ jobId: string; status: string; message: string }> => {
-      const res = await fetch("/api/video/render", {
+      const res = await fetch("/api/remotion-video/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ videoJson }),
@@ -316,7 +316,7 @@ export function useVideoChats() {
   return useQuery({
     queryKey: videoKeys.chats(),
     queryFn: async (): Promise<VideoChatSummary[]> => {
-      const res = await fetch("/api/video/chats");
+      const res = await fetch("/api/remotion-video/chats");
       const data = (await res.json()) as
         | { chats: VideoChatSummary[] }
         | { error: string };
@@ -333,7 +333,7 @@ export function useVideoChat(chatId: string | null) {
     queryKey: videoKeys.chat(chatId ?? ""),
     enabled: !!chatId,
     queryFn: async (): Promise<VideoChatDetail> => {
-      const res = await fetch(`/api/video/chats/${chatId}`);
+      const res = await fetch(`/api/remotion-video/chats/${chatId}`);
       const data = (await res.json()) as VideoChatDetail | { error: string };
       if (!res.ok || "error" in data)
         throw new Error("error" in data ? data.error : "Failed to load chat");
@@ -347,7 +347,7 @@ export function useRenameVideoChat() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, title }: { id: string; title: string }): Promise<void> => {
-      const res = await fetch(`/api/video/chats/${id}`, {
+      const res = await fetch(`/api/remotion-video/chats/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title }),
@@ -369,7 +369,7 @@ export function useRenameVideoChat() {
  * Fetches today's video generation usage for the current user.
  * Falls back gracefully — if the endpoint doesn't exist yet, returns null.
  *
- * NOTE: If you don't have a /api/video/usage endpoint yet, this hook degrades
+ * NOTE: If you don't have a /api/remotion-video/usage endpoint yet, this hook degrades
  * gracefully (returns null data). You can implement the endpoint later and
  * the UI will automatically start using real data.
  */
@@ -378,7 +378,7 @@ export function useVideoDailyUsage() {
     queryKey: videoKeys.usage(),
     queryFn: async (): Promise<VideoUsageData | null> => {
       try {
-        const res = await fetch("/api/video/usage");
+        const res = await fetch("/api/remotion-video/usage");
         if (!res.ok) return null;
         const data = await res.json();
         if ("error" in data) return null;
@@ -401,7 +401,7 @@ function isS3Url(url: string): boolean {
 
 function toProxyUrl(url: string): string {
   if (!url || !isS3Url(url)) return url
-  return `/api/video/s3-proxy?url=${encodeURIComponent(url)}`
+  return `/api/remotion-video/s3-proxy?url=${encodeURIComponent(url)}`
 }
 
 export function proxyS3Urls(videoJson: VideoJson): VideoJson {

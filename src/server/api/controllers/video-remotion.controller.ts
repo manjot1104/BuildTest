@@ -1,5 +1,5 @@
 // ============================================================
-// VideoGenController
+// video-remotion.controller
 //   - Receives { body }
 //   - Calls the service
 //   - Returns data or { error: string; status: number }
@@ -35,7 +35,7 @@ import { getVideoPlanId, getVideoServerPlanLimits } from "@/server/services/vide
 
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
-export async function generateVideoHandler({
+export async function generateRemotionVideoHandler({
   body,
 }: {
   body: {
@@ -244,7 +244,7 @@ export async function generateVideoHandler({
         previousVideoJson = JSON.parse(existing.video_json) as VideoJson;
       } catch {
         // If video_json is corrupt/placeholder, proceed without previous context
-        console.warn(`[VideoController] Could not parse existing video_json for chat ${chatId} — generating fresh`);
+        console.warn(`[RemotionVideoController] Could not parse existing video_json for chat ${chatId} — generating fresh`);
       }
 
       // Load previous options and images for context
@@ -333,7 +333,7 @@ export async function generateVideoHandler({
 
     if (!result.success) {
       console.error(
-        `[VideoController] generateVideoJson failed: ${result.details}`,
+        `[RemotionVideoController] generateVideoJson failed: ${result.details}`,
       );
 
       // Refund explicitly here: catch block only runs for thrown errors,
@@ -344,7 +344,7 @@ export async function generateVideoHandler({
           await addAdditionalCredits(resolvedUserId, creditsDeductedAmount);
         } catch (refundErr) {
           console.error(
-            `[VideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
+            `[RemotionVideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
             refundErr,
           );
         }
@@ -419,7 +419,7 @@ export async function generateVideoHandler({
       },
     };
   } catch (err) {
-    console.error("[VideoController] generateVideoHandler error:", err);
+    console.error("[RemotionVideoController] generateVideoRemotionHandler error:", err);
 
     // ── Refund credits if deducted but generation threw an error ──────────────
     // Mirrors the chat controller pattern. Non-fatal: log on refund failure
@@ -429,7 +429,7 @@ export async function generateVideoHandler({
         await addAdditionalCredits(resolvedUserId, creditsDeductedAmount);
       } catch (refundErr) {
         console.error(
-          `[VideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
+          `[RemotionVideoController] CRITICAL: Credit refund failed for user ${resolvedUserId}, amount: ${creditsDeductedAmount}, chat: ${resolvedChatId}`,
           refundErr,
         );
       }
@@ -442,7 +442,7 @@ export async function generateVideoHandler({
 // ── POST /api/video/render ────────────────────────────────────────────────────
 // Phase 5 stub — accepts VideoJson and queues a render job.
 
-export async function renderVideoHandler({
+export async function renderRemotionVideoHandler({
   body,
 }: {
   body: { videoJson: VideoJson };
@@ -475,7 +475,7 @@ export async function renderVideoHandler({
       message: "Render job queued. MP4 export is coming in Phase 5.",
     };
   } catch (err) {
-    console.error("[VideoController] renderVideoHandler error:", err);
+    console.error("[RemotionVideoController] renderRemotionVideoHandler error:", err);
     return { error: "Internal server error", status: 500 };
   }
 }

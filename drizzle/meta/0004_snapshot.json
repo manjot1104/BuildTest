@@ -1,6 +1,6 @@
 {
-  "id": "9bff0c62-0fa8-4372-8fc2-9c27624068d6",
-  "prevId": "66b8c1b2-bb84-4f43-92a9-7c5b3b297eef",
+  "id": "4b750fdb-ec51-4fd9-b195-8d442e5902f3",
+  "prevId": "dfe43bdf-81a3-4517-ae75-ac347750252d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -811,6 +811,12 @@
         },
         "preview_url": {
           "name": "preview_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "demo_html": {
+          "name": "demo_html",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2923,6 +2929,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_url": {
+          "name": "target_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3735,12 +3747,6 @@
         },
         "image_session_id": {
           "name": "image_session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_generation_id": {
-          "name": "current_generation_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false

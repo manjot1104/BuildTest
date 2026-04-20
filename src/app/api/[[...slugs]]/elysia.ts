@@ -110,9 +110,9 @@ import {
   confirmAndExecuteHandler,
 } from "@/server/api/controllers/testing.controller";
 import {
-  generateVideoHandler,
-  renderVideoHandler,
-} from '@/server/api/controllers/video-gen.controller';
+  generateRemotionVideoHandler,
+  renderRemotionVideoHandler,
+} from '@/server/api/controllers/video-remotion.controller';
 import {
   getVideoChatsHandler,
   getVideoChatHandler,
@@ -1875,17 +1875,17 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
   
   
   // ============================================
-  // Video Generation Endpoints
+  // Video Generation Endpoints (video.controller — kie.ai)
   // ============================================
-
+ 
   // POST /api/video/generate — generate AI video background via kie.ai
   .post('/video/generate', ({ request }) => generateVideoHandler(request))
-
+ 
 
   // ============================================
   // Remotion Video Generation Endpoints
   // ============================================
-
+ 
   // POST /api/remotion-video/upload-images
   //   Content-Type: multipart/form-data
   //   Body: { images: File[], descriptions: string[] }
@@ -1915,7 +1915,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
 .post(
   '/remotion-video/generate',
   async ({ body, set }: any) => {
-    const result = await generateVideoHandler({ body })
+    const result = await generateRemotionVideoHandler({ body })
     if ('status' in result && 'error' in result) {
       set.status = result.status
       return result
@@ -1948,12 +1948,11 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
   },
 )
  
-  // POST /api/remotion-video/render — VideoJson → render job 
-  // Currently returns a stub jobId. In the future, this will trigger actual rendering and return a real jobId that can be polled for status and results.
+  // POST /api/remotion-video/render — VideoJson → render job
   .post(
     '/remotion-video/render',
     async ({ body, set }) => {
-      const result = await renderVideoHandler({ body })
+      const result = await renderRemotionVideoHandler({ body })
       if ('status' in result && 'error' in result) {
         set.status = result.status
         return result
@@ -1975,7 +1974,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
   )
   // GET /api/remotion-video/chats — list all video chats for the authenticated user
   // Used by useVideoChats() in the history panel to populate the sidebar/drawer.
-  // IMPORTANT: declared before /video/chats/:chatId to avoid route collision.
+  // IMPORTANT: declared before /remotion-video/chats/:chatId to avoid route collision.
   .get(
     '/remotion-video/chats',
     async ({ set }) => {
@@ -2004,6 +2003,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
       params: t.Object({ chatId: t.String() }),
     },
   )
+
   // PATCH /api/remotion-video/chats/:chatId — rename a video chat title
   .patch(
     '/remotion-video/chats/:chatId',
@@ -2039,7 +2039,8 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
       params: t.Object({ chatId: t.String() }),
     },
   )
-
+ 
+  // GET /api/remotion-video/s3-proxy — authenticated S3 image proxy
   .get(
     '/remotion-video/s3-proxy',
     async ({ query, set }) => {
@@ -2048,7 +2049,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         set.status = 401
         return { error: 'Unauthorized' }
       }
-
+ 
       const { url } = query
       if (!url) {
         set.status = 400
@@ -2063,7 +2064,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         return { error: 'S3 not configured' }
       }
       const allowedHostname = `${bucket}.s3.${region}.amazonaws.com`
-
+ 
       let parsed: URL
       try {
         parsed = new URL(url)
@@ -2071,28 +2072,28 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         set.status = 400
         return { error: 'Invalid url' }
       }
-
+ 
       if (parsed.hostname !== allowedHostname) {
         set.status = 403
         return { error: 'Forbidden' }
       }
-
+ 
       const response = await fetch(url)
       if (!response.ok) {
         set.status = 502
         return { error: 'Failed to fetch image from S3' }
       }
-
+ 
       const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
       const buffer = await response.arrayBuffer()
-
+ 
       const headers: Record<string, string> = {
         'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
         'Cache-Control': 'public, max-age=86400',
         'Content-Length': buffer.byteLength.toString(),
       }
-
+ 
       return new Response(buffer, { headers })
     },
     {
@@ -2111,7 +2112,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
         set.status = 401
         return { error: 'Unauthorized' }
       }
-
+ 
       const planId = await getVideoPlanId(session.user.id)
       const planLimits = getVideoServerPlanLimits(planId)
       const promptsToday = await countVideoPromptsTodayByUserId(session.user.id)
@@ -2119,7 +2120,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
       // ISO timestamp for midnight UTC tonight — used by the frontend countdown
       const resetsAt = new Date()
       resetsAt.setUTCHours(24, 0, 0, 0)
-
+ 
       return {
         promptsToday,
         dailyLimit: planLimits.dailyPrompts,
