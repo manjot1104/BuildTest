@@ -30,6 +30,7 @@ const SEGMENT_LABELS: Record<string, string> = {
     "buildify-studio": "Buildify Studio",
     "ai-resume": "AI Resume Builder",
     "accessibility-tester": "Accessibility Tester",
+    "video-gen": "Video Generator",
     "docs": "Documentation",
 };
 

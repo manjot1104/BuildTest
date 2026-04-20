@@ -6,7 +6,7 @@ import {
   credit_usage_logs,
 } from "@/server/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
-import { calculateCreditCost, SUBSCRIPTION_PLANS } from "@/config/credits.config";
+import { calculateCreditCost, calculateVideoCreditCost, SUBSCRIPTION_PLANS } from "@/config/credits.config";
 
 /**
  * Get or create user credits record
@@ -196,6 +196,23 @@ export async function hasEnoughCredits(
 }
 
 /**
+ * Check if user has enough credits for video generation (New or Follow-up)
+ */
+export async function hasEnoughCreditsForVideo(
+  userId: string,
+  isNewChat: boolean,
+): Promise<{ hasCredits: boolean; required: number; available: number }> {
+  const required = calculateVideoCreditCost(isNewChat);
+  const available = await getUserTotalCredits(userId);
+
+  return {
+    hasCredits: available >= required,
+    required,
+    available,
+  };
+}
+
+/**
  * Deduct credits for a prompt
  */
 export async function deductCreditsForPrompt(
@@ -205,6 +222,26 @@ export async function deductCreditsForPrompt(
 ): Promise<{ success: boolean; error?: string; creditsUsed?: number }> {
   const cost = calculateCreditCost(isNewChat);
   const action = isNewChat ? "new_prompt" : "follow_up_prompt";
+
+  const result = await deductCredits(userId, cost, action, chatId);
+
+  if (result.success) {
+    return { ...result, creditsUsed: cost };
+  }
+
+  return result;
+}
+
+/**
+ * Deduct credits for video generation
+ */
+export async function deductCreditsForVideo(
+  userId: string,
+  isNewChat: boolean,
+  chatId?: string,
+): Promise<{ success: boolean; error?: string; creditsUsed?: number }> {
+  const cost = calculateVideoCreditCost(isNewChat);
+  const action = isNewChat ? "video_new_prompt" : "video_follow_up_prompt";
 
   const result = await deductCredits(userId, cost, action, chatId);
 

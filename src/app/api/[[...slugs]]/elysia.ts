@@ -109,8 +109,28 @@ import {
   deleteTestCaseHandler,
   confirmAndExecuteHandler,
 } from "@/server/api/controllers/testing.controller";
+import {
+  generateRemotionVideoHandler,
+  renderRemotionVideoHandler,
+  getRenderStatusHandler,
+} from '@/server/api/controllers/video-remotion.controller';
+import {
+  getVideoChatsHandler,
+  getVideoChatHandler,
+  deleteVideoChatHandler,
+  renameVideoChatHandler,
+} from '@/server/api/controllers/video-chat.controller'
+import { uploadUserImagesHandler } from '@/server/api/controllers/video-upload.controller'
+import {
+  getVideoPlanId,
+  getVideoServerPlanLimits,
+} from "@/server/services/video-limits.service";
+import { countVideoPromptsTodayByUserId, countServerRenderJobsToday } from "@/server/db/queries";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
+import { downloadRenderedVideoHandler } from "@/server/api/controllers/video-download.controller";
+
+export const maxDuration = 300;
 
 /** Insufficient credits response type */
 interface InsufficientCreditsResponse {
@@ -1839,7 +1859,7 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
     },
   )
 
-  // ADDED: GET /api/badge/:token/svg — returns an actual SVG image (not JSON).
+  // GET /api/badge/:token/svg — returns an actual SVG image (not JSON).
   // This is what the "Copy Badge" button points to as the image src in the
   // markdown string: [![Tested by Buildify](.../svg)](report-link).
   // IMPORTANT: must be declared AFTER /badge/:token so Elysia doesn't swallow
@@ -1859,11 +1879,345 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
   
   
   // ============================================
-  // Video Generation Endpoints
+  // Video Generation Endpoints (video.controller — kie.ai)
   // ============================================
-
+ 
   // POST /api/video/generate — generate AI video background via kie.ai
   .post('/video/generate', ({ request }) => generateVideoHandler(request))
+ 
 
+  // ============================================
+  // Remotion Video Generation Endpoints
+  // ============================================
+ 
+  // POST /api/remotion-video/upload-images
+  //   Content-Type: multipart/form-data
+  //   Body: { images: File[], descriptions: string[] }
+  //
+  //   Returns: { images: UploadedUserImage[], sessionId: string }
+ 
+  .post(
+    '/remotion-video/upload-images',
+    async ({ body, set }: any) => {
+      const result = await uploadUserImagesHandler({ body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      body: t.Object({
+        images: t.Files({ maxSize: '5m', type: ['image/jpeg', 'image/png', 'image/webp'] }),
+        descriptions: t.Union([t.Array(t.String()), t.String()]), // Elysia sends single string when array has 1 item
+      }),
+    })
+ 
+  // POST /api/remotion-video/generate — prompt → VideoJson
+ // Returns validated VideoJson ready to pass to the Remotion Player.
+ .post(
+  '/remotion-video/generate',
+  async ({ body, set }: any) => {
+    const result = await generateRemotionVideoHandler({ body })
+    if ('status' in result && 'error' in result) {
+      set.status = result.status
+      return result
+    }
+    return result
+  },
+  {
+    body: t.Object({
+      prompt: t.String(),
+      duration: t.Optional(t.Number()),
+      // ── required for follow-up prompts ──────────────────────────────
+      chatId: t.Optional(t.Nullable(t.String())),
+      imageSessionId: t.Optional(t.String()),
+      // ────────────────────────────────────────────────────────────────────
+      options: t.Optional(t.Object({
+        useTTS: t.Optional(t.Boolean()),
+        voiceId: t.Optional(t.String()),
+        useMusic: t.Optional(t.Boolean()),
+        musicGenre: t.Optional(t.String()),
+        ttsVolume: t.Optional(t.Number()),
+        musicVolume: t.Optional(t.Number()),
+      })),
+      userImages: t.Optional(t.Array(t.Object({
+        index: t.Number(),
+        url: t.String(),
+        description: t.String(),
+        filename: t.String(),
+      }))),
+    }),
+  },
+)
+ 
+  // GET /api/remotion-video/chats — list all video chats for the authenticated user
+  // Used by useVideoChats() in the history panel to populate the sidebar/drawer.
+  // IMPORTANT: declared before /remotion-video/chats/:chatId to avoid route collision.
+  .get(
+    '/remotion-video/chats',
+    async ({ set }) => {
+      const result = await getVideoChatsHandler()
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+  )
 
-  ;
+  // GET /api/remotion-video/chats/:chatId — single video chat by id
+  // Used by useVideoChat(chatId) to resume a past generation.
+  .get(
+    '/remotion-video/chats/:chatId',
+    async ({ params, set }) => {
+      const result = await getVideoChatHandler({ params })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+
+  // PATCH /api/remotion-video/chats/:chatId — rename a video chat title
+  .patch(
+    '/remotion-video/chats/:chatId',
+    async ({ params, body, set }: any) => {
+      const result = await renameVideoChatHandler({ params, body })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+      body: t.Object({
+        title: t.String(),
+      }),
+    },
+  )
+
+  // DELETE /api/remotion-video/chats/:chatId — delete a video chat by id
+  // Called if we add a delete button to the history panel in future.
+  .delete(
+    '/remotion-video/chats/:chatId',
+    async ({ params, set }) => {
+      const result = await deleteVideoChatHandler({ params })
+      if ('status' in result && 'error' in result) {
+        set.status = result.status
+        return result
+      }
+      return result
+    },
+    {
+      params: t.Object({ chatId: t.String() }),
+    },
+  )
+ 
+  // GET /api/remotion-video/s3-proxy — authenticated S3 image proxy
+  .get(
+    '/remotion-video/s3-proxy',
+    async ({ query, set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+ 
+      const { url } = query
+      if (!url) {
+        set.status = 400
+        return { error: 'Missing url param' }
+      }
+
+      // Build allowed hostname from env vars
+      const bucket = process.env.AWS_S3_BUCKET
+      const region = process.env.AWS_S3_REGION
+      if (!bucket || !region) {
+        set.status = 500
+        return { error: 'S3 not configured' }
+      }
+      const allowedHostname = `${bucket}.s3.${region}.amazonaws.com`
+ 
+      let parsed: URL
+      try {
+        parsed = new URL(url)
+      } catch {
+        set.status = 400
+        return { error: 'Invalid url' }
+      }
+ 
+      if (parsed.hostname !== allowedHostname) {
+        set.status = 403
+        return { error: 'Forbidden' }
+      }
+ 
+      const response = await fetch(url)
+      if (!response.ok) {
+        set.status = 502
+        return { error: 'Failed to fetch image from S3' }
+      }
+ 
+      const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
+      const buffer = await response.arrayBuffer()
+ 
+      const headers: Record<string, string> = {
+        'Content-Type': contentType,
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'public, max-age=86400',
+        'Content-Length': buffer.byteLength.toString(),
+      }
+ 
+      return new Response(buffer, { headers })
+    },
+    {
+      query: t.Object({ url: t.String() }),
+    },
+  )
+
+  // GET /api/remotion-video/usage — daily prompt quota for the authenticated user
+  // Used by useVideoDailyUsage() to render the usage pill and disable the
+  // Generate button when the daily limit is reached.
+  .get(
+    '/remotion-video/usage',
+    async ({ set }) => {
+      const session = await getSession()
+      if (!session?.user?.id) {
+        set.status = 401
+        return { error: 'Unauthorized' }
+      }
+ 
+      const planId = await getVideoPlanId(session.user.id)
+      const planLimits = getVideoServerPlanLimits(planId)
+      const promptsToday = await countVideoPromptsTodayByUserId(session.user.id)
+
+      // ISO timestamp for midnight UTC tonight — used by the frontend countdown
+      const resetsAt = new Date()
+      resetsAt.setUTCHours(24, 0, 0, 0)
+ 
+      return {
+        promptsToday,
+        dailyLimit: planLimits.dailyPrompts,
+        planId: planId ?? 'free',
+        isAuthenticated: true,
+        resetsAt: resetsAt.toISOString(),
+      }
+    },
+  )
+
+  // POST /api/remotion-video/render — VideoJson + chatId → MP4 (server-side render)
+  //
+  // Renders the VideoJson synchronously on Vercel and returns the S3 URL when done.
+  // The render job is tracked in video_render_jobs so the client can poll progress
+  // via GET /api/remotion-video/render?jobId=<id> while the POST is in flight.
+  //
+  // Body:
+  //   chatId   — required; must belong to the authenticated user
+  //   videoJson — snapshot of the current video (not mutated by follow-ups mid-render)
+  .post(
+    '/remotion-video/render',
+    async ({ body, set }: any) => {
+      const result = await renderRemotionVideoHandler({ body });
+ 
+      // HTTP error responses carry numeric `status` + string `error` fields.
+      // Render-level failures use `renderStatus`/`renderError` — different fields
+      // so this guard only triggers for real HTTP errors (auth, validation, etc.).
+      if ('error' in result && 'status' in result && typeof (result as any).status === 'number') {
+        set.status = (result as any).status;
+        return result;
+      }
+ 
+      return result;
+    },
+    {
+      body: t.Object({
+        // chatId is required — the render is always associated with a chat so
+        // we can verify ownership and enforce per-user concurrency limits.
+        chatId: t.String(),
+        videoJson: t.Object({
+          duration: t.Number(),
+          fps: t.Optional(t.Number()),
+          width: t.Optional(t.Number()),
+          height: t.Optional(t.Number()),
+          scenes: t.Array(t.Any()),
+          globalFontFamily: t.Optional(t.String()),
+        }),
+      }),
+    },
+  )
+ 
+  // GET /api/remotion-video/render?jobId=<id> — poll render progress
+  //
+  // Returns:
+  //   { jobId, renderStatus, progress, outputUrl? }  — on success
+  //   { jobId, renderStatus, progress, renderError? } — on render failure
+  //   { error, status }                               — on HTTP error (auth, not found)
+  .get(
+    '/remotion-video/render',
+    async ({ query, set }: any) => {
+      const jobId: string = query?.jobId ?? '';
+      const result = await getRenderStatusHandler({ jobId });
+ 
+      if ('error' in result && 'status' in result && typeof (result as any).status === 'number') {
+        set.status = (result as any).status;
+        return result;
+      }
+ 
+      return result;
+    },
+    {
+      query: t.Object({
+        jobId: t.String(),
+      }),
+    },
+  )
+
+  // GET /api/remotion-video/render-usage — server render quota for current user
+.get(
+  '/remotion-video/render-usage',
+  async ({ set }: any) => {
+    const session = await getSession();
+    if (!session?.user?.id) {
+      set.status = 401;
+      return { error: "Unauthorized", status: 401 };
+    }
+    const userId = session.user.id;
+    const planId = await getVideoPlanId(userId);
+    const planLimits = getVideoServerPlanLimits(planId);
+    const dailyLimit = planLimits.dailyServerRenders ?? 0;
+    const usedToday = await countServerRenderJobsToday(userId);
+
+    const resetsAt = new Date();
+    resetsAt.setUTCHours(24, 0, 0, 0);
+
+    return {
+      usedToday,
+      dailyLimit,
+      remaining: Math.max(0, dailyLimit - usedToday),
+      planId: planId ?? "free",
+      resetsAt: resetsAt.toISOString(),
+    };
+  },
+)
+
+.get(
+  "/remotion-video/download",
+  async ({ query, set }: any) => {
+    const jobId: string = query?.jobId ?? "";
+    if (!jobId.trim()) {
+      set.status = 400;
+      return { error: "jobId is required", status: 400 };
+    }
+    return downloadRenderedVideoHandler({ jobId });
+  },
+  {
+    query: t.Object({
+      jobId: t.String(),
+    }),
+  }
+)

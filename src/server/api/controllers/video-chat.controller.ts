@@ -1,0 +1,140 @@
+// server/controllers/video-chat.controller.ts
+//
+// Handles GET/DELETE endpoints for video chat history.
+// Video generation (POST) lives in video.controller.ts — it owns the chatId lifecycle.
+
+import { getSession } from '@/server/better-auth/server'
+import {
+  getVideoChatById,
+  getVideoChatsByUserId,
+  deleteVideoChat,
+  renameVideoChat,
+} from '@/server/db/queries'
+import {
+  deleteVideoAudioGeneration,
+  deleteVideoImageSession,
+} from '@/server/services/s3.service'
+import type { VideoJson } from '@/remotion-src/types'
+import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
+
+// ── GET /api/video/chats ──────────────────────────────────────────────────────
+
+export async function getVideoChatsHandler(): Promise<
+  | { chats: { id: string; title: string | null; lastPrompt: string | null; updatedAt: string }[] }
+  | { error: string; status: number }
+> {
+  const session = await getSession()
+  if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
+
+  const rows = await getVideoChatsByUserId({ userId: session.user.id })
+
+  return {
+    chats: rows.map((r) => {
+      const prompts = (r.prompts as { prompt: string; sentAt: string }[]) ?? []
+      const lastPrompt = prompts.at(-1)?.prompt ?? null
+      return {
+        id: r.id,
+        title: r.title,
+        lastPrompt,
+        updatedAt: r.updated_at.toISOString(),
+      }
+    }),
+  }
+}
+
+// ── GET /api/video/chats/:chatId ──────────────────────────────────────────────
+
+export async function getVideoChatHandler({
+  params,
+}: {
+  params: { chatId: string }
+}): Promise<
+  | {
+      id: string
+      title: string | null
+      videoJson: VideoJson
+      prompts: { prompt: string; sentAt: string }[]
+      options: Record<string, unknown> | null
+      userImages?: UploadedUserImage[]
+      updatedAt: string
+    }
+  | { error: string; status: number }
+> {
+  const session = await getSession()
+  if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
+
+  const row = await getVideoChatById({ chatId: params.chatId, userId: session.user.id })
+  if (!row) return { error: 'Not found', status: 404 }
+
+  let videoJson: VideoJson
+  try {
+    videoJson = JSON.parse(row.video_json) as VideoJson
+  } catch {
+    return { error: 'Corrupt video data', status: 500 }
+  }
+
+  const userImages = (row.current_user_images as UploadedUserImage[] | null) ?? undefined
+
+  return {
+    id: row.id,
+    title: row.title,
+    videoJson,
+    prompts: (row.prompts as { prompt: string; sentAt: string }[]) ?? [],
+    options: (row.current_options as Record<string, unknown> | null) ?? null,
+    userImages,
+    updatedAt: row.updated_at.toISOString(),
+  }
+}
+
+// ── POST /api/video/chats/:chatId/rename ─────────────────────────────────────
+export async function renameVideoChatHandler({
+  params,
+  body,
+}: {
+  params: { chatId: string };
+  body: { title: string };
+}): Promise<{ success: true } | { error: string; status: number }> {
+  const session = await getSession();
+  if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
+
+  try {
+    await renameVideoChat({
+      chatId: params.chatId,
+      userId: session.user.id,
+      title: body.title,
+    });
+    return { success: true };
+  } catch (err) {
+    return { status: 500, error: "Failed to rename chat" };
+  }
+}
+
+// ── DELETE /api/video/chats/:chatId ───────────────────────────────────────────
+
+export async function deleteVideoChatHandler({
+  params,
+}: {
+  params: { chatId: string }
+}): Promise<{ success: true } | { error: string; status: number }> {
+  const session = await getSession()
+  if (!session?.user?.id) return { error: 'Unauthorized', status: 401 }
+
+  const { imageSessionId } = await deleteVideoChat({
+    chatId: params.chatId,
+    userId: session.user.id,
+  })
+
+  // Fire-and-forget — deletion failure should not fail the API response.
+  if (imageSessionId) {
+    deleteVideoImageSession(imageSessionId).catch((err) =>
+      console.error(`[VideoChatController] Failed to clean up image session ${imageSessionId}:`, err),
+    )
+  }
+
+  // TTS audio is stored under video-audio/{chatId}/ — clean up using the chatId directly.
+  deleteVideoAudioGeneration(params.chatId).catch((err) =>
+    console.error(`[VideoChatController] Failed to clean up TTS audio for chat ${params.chatId}:`, err),
+  )
+
+  return { success: true }
+}
