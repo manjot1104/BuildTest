@@ -2204,7 +2204,20 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
     };
   },
 )
-//  GET /api/remotion-video/download?jobId=xxx
-.get("/remotion-video/download/:jobId", ({ params }) =>
-  downloadRenderedVideoHandler({ jobId: params.jobId ?? "" })
+
+.get(
+  "/remotion-video/download",
+  async ({ query, set }: any) => {
+    const jobId: string = query?.jobId ?? "";
+    if (!jobId.trim()) {
+      set.status = 400;
+      return { error: "jobId is required", status: 400 };
+    }
+    return downloadRenderedVideoHandler({ jobId });
+  },
+  {
+    query: t.Object({
+      jobId: t.String(),
+    }),
+  }
 )
