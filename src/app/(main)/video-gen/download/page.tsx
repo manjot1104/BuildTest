@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import {
   Download, CheckCircle2, AlertTriangle, AlertCircle,
   Film, Loader2, RotateCcw, Monitor, Server, Info,
-  Cpu, Wifi, Clock,
+  Cpu, Wifi, Clock, RefreshCw,
 } from "lucide-react";
 import type { VideoJson } from "@/remotion-src/types";
 
@@ -23,6 +23,14 @@ type Phase =
   | "error";      // something went wrong
 
 type ExportMode = "client" | "server";
+
+interface ServerRenderUsage {
+  usedToday: number;
+  dailyLimit: number;
+  remaining: number;
+  planId: string;
+  resetsAt: string;
+}
 
 // ─── DeviceCapabilityHint ─────────────────────────────────────────────────────
 // Heuristic to suggest the best export mode to the user.
@@ -50,8 +58,7 @@ function estimateDeviceCapability(): "high" | "mid" | "low" {
 // Wraps renderMediaOnWeb with a concurrency hint so low-end devices don't
 // saturate all CPU cores and cause the tab to freeze or stall at a percent.
 // Remotion's web renderer respects the `numberOfGifLoops` / internal worker
-// pool. We pass a `maximumFrameCacheItemSizeInBytes` cap and a `logLevel`
-// to reduce overhead on weaker hardware.
+// pool. We pass a `logLevel` to reduce overhead on weaker hardware.
 
 async function runAdaptiveClientRender(
   videoJson: VideoJson,
@@ -75,32 +82,21 @@ async function runAdaptiveClientRender(
     );
   }
 
-  const capability = estimateDeviceCapability();
-
-  // Adaptive frame-cache cap: restrict memory usage on weaker devices so the
-  // browser GC isn't overwhelmed and the render doesn't stall mid-way.
-  const frameCacheCap =
-    capability === "high"
-      ? 256 * 1024 * 1024   // 256 MB
-      : capability === "mid"
-        ? 96 * 1024 * 1024  //  96 MB
-        : 48 * 1024 * 1024; //  48 MB — conservative for low-end
-
   const { getBlob } = await renderMediaOnWeb({
-  composition: {
-    id: "VideoComposition",
-    component: VideoComposition,
-    durationInFrames,
-    fps,
-    width,
-    height,
-    defaultProps: { videoJson },
-    calculateMetadata: null,
-  },
-  inputProps: { videoJson },
-  onProgress: ({ progress: p }) => onProgress(p),
-  logLevel: "error",
-});
+    composition: {
+      id: "VideoComposition",
+      component: VideoComposition,
+      durationInFrames,
+      fps,
+      width,
+      height,
+      defaultProps: { videoJson },
+      calculateMetadata: null,
+    },
+    inputProps: { videoJson },
+    onProgress: ({ progress: p }) => onProgress(p),
+    logLevel: "error",
+  });
 
   return getBlob();
 }
@@ -144,35 +140,74 @@ async function pollRenderStatus(jobId: string): Promise<PollResult> {
   return data as PollResult;
 }
 
+async function fetchServerRenderUsage(): Promise<ServerRenderUsage | null> {
+  try {
+    const res = await fetch("/api/remotion-video/render-usage");
+    if (!res.ok) return null;
+    const data = await res.json();
+    if ("error" in data) return null;
+    return data as ServerRenderUsage;
+  } catch {
+    return null;
+  }
+}
+
+// ─── UsagePips ────────────────────────────────────────────────────────────────
+// Visual pip indicators showing used vs. remaining server renders.
+
+function UsagePips({ used, total }: { used: number; total: number }) {
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: total }).map((_, i) => (
+        <div
+          key={i}
+          className={`h-1.5 w-4 rounded-full transition-colors ${
+            i < used
+              ? "bg-amber-500/60"
+              : "bg-emerald-500/60"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── ModeCard ─────────────────────────────────────────────────────────────────
 
 function ModeCard({
   mode,
   selected,
   recommended,
+  disabled,
   onSelect,
   icon: Icon,
   title,
   description,
   badges,
   warning,
+  footer,
 }: {
   mode: ExportMode;
   selected: boolean;
   recommended?: boolean;
+  disabled?: boolean;
   onSelect: () => void;
   icon: React.ElementType;
   title: string;
   description: string;
   badges: { label: string; color: "green" | "blue" | "amber" | "red" }[];
   warning?: string;
+  footer?: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={disabled ? undefined : onSelect}
+      disabled={disabled}
       className={`w-full text-left rounded-xl border p-4 transition-all space-y-3 ${
-        selected
+        disabled
+          ? "border-border bg-muted/10 opacity-50 cursor-not-allowed"
+          : selected
           ? "border-primary bg-primary/5 ring-1 ring-primary/20"
           : "border-border bg-muted/20 hover:border-border/80 hover:bg-muted/30"
       }`}
@@ -180,27 +215,44 @@ function ModeCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-            selected ? "bg-primary/10 border border-primary/20" : "bg-muted border border-border"
+            disabled
+              ? "bg-muted border border-border"
+              : selected
+              ? "bg-primary/10 border border-primary/20"
+              : "bg-muted border border-border"
           }`}>
-            <Icon className={`h-4 w-4 ${selected ? "text-primary" : "text-muted-foreground/50"}`} />
+            <Icon className={`h-4 w-4 ${
+              disabled
+                ? "text-muted-foreground/30"
+                : selected
+                ? "text-primary"
+                : "text-muted-foreground/50"
+            }`} />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className={`text-sm font-sans font-semibold ${selected ? "text-foreground" : "text-foreground/80"}`}>
+              <span className={`text-sm font-sans font-semibold ${
+                disabled ? "text-foreground/40" : selected ? "text-foreground" : "text-foreground/80"
+              }`}>
                 {title}
               </span>
-              {recommended && (
+              {recommended && !disabled && (
                 <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-0.5 uppercase tracking-wider">
                   Recommended
+                </span>
+              )}
+              {disabled && (
+                <span className="text-[9px] font-mono font-bold text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-1.5 py-0.5 uppercase tracking-wider">
+                  No renders left
                 </span>
               )}
             </div>
           </div>
         </div>
         <div className={`h-4 w-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all ${
-          selected ? "border-primary" : "border-border"
+          disabled ? "border-border/30" : selected ? "border-primary" : "border-border"
         }`}>
-          {selected && <div className="h-2 w-2 rounded-full bg-primary" />}
+          {selected && !disabled && <div className="h-2 w-2 rounded-full bg-primary" />}
         </div>
       </div>
 
@@ -233,6 +285,8 @@ function ModeCard({
           <p className="text-[10px] font-mono text-amber-500/80 leading-relaxed">{warning}</p>
         </div>
       )}
+
+      {footer && <div className="pl-10">{footer}</div>}
     </button>
   );
 }
@@ -246,6 +300,8 @@ export default function VideoDownloadPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [outputUrl, setOutputUrl] = useState<string | null>(null);
   const [deviceCapability, setDeviceCapability] = useState<"high" | "mid" | "low">("mid");
+  const [serverUsage, setServerUsage] = useState<ServerRenderUsage | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
   const started = useRef(false);
 
   // Detect device capability on mount and pre-select best mode
@@ -255,6 +311,20 @@ export default function VideoDownloadPage() {
     // Pre-select server for low-end devices, client for everyone else
     setMode(cap === "low" ? "server" : "client");
   }, []);
+
+  // Fetch server render usage on mount
+  useEffect(() => {
+    fetchServerRenderUsage().then((usage) => {
+      setServerUsage(usage);
+      setUsageLoading(false);
+      // If low-end device wanted server but no renders left, fall back to client
+      if (usage && usage.remaining === 0) {
+        setMode("client");
+      }
+    });
+  }, []);
+
+  const serverExhausted = !usageLoading && serverUsage !== null && serverUsage.remaining === 0;
 
   // ── Client-side render ───────────────────────────────────────────────────────
 
@@ -383,6 +453,40 @@ export default function VideoDownloadPage() {
       ? "Moderate device detected — Client render should work but may be slow for longer videos."
       : null;
 
+  // ── Server render usage footer (shown inside the server ModeCard) ─────────────
+
+  const serverUsageFooter = usageLoading ? (
+    <div className="flex items-center gap-1.5">
+      <Loader2 className="h-3 w-3 text-muted-foreground/40 animate-spin" />
+      <span className="text-[10px] font-mono text-muted-foreground/40">Loading usage…</span>
+    </div>
+  ) : serverUsage ? (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-mono text-muted-foreground/60">
+          {serverUsage.remaining} of {serverUsage.dailyLimit} renders remaining today
+        </span>
+        <span className={`text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5 border ${
+          serverUsage.remaining === 0
+            ? "text-red-500 bg-red-500/10 border-red-500/20"
+            : serverUsage.remaining <= Math.ceil(serverUsage.dailyLimit * 0.3)
+            ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+            : "text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
+        }`}>
+          {serverUsage.planId} plan
+        </span>
+      </div>
+      {serverUsage.dailyLimit <= 10 && (
+        <UsagePips used={serverUsage.usedToday} total={serverUsage.dailyLimit} />
+      )}
+      {serverUsage.remaining === 0 && (
+        <p className="text-[10px] font-mono text-red-500/70 leading-relaxed">
+          Resets at midnight UTC. Use Client render or upgrade your plan.
+        </p>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-md space-y-5">
@@ -402,10 +506,20 @@ export default function VideoDownloadPage() {
         {phase === "choose" && (
           <div className="space-y-4">
             {/* Device capability tip */}
-            {capTip && (
+            {capTip && !serverExhausted && (
               <div className="flex items-start gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3.5 py-3">
                 <Cpu className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <p className="text-[10px] font-mono text-blue-400/90 leading-relaxed">{capTip}</p>
+              </div>
+            )}
+
+            {/* Server renders exhausted banner */}
+            {serverExhausted && (
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-3">
+                <RefreshCw className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-[10px] font-mono text-amber-500/80 leading-relaxed">
+                  You've used all your server renders for today. Client render is still available — free and unlimited.
+                </p>
               </div>
             )}
 
@@ -413,21 +527,21 @@ export default function VideoDownloadPage() {
               <ModeCard
                 mode="client"
                 selected={mode === "client"}
-                recommended={deviceCapability === "high"}
+                recommended={deviceCapability === "high" || serverExhausted}
                 onSelect={() => setMode("client")}
                 icon={Monitor}
                 title="Client Render"
                 description="Renders entirely in your browser using WebCodecs. Free, private, no server involved. Adaptive CPU throttling reduces stalling on weaker devices."
                 badges={[
                   { label: "Always free", color: "green" },
-                  { label: "Private", color: "green" },
+                  { label: "Unlimited", color: "green" },
                   { label: "Chrome 94+ / Firefox 130+ / Safari 26+", color: "blue" },
                   ...(deviceCapability === "low"
                     ? [{ label: "May be slow on this device", color: "amber" as const }]
                     : []),
                 ]}
                 warning={
-                  deviceCapability === "low"
+                  deviceCapability === "low" && !serverExhausted
                     ? "Low-end device detected. Render may take longer or use Server render for best results."
                     : undefined
                 }
@@ -436,7 +550,8 @@ export default function VideoDownloadPage() {
               <ModeCard
                 mode="server"
                 selected={mode === "server"}
-                recommended={deviceCapability === "low"}
+                recommended={deviceCapability === "low" && !serverExhausted}
+                disabled={serverExhausted}
                 onSelect={() => setMode("server")}
                 icon={Server}
                 title="Server Render"
@@ -444,8 +559,9 @@ export default function VideoDownloadPage() {
                 badges={[
                   { label: "Any device", color: "green" },
                   { label: "Any browser", color: "green" },
-                  { label: "Rate limited", color: "amber" },
+                  { label: "Daily limit", color: "amber" },
                 ]}
+                footer={serverUsageFooter}
               />
             </div>
 

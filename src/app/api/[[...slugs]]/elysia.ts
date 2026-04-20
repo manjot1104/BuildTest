@@ -125,7 +125,7 @@ import {
   getVideoPlanId,
   getVideoServerPlanLimits,
 } from "@/server/services/video-limits.service";
-import { countVideoPromptsTodayByUserId } from "@/server/db/queries";
+import { countVideoPromptsTodayByUserId, countServerRenderJobsToday } from "@/server/db/queries";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
 
@@ -2175,3 +2175,31 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
       }),
     },
   )
+
+  // GET /api/remotion-video/render-usage — server render quota for current user
+.get(
+  '/remotion-video/render-usage',
+  async ({ set }: any) => {
+    const session = await getSession();
+    if (!session?.user?.id) {
+      set.status = 401;
+      return { error: "Unauthorized", status: 401 };
+    }
+    const userId = session.user.id;
+    const planId = await getVideoPlanId(userId);
+    const planLimits = getVideoServerPlanLimits(planId);
+    const dailyLimit = planLimits.dailyServerRenders ?? 0;
+    const usedToday = await countServerRenderJobsToday(userId);
+
+    const resetsAt = new Date();
+    resetsAt.setUTCHours(24, 0, 0, 0);
+
+    return {
+      usedToday,
+      dailyLimit,
+      remaining: Math.max(0, dailyLimit - usedToday),
+      planId: planId ?? "free",
+      resetsAt: resetsAt.toISOString(),
+    };
+  },
+)

@@ -393,6 +393,32 @@ export function useVideoDailyUsage() {
   });
 }
 
+export interface ServerRenderUsageData {
+  usedToday: number;
+  dailyLimit: number;
+  remaining: number;
+  planId: string;
+  resetsAt: string;
+}
+
+export function useServerRenderUsage() {
+  return useQuery({
+    queryKey: [...videoKeys.all, "render-usage"] as const,
+    queryFn: async (): Promise<ServerRenderUsageData | null> => {
+      try {
+        const res = await fetch("/api/remotion-video/render-usage");
+        if (!res.ok) return null;
+        const data = await res.json();
+        if ("error" in data) return null;
+        return data as ServerRenderUsageData;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 30_000,
+  });
+}
+
 // ─── URL proxy helpers ────────────────────────────────────────────────────────
 
 function isS3Url(url: string): boolean {
