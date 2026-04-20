@@ -447,3 +447,38 @@ export function proxyS3Urls(videoJson: VideoJson): VideoJson {
     })),
   }
 }
+// Add this alongside proxyS3Urls in use-video-hooks.ts
+
+function fromProxyUrl(url: string): string {
+  if (!url) return url
+  try {
+    const parsed = new URL(url, 'http://localhost')
+    if (
+      (parsed.pathname === '/api/remotion-video/s3-proxy') &&
+      parsed.searchParams.has('url')
+    ) {
+      return decodeURIComponent(parsed.searchParams.get('url')!)
+    }
+  } catch {
+    // not a proxy URL
+  }
+  return url
+}
+
+export function deproxyS3Urls(videoJson: VideoJson): VideoJson {
+  return {
+    ...videoJson,
+    bgmUrl: videoJson.bgmUrl ? fromProxyUrl(videoJson.bgmUrl) : videoJson.bgmUrl,
+    scenes: videoJson.scenes.map((scene) => ({
+      ...scene,
+      ttsUrl: scene.ttsUrl ? fromProxyUrl(scene.ttsUrl) : scene.ttsUrl,
+      background:
+        scene.background.type === 'image'
+          ? { ...scene.background, url: fromProxyUrl(scene.background.url) }
+          : scene.background,
+      elements: scene.elements.map((el) =>
+        el.type === 'image' ? { ...el, url: fromProxyUrl(el.url) } : el
+      ),
+    })),
+  }
+}

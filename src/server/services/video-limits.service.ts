@@ -17,10 +17,10 @@ export interface VideoPlanLimits {
 }
 
 export const VIDEO_SERVER_PLAN_LIMITS: Record<string, VideoPlanLimits> = {
-  free:       { dailyPrompts: 1,  allowFollowUp: false, maxImages: 1, maxDurationSeconds: 20, label: "Free",     dailyServerRenders: 1 },
-  starter:    { dailyPrompts: 10, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Starter", dailyServerRenders: 3 },
-  pro:        { dailyPrompts: 15, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Pro",     dailyServerRenders: 5 },
-  enterprise: { dailyPrompts: 20, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Enterprise", dailyServerRenders: 8 },
+  free:       { dailyPrompts: 1,  allowFollowUp: false, maxImages: 1, maxDurationSeconds: 20, label: "Free",     dailyServerRenders: 10 },
+  starter:    { dailyPrompts: 10, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Starter", dailyServerRenders: 30 },
+  pro:        { dailyPrompts: 15, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Pro",     dailyServerRenders: 50 },
+  enterprise: { dailyPrompts: 20, allowFollowUp: true,  maxImages: 5, maxDurationSeconds: 30, label: "Enterprise", dailyServerRenders: 80 },
 };
 
 export function getVideoServerPlanLimits(planId: string | null | undefined): VideoPlanLimits {

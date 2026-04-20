@@ -14,6 +14,7 @@ import {
   Cpu, Wifi, Clock, RefreshCw,
 } from "lucide-react";
 import type { VideoJson } from "@/remotion-src/types";
+import { deproxyS3Urls } from '@/client-api/query-hooks/use-video-hooks'
 
 type Phase =
   | "choose"      // user picks client vs server render
@@ -430,16 +431,21 @@ export default function VideoDownloadPage() {
       return;
     }
 
-    if (mode === "server") {
-      if (!parsed.chatId) {
-        setErrorMsg("Server render requires a saved video chat. Please generate your video first.");
-        setPhase("error");
-        return;
-      }
-      void runServerRender({ chatId: parsed.chatId, videoJson: parsed.videoJson });
-    } else {
-      void runClientRender(parsed.videoJson);
-    }
+    const rawVideoJson = parsed.videoJson
+
+if (mode === "server") {
+  if (!parsed.chatId) {
+    setErrorMsg("Server render requires a saved video chat.")
+    setPhase("error")
+    return
+  }
+  // Deproxy: server renderer fetches URLs directly — proxy routes don't exist in the bundle
+  const serverVideoJson = deproxyS3Urls(rawVideoJson)
+  void runServerRender({ chatId: parsed.chatId, videoJson: serverVideoJson })
+} else {
+  // Client render: browser can hit the proxy directly, keep as-is
+  void runClientRender(rawVideoJson)
+}
   }
 
   const pct = Math.round(progress * 100);

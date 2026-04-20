@@ -40,6 +40,43 @@ import { getVideoPlanId, getVideoServerPlanLimits } from "@/server/services/vide
 // ── Server-side render ────────────────────────────────────────────────────────
 import { renderVideoJob } from "@/server/services/video-render.service";
 
+// ── Helper: strip proxy URLs before server-side rendering ─────────────────────
+// The client wraps S3 URLs in /api/remotion-video/s3-proxy?url=... for the
+// browser Player. The Remotion renderer runs in Node.js and fetches URLs
+// directly — the proxy route doesn't exist in the Webpack bundle.
+
+function deproxyVideoJson(videoJson: VideoJson): VideoJson {
+  const strip = (url: string | undefined): string | undefined => {
+    if (!url) return url;
+    try {
+      const u = new URL(url, "http://localhost");
+      if (
+        u.pathname === "/api/remotion-video/s3-proxy" &&
+        u.searchParams.has("url")
+      ) {
+        return decodeURIComponent(u.searchParams.get("url")!);
+      }
+    } catch {}
+    return url;
+  };
+
+  return {
+    ...videoJson,
+    bgmUrl: strip(videoJson.bgmUrl),
+    scenes: videoJson.scenes.map((s) => ({
+      ...s,
+      ttsUrl: strip(s.ttsUrl),
+      background:
+        s.background.type === "image"
+          ? { ...s.background, url: strip(s.background.url)! }
+          : s.background,
+      elements: s.elements.map((el) =>
+        el.type === "image" ? { ...el, url: strip(el.url)! } : el,
+      ),
+    })),
+  };
+}
+
 // ── POST /api/video/generate ──────────────────────────────────────────────────
 
 export async function generateRemotionVideoHandler({
@@ -513,7 +550,13 @@ export async function renderRemotionVideoHandler({
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
 
     const userId = session.user.id;
-    const { videoJson, chatId } = body;
+     const { videoJson: rawVideoJson, chatId } = body;  // ← rename to rawVideoJson
+
+    // ── Strip proxy URLs before rendering ────────────────────────────────────
+    // proxyS3Urls() is applied client-side for the browser Player (CORS).
+    // The server renderer fetches URLs directly in Node.js — the proxy route
+    // doesn't exist inside the Remotion Webpack bundle, causing 404 errors.
+    const videoJson = deproxyVideoJson(rawVideoJson);  // ← add this line
 
     // ── Input validation ──────────────────────────────────────────────────────
     if (!chatId?.trim()) {
