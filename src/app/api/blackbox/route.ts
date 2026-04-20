@@ -150,7 +150,7 @@ export async function POST(req: Request) {
 
   if (session?.user?.id) {
     const availableCredits = await getUserTotalCredits(session.user.id)
-
+console.log("DEBUG credits check:", { availableCredits, cost, userId: session.user.id })
     if (availableCredits < cost) {
       return NextResponse.json(
         { error: "credits_exhausted" },
@@ -208,8 +208,9 @@ Create a premium multi-scene 3D website for: "${prompt}"
         errMsg.toLowerCase().includes("exceeded") ||
         errMsg.toLowerCase().includes("suspended")
       ) {
+         console.error("Blackbox API quota exhausted:", errMsg) 
         return NextResponse.json(
-          { error: "credits_exhausted" },
+          { error: "service_unavailable" },
           { status: 402 }
         )
       }
