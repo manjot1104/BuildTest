@@ -56,7 +56,7 @@ function deproxyVideoJson(videoJson: VideoJson): VideoJson {
       ) {
         return decodeURIComponent(u.searchParams.get("url")!);
       }
-    } catch {}
+    } catch { }
     return url;
   };
 
@@ -112,14 +112,14 @@ export async function generateRemotionVideoHandler({
   };
 }): Promise<
   | {
-      videoJson: VideoJson;
-      chatId: string; // always returned so the client can resume later
-      meta: {
-        scenes: number;
-        totalFrames: number;
-        durationSeconds: number;
-      };
-    }
+    videoJson: VideoJson;
+    chatId: string; // always returned so the client can resume later
+    meta: {
+      scenes: number;
+      totalFrames: number;
+      durationSeconds: number;
+    };
+  }
   | { error: string; status: number; code?: string }
 > {
   // Track credit deduction state for refund-on-failure
@@ -412,7 +412,7 @@ export async function generateRemotionVideoHandler({
 
     if (incomingChatId) {
       // Follow-up: append to prompt log + replace video_json + update options/images
-      ({ prevImageSessionId} = await appendPromptAndUpdateVideo({
+      ({ prevImageSessionId } = await appendPromptAndUpdateVideo({
         chatId,
         userId,
         prompt: prompt.trim(),
@@ -550,7 +550,7 @@ export async function renderRemotionVideoHandler({
     if (!session?.user?.id) return { error: "Unauthorized", status: 401 };
 
     const userId = session.user.id;
-     const { videoJson: rawVideoJson, chatId } = body;  // ← rename to rawVideoJson
+    const { videoJson: rawVideoJson, chatId } = body;  // ← rename to rawVideoJson
 
     // ── Strip proxy URLs before rendering ────────────────────────────────────
     // proxyS3Urls() is applied client-side for the browser Player (CORS).
@@ -682,12 +682,12 @@ export async function getRenderStatusHandler({
   jobId: string;
 }): Promise<
   | {
-      jobId: string;
-      renderStatus: "pending" | "running" | "done" | "failed";
-      progress: number;
-      outputUrl?: string;
-      renderError?: string;
-    }
+    jobId: string;
+    renderStatus: "pending" | "running" | "done" | "failed";
+    progress: number;
+    outputUrl?: string;
+    renderError?: string;
+  }
   | { error: string; status: number }
 > {
   try {
@@ -703,7 +703,9 @@ export async function getRenderStatusHandler({
       jobId: job.id,
       renderStatus: job.status as "pending" | "running" | "done" | "failed",
       progress: job.progress ?? 0,
-      ...(job.output_url ? { outputUrl: job.output_url } : {}),
+      // ── Never expose the raw S3 output_url to the client ──────────────────
+      // Downloads go through /api/remotion-video/download?jobId=xxx instead.
+      ...(job.status === "done" ? { outputReady: true } : {}),
       ...(job.error_message ? { renderError: job.error_message } : {}),
     };
   } catch (err) {

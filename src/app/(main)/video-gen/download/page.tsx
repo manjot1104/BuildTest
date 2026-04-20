@@ -128,7 +128,7 @@ interface PollResult {
   jobId: string;
   renderStatus: RenderStatus;
   progress: number;
-  outputUrl?: string;
+  outputReady?: boolean;
   renderError?: string;
 }
 
@@ -162,11 +162,10 @@ function UsagePips({ used, total }: { used: number; total: number }) {
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}
-          className={`h-1.5 w-4 rounded-full transition-colors ${
-            i < used
+          className={`h-1.5 w-4 rounded-full transition-colors ${i < used
               ? "bg-amber-500/60"
               : "bg-emerald-500/60"
-          }`}
+            }`}
         />
       ))}
     </div>
@@ -205,36 +204,32 @@ function ModeCard({
       type="button"
       onClick={disabled ? undefined : onSelect}
       disabled={disabled}
-      className={`w-full text-left rounded-xl border p-4 transition-all space-y-3 ${
-        disabled
+      className={`w-full text-left rounded-xl border p-4 transition-all space-y-3 ${disabled
           ? "border-border bg-muted/10 opacity-50 cursor-not-allowed"
           : selected
-          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-          : "border-border bg-muted/20 hover:border-border/80 hover:bg-muted/30"
-      }`}
+            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+            : "border-border bg-muted/20 hover:border-border/80 hover:bg-muted/30"
+        }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-            disabled
+          <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${disabled
               ? "bg-muted border border-border"
               : selected
-              ? "bg-primary/10 border border-primary/20"
-              : "bg-muted border border-border"
-          }`}>
-            <Icon className={`h-4 w-4 ${
-              disabled
+                ? "bg-primary/10 border border-primary/20"
+                : "bg-muted border border-border"
+            }`}>
+            <Icon className={`h-4 w-4 ${disabled
                 ? "text-muted-foreground/30"
                 : selected
-                ? "text-primary"
-                : "text-muted-foreground/50"
-            }`} />
+                  ? "text-primary"
+                  : "text-muted-foreground/50"
+              }`} />
           </div>
           <div>
             <div className="flex items-center gap-1.5">
-              <span className={`text-sm font-sans font-semibold ${
-                disabled ? "text-foreground/40" : selected ? "text-foreground" : "text-foreground/80"
-              }`}>
+              <span className={`text-sm font-sans font-semibold ${disabled ? "text-foreground/40" : selected ? "text-foreground" : "text-foreground/80"
+                }`}>
                 {title}
               </span>
               {recommended && !disabled && (
@@ -250,9 +245,8 @@ function ModeCard({
             </div>
           </div>
         </div>
-        <div className={`h-4 w-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all ${
-          disabled ? "border-border/30" : selected ? "border-primary" : "border-border"
-        }`}>
+        <div className={`h-4 w-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center transition-all ${disabled ? "border-border/30" : selected ? "border-primary" : "border-border"
+          }`}>
           {selected && !disabled && <div className="h-2 w-2 rounded-full bg-primary" />}
         </div>
       </div>
@@ -265,15 +259,14 @@ function ModeCard({
         {badges.map((b) => (
           <span
             key={b.label}
-            className={`text-[9px] font-mono rounded-full px-2 py-0.5 border ${
-              b.color === "green"
+            className={`text-[9px] font-mono rounded-full px-2 py-0.5 border ${b.color === "green"
                 ? "text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
                 : b.color === "blue"
-                ? "text-blue-500 bg-blue-500/10 border-blue-500/20"
-                : b.color === "amber"
-                ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
-                : "text-red-500 bg-red-500/10 border-red-500/20"
-            }`}
+                  ? "text-blue-500 bg-blue-500/10 border-blue-500/20"
+                  : b.color === "amber"
+                    ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+                    : "text-red-500 bg-red-500/10 border-red-500/20"
+              }`}
           >
             {b.label}
           </span>
@@ -366,19 +359,21 @@ export default function VideoDownloadPage() {
             const result = await pollRenderStatus(jobId);
             setProgress(result.progress ?? 0);
 
-            if (result.renderStatus === "done" && result.outputUrl) {
+           if (result.renderStatus === "done" && result.outputReady) {
               clearInterval(interval);
-              setOutputUrl(result.outputUrl);
 
-              // Auto-download
+              // ── Use proxy download endpoint instead of raw S3 URL ──────────────────
+              // This hides the S3 URL from the client and forces a real file download.
+              const downloadUrl = `/api/remotion-video/download?jobId=${encodeURIComponent(jobId)}`;
+
               const anchor = document.createElement("a");
-              anchor.href = result.outputUrl;
+              anchor.href = downloadUrl;
               anchor.download = "generated-video.mp4";
-              anchor.target = "_blank";
               document.body.appendChild(anchor);
               anchor.click();
               anchor.remove();
 
+              setOutputUrl(downloadUrl);  // ← store proxy URL, not S3 URL
               resolve();
             } else if (result.renderStatus === "failed") {
               clearInterval(interval);
@@ -433,19 +428,19 @@ export default function VideoDownloadPage() {
 
     const rawVideoJson = parsed.videoJson
 
-if (mode === "server") {
-  if (!parsed.chatId) {
-    setErrorMsg("Server render requires a saved video chat.")
-    setPhase("error")
-    return
-  }
-  // Deproxy: server renderer fetches URLs directly — proxy routes don't exist in the bundle
-  const serverVideoJson = deproxyS3Urls(rawVideoJson)
-  void runServerRender({ chatId: parsed.chatId, videoJson: serverVideoJson })
-} else {
-  // Client render: browser can hit the proxy directly, keep as-is
-  void runClientRender(rawVideoJson)
-}
+    if (mode === "server") {
+      if (!parsed.chatId) {
+        setErrorMsg("Server render requires a saved video chat.")
+        setPhase("error")
+        return
+      }
+      // Deproxy: server renderer fetches URLs directly — proxy routes don't exist in the bundle
+      const serverVideoJson = deproxyS3Urls(rawVideoJson)
+      void runServerRender({ chatId: parsed.chatId, videoJson: serverVideoJson })
+    } else {
+      // Client render: browser can hit the proxy directly, keep as-is
+      void runClientRender(rawVideoJson)
+    }
   }
 
   const pct = Math.round(progress * 100);
@@ -456,8 +451,8 @@ if (mode === "server") {
     deviceCapability === "low"
       ? "Your device has limited CPU/memory — Server render is recommended."
       : deviceCapability === "mid"
-      ? "Moderate device detected — Client render should work but may be slow for longer videos."
-      : null;
+        ? "Moderate device detected — Client render should work but may be slow for longer videos."
+        : null;
 
   // ── Server render usage footer (shown inside the server ModeCard) ─────────────
 
@@ -472,13 +467,12 @@ if (mode === "server") {
         <span className="text-[10px] font-mono text-muted-foreground/60">
           {serverUsage.remaining} of {serverUsage.dailyLimit} renders remaining today
         </span>
-        <span className={`text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5 border ${
-          serverUsage.remaining === 0
+        <span className={`text-[9px] font-mono font-bold rounded-full px-1.5 py-0.5 border ${serverUsage.remaining === 0
             ? "text-red-500 bg-red-500/10 border-red-500/20"
             : serverUsage.remaining <= Math.ceil(serverUsage.dailyLimit * 0.3)
-            ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
-            : "text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
-        }`}>
+              ? "text-amber-500 bg-amber-500/10 border-amber-500/20"
+              : "text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
+          }`}>
           {serverUsage.planId} plan
         </span>
       </div>

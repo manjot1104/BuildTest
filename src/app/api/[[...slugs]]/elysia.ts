@@ -128,6 +128,7 @@ import {
 import { countVideoPromptsTodayByUserId, countServerRenderJobsToday } from "@/server/db/queries";
 import { env } from "@/env";
 import { RATE_LIMITS, CREDIT_COSTS } from "@/config/credits.config";
+import { downloadRenderedVideoHandler } from "@/server/api/controllers/video-download.controller";
 
 export const maxDuration = 300;
 
@@ -2202,4 +2203,8 @@ is3D: chat.demo_url?.startsWith('threed://') ?? false,
       resetsAt: resetsAt.toISOString(),
     };
   },
+)
+//  GET /api/remotion-video/download?jobId=xxx
+.get("/remotion-video/download/:jobId", ({ params }) =>
+  downloadRenderedVideoHandler({ jobId: params.jobId ?? "" })
 )
