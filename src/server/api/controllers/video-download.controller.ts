@@ -82,7 +82,7 @@ export async function downloadRenderedVideoHandler({
     // Reading into a buffer ensures the response is complete and valid.
     const buffer = await streamToBuffer(s3Response.Body);
 
-    return new Response(buffer.buffer as Uint8Array, {
+    return new Response(new Uint8Array(buffer).buffer as ArrayBuffer, {
       status: 200,
       headers: {
         "Content-Type": "video/mp4",
