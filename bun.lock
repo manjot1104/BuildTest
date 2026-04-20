@@ -109,6 +109,7 @@
         "@types/nodemailer": "^7.0.9",
         "@types/pdf-parse": "^1.1.5",
         "@types/pg": "^8.20.0",
+        "@types/puppeteer": "^7.0.4",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
         "@types/react-syntax-highlighter": "^15.5.13",
@@ -899,6 +900,8 @@
     "@types/pg": ["@types/pg@8.20.0", "", { "dependencies": { "@types/node": "*", "pg-protocol": "*", "pg-types": "^2.2.0" } }, "sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow=="],
 
     "@types/prismjs": ["@types/prismjs@1.26.6", "", {}, "sha512-vqlvI7qlMvcCBbVe0AKAb4f97//Hy0EBTaiW8AalRnG/xAN5zOiWWyrNqNXeq8+KAuvRewjCVY1+IPxk4RdNYw=="],
+
+    "@types/puppeteer": ["@types/puppeteer@7.0.4", "", { "dependencies": { "puppeteer": "*" } }, "sha512-ja78vquZc8y+GM2al07GZqWDKQskQXygCDiu0e3uO0DMRKqE0MjrFBFmTulfPYzLB6WnL7Kl2tFPy0WXSpPomg=="],
 
     "@types/react": ["@types/react@19.2.9", "http://registry.npmjs.org/@types/react/-/react-19.2.9.tgz", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-Lpo8kgb/igvMIPeNV2rsYKTgaORYdO1XGVZ4Qz3akwOj0ySGYMPlQWa8BaLn0G63D1aSaAQ5ldR06wCpChQCjA=="],
 
