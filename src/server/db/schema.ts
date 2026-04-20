@@ -250,6 +250,7 @@ export const user_chats = createTable(
     // V0 response data
     demo_url: d.text("demo_url"), // URL to the demo preview
     preview_url: d.text("preview_url"), // URL to preview image
+    demo_html: d.text("demo_html"),
     // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -942,6 +943,7 @@ export const test_cases = createTable(
     priority: testPriorityEnum("priority").default("P1"),
     tags: d.jsonb("tags"),            // string[]
     estimated_duration: d.integer("estimated_duration"), // ms
+    target_url: d.text("target_url"),    
     created_at: d
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => new Date())

@@ -1,6 +1,6 @@
 {
-  "id": "66b8c1b2-bb84-4f43-92a9-7c5b3b297eef",
-  "prevId": "cb36f086-f570-461f-bca7-c50bc78d59ea",
+  "id": "57cfe19b-ba46-4807-b1d0-b6433236569c",
+  "prevId": "7334268d-fc28-406b-8296-4460791fec1a",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -811,6 +811,12 @@
         },
         "preview_url": {
           "name": "preview_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "demo_html": {
+          "name": "demo_html",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2923,6 +2929,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "target_url": {
+          "name": "target_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3687,125 +3699,6 @@
       },
       "indexes": {},
       "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.pg-drizzle_video_chats": {
-      "name": "pg-drizzle_video_chats",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "video_json": {
-          "name": "video_json",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "current_options": {
-          "name": "current_options",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "current_user_images": {
-          "name": "current_user_images",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "image_session_id": {
-          "name": "image_session_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "prompts": {
-          "name": "prompts",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'[]'::jsonb"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "video_chats_user_id_idx": {
-          "name": "video_chats_user_id_idx",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "video_chats_updated_at_idx": {
-          "name": "video_chats_updated_at_idx",
-          "columns": [
-            {
-              "expression": "updated_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "pg-drizzle_video_chats_user_id_user_id_fk": {
-          "name": "pg-drizzle_video_chats_user_id_user_id_fk",
-          "tableFrom": "pg-drizzle_video_chats",
-          "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},

@@ -98,8 +98,9 @@ export const CREDIT_PACKS = {
 export const CREDIT_COSTS = {
   NEW_PROMPT: 20, // Credits deducted for a new chat/prompt
   FOLLOW_UP_PROMPT: 30, // Credits deducted for follow-up message in existing chat
+  VIDEO_GENERATION: 50,
 
-  // Video costs (2x the regular chat costs)
+  // Video costs for remotion videos (2x the regular chat costs)
   VIDEO_NEW_PROMPT: 40,
   VIDEO_FOLLOW_UP_PROMPT: 60,
 } as const;

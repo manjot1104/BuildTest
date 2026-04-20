@@ -2,13 +2,6 @@ import type { Browser } from 'puppeteer-core'
 
 const IS_SERVERLESS = !!process.env.AWS_LAMBDA_FUNCTION_NAME || !!process.env.VERCEL
 
-/**
- * Launches a Puppeteer browser instance that works in both local dev and
- * serverless environments (Vercel / AWS Lambda).
- *
- * - On Vercel / Lambda: uses @sparticuz/chromium (stripped-down, ~50MB)
- * - Locally: uses the Puppeteer-managed Chrome binary
- */
 export async function launchBrowser(): Promise<Browser> {
   if (IS_SERVERLESS) {
     const chromium = await import('@sparticuz/chromium')
@@ -22,16 +15,25 @@ export async function launchBrowser(): Promise<Browser> {
     }) as Promise<Browser>
   }
 
-  const puppeteer = await import('puppeteer')
- return (await puppeteer.default.launch({
-  headless: true,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-  ],
-  executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-  timeout: 30000,
-})) as unknown as Browser
+  // Local: use puppeteer-extra with stealth plugin
+  const { default: puppeteerExtra } = await import('puppeteer-extra')
+  const { default: StealthPlugin } = await import('puppeteer-extra-plugin-stealth')
+
+  puppeteerExtra.use(StealthPlugin())
+
+  const browser = await puppeteerExtra.launch({
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-blink-features=AutomationControlled',
+      '--window-size=1366,768',
+    ],
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+    timeout: 30000,
+  })
+
+  return browser as unknown as Browser
 }

@@ -8,6 +8,7 @@ import { eq, desc, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { runAccessibilityTest } from '@/server/services/accessibility.service'
 import { generateAccessibilityReport } from '@/server/services/accessibility-report.service'
+import { uploadPdfReport } from '@/server/services/s3.service'
 import type {
   AccessibilityTestConfig,
   SSEEvent,
@@ -109,7 +110,7 @@ export async function startAccessibilityTestHandler({
         })
 
         // Run test
-        const { summary, pageResults } = await runAccessibilityTest(config, send)
+        const { summary, pageResults , browser } = await runAccessibilityTest(config, send)
 
         // Update status
         await db
@@ -137,15 +138,26 @@ export async function startAccessibilityTestHandler({
         }
 
         // Generate PDF report
-        const pdfBase64 = await generateAccessibilityReport({
-          targetUrl: normalizedUrl,
-          standards: config.standards,
-          testDate: new Date().toISOString(),
-          summary,
-          pageResults,
-        })
+       const pdfBase64 = await generateAccessibilityReport({
+      targetUrl: normalizedUrl,
+      standards: config.standards,
+      testDate: new Date().toISOString(),
+      summary,
+      pageResults,
+      }, browser)
 
-        send({ type: 'report:complete', testRunId })
+        // Try to upload to S3; fall back to storing inline base64
+let pdfStorageValue: string = pdfBase64
+try {
+  const hostname = new URL(normalizedUrl).hostname
+  const pdfBuffer = Buffer.from(pdfBase64, 'base64')
+  const s3Url = await uploadPdfReport({ buffer: pdfBuffer, testRunId, hostname })
+  if (s3Url) pdfStorageValue = s3Url
+} catch {
+  // S3 upload failed — keep inline base64 as fallback
+}
+
+send({ type: 'report:complete', testRunId })
 
         // Update test run with results + logs
         await db
@@ -157,7 +169,8 @@ export async function startAccessibilityTestHandler({
             total_passes: summary.totalPasses,
             total_incomplete: summary.totalIncomplete,
             logs: JSON.stringify(collectedLogs),
-            pdf_report_base64: pdfBase64,
+            // Back-compat: same column now stores either base64 or a public https URL string
+            pdf_report_base64: pdfStorageValue,
             completed_at: new Date(),
             updated_at: new Date(),
           })
@@ -386,16 +399,33 @@ export async function downloadReportHandler({
     return { error: 'Report not yet generated', status: 404 }
   }
 
-  const pdfBuffer = Buffer.from(testRun.pdf_report_base64, 'base64')
   const hostname = new URL(testRun.target_url).hostname.replace(/[^a-z0-9]/gi, '-')
 
-  return new Response(pdfBuffer, {
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
-      'Content-Length': String(pdfBuffer.length),
-    },
-  })
+  // If the stored value looks like a public URL, redirect/stream from S3
+  if (/^https?:\/\//i.test(testRun.pdf_report_base64)) {
+    // 302 redirect allows browser to download directly from S3
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: testRun.pdf_report_base64,
+        'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
+      },
+    })
+  }
+
+  // Backward compatibility: value is inline base64
+  try {
+    const pdfBuffer = Buffer.from(testRun.pdf_report_base64, 'base64')
+    return new Response(pdfBuffer, {
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `attachment; filename="a11y-report-${hostname}.pdf"`,
+        'Content-Length': String(pdfBuffer.length),
+      },
+    })
+  } catch {
+    return { error: 'Stored report is not available', status: 404 }
+  }
 }
 
 export async function deleteTestRunHandler({

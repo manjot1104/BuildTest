@@ -1,6 +1,10 @@
 import { Elysia, t } from "elysia";
 import { getSession } from "@/server/better-auth/server";
 import {
+  generateVideoHandler,
+  getVideoStatusHandler,
+} from '@/server/api/controllers/video.controller'
+import {
   createChatOwnershipHandler,
   forkChatHandler,
   getChatDetailsHandler,
@@ -70,14 +74,7 @@ import {
   getGithubStatusHandler,
   pushToGithubHandler,
   getGithubRepoForChatHandler,
-  validateGithubSourceHandler, // validate endpoint for test run form
-  getGithubReposHandler,
-  connectExistingRepoHandler,
-  listRepoBranchesHandler,
-  listPullRequestsHandler,
-  getPullRequestHandler,
-  createPullRequestHandler,
-  mergePullRequestHandler,
+  validateGithubSourceHandler, // [GITHUB] new validate endpoint for test run form
 } from "@/server/api/controllers/github.controller";
 import {
   createDesignHandler,
@@ -386,12 +383,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     "/apps/:chatId",
     async ({ params, set }) => {
       try {
-        const result = await getChatDemoUrl({ v0ChatId: params.chatId });
+       const chat = await getUserChat({ v0ChatId: params.chatId });
 
-        if (!result) {
-          set.status = 404;
-          return { error: "App not found" };
-        }
+if (!chat) {
+  set.status = 404;
+  return { error: "App not found" };
+}
 
         // Visit logging (non-critical, fire-and-forget)
         try {
@@ -421,7 +418,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
           // Visit logging is non-critical — silently ignore failures
         }
 
-        return result;
+        return {
+  demoUrl: chat.demo_url,
+  demoHtml: chat.demo_html, 
+  title: chat.title ?? null,
+};
       } catch {
         set.status = 500;
         return { error: "Failed to fetch app" };
@@ -537,6 +538,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       createdAt: chat.created_at.toISOString(),
       updatedAt: chat.updated_at.toISOString(),
       type: chat.chat_type?.toLowerCase() === 'openrouter' || (!chat.demo_url && chat.conversation_id) ? 'openrouter' : 'builder',
+is3D: chat.demo_url?.startsWith('threed://') ?? false,
       folderId: chat.folder_id ?? null,
       is_starred: chat.is_starred,
     }))
@@ -691,11 +693,12 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       return result;
     },
     {
-      body: t.Object({
-        chatId: t.String(),
-        prompt: t.Optional(t.String()),
-        demoUrl: t.Optional(t.String()),
-      }),
+    body: t.Object({
+  chatId: t.String(),
+  prompt: t.Optional(t.String()),
+  demoUrl: t.Optional(t.String()),
+  demo_html: t.Optional(t.String()),
+}),
     },
   )
   // Chat history endpoint - GET /api/chats
@@ -1295,56 +1298,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     return result
   })
 
-  // POST /api/github/push — push generated files to GitHub
-  .post(
-    "/github/push",
-    async ({ body, set }) => {
-      const result = await pushToGithubHandler({ body })
-      if (result && "status" in result && result.status) set.status = result.status
-      return result
-    },
-    {
-      body: t.Object({
-        chatId:                 t.String(),
-        branchName:             t.String(),
-        commitMessage:          t.Optional(t.String()),
-        confirmExistingBranch:  t.Optional(t.Boolean()),
-        repoName:               t.Optional(t.String()),
-        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
-        replaceRepo:            t.Optional(t.Boolean()),
-      }),
-    },
-  )
-
-  // GET /api/github/repos — list user's repos for the "connect existing" picker
-  // Returns repos the user owns, collaborates on, or is an org member of.
-  // Write-permission enforcement happens at push time via the GitHub API.
-  .get('/github/repos', async ({ set }) => {
-    const result = await getGithubReposHandler()
-    if (!Array.isArray(result) && 'status' in result && result.status) {
-      set.status = result.status
-    }
-    return result
-  })
-
-  // POST /api/github/connect — Step 1 of connect-existing-repo flow
-  // Validates the repo is accessible, saves it as the active repo for the chat.
-  // Does NOT push any files. Push happens separately via /github/push.
-  .post(
-    '/github/connect',
-    async ({ body, set }) => {
-      const result = await connectExistingRepoHandler({ body })
-      if (result && 'status' in result && result.status) set.status = result.status
-      return result
-    },
-    {
-      body: t.Object({
-        chatId:       t.String(),
-        repoFullName: t.String(), // format: "owner/repo-name"
-      }),
-    },
-  )
-
   // GET /api/github/validate — live-validates a repo+branch for source code analysis.
   // [GITHUB] Used by the debounced input in the test run form. Requires auth +
   // a GitHub token; returns no_github_account for email-only users.
@@ -1365,7 +1318,6 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // GET /api/github/repo/:chatId — active repo info for a chat
   .get(
     "/github/repo/:chatId",
     async ({ params, set }) => {
@@ -1379,98 +1331,23 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // ── Pull Request Endpoints ──────────────────────────────────────────────
-
-  // GET /api/github/branches/:chatId — list branches for the active repo
-  // Used to populate head/base branch selectors in the PR creation form
-  .get(
-    '/github/branches/:chatId',
-    async ({ params, set }) => {
-      const result = await listRepoBranchesHandler({ params })
-      if (!Array.isArray(result) && 'status' in result && result.status) {
-        set.status = result.status
-      }
-      return result
-    },
-    {
-      params: t.Object({ chatId: t.String() }),
-    },
-  )
-
-  // GET /api/github/prs/:chatId — list all open PRs for the active repo
-  // Fast path: all PRs returned with mergeableStatus: 'unknown'
-  // Use GET /api/github/pr/:chatId/:prNumber for real mergeability
-  .get(
-    '/github/prs/:chatId',
-    async ({ params, set }) => {
-      const result = await listPullRequestsHandler({ params })
-      if (!Array.isArray(result) && 'status' in result && result.status) {
-        set.status = result.status
-      }
-      return result
-    },
-    {
-      params: t.Object({ chatId: t.String() }),
-    },
-  )
-
-  // GET /api/github/pr/:chatId/:prNumber — single PR with real mergeability
-  // Called lazily when the user expands a PR card in the UI
-  .get(
-    '/github/pr/:chatId/:prNumber',
-    async ({ params, set }) => {
-      const result = await getPullRequestHandler({ params })
-      if (result && 'status' in result && result.status) set.status = result.status
-      return result
-    },
-    {
-      params: t.Object({
-        chatId:   t.String(),
-        prNumber: t.String(), // parsed to int inside the handler
-      }),
-    },
-  )
-
-  // POST /api/github/pr/create — create a new pull request
-  // IMPORTANT: must come before /github/pr/:chatId/:prNumber to avoid
-  // Elysia treating "create" as a prNumber param
+  // POST /api/github/push — push generated files to GitHub
   .post(
-    '/github/pr/create',
+    "/github/push",
     async ({ body, set }) => {
-      const result = await createPullRequestHandler({ body })
-      if (result && 'status' in result && result.status) set.status = result.status
+      const result = await pushToGithubHandler({ body })
+      if (result && "status" in result && result.status) set.status = result.status
       return result
     },
     {
       body: t.Object({
-        chatId: t.String(),
-        title:  t.String(),
-        head:   t.String(), // source branch
-        base:   t.String(), // target branch
-        body:   t.Optional(t.String()), // PR description
-      }),
-    },
-  )
-
-  // POST /api/github/pr/merge — merge a pull request
-  // Only succeeds if the PR is currently mergeable (verified server-side)
-  .post(
-    '/github/pr/merge',
-    async ({ body, set }) => {
-      const result = await mergePullRequestHandler({ body })
-      if (result && 'status' in result && result.status) set.status = result.status
-      return result
-    },
-    {
-      body: t.Object({
-        chatId:      t.String(),
-        prNumber:    t.Number(),
-        mergeMethod: t.Union([
-          t.Literal('merge'),
-          t.Literal('squash'),
-          t.Literal('rebase'),
-        ]),
-        commitTitle: t.Optional(t.String()),
+        chatId:                 t.String(),
+        branchName:             t.String(),
+        commitMessage:          t.Optional(t.String()),
+        confirmExistingBranch:  t.Optional(t.Boolean()),
+        repoName:               t.Optional(t.String()),
+        visibility:             t.Optional(t.Union([t.Literal("public"), t.Literal("private")])),
+        replaceRepo:            t.Optional(t.Boolean()),
       }),
     },
   )
@@ -1995,19 +1872,28 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({ token: t.String() }),
     },
   )
-
+  
+  
   // ============================================
   // Video Generation Endpoints
   // ============================================
 
-  // POST /api/video/upload-images
+  // POST /api/video/generate — generate AI video background via kie.ai
+  .post('/video/generate', ({ request }) => generateVideoHandler(request))
+
+
+  // ============================================
+  // Remotion Video Generation Endpoints
+  // ============================================
+
+  // POST /api/remotion-video/upload-images
   //   Content-Type: multipart/form-data
   //   Body: { images: File[], descriptions: string[] }
   //
   //   Returns: { images: UploadedUserImage[], sessionId: string }
  
   .post(
-    '/video/upload-images',
+    '/remotion-video/upload-images',
     async ({ body, set }: any) => {
       const result = await uploadUserImagesHandler({ body })
       if ('status' in result && 'error' in result) {
@@ -2024,10 +1910,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
  
-  // POST /api/video/generate — prompt → VideoJson
+  // POST /api/remotion-video/generate — prompt → VideoJson
 // Returns validated VideoJson ready to pass to the Remotion Player.
 .post(
-  '/video/generate',
+  '/remotion-video/generate',
   async ({ body, set }: any) => {
     const result = await generateVideoHandler({ body })
     if ('status' in result && 'error' in result) {
@@ -2062,10 +1948,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   },
 )
  
-  // POST /api/video/render — VideoJson → render job 
+  // POST /api/remotion-video/render — VideoJson → render job 
   // Currently returns a stub jobId. In the future, this will trigger actual rendering and return a real jobId that can be polled for status and results.
   .post(
-    '/video/render',
+    '/remotion-video/render',
     async ({ body, set }) => {
       const result = await renderVideoHandler({ body })
       if ('status' in result && 'error' in result) {
@@ -2087,11 +1973,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       }),
     },
   )
-  // GET /api/video/chats — list all video chats for the authenticated user
+  // GET /api/remotion-video/chats — list all video chats for the authenticated user
   // Used by useVideoChats() in the history panel to populate the sidebar/drawer.
   // IMPORTANT: declared before /video/chats/:chatId to avoid route collision.
   .get(
-    '/video/chats',
+    '/remotion-video/chats',
     async ({ set }) => {
       const result = await getVideoChatsHandler()
       if ('status' in result && 'error' in result) {
@@ -2102,10 +1988,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // GET /api/video/chats/:chatId — single video chat by id
+  // GET /api/remotion-video/chats/:chatId — single video chat by id
   // Used by useVideoChat(chatId) to resume a past generation.
   .get(
-    '/video/chats/:chatId',
+    '/remotion-video/chats/:chatId',
     async ({ params, set }) => {
       const result = await getVideoChatHandler({ params })
       if ('status' in result && 'error' in result) {
@@ -2118,9 +2004,9 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
       params: t.Object({ chatId: t.String() }),
     },
   )
-  // PATCH /api/video/chats/:chatId — rename a video chat title
+  // PATCH /api/remotion-video/chats/:chatId — rename a video chat title
   .patch(
-    '/video/chats/:chatId',
+    '/remotion-video/chats/:chatId',
     async ({ params, body, set }: any) => {
       const result = await renameVideoChatHandler({ params, body })
       if ('status' in result && 'error' in result) {
@@ -2137,10 +2023,10 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // DELETE /api/video/chats/:chatId — delete a video chat by id
+  // DELETE /api/remotion-video/chats/:chatId — delete a video chat by id
   // Called if we add a delete button to the history panel in future.
   .delete(
-    '/video/chats/:chatId',
+    '/remotion-video/chats/:chatId',
     async ({ params, set }) => {
       const result = await deleteVideoChatHandler({ params })
       if ('status' in result && 'error' in result) {
@@ -2155,7 +2041,7 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
   )
 
   .get(
-    '/video/s3-proxy',
+    '/remotion-video/s3-proxy',
     async ({ query, set }) => {
       const session = await getSession()
       if (!session?.user?.id) {
@@ -2214,11 +2100,11 @@ export const elysiaApp = new Elysia({ prefix: '/api' })
     },
   )
 
-  // GET /api/video/usage — daily prompt quota for the authenticated user
+  // GET /api/remotion-video/usage — daily prompt quota for the authenticated user
   // Used by useVideoDailyUsage() to render the usage pill and disable the
   // Generate button when the daily limit is reached.
   .get(
-    '/video/usage',
+    '/remotion-video/usage',
     async ({ set }) => {
       const session = await getSession()
       if (!session?.user?.id) {

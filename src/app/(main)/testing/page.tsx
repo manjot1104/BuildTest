@@ -48,8 +48,8 @@ const ABSOLUTE_MAX_TESTS = 30;
 interface PlanLimits { maxPages: number; maxTests: number; maxConcurrency: number; label: string }
 const FREE_LIMITS: PlanLimits = { maxPages: 3, maxTests: 5, maxConcurrency: 3, label: "Free" };
 const PLAN_LIMITS: Record<string, PlanLimits> = {
-  starter: { maxPages: 5, maxTests: 10, maxConcurrency: 5, label: "Starter" },
-  pro: { maxPages: 10, maxTests: 20, maxConcurrency: 10, label: "Pro" },
+  starter:    { maxPages:  5, maxTests: 10, maxConcurrency:  5, label: "Starter"   },
+  pro:        { maxPages: 10, maxTests: 20, maxConcurrency: 10, label: "Pro"        },
   enterprise: { maxPages: 20, maxTests: 30, maxConcurrency: 20, label: "Enterprise" },
 };
 function getPlanLimits(p: string | null | undefined): PlanLimits {
@@ -57,12 +57,12 @@ function getPlanLimits(p: string | null | undefined): PlanLimits {
   return PLAN_LIMITS[p.toLowerCase()] ?? FREE_LIMITS;
 }
 
-const CONCURRENCY_MIN = 1;
-const CONCURRENCY_MAX = 20;
+const CONCURRENCY_MIN     = 1;
+const CONCURRENCY_MAX     = 20;
 const CONCURRENCY_DEFAULT = 5;
-const DEFAULT_DISCOVERY_MS = 300_000;
+const DEFAULT_DISCOVERY_MS  = 300_000;
 const DEFAULT_EXTRACTION_MS = 300_000;
-const DEFAULT_EXECUTE_MS = 300_000;
+const DEFAULT_EXECUTE_MS    = 300_000;
 
 // ─── Tooltip ───────────────────────────────────────────────────────────────────
 
@@ -141,13 +141,13 @@ function BfyGhostBtn({ onClick, children, className = "" }: {
 function UsagePill({ runsToday, dailyLimit, planId, onUpgrade }: {
   runsToday: number; dailyLimit: number; planId: string; onUpgrade: () => void;
 }) {
-  const remaining = dailyLimit - runsToday;
-  const pct = runsToday / dailyLimit;
-  const isAtLimit = runsToday >= dailyLimit;
+  const remaining   = dailyLimit - runsToday;
+  const pct         = runsToday / dailyLimit;
+  const isAtLimit   = runsToday >= dailyLimit;
   const isNearLimit = pct >= 0.8 && !isAtLimit;
 
-  const barColor = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-primary";
-  const textColor = isAtLimit ? "text-red-400" : isNearLimit ? "text-yellow-400" : "text-muted-foreground/60";
+  const barColor    = isAtLimit ? "bg-red-500" : isNearLimit ? "bg-yellow-500" : "bg-primary";
+  const textColor   = isAtLimit ? "text-red-400" : isNearLimit ? "text-yellow-400" : "text-muted-foreground/60";
   const borderColor = isAtLimit ? "border-red-500/25" : isNearLimit ? "border-yellow-500/20" : "border-border";
 
   return (
@@ -320,16 +320,17 @@ function AdvancedSettingsPanel({
                     {Array.from({ length: CONCURRENCY_MAX }).map((_, i) => {
                       const isActive = i < concurrency;
                       const isLocked = i >= maxConcurrency;
-                      const activeColor = concurrency <= low ? "bg-primary/70"
-                        : concurrency <= mid ? "bg-yellow-500/70"
-                          : "bg-orange-500/70";
+                      const activeColor = concurrency <= low  ? "bg-primary/70"
+                                        : concurrency <= mid  ? "bg-yellow-500/70"
+                                        : "bg-orange-500/70";
                       return (
                         <div
                           key={i}
-                          className={`flex-1 rounded-full transition-colors duration-150 ${isLocked ? "bg-border/30"
-                              : isActive ? activeColor
-                                : "bg-border"
-                            }`}
+                          className={`flex-1 rounded-full transition-colors duration-150 ${
+                            isLocked  ? "bg-border/30"
+                            : isActive ? activeColor
+                            : "bg-border"
+                          }`}
                         />
                       );
                     })}
@@ -347,19 +348,21 @@ function AdvancedSettingsPanel({
               {concurrency > maxConcurrency ? (
                 <UpgradeNudge feature="Concurrency" planNeeded="Upgrade plan" onUpgrade={onUpgrade} />
               ) : (
-                <p className={`text-[10px] font-mono flex items-center gap-1.5 ${concurrency <= low ? "text-primary/60"
-                    : concurrency <= mid ? "text-yellow-500/60"
-                      : "text-orange-500/60"
-                  }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${concurrency <= low ? "bg-primary/60"
-                      : concurrency <= mid ? "bg-yellow-500/60"
-                        : "bg-orange-500/60"
-                    }`} />
+                <p className={`text-[10px] font-mono flex items-center gap-1.5 ${
+                  concurrency <= low ? "text-primary/60"
+                  : concurrency <= mid ? "text-yellow-500/60"
+                  : "text-orange-500/60"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${
+                    concurrency <= low ? "bg-primary/60"
+                    : concurrency <= mid ? "bg-yellow-500/60"
+                    : "bg-orange-500/60"
+                  }`} />
                   {concurrency <= low
                     ? "lower parallelism · steady credit usage"
                     : concurrency <= mid
-                      ? "moderate parallelism · balanced speed"
-                      : "high parallelism · uses credits quickly"
+                    ? "moderate parallelism · balanced speed"
+                    : "high parallelism · uses credits quickly"
                   }
                 </p>
               )}
@@ -548,21 +551,6 @@ function CrawlContextInput({
   );
 }
 
-// ─── Download CSV ──────────────────────────────────────────────────────────────
-function downloadCSV(filename: string, rows: string[][]): void {
-  const csv = rows
-    .map((r) => r.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
-    .join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
-}
-
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TestingPage() {
@@ -573,19 +561,19 @@ export default function TestingPage() {
   const { data: usageData } = useTestUsage();
   const isAtDailyLimit = usageData ? usageData.runsToday >= usageData.dailyLimit : false;
 
-  const prefillUrl = searchParams.get("url") ?? "";
-  const prefillOwner = searchParams.get("owner") ?? "";
-  const prefillRepo = searchParams.get("repo") ?? "";
+  const prefillUrl    = searchParams.get("url")    ?? "";
+  const prefillOwner  = searchParams.get("owner")  ?? "";
+  const prefillRepo   = searchParams.get("repo")   ?? "";
   const prefillBranch = searchParams.get("branch") ?? "";
-  const hasPrefill = !!(prefillUrl || prefillOwner || prefillRepo);
+  const hasPrefill    = !!(prefillUrl || prefillOwner || prefillRepo);
 
-  const [url, setUrl] = useState(prefillUrl);
-  const [maxPages, setMaxPages] = useState(5);
-  const [maxTests, setMaxTests] = useState(10);
-  const [concurrency, setConcurrency] = useState(CONCURRENCY_DEFAULT);
-  const [discoveryMs, setDiscoveryMs] = useState(DEFAULT_DISCOVERY_MS);
+  const [url, setUrl]             = useState(prefillUrl);
+  const [maxPages, setMaxPages]   = useState(5);
+  const [maxTests, setMaxTests]   = useState(10);
+  const [concurrency, setConcurrency]   = useState(CONCURRENCY_DEFAULT);
+  const [discoveryMs, setDiscoveryMs]   = useState(DEFAULT_DISCOVERY_MS);
   const [extractionMs, setExtractionMs] = useState(DEFAULT_EXTRACTION_MS);
-  const [executeMs, setExecuteMs] = useState(DEFAULT_EXECUTE_MS);
+  const [executeMs, setExecuteMs]       = useState(DEFAULT_EXECUTE_MS);
   const [githubSource, setGithubSource] = useState<GithubSourceValue | null>(null);
   const [crawlContext, setCrawlContext] = useState("");
   const [showPrefillBanner, setShowPrefillBanner] = useState(hasPrefill);
@@ -606,14 +594,14 @@ export default function TestingPage() {
     setShowTestsUpgradeNudge(false);
   }, [planLimits]);
 
-  const [testRunId, setTestRunId] = useState<string | null>(null);
+  const [testRunId, setTestRunId]           = useState<string | null>(null);
   const [filterSeverity, setFilterSeverity] = useState("all");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [tcFilter, setTcFilter] = useState<"all" | "passed" | "failed" | "flaky">("all");
-  const [activeTab, setActiveTab] = useState<"tests" | "bugs" | "performance" | "trend">("tests");
-  const [selectedBug, setSelectedBug] = useState<BugType | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [tcFilter, setTcFilter]             = useState<"all" | "passed" | "failed" | "flaky">("all");
+  const [activeTab, setActiveTab]           = useState<"tests" | "bugs" | "performance" | "trend">("tests");
+  const [selectedBug, setSelectedBug]       = useState<BugType | null>(null);
+  const [showHistory, setShowHistory]       = useState(false);
+  const [copied, setCopied]                 = useState(false);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const { mutate: startTest, isPending: isStarting } = useStartTestRun();
@@ -624,15 +612,15 @@ export default function TestingPage() {
 
   const initialStatusForSSE =
     run?.status && ["complete", "failed", "cancelled"].includes(run.status) ? run.status
-      : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
+    : run?.status === "awaiting_review" ? "awaiting_review" : undefined;
 
   const { sseState } = useTestRunSSE(testRunId, initialStatusForSSE);
 
-  const isComplete = sseState.isComplete || run?.status === "complete";
-  const isFailed = sseState.pipelineStatus === "failed" || run?.status === "failed";
-  const isCancelled = sseState.isCancelled || run?.status === "cancelled";
+  const isComplete       = sseState.isComplete       || run?.status === "complete";
+  const isFailed         = sseState.pipelineStatus === "failed" || run?.status === "failed";
+  const isCancelled      = sseState.isCancelled      || run?.status === "cancelled";
   const isAwaitingReview = sseState.isAwaitingReview || run?.status === "awaiting_review";
-  const isRunning = !!testRunId && !isComplete && !isFailed && !isCancelled && !isAwaitingReview;
+  const isRunning        = !!testRunId && !isComplete && !isFailed && !isCancelled && !isAwaitingReview;
 
   const { data: report } = useTestReport(testRunId, isComplete);
 
@@ -641,13 +629,13 @@ export default function TestingPage() {
     running: run?.running ?? 0, skipped: run?.skipped ?? 0, total: run?.totalTests ?? 0,
   };
 
-  const sseOrder = PIPELINE_ORDER[sseState.pipelineStatus] ?? 0;
-  const dbOrder = PIPELINE_ORDER[run?.status ?? "crawling"] ?? 0;
+  const sseOrder       = PIPELINE_ORDER[sseState.pipelineStatus] ?? 0;
+  const dbOrder        = PIPELINE_ORDER[run?.status ?? "crawling"] ?? 0;
   const pipelineStatus = sseOrder >= dbOrder ? sseState.pipelineStatus : (run?.status ?? "crawling");
-  const percent = sseState.percent > 0 ? sseState.percent : (run?.percent ?? 10);
-  const isCrawlingPhase = pipelineStatus === "crawling";
+  const percent        = sseState.percent > 0 ? sseState.percent : (run?.percent ?? 10);
+  const isCrawlingPhase  = pipelineStatus === "crawling";
   const isExecutingPhase = pipelineStatus === "executing" || pipelineStatus === "reporting";
-  const liveTestCases = sseState.generatedTestCases;
+  const liveTestCases    = sseState.generatedTestCases;
 
   const filteredBugs = (report?.bugs ?? []).filter((b) => {
     if (filterSeverity !== "all" && b.severity !== filterSeverity) return false;
@@ -681,10 +669,10 @@ export default function TestingPage() {
   const runDisabledReason = isStarting
     ? "Starting test run…"
     : !url.trim()
-      ? "Enter a URL above to get started"
-      : isAtDailyLimit
-        ? `Daily limit reached. Upgrade to run more tests today.`
-        : undefined;
+    ? "Enter a URL above to get started"
+    : isAtDailyLimit
+    ? `Daily limit reached. Upgrade to run more tests today.`
+    : undefined;
 
   const handleStart = () => {
     if (!url.trim()) { toast.error("Please enter a URL to test"); return; }
@@ -694,9 +682,9 @@ export default function TestingPage() {
     }
     const effectiveConcurrency = Math.min(concurrency, planLimits.maxConcurrency);
     const timeouts: Record<string, number> = {};
-    if (discoveryMs !== DEFAULT_DISCOVERY_MS) timeouts.discoveryMs = discoveryMs;
-    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs = extractionMs;
-    if (executeMs !== DEFAULT_EXECUTE_MS) timeouts.executeTestBaseMs = executeMs;
+    if (discoveryMs  !== DEFAULT_DISCOVERY_MS)  timeouts.discoveryMs       = discoveryMs;
+    if (extractionMs !== DEFAULT_EXTRACTION_MS) timeouts.extractionMs      = extractionMs;
+    if (executeMs    !== DEFAULT_EXECUTE_MS)    timeouts.executeTestBaseMs = executeMs;
     startTest(
       {
         url: url.trim(), maxPages, maxTests,
@@ -746,7 +734,7 @@ export default function TestingPage() {
   return (
     <div className="relative -m-4 w-[calc(100%+2rem)] min-h-screen bg-sidebar">
       {selectedBug && <BugDetailModal bug={selectedBug} onClose={() => setSelectedBug(null)} />}
-      {showHistory && (
+      {showHistory  && (
         <HistoryPanel
           onSelect={(id: string, status: string) => { setTestRunId(id); setActiveTab("tests"); }}
           onClose={() => setShowHistory(false)}
@@ -1160,10 +1148,10 @@ export default function TestingPage() {
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
                     {[
-                      { val: report.passed, label: "passed", cls: "text-primary" },
-                      { val: report.failed, label: "failed", cls: "text-red-500" },
-                      { val: report.skipped, label: "skipped", cls: "text-muted-foreground/60" },
-                      { val: report.totalTests, label: "total", cls: "text-foreground" },
+                      { val: report.passed,     label: "passed",  cls: "text-primary"              },
+                      { val: report.failed,     label: "failed",  cls: "text-red-500"               },
+                      { val: report.skipped,    label: "skipped", cls: "text-muted-foreground/60"   },
+                      { val: report.totalTests, label: "total",   cls: "text-foreground"            },
                     ].map(({ val, label, cls }) => (
                       <div key={label} className="rounded-lg bg-muted/50 border border-border px-2 py-1.5">
                         <p className={`text-sm font-mono font-bold tabular-nums ${cls}`}>{val ?? 0}</p>
@@ -1214,15 +1202,16 @@ export default function TestingPage() {
             {/* Tabs */}
             <div className="flex border-b border-border overflow-x-auto" role="tablist">
               {([
-                { key: "tests", label: "tests", count: report.testCases?.length ?? 0, icon: FlaskConical },
-                { key: "bugs", label: "bugs", count: report.bugs?.length ?? 0, icon: Bug },
-                { key: "performance", label: "perf", count: report.performanceGauges?.length ?? 0, icon: Activity },
-                { key: "trend", label: "trend", count: report.trendData?.length ?? 0, icon: TrendingUp },
+                { key: "tests",       label: "tests", count: report.testCases?.length ?? 0,        icon: FlaskConical },
+                { key: "bugs",        label: "bugs",  count: report.bugs?.length ?? 0,              icon: Bug         },
+                { key: "performance", label: "perf",  count: report.performanceGauges?.length ?? 0, icon: Activity    },
+                { key: "trend",       label: "trend", count: report.trendData?.length ?? 0,         icon: TrendingUp  },
               ] as const).map(({ key, label, count, icon: Icon }) => (
                 <button key={key} role="tab" aria-selected={activeTab === key}
                   onClick={() => setActiveTab(key as typeof activeTab)}
-                  className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] sm:text-xs font-mono uppercase tracking-widest border-b-2 transition-colors -mb-px shrink-0 touch-manipulation ${activeTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}>
+                  className={`flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-[10px] sm:text-xs font-mono uppercase tracking-widest border-b-2 transition-colors -mb-px shrink-0 touch-manipulation ${
+                    activeTab === key ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}>
                   <Icon className="h-3.5 w-3.5" />
                   {label}
                   {count > 0 && (
@@ -1238,8 +1227,9 @@ export default function TestingPage() {
                 <div className="flex items-center gap-1.5 flex-wrap" role="group">
                   {(["all", "passed", "failed", "flaky"] as const).map((f) => (
                     <button key={f} onClick={() => setTcFilter(f)} aria-pressed={tcFilter === f}
-                      className={`text-[10px] font-mono px-2.5 py-1 rounded-md capitalize transition-all touch-manipulation border ${tcFilter === f ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
-                        }`}>
+                      className={`text-[10px] font-mono px-2.5 py-1 rounded-md capitalize transition-all touch-manipulation border ${
+                        tcFilter === f ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
+                      }`}>
                       {f}
                       {f !== "all" && (
                         <span className="ml-1 text-muted-foreground/40">
@@ -1252,7 +1242,7 @@ export default function TestingPage() {
                 <div className="flex flex-col gap-2" role="list">
                   {filteredTestCases.length === 0
                     ? (
-                      <div className="rounded-xl border border-border bg-muted/20 p-6 text-center">
+                      <div className="sm:col-span-2 rounded-xl border border-border bg-muted/20 p-6 text-center">
                         <FlaskConical className="h-7 w-7 text-muted-foreground/20 mx-auto mb-2" />
                         <p className="text-xs font-mono text-muted-foreground">no test cases match this filter</p>
                       </div>
@@ -1277,8 +1267,9 @@ export default function TestingPage() {
                   <div className="flex gap-1 flex-wrap" role="group">
                     {["all", "critical", "high", "medium", "low"].map((sev) => (
                       <button key={sev} onClick={() => setFilterSeverity(sev)} aria-pressed={filterSeverity === sev}
-                        className={`text-[10px] font-mono px-2 py-1 rounded-md capitalize transition-all touch-manipulation border ${filterSeverity === sev ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
-                          }`}>{sev}</button>
+                        className={`text-[10px] font-mono px-2 py-1 rounded-md capitalize transition-all touch-manipulation border ${
+                          filterSeverity === sev ? "bg-muted text-foreground border-border" : "text-muted-foreground hover:text-foreground border-border/50"
+                        }`}>{sev}</button>
                     ))}
                   </div>
                 </div>
@@ -1290,7 +1281,7 @@ export default function TestingPage() {
                     </div>
                   )
                   : (
-                    <div className="flex flex-col gap-2" role="list">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="list">
                       {filteredBugs.map((bug) => (
                         <div key={bug.id} role="listitem"><BugCard bug={bug} onClick={() => setSelectedBug(bug)} /></div>
                       ))}
@@ -1320,14 +1311,14 @@ export default function TestingPage() {
                           </div>
                           <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">Core Web Vitals</p>
                           <div className="space-y-2 mb-3">
-                            <PerfGaugeRow label="LCP" value={pg.lcpMs} unit="ms" status={pg.lcpStatus} />
-                            <PerfGaugeRow label="CLS" value={pg.cls} unit="" status={pg.clsStatus} />
+                            <PerfGaugeRow label="LCP"  value={pg.lcpMs}  unit="ms" status={pg.lcpStatus}  />
+                            <PerfGaugeRow label="CLS"  value={pg.cls}    unit=""   status={pg.clsStatus}  />
                             <PerfGaugeRow label="TTFB" value={pg.ttfbMs} unit="ms" status={pg.ttfbStatus} />
                           </div>
                           <p className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-widest mb-2">Load Timing</p>
                           <div className="space-y-2">
-                            <PerfGaugeRow label="DCL" value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
-                            <PerfGaugeRow label="Load" value={pg.loadEventMs} unit="ms" status={pg.loadEventStatus ?? "unknown"} />
+                            <PerfGaugeRow label="DCL"  value={pg.domContentLoadedMs} unit="ms" status={pg.domContentLoadedStatus ?? "unknown"} />
+                            <PerfGaugeRow label="Load" value={pg.loadEventMs}         unit="ms" status={pg.loadEventStatus ?? "unknown"}        />
                           </div>
                         </div>
                       ))}
@@ -1373,57 +1364,8 @@ export default function TestingPage() {
               <button
                 onClick={() => { const b = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = `testfish-${Date.now()}.json`; a.click(); toast.success("JSON downloaded"); }}
                 className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation">
-                <FileText className="h-3.5 w-3.5" /> Report JSON
+                <FileText className="h-3.5 w-3.5" /> JSON
               </button>
-              <button
-                onClick={() => {
-                  const rows = [
-                    ["Title", "Category", "Priority", "Status", "Duration (ms)", "Steps", "Expected Result"],
-                    ...(report.testCases ?? []).map((tc) => {
-                      const liveStatus = sseState.testUpdates[tc.id]?.status;
-                      const status = liveStatus ?? tc.results?.[0]?.status ?? "skipped";
-                      const duration = sseState.testUpdates[tc.id]?.durationMs ?? tc.results?.[0]?.duration_ms ?? "";
-                      return [
-                        tc.title ?? "",
-                        tc.category ?? "",
-                        tc.priority ?? "",
-                        status,
-                        String(duration),
-                        (tc.steps ?? []).join(" | "),
-                        tc.expected_result ?? "",
-                     ];
-                    }),
-                  ];
-                  downloadCSV(`testfish-cases-${Date.now()}.csv`, rows);
-                  toast.success("Test cases CSV downloaded");
-                }}
-                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
-                >
-                <FileText className="h-3.5 w-3.5" /> Cases CSV
-              </button>
-
-              <button
-                onClick={() => {
-                  const rows = [
-                    ["Title", "Severity", "Category", "Page URL", "Description", "Steps", "AI Fix Suggestion"],
-                    ...(report.bugs ?? []).map((b) => [
-                      b.title ?? "",
-                      b.severity ?? "",
-                      b.category ?? "",
-                      b.page_url ?? "",
-                      b.description ?? "",
-                      (b.reproduction_steps ?? []).join(" | "),
-                      b.ai_fix_suggestion ?? "",
-                    ]),
-                  ];
-                  downloadCSV(`testfish-bugs-${Date.now()}.csv`, rows);
-                  toast.success("Bug report CSV downloaded");
-                }}
-                className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
-                >
-                <Bug className="h-3.5 w-3.5" /> Bugs CSV
-              </button>
-
               {report.shareableSlug && (
                 <button
                   onClick={() => { void navigator.clipboard.writeText(`${window.location.origin}/report/${report.shareableSlug}`); setCopied(true); toast.success("Link copied!"); setTimeout(() => setCopied(false), 2000); }}
@@ -1432,10 +1374,22 @@ export default function TestingPage() {
                   {copied ? "copied!" : "share"}
                 </button>
               )}
-
-              <button onClick={handleReset} className="inline-flex items-center gap-2 h-8 px-3 rounded-lg text-muted-foreground/40 text-xs font-mono hover:text-muted-foreground transition-all ml-auto touch-manipulation">
-                <RotateCcw className="h-3.5 w-3.5" /> new test
-              </button>
+               {report.embedBadgeToken && (
+                <button
+                  onClick={() => {
+                    const badgeUrl = `${window.location.origin}/api/badge/${report.embedBadgeToken}/svg`;
+                    const reportUrl = report.shareableSlug
+                      ? `${window.location.origin}/report/${report.shareableSlug}`
+                      : window.location.href;
+                    const markdown = `[![Tested by Buildify](${badgeUrl})](${reportUrl})`;
+                    void navigator.clipboard.writeText(markdown);
+                    toast.success("Badge markdown copied!");
+                  }}
+                  className="inline-flex items-center gap-2 h-8 px-3 rounded-lg border border-border text-muted-foreground text-xs font-mono hover:text-foreground hover:bg-muted transition-all touch-manipulation"
+                >
+                  <BarChart3 className="h-3.5 w-3.5" /> Badge
+                </button>
+              )}
 
             </div>
           </div>

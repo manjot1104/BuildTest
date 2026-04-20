@@ -13,6 +13,12 @@
 
 import { z } from 'zod'
 
+import {
+  applyResumeDesignSystemToHtml,
+  RESUME_DESIGN_SYSTEM_CSS,
+  RESUME_DS_MARKER,
+} from './resume-design-system'
+
 // ── Canonical Structured Schema ──────────────────────────────────────────────
 
 export const resumeDataSchema = z.object({
@@ -204,12 +210,12 @@ function normalizeExperience(raw: ResumeRenderData['experience']): ExperienceEnt
       if (lines.length === 0) return null
       const firstLine = lines[0] ?? ''
       const parts = firstLine.split(/\s*\|\s*/)
-      return {
-        role: parts[0] || 'Software Engineer',
-        company: parts[1] || 'Company',
-        duration: parts[2] || '',
-        points: lines.slice(1).map((l) => l.replace(/^[•\-\*]\s*/, '').trim()).filter(Boolean),
-      }
+      const role = (parts[0] || '').trim()
+      const company = (parts[1] || '').trim()
+      const duration = (parts[2] || '').trim()
+      const points = lines.slice(1).map((l) => l.replace(/^[•\-\*]\s*/, '').trim()).filter(Boolean)
+      if (!role && !company && points.length === 0) return null
+      return { role, company, duration, points }
     })
     .filter(Boolean) as ExperienceEntry[]
 }
@@ -227,11 +233,11 @@ function normalizeProjects(raw: ResumeRenderData['projects']): ProjectEntry[] {
       if (lines.length === 0) return null
       const firstLine = lines[0] ?? ''
       const parts = firstLine.split(/\s*\|\s*/)
-      return {
-        name: parts[0] || 'Project',
-        tech: parts.length > 2 ? parts[1] : undefined,
-        points: lines.slice(1).map((l) => l.replace(/^[•\-\*]\s*/, '').trim()).filter(Boolean),
-      }
+      const name = (parts[0] || '').trim()
+      const tech = parts.length > 2 ? parts[1] : undefined
+      const points = lines.slice(1).map((l) => l.replace(/^[•\-\*]\s*/, '').trim()).filter(Boolean)
+      if (!name && points.length === 0) return null
+      return { name, tech, points }
     })
     .filter(Boolean) as ProjectEntry[]
 }
@@ -242,20 +248,29 @@ function normalizeEducation(raw: ResumeRenderData['education']): EducationEntry[
 
   const text = raw as string
   if (isPlaceholder(text)) return []
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
-  if (lines.length === 0) return []
+  const blocks = text.split(/\n\n+/).map((b) => b.trim()).filter(Boolean)
+  return blocks
+    .map((block) => {
+      const lines = block
+        .split('\n')
+        .map((l) => l.replace(/^[•\-\*]\s*/, '').trim())
+        .filter(Boolean)
+      if (lines.length === 0) return null
 
-  // Try to parse: "Degree\nCollege | Year\n• details"
-  const degree = lines[0] ?? 'Degree'
-  const instLine = lines[1] ?? ''
-  const instParts = instLine.split(/\s*\|\s*/)
-  return [
-    {
-      degree,
-      college: instParts[0] || 'Institution',
-      year: instParts[1] || '',
-    },
-  ]
+      const degree = lines[0] || ''
+      const rest = lines.slice(1)
+      let year = ''
+      const yearIdx = rest.findIndex((l) => /\b(19|20)\d{2}\s*[-–—to]+\s*(19|20)\d{2}\b/i.test(l))
+      if (yearIdx >= 0) {
+        year = rest[yearIdx] || ''
+        rest.splice(yearIdx, 1)
+      }
+
+      const college = rest.join(', ')
+      if (!degree && !college && !year) return null
+      return { degree, college, year }
+    })
+    .filter(Boolean) as EducationEntry[]
 }
 
 function normalizeSkillsToString(raw: ResumeRenderData['skills']): string {
@@ -359,8 +374,18 @@ function replaceContactPlaceholders(block: string, data: ResumeRenderData): stri
   const portfolio = data.portfolio || ''
   const gitHub = data.github || ''
 
-  // Name
-  out = out.replace(/\bNAME\b/g, name)
+  // Name (use function replacers — user text can contain `$10` etc.; string replacement interprets `$n`)
+  out = out.replace(/\bNAME\b/g, () => name)
+  out = out.replace(/\bTITLE\b/g, () => data.title || '')
+  out = out.replace(/\bSUMMARY\b/g, () => data.summary || '')
+
+  // Standalone contact tokens (for templates that print one field per line)
+  out = out.replace(/\bEMAIL\b/g, () => data.email || '')
+  out = out.replace(/\bPHONE\b/g, () => data.phone || '')
+  out = out.replace(/\bLOCATION\b/g, () => loc)
+  out = out.replace(/\bLINKEDIN\b/g, () => linkedIn)
+  out = out.replace(/\bGITHUB\b/g, () => gitHub)
+  out = out.replace(/\bPORTFOLIO\b/g, () => portfolio)
 
   // Multi-part contact patterns (most specific first) — pipe separator
   out = out.replace(
@@ -428,10 +453,10 @@ function replaceContactPlaceholders(block: string, data: ResumeRenderData): stri
 function buildHtmlExperience(entries: ExperienceEntry[]): string {
   return entries
     .map(
-      (e) => `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${safeHtml(e.role)}</span><span class="entry-date">${safeHtml(e.duration)}</span></div>
-    <div class="entry-sub">${safeHtml(e.company)}</div>
-    <ul>
+      (e) => `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${safeHtml(e.role)}</span><span class="entry-date rs-entry-date">${safeHtml(e.duration)}</span></div>
+    <div class="entry-sub rs-entry-meta">${safeHtml(e.company)}</div>
+    <ul class="rs-list">
 ${e.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
     </ul>
   </div>`
@@ -442,10 +467,10 @@ ${e.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
 function buildHtmlProjects(entries: ProjectEntry[]): string {
   return entries
     .map((p) => {
-      const techLine = p.tech ? `\n    <div class="entry-sub">${safeHtml(p.tech)}</div>` : ''
-      return `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${safeHtml(p.name)}</span></div>${techLine}
-    <ul>
+      const techLine = p.tech ? `\n    <div class="entry-sub rs-entry-meta">${safeHtml(p.tech)}</div>` : ''
+      return `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${safeHtml(p.name)}</span></div>${techLine}
+    <ul class="rs-list">
 ${p.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
     </ul>
   </div>`
@@ -455,26 +480,56 @@ ${p.points.map((b) => `      <li>${safeHtml(b)}</li>`).join('\n')}
 
 function buildHtmlEducation(entries: EducationEntry[]): string {
   return entries
-    .map(
-      (e) => `  <div class="entry">
-    <div class="entry-header"><span class="entry-title">${safeHtml(e.degree)}</span><span class="entry-date">${safeHtml(e.year)}</span></div>
-    <div class="entry-sub">${safeHtml(e.college)}</div>
+    .map((e) => {
+      const degreeLine = e.year ? `${safeHtml(e.degree)} (${safeHtml(e.year)})` : safeHtml(e.degree)
+      return `  <div class="entry rs-entry">
+    <div class="entry-header rs-entry-head"><span class="entry-title rs-entry-title">${degreeLine}</span></div>
+    <div class="entry-sub rs-entry-meta">${safeHtml(e.college)}</div>
   </div>`
-    )
+    })
     .join('\n')
 }
 
 function buildHtmlSkills(skillsStr: string): string {
-  return `  <div class="skills-text">${safeHtml(skillsStr)}</div>`
+  const grouped = skillsStr
+    .split(/\s*\|\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => s.includes(':'))
+  if (grouped.length > 0) {
+    return `  <div class="skills-text rs-body">\n${grouped.map((line) => `    <div>${safeHtml(line)}</div>`).join('\n')}\n  </div>`
+  }
+  return `  <div class="skills-text rs-body">${safeHtml(skillsStr)}</div>`
 }
 
 function buildHtmlSummary(summary: string): string {
-  return `  <p style="font-size:10.5px;line-height:1.6;margin-bottom:4px">${safeHtml(summary)}</p>`
+  return `  <p class="rs-body">${safeHtml(summary)}</p>`
+}
+
+/** Teal Split Blocks: Profile uses a plain `<p>` under `.bar`, not rs-body */
+function buildHtmlProfileParagraph(summary: string): string {
+  return `  <p>${safeHtml(summary)}</p>`
+}
+
+/** Teal Split Blocks: `<ul class="skills">` with colored `<li>` items */
+function buildHtmlSkillsTealUl(skillsStr: string): string {
+  const parts = skillsStr
+    .split(/[,|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  const items = parts.map((p) => `        <li>${safeHtml(p)}</li>`).join('\n')
+  return `\n        <ul class="skills">\n${items}\n      </ul>`
+}
+
+/** Teal-style bar strips (`.section` > `.bar` / `.bar dark`) — not matched by h2 / section-title */
+function isTealSplitBarLayout(html: string): boolean {
+  return html.includes('contact-line') && /\bbar\s+dark\b/.test(html) && /\bclass=["'][^"']*\bbar\b/.test(html)
 }
 
 function buildHtmlList(items: string[]): string {
   if (items.length === 0) return ''
-  return `  <ul>\n${items.map((i) => `    <li>${safeHtml(i)}</li>`).join('\n')}\n  </ul>`
+  return `  <ul class="rs-list">\n${items.map((i) => `    <li>${safeHtml(i)}</li>`).join('\n')}\n  </ul>`
 }
 
 // ── LaTeX Section Builders ───────────────────────────────────────────────────
@@ -515,16 +570,32 @@ ${bulletsLatex}
 
 function buildLatexEducation(entries: EducationEntry[]): string {
   return entries
-    .map(
-      (e) => `\\textbf{${safeLatex(e.degree)}} \\hfill \\textit{${safeLatex(e.year)}}\\\\
+    .map((e) => {
+      const degreeLine = e.year ? `${safeLatex(e.degree)} (${safeLatex(e.year)})` : safeLatex(e.degree)
+      return `\\textbf{${degreeLine}}\\\\
 \\textit{${safeLatex(e.college)}}
 `
-    )
+    })
     .join('\n')
     .trimEnd()
 }
 
 function buildLatexSkills(skillsStr: string): string {
+  const grouped = skillsStr
+    .split(/\s*\|\s*/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => s.includes(':'))
+  if (grouped.length > 0) {
+    return grouped
+      .map((line) => {
+        const idx = line.indexOf(':')
+        const label = line.slice(0, idx + 1).trim()
+        const value = line.slice(idx + 1).trim()
+        return `\\textbf{${safeLatex(label)}} ${safeLatex(value)}`
+      })
+      .join('\\\\\n')
+  }
   return safeLatex(skillsStr)
 }
 
@@ -540,30 +611,68 @@ function buildLatexList(items: string[]): string {
 // ── Section replacement engine ───────────────────────────────────────────────
 
 const SECTION_HEADING_ALIASES = {
-  summary: ['Summary', 'Professional Summary', 'Profile', 'Executive Summary', 'Objective', 'Career Objective'],
+  summary: [
+    'Summary',
+    'Professional Summary',
+    'Profile',
+    'Executive Summary',
+    'Objective',
+    'Career Objective',
+    'About Me',
+  ],
+  contact: ['Contact', 'CONTACT'],
   skills: ['Skills', 'Technical Skills', 'Core Skills', 'TECHNICAL SKILLS', 'Skill Ribbon', 'SKILLS'],
-  experience: ['Experience', 'Work Experience', 'Employment History', 'Experience Timeline', 'Leadership Experience', 'Research Experience', 'EXPERIENCE'],
+  experience: ['Experience', 'Working Experience', 'Work Experience', 'Employment History', 'Experience Timeline', 'Leadership Experience', 'Research Experience', 'EXPERIENCE'],
   education: ['Education', 'Academic Background', 'EDUCATION'],
   projects: ['Projects', 'Selected Projects', 'Strategic Projects', 'PROJECTS'],
   certifications: ['Certifications', 'Certificates', 'CERTIFICATIONS'],
-  achievements: ['Achievements', 'Accomplishments', 'Awards', 'Awards \\& Honors', 'Impact Highlights', 'AWARDS \\& HONORS'],
-  languages: ['Languages', 'LANGUAGES'],
+  achievements: ['Achievements', 'Accomplishments', 'Awards', 'Awards \\& Honors', 'Honors \\& Awards', 'Impact Highlights', 'AWARDS \\& HONORS'],
+  languages: ['Languages', 'Language', 'LANGUAGES'],
+  references: ['References', 'REFERENCES'],
   publications: ['Publications', 'PUBLICATIONS'],
   volunteer: ['Volunteer Experience', 'Volunteering'],
   interests: ['Interests', 'Hobbies', 'INTERESTS'],
 } as const satisfies Record<string, readonly string[]>
 
+/** `String#replace` replacement treats `$10` etc. as capture groups — escape user HTML bodies */
+function escapeForRegexpReplacement(s: string): string {
+  // Replacement must be a function: a string `'$$'` would be interpreted as one literal `$`, not two.
+  return s.replace(/\$/g, () => '$$')
+}
+
 function replaceHtmlSection(html: string, headingTexts: readonly string[], newContent: string): string {
+  const safeNew = escapeForRegexpReplacement(newContent)
   let out = html
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    // Lookahead stops at: next heading, </main>, </aside>, </article>, </section>, or </div></body>
-    const pattern = new RegExp(
+    // Pattern A: classic <h2>Heading</h2> ... next heading or document boundary
+    const patternH = new RegExp(
       `(<h[1-6][^>]*>\\s*${escaped}\\s*<\\/h[1-6]>)([\\s\\S]*?)(?=<h[1-6][^>]*>|<\\/main>|<\\/aside>|<\\/article>|<\\/section>|<\\/div>\\s*<\\/body>|<\\/body>)`,
       'i'
     )
-    if (pattern.test(out)) {
-      out = out.replace(pattern, `$1\n${newContent}\n`)
+    if (patternH.test(out)) {
+      out = out.replace(patternH, `$1\n${safeNew}\n`)
+      break
+    }
+
+    // Pattern B: modern section blocks with nested content.
+    // Replace everything after the section-title until this section wrapper closes.
+    const patternSection = new RegExp(
+      `(<div[^>]*class=["'][^"']*section[^"']*["'][^>]*>\\s*<div[^>]*class=["'][^"']*section-title[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>)([\\s\\S]*?)(<\\/div>\\s*)(?=<div[^>]*class=["'][^"']*section[^"']*["']|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'i'
+    )
+    if (patternSection.test(out)) {
+      out = out.replace(patternSection, `$1\n${safeNew}\n$3`)
+      break
+    }
+
+    // Pattern C: Teal Split Blocks — `.section` > `.bar` or `.bar dark` strip headings
+    const patternBarSection = new RegExp(
+      `(<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*\\bclass=["'][^"']*\\bbar(?:\\s+dark)?\\b[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>)([\\s\\S]*?)(<\\/div>\\s*)(?=<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'i',
+    )
+    if (patternBarSection.test(out)) {
+      out = out.replace(patternBarSection, `$1\n${safeNew}\n$3`)
       break
     }
   }
@@ -571,15 +680,28 @@ function replaceHtmlSection(html: string, headingTexts: readonly string[], newCo
 }
 
 function replaceLatexSection(latex: string, headingTexts: readonly string[], newContent: string): string {
+  const safeNew = escapeForRegexpReplacement(newContent)
   let out = latex
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const pattern = new RegExp(
-      `(\\\\section\\*\\{\\s*${escaped}\\s*\\})([\\s\\S]*?)(?=\\\\section\\*\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\})`,
+    const patternStandard = new RegExp(
+      `((?:\\\\section\\*|\\\\resumeSection|\\\\cvSection|\\\\CVSection|\\\\cvsection|\\\\cvsubsection)\\{\\s*${escaped}\\s*\\})([\\s\\S]*?)(?=(?:\\\\section\\*|\\\\resumeSection|\\\\cvSection|\\\\CVSection|\\\\cvsection|\\\\cvsubsection)\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\}|\\\\switchcolumn|\\\\end\\{paracol\\})`,
       'i'
     )
-    if (pattern.test(out)) {
-      out = out.replace(pattern, `$1\n${newContent}\n`)
+    if (patternStandard.test(out)) {
+      // Force content onto a fresh paragraph after section macros.
+      out = out.replace(patternStandard, `$1\n\\par\n${safeNew}\n`)
+      break
+    }
+
+    // Support custom icon sections: \section{\faUser}{Summary}
+    const patternIconSection = new RegExp(
+      `(\\\\section\\{[^}]*\\}\\{\\s*${escaped}\\s*\\})([\\s\\S]*?)(?=\\\\section\\{[^}]*\\}\\{|(?:\\\\section\\*|\\\\resumeSection)\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\}|\\\\switchcolumn|\\\\end\\{paracol\\})`,
+      'i'
+    )
+    if (patternIconSection.test(out)) {
+      // Icon-based custom sections often render inline; \par ensures next-line content.
+      out = out.replace(patternIconSection, `$1\n\\par\n${safeNew}\n`)
       break
     }
   }
@@ -590,12 +712,25 @@ function removeHtmlSection(html: string, headingTexts: readonly string[]): strin
   let out = html
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    // Lookahead stops at: next heading, </main>, </aside>, </article>, </section>, or </div></body>
-    const pattern = new RegExp(
+    // Remove classic heading blocks
+    const patternH = new RegExp(
       `\\s*<h[1-6][^>]*>\\s*${escaped}\\s*<\\/h[1-6]>[\\s\\S]*?(?=<h[1-6][^>]*>|<\\/main>|<\\/aside>|<\\/article>|<\\/section>|<\\/div>\\s*<\\/body>|<\\/body>)`,
       'gi'
     )
-    out = out.replace(pattern, '\n')
+    out = out.replace(patternH, '\n')
+
+    // Remove section-title blocks contained within a .section wrapper
+    const patternSection = new RegExp(
+      `\\s*<div[^>]*class=["'][^"']*section[^"']*["'][^>]*>\\s*<div[^>]*class=["'][^"']*section-title[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>[\\s\\S]*?<\\/div>\\s*(?=<div[^>]*class=["'][^"']*section[^"']*["']|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'gi'
+    )
+    out = out.replace(patternSection, '\n')
+
+    const patternBarRemove = new RegExp(
+      `\\s*<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*\\bclass=["'][^"']*\\bbar(?:\\s+dark)?\\b[^"']*["'][^>]*>\\s*${escaped}\\s*<\\/div>[\\s\\S]*?<\\/div>\\s*(?=<div[^>]*\\bclass=["'][^"']*\\bsection\\b[^"']*["'][^>]*>|<\\/div>\\s*<\\/div>|<\\/body>|<\\/html>)`,
+      'gi',
+    )
+    out = out.replace(patternBarRemove, '\n')
   }
   return out
 }
@@ -605,18 +740,292 @@ function removeLatexSection(latex: string, headingTexts: readonly string[]): str
   for (const heading of headingTexts) {
     const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const p1 = new RegExp(
-      `\\n\\\\section\\*\\{\\s*${escaped}\\s*\\}[\\s\\S]*?(?=\\n\\\\section\\*\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\})`,
+      `\\n(?:\\\\section\\*|\\\\resumeSection|\\\\cvSection|\\\\CVSection|\\\\cvsection|\\\\cvsubsection)\\{\\s*${escaped}\\s*\\}[\\s\\S]*?(?=\\n(?:\\\\section\\*|\\\\resumeSection|\\\\cvSection|\\\\CVSection|\\\\cvsection|\\\\cvsubsection)\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\}|\\\\switchcolumn|\\\\end\\{paracol\\})`,
       'gi'
     )
     out = out.replace(p1, '\n')
+
+    const p2 = new RegExp(
+      `\\n\\\\section\\{[^}]*\\}\\{\\s*${escaped}\\s*\\}[\\s\\S]*?(?=\\n\\\\section\\{[^}]*\\}\\{|\\n(?:\\\\section\\*|\\\\resumeSection)\\{|\\\\end\\{document\\}|\\\\end\\{minipage\\}|\\\\switchcolumn|\\\\end\\{paracol\\})`,
+      'gi'
+    )
+    out = out.replace(p2, '\n')
   }
   return out
+}
+
+function stripEmptyLatexSections(latex: string): string {
+  // Remove any section-like heading whose body is empty until the next section boundary.
+  // Supports \section*{}, \resumeSection{}, \cvSection{}, \CVSection{}, and icon style \section{...}{...}.
+  const sectionBlock =
+    /(\n(?:\\section\*|\\resumeSection|\\cvSection|\\CVSection|\\cvsection|\\cvsubsection)\{[^}]+\}|\n\\section\{[^}]*\}\{[^}]+\})([\s\S]*?)(?=\n(?:\\section\*|\\resumeSection|\\cvSection|\\CVSection|\\cvsection|\\cvsubsection)\{|\n\\section\{[^}]*\}\{[^}]+\}|\\end\{document\}|\\end\{paracol\}|\\switchcolumn)/gi
+
+  return latex.replace(sectionBlock, (full, heading: string, body: string) => {
+    const normalized = (body || '')
+      .replace(/%.*$/gm, '')
+      .replace(/\\par\b/g, '')
+      .replace(/\\vspace\*?\{[^}]*\}/g, '')
+      .replace(/\\small\b|\\normalsize\b|\\large\b|\\bfseries\b/g, '')
+      .replace(/[{}]/g, '')
+      .trim()
+    if (!normalized) return '\n'
+    return `${heading}${body}`
+  })
+}
+
+function stripEmptyHtmlSections(html: string): string {
+  let out = html
+  // Remove plain heading tags that have no meaningful content before next heading boundary.
+  out = out.replace(
+    /<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>\s*(?=(?:<h[1-6][^>]*>)|(?:<\/body>))/gi,
+    (match) => {
+      const bodyOnly = match.replace(/<h[1-6][^>]*>[\s\S]*?<\/h[1-6]>/i, '').replace(/<[^>]+>/g, '').trim()
+      return bodyOnly ? match : ''
+    }
+  )
+  return out
+}
+
+// ── Slate Split Header Sidebar (`.s-title` + `.exp-item`) — not matched by generic replaceHtmlSection
+
+function isSlateSplitHeaderLayout(html: string): boolean {
+  return (
+    html.includes('s-title') &&
+    /\bsection\b/.test(html) &&
+    (html.includes('exp-item') || html.includes('c-item'))
+  )
+}
+
+function sliceBalancedDivFrom(html: string, sectionStart: number): number {
+  let depth = 0
+  const re = /<\/?div\b[^>]*>/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(html)) !== null) {
+    if (m.index < sectionStart) continue
+    if (m[0].startsWith('</')) depth--
+    else depth++
+    if (depth === 0) return m.index + m[0].length
+  }
+  return -1
+}
+
+/** Replace outer `<div class="…token…">…</div>` without stopping at nested `</div>` (e.g. `.c-ico`). */
+function replaceBalancedDivByClassToken(
+  html: string,
+  classToken: string,
+  replacement: string,
+): string {
+  const openRe = new RegExp(
+    `<div[^>]*\\bclass=["'][^"']*\\b${classToken}\\b[^"']*["'][^>]*>`,
+    'i',
+  )
+  const m = openRe.exec(html)
+  if (!m || m.index === undefined) return html
+  const start = m.index
+  const end = sliceBalancedDivFrom(html, start)
+  if (end < 0) return html
+  return html.slice(0, start) + replacement + html.slice(end)
+}
+
+function findSlateSectionByTitle(
+  html: string,
+  title: string,
+): { start: number; end: number; innerStart: number } | null {
+  const esc = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const headRe = new RegExp(
+    `<div[^>]*class=["'][^"']*\\bsection\\b[^"']*["'][^>]*>\\s*<div[^>]*class=["'][^"']*s-title[^"']*["'][^>]*>\\s*${esc}\\s*</div>`,
+    'i',
+  )
+  const m = headRe.exec(html)
+  if (!m || m.index === undefined) return null
+  const start = m.index
+  const innerStart = m.index + m[0].length
+  const end = sliceBalancedDivFrom(html, start)
+  if (end < 0) return null
+  return { start, end, innerStart }
+}
+
+function replaceSlateHtmlSection(html: string, title: string, innerBody: string): string {
+  const r = findSlateSectionByTitle(html, title)
+  if (!r) return html
+  const prefix = html.slice(r.start, r.innerStart)
+  return html.slice(0, r.start) + prefix + innerBody + '</div>' + html.slice(r.end)
+}
+
+function removeSlateHtmlSection(html: string, title: string): string {
+  const r = findSlateSectionByTitle(html, title)
+  if (!r) return html
+  return html.slice(0, r.start) + html.slice(r.end)
+}
+
+function replaceSlateHeaderAndContact(html: string, data: ResumeRenderData): string {
+  let out = html
+  const name = safeHtml((data.fullName || 'Candidate').toUpperCase())
+  const role = safeHtml((data.title || '').toUpperCase())
+  out = out.replace(
+    /<div class="name">[^<]*<\/div>\s*<div class="role">[^<]*<\/div>/i,
+    `<div class="name">${name}</div><div class="role">${role}</div>`,
+  )
+  const cells = [
+    data.phone,
+    data.email,
+    data.portfolio || data.linkedin,
+    data.location,
+  ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+  if (cells.length > 0) {
+    const padded = [...cells, '', '', '', ''].slice(0, 4)
+    const row = padded
+      .map((c) => {
+        const t = String(c).trim()
+        return `<div class="c-item"><div class="c-ico"></div><span>${t ? safeHtml(t) : '—'}</span></div>`
+      })
+      .join('\n    ')
+    out = replaceBalancedDivByClassToken(
+      out,
+      'contact',
+      `<div class="contact">\n    ${row}\n  </div>`,
+    )
+  }
+  return out
+}
+
+function buildHtmlExperienceSlate(entries: ExperienceEntry[]): string {
+  if (entries.length === 0) return ''
+  const items = entries
+    .map(
+      (e) => `            <div class="exp-item"><div class="dot"></div>
+              <div class="e-head"><div class="e-role">${safeHtml(e.role)}</div><div class="e-date">${safeHtml(e.duration)}</div></div>
+              <div class="e-org">${safeHtml(e.company)}</div>
+              <ul>${e.points.map((p) => `<li>${safeHtml(p)}</li>`).join('')}</ul>
+            </div>`,
+    )
+    .join('\n')
+  return `\n          <div class="exp">\n${items}\n          </div>\n        `
+}
+
+function buildHtmlEducationSlate(entries: EducationEntry[]): string {
+  if (entries.length === 0) return ''
+  return entries
+    .map((e) => {
+      return `\n          <div class="edu-block">
+            <div class="e-head"><div class="e-role">${safeHtml(e.degree)}</div><div class="e-date">${safeHtml(e.year)}</div></div>
+            <div class="e-org">${safeHtml(e.college)}</div>
+          </div>`
+    })
+    .join('\n')
+}
+
+function buildHtmlSkillsSlateUl(skillsStr: string): string {
+  const parts = skillsStr
+    .split(/[,|]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  return `<ul>${parts.map((p) => `<li>${safeHtml(p)}</li>`).join('')}</ul>`
+}
+
+function buildHtmlReferencesSlate(items: string[]): string {
+  if (items.length === 0) return ''
+  const cards = items.slice(0, 4).map((line) => {
+    const bits = line.split(/\s*[·•|—–-]\s*/).map((s) => s.trim())
+    const name = bits[0] || line
+    const role = bits[1] || ''
+    const extra = bits.slice(2).join(' · ')
+    return `<div class="ref-card"><div class="ref-name">${safeHtml(name)}</div>${role ? `<div class="ref-role">${safeHtml(role)}</div>` : ''}${extra ? `<small>${safeHtml(extra)}</small>` : ''}</div>`
+  })
+  return `\n          <div class="refs">\n            ${cards.join('\n            ')}\n          </div>\n        `
+}
+
+function renderHtmlSlateSections(block: string, data: ResumeRenderData): string {
+  let out = replaceSlateHeaderAndContact(block, data)
+
+  const expEntries = normalizeExperience(data.experience)
+  const eduEntries = normalizeEducation(data.education)
+  const skillsStr = normalizeSkillsToString(data.skills)
+  const achievements = normalizeStringArray(data.achievements)
+  const langs = normalizeStringArray(data.languagesKnown)
+
+  const hasSummary = !isPlaceholder(data.summary)
+  const hasSkills = !!skillsStr
+  const hasExp = expEntries.length > 0
+  const hasEdu = eduEntries.length > 0
+  const hasAchievements = achievements.length > 0
+  const hasLanguages = langs.length > 0
+
+  if (hasSummary) {
+    out = replaceSlateHtmlSection(out, 'About Me', `<p>${safeHtml(data.summary!)}</p>`)
+  } else {
+    out = removeSlateHtmlSection(out, 'About Me')
+  }
+
+  if (hasEdu) {
+    out = replaceSlateHtmlSection(out, 'Education', buildHtmlEducationSlate(eduEntries))
+  } else {
+    out = removeSlateHtmlSection(out, 'Education')
+  }
+
+  if (hasSkills) {
+    out = replaceSlateHtmlSection(out, 'Skills', buildHtmlSkillsSlateUl(skillsStr))
+  } else {
+    out = removeSlateHtmlSection(out, 'Skills')
+  }
+
+  if (hasLanguages) {
+    out = replaceSlateHtmlSection(
+      out,
+      'Language',
+      `<ul>${langs.map((l) => `<li>${safeHtml(l)}</li>`).join('')}</ul>`,
+    )
+  } else {
+    out = removeSlateHtmlSection(out, 'Language')
+  }
+
+  if (hasExp) {
+    out = replaceSlateHtmlSection(out, 'Experience', buildHtmlExperienceSlate(expEntries))
+  } else {
+    out = removeSlateHtmlSection(out, 'Experience')
+  }
+
+  if (hasAchievements) {
+    out = replaceSlateHtmlSection(out, 'References', buildHtmlReferencesSlate(achievements))
+  } else {
+    out = removeSlateHtmlSection(out, 'References')
+  }
+
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.publications)
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.volunteer)
+  out = removeHtmlSection(out, SECTION_HEADING_ALIASES.interests)
+
+  out = injectSlateColumnOverflowCss(out)
+
+  return out.replace(/\n{3,}/g, '\n\n')
+}
+
+/** Long degree/school lines + flex .e-head otherwise spill into the 65% column (min-width:auto). */
+function injectSlateColumnOverflowCss(html: string): string {
+  const patch = `<style data-slate-col-fix>
+.grid>div:first-child,.grid>div:first-child .section{min-width:0!important;max-width:100%!important}
+.e-head{min-width:0!important;max-width:100%!important}
+.e-role{flex:1 1 0%!important;min-width:0!important;overflow-wrap:break-word!important;word-break:break-word!important}
+.e-date{flex-shrink:0!important;max-width:42%!important}
+.edu-block{min-width:0!important;max-width:100%!important}
+.e-org{min-width:0!important;max-width:100%!important;overflow-wrap:break-word!important;word-break:break-word!important}
+</style>`
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, `${patch}</head>`)
+  }
+  return `${patch}${html}`
 }
 
 // ── Core render functions ────────────────────────────────────────────────────
 
 function renderHtmlSections(block: string, data: ResumeRenderData): string {
+  if (isSlateSplitHeaderLayout(block)) {
+    return renderHtmlSlateSections(block, data)
+  }
+
   let out = block
+  const tealBar = isTealSplitBarLayout(block)
 
   const expEntries = normalizeExperience(data.experience)
   const projEntries = normalizeProjects(data.projects)
@@ -637,13 +1046,31 @@ function renderHtmlSections(block: string, data: ResumeRenderData): string {
 
   // Replace or remove each section
   if (hasSummary) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.summary, buildHtmlSummary(data.summary!))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.summary,
+      tealBar ? buildHtmlProfileParagraph(data.summary!) : buildHtmlSummary(data.summary!),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.summary)
   }
 
+  const contactItems = [data.phone, data.email, data.location, data.linkedin, data.github, data.portfolio].filter(Boolean)
+  if (contactItems.length > 0) {
+    const contactHtml = tealBar
+      ? contactItems.map((v) => `      <p class="contact-line">${safeHtml(v!)}</p>`).join('\n')
+      : `  <p class="kv">${contactItems.map((v) => safeHtml(v!)).join('<br>')}</p>`
+    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.contact, contactHtml)
+  } else {
+    out = removeHtmlSection(out, SECTION_HEADING_ALIASES.contact)
+  }
+
   if (hasSkills) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.skills, buildHtmlSkills(skillsStr))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.skills,
+      tealBar ? buildHtmlSkillsTealUl(skillsStr) : buildHtmlSkills(skillsStr),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.skills)
   }
@@ -667,7 +1094,11 @@ function renderHtmlSections(block: string, data: ResumeRenderData): string {
   }
 
   if (hasCerts) {
-    out = replaceHtmlSection(out, SECTION_HEADING_ALIASES.certifications, buildHtmlList(certs))
+    out = replaceHtmlSection(
+      out,
+      SECTION_HEADING_ALIASES.certifications,
+      tealBar ? `  <p>${certs.map((c) => safeHtml(c)).join('<br>')}</p>` : buildHtmlList(certs),
+    )
   } else {
     out = removeHtmlSection(out, SECTION_HEADING_ALIASES.certifications)
   }
@@ -722,6 +1153,17 @@ function renderLatexSections(block: string, data: ResumeRenderData): string {
     out = removeLatexSection(out, SECTION_HEADING_ALIASES.summary)
   }
 
+  const contactItems = [data.phone, data.email, data.location, data.linkedin, data.github, data.portfolio].filter(Boolean)
+  if (contactItems.length > 0) {
+    out = replaceLatexSection(
+      out,
+      SECTION_HEADING_ALIASES.contact,
+      `{\\small ${contactItems.map((v) => safeLatex(v!)).join('\\\\')}}`
+    )
+  } else {
+    out = removeLatexSection(out, SECTION_HEADING_ALIASES.contact)
+  }
+
   if (hasSkills) {
     out = replaceLatexSection(out, SECTION_HEADING_ALIASES.skills, buildLatexSkills(skillsStr))
   } else {
@@ -758,6 +1200,14 @@ function renderLatexSections(block: string, data: ResumeRenderData): string {
     out = removeLatexSection(out, SECTION_HEADING_ALIASES.achievements)
   }
 
+  if (/\\resumeSection\{\s*References\s*\}/i.test(out)) {
+    if (hasAchievements) {
+      out = replaceLatexSection(out, SECTION_HEADING_ALIASES.references, buildLatexList(achievements))
+    } else {
+      out = removeLatexSection(out, SECTION_HEADING_ALIASES.references)
+    }
+  }
+
   if (hasLanguages) {
     out = replaceLatexSection(
       out,
@@ -788,34 +1238,23 @@ function defaultHtml(data: ResumeRenderData): string {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<style ${RESUME_DS_MARKER}="true">
+${RESUME_DESIGN_SYSTEM_CSS}
+</style>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: 'Segoe UI', Arial, sans-serif; background: #fff; padding: 20px; }
-.resume { max-width: 794px; margin: 0 auto; padding: 30px; }
-h1 { font-size: 22px; margin-bottom: 4px; }
-h2 { font-size: 12px; margin: 16px 0 8px; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 3px; }
-.contact { font-size: 10.5px; color: #444; margin-bottom: 12px; }
-.entry { margin-bottom: 14px; }
-.entry-header { display: flex; justify-content: space-between; align-items: baseline; }
-.entry-title { font-weight: 600; font-size: 11px; }
-.entry-date { font-size: 10px; color: #666; }
-.entry-sub { font-size: 10px; color: #666; margin-top: 1px; }
-.skills-text { font-size: 10.5px; line-height: 1.5; }
-ul { margin: 4px 0 0 18px; }
-li { font-size: 10.5px; line-height: 1.6; margin-bottom: 2px; }
-p { font-size: 10.5px; line-height: 1.6; }
+.resume h2 { border-bottom: 1px solid #333; padding-bottom: 4px; }
 </style>
 </head>
 <body>
-<div class="resume">
-  <h1>${safeHtml(data.fullName)}</h1>
-  <div class="contact">${safeHtml(data.email)} | ${safeHtml(data.phone)}${data.location ? ` | ${safeHtml(data.location)}` : ''}</div>
-${!isPlaceholder(data.summary) ? `  <h2>Summary</h2>\n  <p>${safeHtml(data.summary!)}</p>` : ''}
-${skillsStr ? `  <h2>Skills</h2>\n  <div class="skills-text">${safeHtml(skillsStr)}</div>` : ''}
-${expEntries.length > 0 ? `  <h2>Experience</h2>\n${buildHtmlExperience(expEntries)}` : ''}
-${projEntries.length > 0 ? `  <h2>Projects</h2>\n${buildHtmlProjects(projEntries)}` : ''}
-${eduEntries.length > 0 ? `  <h2>Education</h2>\n${buildHtmlEducation(eduEntries)}` : ''}
-${certs.length > 0 ? `  <h2>Certifications</h2>\n${buildHtmlList(certs)}` : ''}
+<div class="resume rs-root">
+  <h1 class="rs-name">${safeHtml(data.fullName)}</h1>
+  <div class="contact rs-contact">${safeHtml(data.email)} | ${safeHtml(data.phone)}${data.location ? ` | ${safeHtml(data.location)}` : ''}</div>
+${!isPlaceholder(data.summary) ? `  <h2 class="rs-section-title">Summary</h2>\n  <p class="rs-body">${safeHtml(data.summary!)}</p>` : ''}
+${skillsStr ? `  <h2 class="rs-section-title">Skills</h2>\n  <div class="skills-text rs-body">${safeHtml(skillsStr)}</div>` : ''}
+${expEntries.length > 0 ? `  <h2 class="rs-section-title">Experience</h2>\n${buildHtmlExperience(expEntries)}` : ''}
+${projEntries.length > 0 ? `  <h2 class="rs-section-title">Projects</h2>\n${buildHtmlProjects(projEntries)}` : ''}
+${eduEntries.length > 0 ? `  <h2 class="rs-section-title">Education</h2>\n${buildHtmlEducation(eduEntries)}` : ''}
+${certs.length > 0 ? `  <h2 class="rs-section-title">Certifications</h2>\n${buildHtmlList(certs)}` : ''}
 </div>
 </body>
 </html>`
@@ -885,11 +1324,15 @@ export function renderTemplate(
   // Step 2: Replace section content with formatted data
   out = format === 'html' ? renderHtmlSections(out, data) : renderLatexSections(out, data)
 
+  // Step 2.5: Global cleanup so no empty headings leak into generated output.
+  out = format === 'html' ? stripEmptyHtmlSections(out) : stripEmptyLatexSections(out)
+
   // Step 3: Ensure full document wrapper
   if (format === 'html') {
     if (!out.toLowerCase().includes('<!doctype html')) {
       out = `<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n</head>\n<body>\n${out}\n</body>\n</html>`
     }
+    out = applyResumeDesignSystemToHtml(out)
   } else {
     if (!out.includes('\\begin{document}')) {
       out = `\\documentclass[10pt]{article}\n\\usepackage[margin=0.75in]{geometry}\n\\usepackage{enumitem}\n\\usepackage{titlesec}\n\n\\begin{document}\n${out}\n\\end{document}`
