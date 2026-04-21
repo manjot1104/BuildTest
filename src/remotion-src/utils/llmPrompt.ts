@@ -40,7 +40,6 @@ BULLET_POINTS  → text "heading" + bullet-list "bullet"
 SPLIT_LEFT     → text "text" + image "visual"
 SPLIT_RIGHT    → text "text" + image "visual"
 LOWER_THIRD    → text "main" + text "lower"
-FULLSCREEN     → image "main"
 
 === ELEMENT TYPES ===
 Text:   { "type": "text", "text": "...", "slot": "SLOT", "fontSize": 48, "shadow": true, "animation": "spring-up" }
