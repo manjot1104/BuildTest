@@ -250,7 +250,9 @@ export const user_chats = createTable(
     // V0 response data
     demo_url: d.text("demo_url"), // URL to the demo preview
     preview_url: d.text("preview_url"), // URL to preview image
+
     demo_html: d.text("demo_html"),
+
     // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -267,13 +269,13 @@ export const user_chats = createTable(
 
     prompt_metadata: d.jsonb("prompt_metadata"), // store JSON string
 
-    conversation_id: d
-      .text("conversation_id")
-      .references(() => conversations.id, { onDelete: "set null" }),
+conversation_id: d
+  .text("conversation_id")
+  .references(() => conversations.id, { onDelete: "set null" }),
 
-    folder_id: d
-      .text("folder_id")
-      .references(() => chat_folders.id, { onDelete: "set null" }),
+folder_id: d
+  .text("folder_id")
+  .references(() => chat_folders.id, { onDelete: "set null" }),
   }),
   (t) => [
     unique().on(t.v0_chat_id), // Ensure each v0 chat can only be owned by one user
@@ -281,8 +283,8 @@ export const user_chats = createTable(
     index("user_chats_v0_chat_id_idx").on(t.v0_chat_id),
     index("user_chats_created_at_idx").on(t.created_at),
     index("user_chats_chat_type_idx").on(t.chat_type),
-    index("user_chats_conversation_id_idx").on(t.conversation_id),
-    index("user_chats_folder_id_idx").on(t.folder_id),
+index("user_chats_conversation_id_idx").on(t.conversation_id),
+index("user_chats_folder_id_idx").on(t.folder_id),
   ],
 );
 

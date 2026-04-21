@@ -1,5 +1,16 @@
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 /** @type {import("next").NextConfig} */
 const config = {
+  // Parent folders may contain another lockfile (e.g. D:\Users\Dell\ReactNative\package-lock.json).
+  // Pin tracing / workspace inference to this app so PostCSS and deps resolve from this directory.
+  outputFileTracingRoot: path.join(__dirname),
+  turbopack: {
+    root: path.join(__dirname),
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
