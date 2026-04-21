@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_video_chats" ADD COLUMN "image_session_id" text;

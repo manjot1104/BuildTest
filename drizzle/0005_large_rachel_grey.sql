@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_video_chats" DROP COLUMN "current_generation_id";

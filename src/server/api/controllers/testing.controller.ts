@@ -2759,12 +2759,26 @@ export async function exportTestReportPdfHandler({
     const report = run.reportExports?.[0];
     const aiSummary = report?.ai_summary ?? "";
     const overallScore = run.overall_score ?? 0;
+
+    // ── Color palette — matches public report page exactly ─────────────────
+    // Score gauge: primary blue ≥90, yellow 70–89, red <70
+    const PRIMARY   = "#3b82f6"; // Tailwind blue-500 — matches --color-primary
     const scoreColor =
-      overallScore >= 90
-        ? "#22c55e"
-        : overallScore >= 70
-          ? "#eab308"
-          : "#ef4444";
+      overallScore >= 90 ? PRIMARY :
+      overallScore >= 70 ? "#eab308" :
+      "#ef4444";
+
+    // Progress bar: passed = PRIMARY blue (not green)
+    const PASS_BAR  = PRIMARY;
+
+    // Category pct: primary blue ≥80, yellow 50–79, red <50
+    function catColor(pct: number) {
+      return pct >= 80 ? PRIMARY : pct >= 50 ? "#eab308" : "#ef4444";
+    }
+
+    // Test-case status: passed = primary blue (matches ts-passed in report)
+    // Bug severity colours are unchanged (red/orange/yellow/blue)
+    // ────────────────────────────────────────────────────────────────────────
 
     // Build category breakdown
     const resultsByCategory: Record<
@@ -2808,9 +2822,9 @@ export async function exportTestReportPdfHandler({
 
     const severityColors: Record<string, string> = {
       critical: "#ef4444",
-      high: "#f97316",
-      medium: "#eab308",
-      low: "#60a5fa",
+      high:     "#f97316",
+      medium:   "#eab308",
+      low:      "#60a5fa",
     };
 
     function esc(s: string | null | undefined): string {
@@ -2837,74 +2851,102 @@ export async function exportTestReportPdfHandler({
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #09090b; color: #e4e4e7; font-size: 13px; line-height: 1.6; }
   .page { max-width: 900px; margin: 0 auto; padding: 40px 32px; }
+
+  /* ── Header ── */
   .header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 36px; padding-bottom: 24px; border-bottom: 1px solid #27272a; }
+  .brand-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; background: ${PRIMARY}1a; border: 1px solid ${PRIMARY}33; margin-right: 10px; font-size: 15px; vertical-align: middle; }
   .brand-name { font-size: 17px; font-weight: 700; color: #f4f4f5; }
-  .brand-sub { font-size: 11px; color: #71717a; font-family: monospace; margin-top: 2px; }
+  .brand-sub  { font-size: 11px; color: #71717a; font-family: monospace; margin-top: 2px; }
   .report-date { text-align: right; color: #52525b; font-size: 11px; font-family: monospace; line-height: 1.8; }
+
+  /* ── Score hero ── */
   .score-hero { background: #18181b; border: 1px solid #27272a; border-radius: 16px; padding: 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 32px; }
   .score-circle { width: 100px; height: 100px; border-radius: 50%; border: 6px solid ${scoreColor}33; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; }
   .score-number { font-size: 32px; font-weight: 700; color: ${scoreColor}; line-height: 1; }
-  .score-label { font-size: 10px; color: #52525b; font-family: monospace; }
+  .score-label  { font-size: 10px; color: #52525b; font-family: monospace; }
   .score-details { flex: 1; min-width: 0; }
-  .score-url { font-family: monospace; font-size: 12px; color: #71717a; margin-bottom: 8px; overflow-wrap: break-word; word-break: break-all; }
-  .score-bar { height: 6px; background: #27272a; border-radius: 9999px; overflow: hidden; display: flex; margin-bottom: 8px; }
-  .score-bar-pass { background: #22c55e; height: 100%; }
+  .score-url  { font-family: monospace; font-size: 12px; color: #71717a; margin-bottom: 8px; overflow-wrap: break-word; word-break: break-all; }
+  .score-bar  { height: 6px; background: #27272a; border-radius: 9999px; overflow: hidden; display: flex; margin-bottom: 8px; }
+  /* Passed = PRIMARY blue (matches report's bg-primary bar) */
+  .score-bar-pass { background: ${PASS_BAR}; height: 100%; border-radius: 9999px 0 0 9999px; }
   .score-bar-fail { background: #ef4444; height: 100%; }
   .score-bar-skip { background: #3f3f46; flex: 1; height: 100%; }
   .score-stats { display: flex; gap: 16px; font-family: monospace; font-size: 12px; flex-wrap: wrap; }
+
+  /* ── Sections ── */
   .section { margin-bottom: 28px; }
   .section-title { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #52525b; margin-bottom: 12px; }
-  .ai-summary { background: rgba(34,197,94,0.04); border: 1px solid rgba(34,197,94,0.15); border-radius: 12px; padding: 16px; }
-  .ai-label { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: #4ade80; margin-bottom: 8px; }
-  .ai-text { color: #d4d4d8; font-size: 13px; line-height: 1.7; }
+
+  /* ── AI Summary — primary blue accent (matches Sparkles icon + border) ── */
+  .ai-summary { background: ${PRIMARY}0d; border: 1px solid ${PRIMARY}33; border-radius: 12px; padding: 16px; }
+  .ai-label   { font-size: 11px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.08em; color: ${PRIMARY}; margin-bottom: 8px; }
+  .ai-text    { color: #d4d4d8; font-size: 13px; line-height: 1.7; }
+
+  /* ── Category grid ── */
   .category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .category-card { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 14px; text-align: center; }
-  .category-pct { font-size: 20px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
+  .category-pct  { font-size: 20px; font-weight: 700; line-height: 1; margin-bottom: 4px; }
   .category-name { font-size: 11px; color: #71717a; text-transform: capitalize; }
-  .category-sub { font-size: 10px; color: #3f3f46; font-family: monospace; margin-top: 2px; }
-  .bug-item { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; page-break-inside: avoid; }
-  .bug-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-  .bug-severity { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: monospace; padding: 2px 8px; border-radius: 9999px; border: 1px solid; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
-  .bug-sev-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-  .bug-category { font-size: 10px; color: #52525b; background: #27272a; padding: 2px 7px; border-radius: 9999px; flex-shrink: 0; }
-  .bug-title { font-size: 13px; font-weight: 600; color: #f4f4f5; margin-top: 6px; }
-  .bug-url { font-size: 11px; color: #52525b; font-family: monospace; margin-bottom: 6px; overflow-wrap: break-word; word-break: break-all; }
-  .bug-desc { font-size: 12px; color: #a1a1aa; line-height: 1.5; margin-bottom: 8px; }
-  .bug-screenshot { margin: 10px 0; border-radius: 8px; overflow: hidden; border: 1px solid #27272a; }
+  .category-sub  { font-size: 10px; color: #3f3f46; font-family: monospace; margin-top: 2px; }
+
+  /* ── Bugs ── */
+  .bug-item        { background: #18181b; border: 1px solid #27272a; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; page-break-inside: avoid; }
+  .bug-header      { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .bug-severity    { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-family: monospace; padding: 2px 8px; border-radius: 9999px; border: 1px solid; text-transform: uppercase; letter-spacing: 0.05em; flex-shrink: 0; }
+  .bug-sev-dot     { width: 6px; height: 6px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .bug-category    { font-size: 10px; color: #52525b; background: #27272a; padding: 2px 7px; border-radius: 9999px; flex-shrink: 0; }
+  .bug-title       { font-size: 13px; font-weight: 600; color: #f4f4f5; margin-top: 6px; }
+  .bug-url         { font-size: 11px; color: #52525b; font-family: monospace; margin-bottom: 6px; overflow-wrap: break-word; word-break: break-all; }
+  .bug-desc        { font-size: 12px; color: #a1a1aa; line-height: 1.5; margin-bottom: 8px; }
+  .bug-screenshot  { margin: 10px 0; border-radius: 8px; overflow: hidden; border: 1px solid #27272a; }
   .bug-screenshot img { width: 100%; display: block; max-height: 280px; object-fit: cover; object-position: top; }
   .bug-steps-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #52525b; margin: 8px 0 5px; }
-  .bug-steps { list-style: none; }
-  .bug-step { display: flex; gap: 8px; font-size: 11px; color: #71717a; margin-bottom: 3px; }
-  .step-num { color: #3f3f46; font-family: monospace; flex-shrink: 0; min-width: 16px; }
-  .bug-fix { background: rgba(34,197,94,0.05); border: 1px solid rgba(34,197,94,0.15); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
-  .bug-fix-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.06em; color: #4ade80; margin-bottom: 5px; }
-  .bug-fix-text { font-size: 11px; color: #a1a1aa; font-family: monospace; white-space: pre-wrap; line-height: 1.5; }
+  .bug-steps       { list-style: none; }
+  .bug-step        { display: flex; gap: 8px; font-size: 11px; color: #71717a; margin-bottom: 3px; }
+  .step-num        { color: #3f3f46; font-family: monospace; flex-shrink: 0; min-width: 16px; }
+
+  /* AI fix box — primary blue (matches BugDetailModal in report) */
+  .bug-fix       { background: ${PRIMARY}0d; border: 1px solid ${PRIMARY}33; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+  .bug-fix-label { font-size: 10px; font-family: monospace; text-transform: uppercase; letter-spacing: 0.06em; color: ${PRIMARY}; margin-bottom: 5px; }
+  .bug-fix-text  { font-size: 11px; color: #a1a1aa; font-family: monospace; white-space: pre-wrap; line-height: 1.5; }
+
+  /* ── Test cases ── */
   .test-table { background: #18181b; border: 1px solid #27272a; border-radius: 10px; overflow: hidden; }
-  .test-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #1f1f1f; }
+  .test-row   { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid #1f1f1f; }
   .test-row:last-child { border-bottom: none; }
   .test-status { font-size: 10px; font-family: monospace; padding: 2px 7px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; }
-  .ts-passed  { color: #4ade80; border-color: rgba(74,222,128,.25); background: rgba(74,222,128,.08); }
+  /* passed = PRIMARY blue — matches text-primary bg-primary/10 border-primary/25 in report */
+  .ts-passed  { color: ${PRIMARY}; border-color: ${PRIMARY}40; background: ${PRIMARY}1a; }
   .ts-failed  { color: #f87171; border-color: rgba(248,113,113,.25); background: rgba(248,113,113,.08); }
-  .ts-flaky   { color: #facc15; border-color: rgba(250,204,21,.25); background: rgba(250,204,21,.08); }
+  .ts-flaky   { color: #facc15; border-color: rgba(250,204,21,.25);  background: rgba(250,204,21,.08); }
   .ts-skipped { color: #52525b; border-color: #27272a; background: #18181b; }
   .test-priority { font-size: 10px; font-family: monospace; padding: 2px 6px; border-radius: 9999px; border: 1px solid; flex-shrink: 0; }
   .tp-P0 { color: #f87171; border-color: rgba(248,113,113,.25); background: rgba(248,113,113,.08); }
-  .tp-P1 { color: #facc15; border-color: rgba(250,204,21,.25); background: rgba(250,204,21,.08); }
+  .tp-P1 { color: #facc15; border-color: rgba(250,204,21,.25);  background: rgba(250,204,21,.08); }
   .tp-P2 { color: #52525b; border-color: #27272a; background: #18181b; }
   .test-title { font-size: 12px; color: #d4d4d8; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .test-cat { font-size: 10px; color: #52525b; font-family: monospace; flex-shrink: 0; }
-  .test-dur { font-size: 10px; color: #3f3f46; font-family: monospace; flex-shrink: 0; }
+  .test-cat   { font-size: 10px; color: #52525b; font-family: monospace; flex-shrink: 0; }
+  .test-dur   { font-size: 10px; color: #3f3f46; font-family: monospace; flex-shrink: 0; }
+
+  /* ── Footer ── */
   .footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #27272a; display: flex; align-items: center; justify-content: space-between; color: #3f3f46; font-size: 11px; font-family: monospace; }
-  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } .bug-item { page-break-inside: avoid; } }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .bug-item { page-break-inside: avoid; }
+  }
 </style>
 </head>
 <body>
 <div class="page">
 
+  <!-- Header -->
   <div class="header">
     <div>
-      <div class="brand-name">🐛 Buildify Testing Engine</div>
-      <div class="brand-sub">Automated QA Report</div>
+      <div class="brand-name">
+        <span class="brand-icon">🐛</span>Test Report
+      </div>
+      <div class="brand-sub">Public · Buildify Testing Engine</div>
     </div>
     <div class="report-date">
       <div>${new Date(run.started_at ?? Date.now()).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</div>
@@ -2913,6 +2955,7 @@ export async function exportTestReportPdfHandler({
     </div>
   </div>
 
+  <!-- Score hero -->
   <div class="score-hero">
     <div class="score-circle">
       <div class="score-number">${overallScore}</div>
@@ -2926,7 +2969,7 @@ export async function exportTestReportPdfHandler({
         <div class="score-bar-skip"></div>
       </div>
       <div class="score-stats">
-        <span style="color:#22c55e;">✓ ${run.passed ?? 0} passed</span>
+        <span style="color:${PRIMARY};">✓ ${run.passed ?? 0} passed</span>
         <span style="color:#ef4444;">✗ ${run.failed ?? 0} failed</span>
         <span style="color:#52525b;">${run.skipped ?? 0} skipped</span>
         <span style="color:#71717a;">${run.total_tests ?? 0} total</span>
@@ -2939,7 +2982,7 @@ export async function exportTestReportPdfHandler({
       ? `
   <div class="section">
     <div class="ai-summary">
-      <div class="ai-label">✦ AI Analysis</div>
+      <div class="ai-label">✦ AI Summary</div>
       <div class="ai-text">${esc(aiSummary)}</div>
     </div>
   </div>`
@@ -2956,10 +2999,8 @@ export async function exportTestReportPdfHandler({
         .map(([cat, data]) => {
           const pct =
             data.total > 0 ? Math.round((data.passed / data.total) * 100) : 0;
-          const col =
-            pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
           return `<div class="category-card">
-          <div class="category-pct" style="color:${col};">${pct}%</div>
+          <div class="category-pct" style="color:${catColor(pct)};">${pct}%</div>
           <div class="category-name">${cat.replace(/_/g, " ")}</div>
           <div class="category-sub">${data.passed}/${data.total}</div>
         </div>`;
@@ -2970,6 +3011,7 @@ export async function exportTestReportPdfHandler({
       : ""
   }
 
+  <!-- Bugs -->
   <div class="section">
     <div class="section-title">Bugs Found (${bugs.length})</div>
     ${
@@ -3018,8 +3060,8 @@ export async function exportTestReportPdfHandler({
     <div class="test-table">
       ${run
         .testCases!.map((tc) => {
-          const result = tc.results?.[0];
-          const status = result?.status ?? "skipped";
+          const result   = tc.results?.[0];
+          const status   = result?.status ?? "skipped";
           const priority = (tc.priority ?? "P2") as string;
           return `<div class="test-row">
           <span class="test-status ts-${status}">${status}</span>
@@ -3054,12 +3096,6 @@ export async function exportTestReportPdfHandler({
         status: 500,
       };
 
-    // pdfBytes is already a clean ArrayBuffer returned by safePdfBytes()
-    // inside generateHtmlPdf() in puppeteer.service.ts — it owns its own memory
-    // slice with no pool offset. Wrapping it in Buffer.from() then reading
-    // .buffer re-attaches it to Node's shared pool, which causes the byteOffset
-    // to be non-zero and sends garbage bytes before the PDF header, corrupting
-    // the file. Pass pdfBytes directly so exactly the right bytes are sent.
     return new Response(pdfBytes, {
       status: 200,
       headers: {

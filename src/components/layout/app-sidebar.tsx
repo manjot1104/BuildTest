@@ -13,6 +13,7 @@ import {
     Star,
     ShieldCheck,
     FolderOpen,
+    Film,
 } from "lucide-react"
 import { type SettingsTab } from "@/components/settings-dialog"
 import { BuildifyLogo } from "@/components/buildify-logo"
@@ -84,6 +85,11 @@ const buildNavSections = (
                 title: "Accessibility Tester",
                 url: "/dashboard/accessibility-tester",
                 icon: ShieldCheck,
+            },
+            {
+                title: "Video Generator",
+                url: "/video-gen",
+                icon: Film,
             },
             {
                 title: "Testing",

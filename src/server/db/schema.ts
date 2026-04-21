@@ -250,9 +250,7 @@ export const user_chats = createTable(
     // V0 response data
     demo_url: d.text("demo_url"), // URL to the demo preview
     preview_url: d.text("preview_url"), // URL to preview image
-
     demo_html: d.text("demo_html"),
-
     // Timestamps
     created_at: d
       .timestamp("created_at", { withTimezone: true })
@@ -1066,7 +1064,7 @@ export const report_exports = createTable(
 );
 
 // =============================================================================
-// NEW TABLE: per-page Core Web Vitals
+// per-page Core Web Vitals
 // Powers the "Performance Gauges" dashboard section (LCP / FID / CLS / TTFB)
 // with green / yellow / red thresholds per page.
 // =============================================================================
@@ -1170,3 +1168,112 @@ export const performanceMetricsRelations = relations(
     }),
   }),
 );
+
+// =============================================================================
+// Video Generation
+// =============================================================================
+
+export const video_chats = createTable(
+  "video_chats",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+ 
+    title: d.text("title"), // auto-generated from first prompt
+ 
+    // ── Current video state ───────────────────────────────────────────────────
+    // Completely rewritten on every follow-up prompt.
+    video_json: d.text("video_json").notNull(),          // latest VideoJson as JSON string
+    current_options: d.jsonb("current_options"),         // VideoOptions: { useTTS, useMusic, voiceId, musicGenre, ttsVolume, musicVolume }
+    current_user_images: d.jsonb("current_user_images"), // UserImage[]: replaceable at any time (max 5)
+    image_session_id: d.text("image_session_id"),        // tracks which upload session owns the current images (for S3 cleanup)
+    
+    // ── Prompt history (append-only log) ──────────────────────────────────────
+    // Shape: { prompt: string, sentAt: string }[]
+    // Never deleted — gives full history of how the video evolved.
+    prompts: d.jsonb("prompts").notNull().default([]),
+ 
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("video_chats_user_id_idx").on(t.user_id),
+    index("video_chats_updated_at_idx").on(t.updated_at),
+  ],
+);
+ 
+export const videoChatsRelations = relations(video_chats, ({ one }) => ({
+  user: one(user, { fields: [video_chats.user_id], references: [user.id] }),
+}));
+
+
+export const video_render_jobs = createTable(
+  "video_render_jobs",
+  (d) => ({
+    id: d.text("id").primaryKey(),
+    user_id: d
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+ 
+    chat_id: d
+      .text("chat_id")
+      .notNull()
+      .references(() => video_chats.id, { onDelete: "cascade" }),
+ 
+    // ── Job lifecycle ──────────────────────────────────────────────────────────
+    // pending  → queued, not yet picked up by the worker
+    // running  → a serverless function is currently rendering
+    // done     → output_url is populated, MP4 is in S3
+    // failed   → error_message is populated, client should show retry/fallback
+    status: d
+      .text("status", { enum: ["pending", "running", "done", "failed"] })
+      .notNull()
+      .default("pending"),
+ 
+    // ── Payload ────────────────────────────────────────────────────────────────
+    // Snapshot of the VideoJson at the time the render was requested.
+    // Stored separately from video_chats.video_json so a follow-up prompt
+    // on the chat doesn't affect an in-flight render.
+    video_json: d.text("video_json").notNull(),
+ 
+    // ── Output ─────────────────────────────────────────────────────────────────
+    output_url: d.text("output_url"),    // S3 URL of the finished MP4
+    error_message: d.text("error_message"),
+    progress: d.integer("progress").default(0), // 0–100, updated during render
+ 
+    // ── Stuck-job detection ────────────────────────────────────────────────────
+    // started_at is set when status transitions to "running".
+    // Any job still "running" after STUCK_JOB_TIMEOUT_MS (15 min) is
+    // automatically reset to "failed" so users aren't permanently blocked.
+    started_at: d.timestamp("started_at", { withTimezone: true }),
+ 
+    created_at: d
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+    updated_at: d
+      .timestamp("updated_at", { withTimezone: true })
+      .$defaultFn(() => new Date())
+      .notNull(),
+  }),
+  (t) => [
+    index("video_render_jobs_user_id_idx").on(t.user_id),
+    index("video_render_jobs_status_idx").on(t.status),
+    index("video_render_jobs_chat_id_idx").on(t.chat_id),
+  ],
+);
+ 
+export const videoRenderJobsRelations = relations(video_render_jobs, ({ one }) => ({
+  user: one(user, { fields: [video_render_jobs.user_id], references: [user.id] }),
+  chat: one(video_chats, { fields: [video_render_jobs.chat_id], references: [video_chats.id] }),
+}));
