@@ -2,19 +2,20 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { FileText, Code, ArrowRight, FileCode, Target, LayoutTemplate, Loader2 } from "lucide-react"
+import { FileText, Code, ArrowRight, FileCode, Target, LayoutTemplate, Loader2, Mail } from "lucide-react"
 
 interface Props {
   onSelect: (templateType: "latex" | "html") => void
   onScoreResume?: () => void
   /** Buildify Studio portfolio path — skips resume template browser. */
   onPortfolio?: () => void
+  onCoverLetter?: () => void
 }
 
-export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Props) {
-  const [pendingCard, setPendingCard] = useState<"latex" | "html" | "portfolio" | "score" | null>(null)
+export function TemplateSelection({ onSelect, onScoreResume, onPortfolio, onCoverLetter }: Props) {
+  const [pendingCard, setPendingCard] = useState<"latex" | "html" | "portfolio" | "score" | "cover-letter" | null>(null)
 
-  const runWithTransition = (card: "latex" | "html" | "portfolio" | "score", cb: () => void) => {
+  const runWithTransition = (card: "latex" | "html" | "portfolio" | "score" | "cover-letter", cb: () => void) => {
     if (pendingCard) return
     setPendingCard(card)
     window.setTimeout(() => {
@@ -42,7 +43,7 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
         </p>
       </motion.div>
 
-      <div className="grid w-full max-w-6xl gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid w-full max-w-6xl gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {/* LaTeX Card */}
         <motion.button
           initial={{ opacity: 0, y: 24 }}
@@ -201,6 +202,48 @@ export function TemplateSelection({ onSelect, onScoreResume, onPortfolio }: Prop
             </div>
             <div className="flex flex-wrap gap-1.5">
               {["AI Scoring", "ATS Check", "FAANG Review"].map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-md bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        </motion.button>
+
+        {/* Cover Letter Card */}
+        <motion.button
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+          whileHover={{ y: -4 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => runWithTransition("cover-letter", () => onCoverLetter?.())}
+          disabled={pendingCard !== null}
+          className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-card p-px text-left transition-colors hover:border-cyan-500/50"
+        >
+          <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-cyan-500/10 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          <div className="relative flex flex-col gap-5 p-7">
+            <div className="flex items-center justify-between">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-cyan-500/10 ring-1 ring-cyan-500/20">
+                <Mail className="size-5 text-cyan-500" />
+              </div>
+              {pendingCard === "cover-letter" ? (
+                <Loader2 className="size-4 animate-spin text-cyan-500" />
+              ) : (
+                <ArrowRight className="size-4 -translate-x-1 text-muted-foreground/0 transition-all duration-300 group-hover:translate-x-0 group-hover:text-cyan-500" />
+              )}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Cover Letter</h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                Instantly create a tailored cover letter aligned with your resume tone and job keywords.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {["Tailored Tone", "Keyword Focus", "Ready to Send"].map((tag) => (
                 <span
                   key={tag}
                   className="rounded-md bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground"

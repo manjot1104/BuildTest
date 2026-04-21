@@ -169,7 +169,14 @@ const resumeSchema = z.object({
 
 type ResumeFormData = z.infer<typeof resumeSchema>
 
-type Step = 'template-browser' | 'format-selection' | 'form' | 'preview' | 'compiling' | 'score'
+type Step =
+  | 'template-browser'
+  | 'format-selection'
+  | 'form'
+  | 'preview'
+  | 'compiling'
+  | 'score'
+  | 'cover-letter'
 
 const PORTFOLIO_STUDIO_EXAMPLES = [
   {
@@ -235,6 +242,18 @@ export default function AIResumeBuilderPage() {
   const [scoreFormat, setScoreFormat] = useState<'html' | 'latex' | 'text'>('text')
   const [scoreFile, setScoreFile] = useState<File | null>(null)
   const [isExtractingText, setIsExtractingText] = useState(false)
+  const [coverLetterCompany, setCoverLetterCompany] = useState('')
+  const [coverLetterHiringManager, setCoverLetterHiringManager] = useState('')
+  const [coverLetterJobDescription, setCoverLetterJobDescription] = useState('')
+  const [coverLetterOutput, setCoverLetterOutput] = useState('')
+  const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false)
+  const [coverLetterMeta, setCoverLetterMeta] = useState<{
+    model?: string
+    isFallback?: boolean
+    inferredTone?: string
+    focusedKeywords?: string[]
+  } | null>(null)
+  const [aiWriterLoading, setAiWriterLoading] = useState<Record<string, boolean>>({})
   /** JD text for optional job-fit panel only — not wired to generate resume. */
   const [jobFitJdDraft, setJobFitJdDraft] = useState('')
   const [openingPortfolioExampleId, setOpeningPortfolioExampleId] = useState<string | null>(null)
@@ -769,7 +788,153 @@ export default function AIResumeBuilderPage() {
     setShowScore(false)
     setScoreFile(null)
     setScoreInput('')
+    setCoverLetterCompany('')
+    setCoverLetterHiringManager('')
+    setCoverLetterJobDescription('')
+    setCoverLetterOutput('')
+    setCoverLetterMeta(null)
     form.reset()
+  }
+
+  const handleGenerateCoverLetter = async () => {
+    if (!coverLetterCompany.trim()) {
+      toast.error('Please enter a company name.')
+      return
+    }
+    if (coverLetterJobDescription.trim().length < 50) {
+      toast.error('Please add a fuller job description (at least 50 characters).')
+      return
+    }
+
+    const data = form.getValues()
+    if (!data.fullName?.trim() || !data.email?.trim() || !data.phone?.trim()) {
+      toast.error('Please fill name, email, and phone in resume form first.')
+      return
+    }
+
+    setIsGeneratingCoverLetter(true)
+    toast.loading('Generating tailored cover letter...', { id: 'cover-letter-generate' })
+    try {
+      const response = await fetch('/api/resume/cover-letter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          fullName: data.fullName,
+          title: data.title,
+          email: data.email,
+          phone: data.phone,
+          summary: data.summary,
+          skills: data.skills,
+          experience: data.experience,
+          projects: data.projects,
+          achievements: data.achievements,
+          certifications: data.certifications,
+          jobDescription: coverLetterJobDescription,
+          companyName: coverLetterCompany,
+          hiringManager: coverLetterHiringManager,
+          model: selectedModel,
+        }),
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to generate cover letter' }))
+        throw new Error((err as { error?: string }).error || 'Failed to generate cover letter')
+      }
+
+      const result = (await response.json()) as {
+        coverLetter: string
+        model?: string
+        isFallback?: boolean
+        inferredTone?: string
+        focusedKeywords?: string[]
+      }
+      setCoverLetterOutput(result.coverLetter || '')
+      setCoverLetterMeta({
+        model: result.model,
+        isFallback: result.isFallback,
+        inferredTone: result.inferredTone,
+        focusedKeywords: result.focusedKeywords,
+      })
+
+      if (result.isFallback && result.model) {
+        toast.warning(`Generated with fallback: ${getModelName(result.model)}`, {
+          id: 'cover-letter-generate',
+        })
+      } else {
+        toast.success('Cover letter generated.', { id: 'cover-letter-generate' })
+      }
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to generate cover letter.',
+        { id: 'cover-letter-generate' },
+      )
+    } finally {
+      setIsGeneratingCoverLetter(false)
+    }
+  }
+
+  const handleAiRewriteSection = async (
+    section:
+      | 'summary'
+      | 'skills'
+      | 'experience'
+      | 'projects'
+      | 'education'
+      | 'certifications'
+      | 'achievements'
+      | 'languagesKnown',
+  ) => {
+    const current = (form.getValues(section) || '').trim()
+    if (!current) {
+      toast.error(`Add some text in ${section} first.`)
+      return
+    }
+
+    const instruction = window.prompt(
+      `AI Writer for ${section}\nOptional: what should be improved?`,
+      'Improve clarity and impact, keep facts same.',
+    )
+    if (instruction === null) return
+
+    setAiWriterLoading((prev) => ({ ...prev, [section]: true }))
+    toast.loading(`Rewriting ${section}...`, { id: `rewrite-${section}` })
+    try {
+      const data = form.getValues()
+      const response = await fetch('/api/resume/rewrite-section', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          section,
+          sectionText: current,
+          instruction: instruction || undefined,
+          model: selectedModel,
+          fullName: data.fullName,
+          title: data.title,
+          targetRole: data.title,
+        }),
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: 'Failed to rewrite section' }))
+        throw new Error((err as { error?: string }).error || 'Failed to rewrite section')
+      }
+      const result = (await response.json()) as { rewrittenText: string; model?: string; isFallback?: boolean }
+      form.setValue(section, result.rewrittenText || current, { shouldDirty: true })
+      if (result.isFallback && result.model) {
+        toast.warning(`Section rewritten with fallback: ${getModelName(result.model)}`, {
+          id: `rewrite-${section}`,
+        })
+      } else {
+        toast.success(`${section} updated by AI Writer.`, { id: `rewrite-${section}` })
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'AI Writer failed.', {
+        id: `rewrite-${section}`,
+      })
+    } finally {
+      setAiWriterLoading((prev) => ({ ...prev, [section]: false }))
+    }
   }
 
   // Handle file uploads and parsing
@@ -1038,6 +1203,10 @@ export default function AIResumeBuilderPage() {
             setCurrentStep('score')
           }}
           onPortfolio={handlePortfolioEntry}
+          onCoverLetter={() => {
+            setResumeBuilderMode('resume')
+            setCurrentStep('cover-letter')
+          }}
         />
       </div>
     )
@@ -1326,6 +1495,325 @@ export default function AIResumeBuilderPage() {
                 onClose={() => setShowScore(false)}
               />
             )}
+          </div>
+        </motion.div>
+      </div>
+    )
+  }
+
+  if (currentStep === 'cover-letter') {
+    return (
+      <div className="container mx-auto max-w-4xl px-3 py-4 sm:px-4 sm:py-8">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
+        >
+          <div className="mb-6 flex items-start gap-3 sm:gap-4">
+            <button
+              onClick={() => setCurrentStep('format-selection')}
+              className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight sm:text-2xl">Cover Letter Generator</h1>
+                <span className="shrink-0 rounded-full bg-cyan-500/10 px-2.5 py-0.5 text-[11px] font-medium text-cyan-600 ring-1 ring-cyan-500/20 dark:text-cyan-400">
+                  Tailored
+                </span>
+              </div>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Generate a job-specific cover letter aligned with your resume tone and JD keyword focus.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-dashed border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-dashed border-border/60 bg-muted/20 px-3 py-2.5 sm:px-4">
+                <Upload className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium text-muted-foreground">Upload Resume (Auto-fill)</span>
+              </div>
+              <div className="p-4">
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) void handleFileUpload('resume', file)
+                    }}
+                    className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+                    disabled={isParsingFiles}
+                  />
+                  <div
+                    className={cn(
+                      'flex items-center gap-3 rounded-xl border-2 border-dashed border-border/60 bg-muted/10 px-4 py-5 transition-colors hover:border-cyan-500/40 hover:bg-cyan-500/5',
+                      isParsingFiles && 'pointer-events-none opacity-60',
+                    )}
+                  >
+                    {isParsingFiles ? (
+                      <>
+                        <Loader2 className="size-5 animate-spin text-cyan-500" />
+                        <div>
+                          <p className="text-sm font-medium">Extracting details from resume...</p>
+                          <p className="text-xs text-muted-foreground">Please wait, fields will auto-fill.</p>
+                        </div>
+                      </>
+                    ) : resumeFile ? (
+                      <>
+                        <FileCheck className="size-5 text-emerald-500" />
+                        <div>
+                          <p className="text-sm font-medium">{resumeFile.name}</p>
+                          <p className="text-xs text-muted-foreground">Resume parsed. Click to replace file.</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="size-5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">Drop or click to upload resume</p>
+                          <p className="text-xs text-muted-foreground">Supports PDF, DOC, DOCX, TXT</p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <span className="text-sm font-medium">Resume Context (for tone and achievements)</span>
+              </div>
+              <div className="space-y-4 p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Full Name</label>
+                    <Input
+                      value={watchedResumeFields.fullName || ''}
+                      onChange={(e) =>
+                        form.setValue('fullName', e.target.value, {
+                          shouldDirty: true,
+                        })
+                      }
+                      placeholder="e.g., John Doe"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Target Title</label>
+                    <Input
+                      value={watchedResumeFields.title || ''}
+                      onChange={(e) =>
+                        form.setValue('title', e.target.value, {
+                          shouldDirty: true,
+                        })
+                      }
+                      placeholder="e.g., Frontend Engineer"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Email</label>
+                    <Input
+                      type="email"
+                      value={watchedResumeFields.email || ''}
+                      onChange={(e) =>
+                        form.setValue('email', e.target.value, {
+                          shouldDirty: true,
+                        })
+                      }
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-foreground">Phone</label>
+                    <Input
+                      value={watchedResumeFields.phone || ''}
+                      onChange={(e) =>
+                        form.setValue('phone', e.target.value, {
+                          shouldDirty: true,
+                        })
+                      }
+                      placeholder="+91 98xxxxxx"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Professional Summary</label>
+                  <Textarea
+                    value={watchedResumeFields.summary || ''}
+                    onChange={(e) =>
+                      form.setValue('summary', e.target.value, {
+                        shouldDirty: true,
+                      })
+                    }
+                    className="min-h-[100px]"
+                    placeholder="Short profile summary..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Skills</label>
+                  <Textarea
+                    value={watchedResumeFields.skills || ''}
+                    onChange={(e) =>
+                      form.setValue('skills', e.target.value, {
+                        shouldDirty: true,
+                      })
+                    }
+                    className="min-h-[100px]"
+                    placeholder="React, Node.js, SQL, Leadership..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Experience</label>
+                  <Textarea
+                    value={watchedResumeFields.experience || ''}
+                    onChange={(e) =>
+                      form.setValue('experience', e.target.value, {
+                        shouldDirty: true,
+                      })
+                    }
+                    className="min-h-[140px]"
+                    placeholder="Add key experiences with impact and metrics..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-foreground">Projects</label>
+                  <Textarea
+                    value={watchedResumeFields.projects || ''}
+                    onChange={(e) =>
+                      form.setValue('projects', e.target.value, {
+                        shouldDirty: true,
+                      })
+                    }
+                    className="min-h-[120px]"
+                    placeholder="Mention projects relevant to the job..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <Settings2 className="size-4 text-muted-foreground" />
+                <span className="text-sm font-medium">AI Model</span>
+              </div>
+              <div className="p-4">
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="h-9 max-w-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RESUME_MODELS.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        {model.name} <span className="text-muted-foreground">— {model.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Company Name</label>
+                <Input
+                  value={coverLetterCompany}
+                  onChange={(e) => setCoverLetterCompany(e.target.value)}
+                  placeholder="e.g., Stripe"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Hiring Manager (optional)</label>
+                <Input
+                  value={coverLetterHiringManager}
+                  onChange={(e) => setCoverLetterHiringManager(e.target.value)}
+                  placeholder="e.g., Sarah Johnson"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <span className="text-sm font-medium">Job Description</span>
+              </div>
+              <Textarea
+                value={coverLetterJobDescription}
+                onChange={(e) => setCoverLetterJobDescription(e.target.value)}
+                className="min-h-[220px] resize-none border-0 rounded-none focus-visible:ring-0"
+                placeholder="Paste the full job description here to match tone and keyword focus..."
+              />
+            </div>
+
+            <div className="flex items-center justify-end">
+              <Button
+                onClick={() => void handleGenerateCoverLetter()}
+                disabled={isGeneratingCoverLetter}
+                className="gap-2"
+              >
+                {isGeneratingCoverLetter ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-4" />
+                    Generate Cover Letter
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {(coverLetterMeta?.inferredTone || (coverLetterMeta?.focusedKeywords?.length ?? 0) > 0) && (
+              <div className="rounded-xl border border-border/60 bg-card p-4 text-sm">
+                {coverLetterMeta.inferredTone ? (
+                  <p className="text-muted-foreground">
+                    <span className="font-medium text-foreground">Inferred tone:</span> {coverLetterMeta.inferredTone}
+                  </p>
+                ) : null}
+                {(coverLetterMeta.focusedKeywords?.length ?? 0) > 0 ? (
+                  <p className="mt-2 text-muted-foreground">
+                    <span className="font-medium text-foreground">Keyword focus:</span>{' '}
+                    {coverLetterMeta.focusedKeywords?.slice(0, 10).join(', ')}
+                  </p>
+                ) : null}
+              </div>
+            )}
+
+            <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+              <div className="flex items-center justify-between gap-2 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
+                <span className="text-sm font-medium">Generated Cover Letter</span>
+                {coverLetterOutput.trim() ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(coverLetterOutput)
+                      toast.success('Cover letter copied to clipboard')
+                    }}
+                  >
+                    <Copy className="size-3.5" />
+                    Copy
+                  </Button>
+                ) : null}
+              </div>
+              <Textarea
+                value={coverLetterOutput}
+                onChange={(e) => setCoverLetterOutput(e.target.value)}
+                className="min-h-[260px] resize-none border-0 rounded-none focus-visible:ring-0"
+                placeholder="Your tailored cover letter will appear here..."
+              />
+            </div>
           </div>
         </motion.div>
       </div>
@@ -1828,11 +2316,7 @@ export default function AIResumeBuilderPage() {
                     size="sm"
                     onClick={() => {
                       setResumeBuilderMode('resume')
-                      if (templateType === 'html') {
-                        setCurrentStep('template-browser')
-                      } else {
-                        setCurrentStep('format-selection')
-                      }
+                    setCurrentStep('format-selection')
                     }}
                     className="h-7 gap-1.5 text-xs"
                   >
@@ -1866,11 +2350,7 @@ export default function AIResumeBuilderPage() {
                   size="sm"
                   onClick={() => {
                     setResumeBuilderMode('resume')
-                    if (templateType === 'html' && selectedTemplate) {
-                      setCurrentStep('template-browser')
-                    } else {
-                      setCurrentStep('format-selection')
-                    }
+                    setCurrentStep('format-selection')
                   }}
                   className="h-7 gap-1.5 text-xs"
                 >
@@ -2091,6 +2571,17 @@ export default function AIResumeBuilderPage() {
               <MessageSquare className="size-4 text-indigo-500" />
               <span className="text-sm font-medium text-muted-foreground">Professional Summary</span>
               <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Optional</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => void handleAiRewriteSection('summary')}
+                disabled={!!aiWriterLoading.summary}
+              >
+                {aiWriterLoading.summary ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                AI Writer
+              </Button>
             </div>
             <div className="p-4">
               <FormField
@@ -2124,6 +2615,17 @@ export default function AIResumeBuilderPage() {
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
               <Sparkles className="size-4 text-amber-500" />
               <span className="text-sm font-medium">Skills</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => void handleAiRewriteSection('skills')}
+                disabled={!!aiWriterLoading.skills}
+              >
+                {aiWriterLoading.skills ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                AI Writer
+              </Button>
             </div>
             <div className="p-4">
               <FormField
@@ -2157,6 +2659,17 @@ export default function AIResumeBuilderPage() {
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
               <Briefcase className="size-4 text-emerald-500" />
               <span className="text-sm font-medium">Experience</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => void handleAiRewriteSection('experience')}
+                disabled={!!aiWriterLoading.experience}
+              >
+                {aiWriterLoading.experience ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                AI Writer
+              </Button>
             </div>
             <div className="p-4">
               <FormField
@@ -2190,6 +2703,17 @@ export default function AIResumeBuilderPage() {
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
               <FolderKanban className="size-4 text-rose-500" />
               <span className="text-sm font-medium">Projects</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => void handleAiRewriteSection('projects')}
+                disabled={!!aiWriterLoading.projects}
+              >
+                {aiWriterLoading.projects ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                AI Writer
+              </Button>
             </div>
             <div className="p-4">
               <FormField
@@ -2223,6 +2747,17 @@ export default function AIResumeBuilderPage() {
             <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-3 py-2.5 sm:px-4">
               <GraduationCap className="size-4 text-violet-500" />
               <span className="text-sm font-medium">Education</span>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="ml-auto h-7 gap-1.5 text-xs"
+                onClick={() => void handleAiRewriteSection('education')}
+                disabled={!!aiWriterLoading.education}
+              >
+                {aiWriterLoading.education ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                AI Writer
+              </Button>
             </div>
             <div className="p-4">
               <FormField
@@ -2264,7 +2799,24 @@ export default function AIResumeBuilderPage() {
                 name="certifications"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Certifications</FormLabel>
+                    <div className="mb-1 flex items-center gap-2">
+                      <FormLabel className="text-xs">Certifications</FormLabel>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-6 gap-1.5 px-2 text-[10px]"
+                        onClick={() => void handleAiRewriteSection('certifications')}
+                        disabled={!!aiWriterLoading.certifications}
+                      >
+                        {aiWriterLoading.certifications ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3" />
+                        )}
+                        AI Writer
+                      </Button>
+                    </div>
                     <FormControl>
                       <Textarea
                         placeholder="AWS Solutions Architect Associate (2023), Google Cloud Professional Developer (2022)"
@@ -2283,7 +2835,24 @@ export default function AIResumeBuilderPage() {
                 name="achievements"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Achievements</FormLabel>
+                    <div className="mb-1 flex items-center gap-2">
+                      <FormLabel className="text-xs">Achievements</FormLabel>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-6 gap-1.5 px-2 text-[10px]"
+                        onClick={() => void handleAiRewriteSection('achievements')}
+                        disabled={!!aiWriterLoading.achievements}
+                      >
+                        {aiWriterLoading.achievements ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3" />
+                        )}
+                        AI Writer
+                      </Button>
+                    </div>
                     <FormControl>
                       <Textarea
                         placeholder="Best Innovation Award — Google Hackathon 2023, Speaker — ReactConf 2022"
@@ -2302,7 +2871,24 @@ export default function AIResumeBuilderPage() {
                 name="languagesKnown"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-xs">Languages Spoken</FormLabel>
+                    <div className="mb-1 flex items-center gap-2">
+                      <FormLabel className="text-xs">Languages Spoken</FormLabel>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-6 gap-1.5 px-2 text-[10px]"
+                        onClick={() => void handleAiRewriteSection('languagesKnown')}
+                        disabled={!!aiWriterLoading.languagesKnown}
+                      >
+                        {aiWriterLoading.languagesKnown ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          <Sparkles className="size-3" />
+                        )}
+                        AI Writer
+                      </Button>
+                    </div>
                     <FormControl>
                       <Input placeholder="English (Native), Spanish (Conversational)" {...field} />
                     </FormControl>
