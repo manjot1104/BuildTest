@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/env'
 
-// Type declaration for require (needed for CommonJS modules)
-declare const require: (id: string) => any
-
 // Ensure Node.js runtime for pdf-parse
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
@@ -48,22 +45,40 @@ async function extractTextFromPDF(file: File): Promise<string> {
       throw new Error('PDF file is too large (max 10MB). Please use a smaller file.')
     }
     
-    // Load pdf-parse module v2 - uses PDFParse class
-    let PDFParse: any
+    // Load pdf-parse in an ESM-safe way; support both v1 and v2 exports
+    let PDFParseClass: null | (new (input: { data: Buffer }) => { getText: () => Promise<any> }) = null
+    let parseFunction: null | ((buffer: Buffer) => Promise<any>) = null
     try {
-      console.log('[parse-files] Loading pdf-parse module (v2)...')
-      
-      // pdf-parse v2 exports PDFParse class
-      const pdfModule = require('pdf-parse')
-      
-      // Extract PDFParse class from module
-      if (pdfModule.PDFParse && typeof pdfModule.PDFParse === 'function') {
-        PDFParse = pdfModule.PDFParse
-      } else {
-        throw new Error('PDFParse class not found in pdf-parse module')
+      console.log('[parse-files] Loading pdf-parse module...')
+      const pdfModule = await import('pdf-parse')
+      const moduleExports = (pdfModule as { default?: unknown; PDFParse?: unknown })
+      const defaultExport = moduleExports.default
+      const namedExport = moduleExports.PDFParse
+
+      if (typeof namedExport === 'function') {
+        PDFParseClass = namedExport as new (input: { data: Buffer }) => { getText: () => Promise<any> }
       }
-      
-      console.log('[parse-files] ✅ pdf-parse module loaded successfully')
+
+      if (typeof defaultExport === 'function') {
+        parseFunction = defaultExport as (buffer: Buffer) => Promise<any>
+      }
+
+      // Some builds expose the parse function on a nested default
+      if (!parseFunction && defaultExport && typeof defaultExport === 'object') {
+        const nested = (defaultExport as { default?: unknown }).default
+        if (typeof nested === 'function') {
+          parseFunction = nested as (buffer: Buffer) => Promise<any>
+        }
+      }
+
+      if (!PDFParseClass && !parseFunction) {
+        throw new Error('No compatible pdf-parse export found')
+      }
+
+      console.log('[parse-files] ✅ pdf-parse module loaded successfully', {
+        hasV2Class: !!PDFParseClass,
+        hasV1Function: !!parseFunction,
+      })
     } catch (importError) {
       console.error('[parse-files] ❌ Failed to load pdf-parse:', importError)
       const errorDetails = importError instanceof Error ? {
@@ -89,12 +104,18 @@ async function extractTextFromPDF(file: File): Promise<string> {
     let data: any
     try {
       console.log('[parse-files] Creating PDFParse instance...')
-      // pdf-parse v2: Create instance with buffer
-      const parser = new PDFParse({ data: buffer })
-      
-      console.log('[parse-files] Calling getText()...')
-      // Get text from PDF
-      data = await parser.getText()
+      if (PDFParseClass) {
+        // pdf-parse v2 API: class instance + getText()
+        const parser = new PDFParseClass({ data: buffer })
+        console.log('[parse-files] Calling getText() with v2 parser...')
+        data = await parser.getText()
+      } else if (parseFunction) {
+        // pdf-parse v1 API: parse(buffer)
+        console.log('[parse-files] Calling parse function (v1 API)...')
+        data = await parseFunction(buffer)
+      } else {
+        throw new Error('PDF parser is loaded but no usable API is available')
+      }
       
       console.log('[parse-files] ✅ PDF parsed successfully')
       console.log('[parse-files] PDF metadata:', {
@@ -137,6 +158,12 @@ async function extractTextFromPDF(file: File): Promise<string> {
     console.error('[parse-files] Error stack:', errorStack)
     throw new Error(`Failed to extract text from PDF file: ${errorMessage}`)
   }
+}
+
+function isPdfFile(file: File): boolean {
+  const mimeType = file.type?.toLowerCase() || ''
+  const lowerName = file.name.toLowerCase()
+  return mimeType === 'application/pdf' || lowerName.endsWith('.pdf')
 }
 
 function buildFallbackResumeData(rawText: string): ParsedResumeData {
@@ -269,7 +296,7 @@ export async function POST(request: NextRequest) {
       
       // Extract resume text
       if (resumeFile) {
-        if (resumeFile.type === 'application/pdf') {
+        if (isPdfFile(resumeFile)) {
           extractionPromises.push(
             extractTextFromPDF(resumeFile).catch((error) => {
               console.error('[parse-files] Resume PDF extraction failed:', error)
@@ -290,7 +317,7 @@ export async function POST(request: NextRequest) {
       
       // Extract JD text
       if (jdFile) {
-        if (jdFile.type === 'application/pdf') {
+        if (isPdfFile(jdFile)) {
           extractionPromises.push(
             extractTextFromPDF(jdFile).catch((error) => {
               console.error('[parse-files] JD PDF extraction failed:', error)
@@ -323,7 +350,7 @@ export async function POST(request: NextRequest) {
         
         if (resumeText.length === 0 && resumeFile) {
           console.warn('[parse-files] ⚠️ Resume text is empty after extraction')
-          if (resumeFile.type === 'application/pdf') {
+          if (isPdfFile(resumeFile)) {
             console.warn('[parse-files] PDF might be image-based or contain no extractable text')
           }
         }
@@ -339,7 +366,7 @@ export async function POST(request: NextRequest) {
         }
         
         // If it's a PDF and extraction failed, provide helpful error but don't fail completely
-        if (resumeFile?.type === 'application/pdf') {
+        if (resumeFile && isPdfFile(resumeFile)) {
           const errorMsg = errorReason instanceof Error ? errorReason.message : String(errorReason)
           console.warn('[parse-files] PDF extraction failed, but continuing with empty text')
           resumeText = '' // Set to empty instead of throwing
