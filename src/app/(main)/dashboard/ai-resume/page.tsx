@@ -2163,16 +2163,20 @@ export default function AIResumeBuilderPage() {
                   <label className="text-xs font-medium text-muted-foreground">Upload Your Resume</label>
                   <div className="relative">
                     <input
+                      id="resume-upload-input"
                       type="file"
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
                         if (file) void handleFileUpload('resume', file)
                       }}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="sr-only"
                       disabled={isParsingFiles}
                     />
-                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                    <label
+                      htmlFor="resume-upload-input"
+                      className="relative z-10 flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                    >
                       {resumeFile ? (
                         <>
                           <FileCheck className="size-4 text-green-600" />
@@ -2180,11 +2184,12 @@ export default function AIResumeBuilderPage() {
                           <button
                             type="button"
                             onClick={(e) => {
+                              e.preventDefault()
                               e.stopPropagation()
                               setResumeFile(null)
                               setParsedData(null)
                             }}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="relative z-20 text-muted-foreground hover:text-foreground"
                           >
                             <X className="size-3.5" />
                           </button>
@@ -2195,7 +2200,7 @@ export default function AIResumeBuilderPage() {
                           <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
                         </>
                       )}
-                    </div>
+                    </label>
                   </div>
                 </div>
 
@@ -2204,16 +2209,20 @@ export default function AIResumeBuilderPage() {
                   <label className="text-xs font-medium text-muted-foreground">Upload Job Description</label>
                   <div className="relative">
                     <input
+                      id="jd-upload-input"
                       type="file"
                       accept=".pdf,.doc,.docx,.txt"
                       onChange={(e) => {
                         const file = e.target.files?.[0]
                         if (file) void handleFileUpload('jd', file)
                       }}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      className="sr-only"
                       disabled={isParsingFiles}
                     />
-                    <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50">
+                    <label
+                      htmlFor="jd-upload-input"
+                      className="relative z-10 flex cursor-pointer items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 transition-colors hover:bg-muted/50"
+                    >
                       {jdFile ? (
                         <>
                           <FileCheck className="size-4 text-green-600" />
@@ -2221,6 +2230,7 @@ export default function AIResumeBuilderPage() {
                           <button
                             type="button"
                             onClick={(e) => {
+                              e.preventDefault()
                               e.stopPropagation()
                               setJdFile(null)
                               if (parsedData) {
@@ -2230,7 +2240,7 @@ export default function AIResumeBuilderPage() {
                                 form.setValue('additionalInstructions', cleaned)
                               }
                             }}
-                            className="text-muted-foreground hover:text-foreground"
+                            className="relative z-20 text-muted-foreground hover:text-foreground"
                           >
                             <X className="size-3.5" />
                           </button>
@@ -2241,7 +2251,7 @@ export default function AIResumeBuilderPage() {
                           <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, TXT</span>
                         </>
                       )}
-                    </div>
+                    </label>
                   </div>
                 </div>
               </div>
