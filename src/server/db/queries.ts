@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gte, isNotNull, inArray, or } from 'drizzle-orm'
+import { and, count, desc, eq, gte, isNotNull, inArray, or, lt } from 'drizzle-orm'
 import { randomUUID } from 'crypto'
 
 import { user_chats, anonymous_chat_logs, user, github_repos, studio_layouts, chat_folders } from './schema'
@@ -12,6 +12,10 @@ import {
   report_exports,
   performance_metrics,
 } from './schema'
+
+import { video_chats, video_render_jobs } from './schema'
+import type { VideoJson } from '@/remotion-src/types'
+import type { UploadedUserImage } from '@/server/api/controllers/video-upload.controller'
 
 import { db } from './index'
 
@@ -1348,4 +1352,507 @@ export async function getReportExportByBadgeToken(token: string) {
     where: eq(report_exports.embed_badge_token, token),
     with: { testRun: true },
   })
+}
+
+// ============================================================================
+// Video Generation Queries
+// ============================================================================
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type VideoChat = typeof video_chats.$inferSelect
+
+export interface VideoOptions {
+  useTTS?: boolean
+  useMusic?: boolean
+  voiceId?: string
+  musicGenre?: string
+  ttsVolume?: number
+  musicVolume?: number
+}
+
+export interface PromptLogEntry {
+  prompt: string
+  sentAt: string // ISO string
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Derive a title from the first prompt (first 80 chars, trimmed). */
+function deriveTitle(prompt: string): string {
+  return prompt.trim().slice(0, 80)
+}
+
+// ── Queries ───────────────────────────────────────────────────────────────────
+
+/**
+ * Creates a new video_chats row BEFORE generation starts.
+ * video_json is set to a placeholder "[]" — updated once generation completes.
+ * Returns the new chat id so the controller can pass it to the client immediately.
+ */
+export async function createVideoChat({
+  userId,
+  prompt,
+  options,
+  userImages,
+  imageSessionId,
+}: {
+  userId: string
+  prompt: string
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+  imageSessionId?: string
+}): Promise<string> {
+  const id = randomUUID()
+  const promptEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
+
+  await db.insert(video_chats).values({
+    id,
+    user_id: userId,
+    title: deriveTitle(prompt),
+    video_json: '[]', // placeholder; filled in by updateVideoChatAfterGeneration
+    current_options: options ?? null,
+    current_user_images: userImages ?? null,
+    image_session_id: imageSessionId ?? null,
+    prompts: [promptEntry],
+  })
+
+  return id
+}
+
+/**
+ * Updates the video_json field after generation succeeds.
+ * Also updates current_options, current_user_images, and image_session_id.
+ * Bumps updated_at so the history list stays sorted correctly.
+ *
+ * Returns the previous image_session_id so the caller can clean up old S3
+ * image files after the DB write succeeds.
+ */
+export async function updateVideoChatAfterGeneration({
+  chatId,
+  userId,
+  videoJson,
+  options,
+  userImages,
+  imageSessionId,
+}: {
+  chatId: string
+  userId: string
+  videoJson: VideoJson
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+  imageSessionId?: string
+}): Promise<{ prevImageSessionId: string | null }> {
+  // Fetch previous image session ID before overwriting so the caller can delete old S3 files.
+  const [prev] = await db
+    .select({ image_session_id: video_chats.image_session_id })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
+  await db
+    .update(video_chats)
+    .set({
+      video_json: JSON.stringify(videoJson),
+      current_options: options ?? null,
+      current_user_images: userImages ?? null,
+      image_session_id: imageSessionId ?? null,
+      updated_at: new Date(),
+    })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return { prevImageSessionId: prev?.image_session_id ?? null }
+}
+
+/**
+ * Appends a new prompt to the prompts log and replaces video_json.
+ * Also updates current_options, current_user_images, and image_session_id.
+ * Used for follow-up prompts.
+ *
+ * Returns the previous image_session_id so the caller can clean up old S3
+ * image files after the DB write succeeds.
+ */
+export async function appendPromptAndUpdateVideo({
+  chatId,
+  userId,
+  prompt,
+  videoJson,
+  options,
+  userImages,
+  imageSessionId,
+}: {
+  chatId: string
+  userId: string
+  prompt: string
+  videoJson: VideoJson
+  options?: VideoOptions
+  userImages?: UploadedUserImage[]
+  imageSessionId?: string
+}): Promise<{ prevImageSessionId: string | null }> {
+  // Fetch current prompts + previous image session ID in one query.
+  const [row] = await db
+    .select({
+      prompts: video_chats.prompts,
+      image_session_id: video_chats.image_session_id,
+    })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
+  if (!row) return { prevImageSessionId: null }
+
+  const existing = (row.prompts as PromptLogEntry[]) ?? []
+  const newEntry: PromptLogEntry = { prompt, sentAt: new Date().toISOString() }
+
+  await db
+    .update(video_chats)
+    .set({
+      video_json: JSON.stringify(videoJson),
+      prompts: [...existing, newEntry],
+      current_options: options ?? null,
+      current_user_images: userImages ?? null,
+      image_session_id: imageSessionId ?? null,
+      updated_at: new Date(),
+    })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return {
+    // Only meaningful to clean up the old image session if a new one was uploaded.
+    // The controller decides whether to act on this.
+    prevImageSessionId: row.image_session_id ?? null,
+  }
+}
+
+/**
+ * Gets a single video chat by id with ownership check.
+ */
+export async function getVideoChatById({
+  chatId,
+  userId,
+}: {
+  chatId: string
+  userId: string
+}): Promise<VideoChat | undefined> {
+  const [row] = await db
+    .select()
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
+  return row
+}
+
+/**
+ * Gets all video chats for a user, most recently updated first.
+ * Returns lightweight rows (no video_json) for list views.
+ */
+export async function getVideoChatsByUserId({
+  userId,
+  limit = 30,
+  offset = 0,
+}: {
+  userId: string
+  limit?: number
+  offset?: number
+}): Promise<
+  Pick<VideoChat, 'id' | 'title' | 'prompts' | 'created_at' | 'updated_at'>[]
+> {
+  return db
+    .select({
+      id: video_chats.id,
+      title: video_chats.title,
+      prompts: video_chats.prompts,
+      created_at: video_chats.created_at,
+      updated_at: video_chats.updated_at,
+    })
+    .from(video_chats)
+    .where(eq(video_chats.user_id, userId))
+    .orderBy(desc(video_chats.updated_at))
+    .limit(limit)
+    .offset(offset)
+}
+export async function renameVideoChat({
+  chatId,
+  userId,
+  title,
+}: {
+  chatId: string;
+  userId: string;
+  title: string;
+}) {
+  await db
+    .update(video_chats)
+    .set({ title, updated_at: new Date() })
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)));
+}
+
+/**
+ * Deletes a video chat (with ownership check).
+ * Returns the image_session_id that was stored so the caller can clean up
+ * the associated S3 image files. TTS audio is stored under video-audio/{chatId}/
+ * and is cleaned up using the chatId directly.
+ */
+export async function deleteVideoChat({
+  chatId,
+  userId,
+}: {
+  chatId: string
+  userId: string
+}): Promise<{ imageSessionId: string | null }> {
+  // Fetch image session ID before deleting so the caller can clean up S3.
+  const [row] = await db
+    .select({ image_session_id: video_chats.image_session_id })
+    .from(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+    .limit(1)
+
+  await db
+    .delete(video_chats)
+    .where(and(eq(video_chats.id, chatId), eq(video_chats.user_id, userId)))
+
+  return { imageSessionId: row?.image_session_id ?? null }
+}
+
+/**
+ * Counts how many video generation prompts (initial + follow-up) a user has
+ * sent today (UTC calendar day). Used by generateVideoHandler to enforce the
+ * per-plan daily prompt limit server-side.
+ *
+ * Each row in video_chats.prompts is a PromptLogEntry[]. We sum the array
+ * lengths across all chats updated today, which counts every prompt (initial
+ * + follow-ups) sent in the current UTC day.
+ */
+export async function countVideoPromptsTodayByUserId(userId: string): Promise<number> {
+  const startOfDay = new Date()
+  startOfDay.setUTCHours(0, 0, 0, 0)
+
+  const rows = await db
+  .select({ prompts: video_chats.prompts })
+  .from(video_chats)
+  .where(
+    and(
+      eq(video_chats.user_id, userId),
+      gte(video_chats.updated_at, startOfDay),
+    )
+  )
+
+  let count = 0
+  for (const row of rows) {
+      const prompts = (row.prompts as PromptLogEntry[]) ?? []
+      for (const entry of prompts) {
+        if (new Date(entry.sentAt) >= startOfDay) {
+          count++
+        }
+      } 
+    }
+  return count
+}
+
+
+// ── Video Render Jobs ───────────────────────────────────────────────────────────────
+export type RenderJobStatus = "pending" | "running" | "done" | "failed";
+export type RenderJob = typeof video_render_jobs.$inferSelect;
+const STUCK_JOB_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+export async function createRenderJob({
+  userId,
+  chatId,
+  videoJson,
+}: {
+  userId: string;
+  chatId: string;
+  videoJson: string; // JSON.stringify(videoJson) — snapshot at queue time
+}): Promise<RenderJob> {
+  const id = randomUUID();
+  const [job] = await db
+    .insert(video_render_jobs)
+    .values({
+      id,
+      user_id: userId,
+      chat_id: chatId,
+      video_json: videoJson,
+      status: "pending",
+    })
+    .returning();
+  return job!;
+}
+ 
+// ── Read ──────────────────────────────────────────────────────────────────────
+ 
+/** Fetch a single job with ownership check. Used by the polling endpoint. */
+export async function getRenderJobById(
+  jobId: string,
+  userId: string,
+): Promise<RenderJob | undefined> {
+  const [job] = await db
+    .select()
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.id, jobId),
+        eq(video_render_jobs.user_id, userId),
+      ),
+    )
+    .limit(1);
+  return job;
+}
+ 
+/** Get the most recent render job for a chat (any status). */
+export async function getLatestRenderJobForChat(
+  chatId: string,
+  userId: string,
+): Promise<RenderJob | undefined> {
+  const [job] = await db
+    .select()
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.chat_id, chatId),
+        eq(video_render_jobs.user_id, userId),
+      ),
+    )
+    .orderBy(desc(video_render_jobs.created_at))
+    .limit(1);
+  return job;
+}
+ 
+/**
+ * Count active (pending + running) server render jobs for a user.
+ * Called before creating a new job to enforce the "one concurrent render" limit.
+ * Also resets stuck jobs first so a crashed render doesn't block the user forever.
+ */
+export async function countActiveRenderJobsForUser(userId: string): Promise<number> {
+  // Reset stuck jobs before counting so crashes don't permanently block the user
+  await resetStuckJobs();
+ 
+  const [result] = await db
+    .select({ count: count() })
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.user_id, userId),
+        or(
+          eq(video_render_jobs.status, "pending"),
+          eq(video_render_jobs.status, "running"),
+        ),
+      ),
+    );
+  return result?.count ?? 0;
+}
+ 
+/**
+ * Count render jobs created today (UTC) for a user.
+ * Used to enforce per-plan daily server render limits.
+ * Counts all statuses (including failed) to prevent re-queue abuse.
+ */
+export async function countServerRenderJobsToday(userId: string): Promise<number> {
+  const startOfDay = new Date();
+  startOfDay.setUTCHours(0, 0, 0, 0);
+ 
+  const [result] = await db
+    .select({ count: count() })
+    .from(video_render_jobs)
+    .where(
+      and(
+        eq(video_render_jobs.user_id, userId),
+        gte(video_render_jobs.created_at, startOfDay),
+      ),
+    );
+  return result?.count ?? 0;
+}
+ 
+// ── Update ────────────────────────────────────────────────────────────────────
+ 
+export async function markJobRunning(jobId: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({ status: "running", started_at: new Date(), updated_at: new Date() })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+/** Throttle calls to this — it writes to DB on every invocation. */
+export async function updateJobProgress(jobId: string, progress: number): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({ progress: Math.round(progress), updated_at: new Date() })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+export async function markJobDone(jobId: string, outputUrl: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "done",
+      output_url: outputUrl,
+      progress: 100,
+      updated_at: new Date(),
+    })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+export async function markJobFailed(jobId: string, errorMessage: string): Promise<void> {
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "failed",
+      error_message: errorMessage,
+      updated_at: new Date(),
+    })
+    .where(eq(video_render_jobs.id, jobId));
+}
+ 
+/**
+ * Reset jobs that have been "running" for too long (Vercel function timed out
+ * or crashed mid-render). Called automatically before any active-count check.
+ */
+async function resetStuckJobs(): Promise<void> {
+  const stuckBefore = new Date(Date.now() - STUCK_JOB_TIMEOUT_MS);
+  await db
+    .update(video_render_jobs)
+    .set({
+      status: "failed",
+      error_message: "Render timed out. Please try again.",
+      updated_at: new Date(),
+    })
+    .where(
+      and(
+        eq(video_render_jobs.status, "running"),
+        lt(video_render_jobs.started_at, stuckBefore),
+      ),
+    );
+}
+ 
+/**
+ * Atomically claim the next pending job for the render worker.
+ * Uses update-returning so two concurrent function invocations can't grab
+ * the same job (last-writer-wins at DB level; only one gets status=running).
+ * Jobs are processed FIFO by created_at.
+ */
+export async function claimNextPendingJob(): Promise<RenderJob | undefined> {
+  await resetStuckJobs();
+ 
+  // Drizzle doesn't support "UPDATE ... WHERE id = (SELECT MIN(id) ...)" directly,
+  // so we fetch the oldest pending job id first, then claim it atomically.
+  const [oldest] = await db
+    .select({ id: video_render_jobs.id })
+    .from(video_render_jobs)
+    .where(eq(video_render_jobs.status, "pending"))
+    .orderBy(video_render_jobs.created_at)
+    .limit(1);
+ 
+  if (!oldest) return undefined;
+ 
+  const [claimed] = await db
+    .update(video_render_jobs)
+    .set({ status: "running", started_at: new Date(), updated_at: new Date() })
+    .where(
+      and(
+        eq(video_render_jobs.id, oldest.id),
+        // Double-check status hasn't changed since the SELECT (race guard)
+        eq(video_render_jobs.status, "pending"),
+      ),
+    )
+    .returning();
+ 
+  return claimed;
 }
