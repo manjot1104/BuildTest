@@ -59,6 +59,32 @@ function skillChunks(skills: string, buckets: number): string[] {
   })
 }
 
+function clampText(input: string, maxChars: number): string {
+  const clean = input.replace(/\s+/g, ' ').trim()
+  if (clean.length <= maxChars) return clean
+  return `${clean.slice(0, Math.max(0, maxChars - 3)).trim()}...`
+}
+
+function normalizeSkillCardText(raw: string): string {
+  const parts = raw
+    .split(/[,，\n·]/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+  if (parts.length === 0) return '—'
+  return clampText(parts.join(' · '), 220)
+}
+
+function compactSkillsInline(skills: string): string {
+  const parts = skills
+    .split(/[,，\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 6)
+  if (parts.length === 0) return 'TypeScript · React · Node.js · PostgreSQL'
+  return clampText(parts.join(' · '), 220)
+}
+
 const SKILL_LABELS = ['Frontend & UI', 'Backend & APIs', 'Platform & DevOps', 'Tools & more'] as const
 
 function projectTriple(projects: string): [string, string, string] {
@@ -103,7 +129,7 @@ function normalizeProjectCardText(raw: string): string {
 
   if (!detailPool) return title
 
-  const detail = detailPool.length > 220 ? `${detailPool.slice(0, 217)}...` : detailPool
+  const detail = detailPool.length > 1200 ? `${detailPool.slice(0, 1197)}...` : detailPool
   return `${title}\n${detail}`
 }
 
@@ -115,9 +141,9 @@ function estimateProjectCardHeight(content: string): number {
     return acc + wrapped
   }, 0)
 
-  // 124 was template default. Grow card for long content, cap to keep layout sane.
+  // Grow card for long content, cap to keep layout sane.
   const estimated = 84 + lineCount * 16
-  return Math.max(124, Math.min(220, estimated))
+  return Math.max(124, Math.min(520, estimated))
 }
 
 function normalizeWorkCardText(raw: string): string {
@@ -131,7 +157,7 @@ function normalizeWorkCardText(raw: string): string {
   const detailPool = (lines.slice(1).join(' ') || '').replace(/\s+/g, ' ').trim()
   if (!detailPool) return title
 
-  const detail = detailPool.length > 72 ? `${detailPool.slice(0, 69)}...` : detailPool
+  const detail = detailPool.length > 240 ? `${detailPool.slice(0, 237)}...` : detailPool
   return `${title}\n${detail}`
 }
 
@@ -151,8 +177,35 @@ function normalizeServiceCardText(raw: string): string {
     .trim()
   if (!detailPool) return title
 
-  const detail = detailPool.length > 78 ? `${detailPool.slice(0, 75)}...` : detailPool
+  const detail = detailPool.length > 260 ? `${detailPool.slice(0, 257)}...` : detailPool
   return `${title}\n${detail}`
+}
+
+function estimateTextBlockHeight(
+  content: string,
+  width: number,
+  fontSize = 14,
+  lineHeight = 1.6,
+  padding = 0,
+): number {
+  const charsPerLine = Math.max(14, Math.floor((width - padding * 2) / Math.max(6, fontSize * 0.55)))
+  const lines = content
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .reduce((acc, line) => acc + Math.max(1, Math.ceil(line.length / charsPerLine)), 0)
+  return Math.ceil(lines * fontSize * lineHeight + padding * 2 + 8)
+}
+
+function getById(elements: CanvasElement[], id: string): CanvasElement | undefined {
+  return elements.find((e) => e.id === id)
+}
+
+function shiftElementsFromY(elements: CanvasElement[], startY: number, delta: number): void {
+  if (delta <= 0) return
+  for (const el of elements) {
+    if (el.y >= startY) el.y += delta
+  }
 }
 
 function workQuads(projects: string): [string, string, string, string] {
@@ -199,15 +252,7 @@ function personalizeDeveloperDark(elements: CanvasElement[], d: PortfolioStudioR
   const summary =
     d.summary?.trim() ||
     'Building reliable products with a focus on clarity, performance, and maintainability.'
-  const skillsLine =
-    d.skills?.split('\n').map((l) => l.trim()).find(Boolean) ||
-    d.skills
-      ?.split(/[,，]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, 6)
-      .join(' · ') ||
-    'TypeScript · React · Node.js · PostgreSQL'
+  const skillsLine = compactSkillsInline(d.skills ?? '')
   const chunks = skillChunks(d.skills ?? '', 4)
   const [p1, p2, p3] = projectTriple(d.projects ?? '')
 
@@ -233,9 +278,36 @@ function personalizeDeveloperDark(elements: CanvasElement[], d: PortfolioStudioR
   ;[0, 1, 2, 3].forEach((i) => {
     patchById(elements, `d-card${i + 1}`, (el) => ({
       ...el,
-      content: `${SKILL_LABELS[i]}\n${chunks[i]}`,
+      content: `${SKILL_LABELS[i]}\n${normalizeSkillCardText(chunks[i] ?? '')}`,
     }))
   })
+
+  const bioEl = getById(elements, 'd-bio')
+  if (bioEl) {
+    const nextBioHeight = Math.max(76, estimateTextBlockHeight(String(bioEl.content || ''), bioEl.width, 15, 1.7, 0))
+    patchById(elements, 'd-bio', (el) => ({ ...el, height: nextBioHeight }))
+    patchById(elements, 'd-btn1', (el) => ({ ...el, y: bioEl.y + nextBioHeight + 20 }))
+    patchById(elements, 'd-btn2', (el) => ({ ...el, y: bioEl.y + nextBioHeight + 20 }))
+    patchById(elements, 'd-social', (el) => ({ ...el, y: bioEl.y + nextBioHeight + 86 }))
+  }
+
+  // Grow skill cards by content and reflow projects below.
+  const skillHeights = [1, 2, 3, 4].map((i) => {
+    const card = getById(elements, `d-card${i}`)
+    if (!card) return 88
+    return Math.max(88, estimateTextBlockHeight(String(card.content || ''), card.width, 12, 1.6, 16))
+  })
+  const maxSkillH = Math.max(...skillHeights, 88)
+  ;[1, 2, 3, 4].forEach((i) => {
+    patchById(elements, `d-card${i}`, (el) => ({ ...el, height: maxSkillH }))
+  })
+  const skillCardsBottom = 642 + maxSkillH
+  const projHeaderY = skillCardsBottom + 28
+  const projCardsY = projHeaderY + 56
+  patchById(elements, 'd-proj-h', (el) => ({ ...el, y: projHeaderY }))
+  patchById(elements, 'd-proj1', (el) => ({ ...el, y: projCardsY }))
+  patchById(elements, 'd-proj2', (el) => ({ ...el, y: projCardsY }))
+  patchById(elements, 'd-proj3', (el) => ({ ...el, y: projCardsY }))
   const proj1 = normalizeProjectCardText(p1)
   const proj2 = normalizeProjectCardText(p2)
   const proj3 = normalizeProjectCardText(p3)
@@ -247,11 +319,18 @@ function personalizeDeveloperDark(elements: CanvasElement[], d: PortfolioStudioR
   patchById(elements, 'd-proj2', (el) => ({ ...el, content: proj2, height: h2 }))
   patchById(elements, 'd-proj3', (el) => ({ ...el, content: proj3, height: h3 }))
   patchById(elements, 'd-skillbg', (el) => {
-    const maxProjectBottom = Math.max(814 + h1, 814 + h2, 814 + h3)
+    const maxProjectBottom = Math.max(projCardsY + h1, projCardsY + h2, projCardsY + h3)
     const minSectionBottom = maxProjectBottom + 24
     const nextHeight = Math.max(el.height, minSectionBottom - el.y)
     return { ...el, height: nextHeight }
   })
+
+  const social = getById(elements, 'd-social')
+  if (social) {
+    const nextSkillsStart = Math.max(556, social.y + social.height + 42)
+    const delta = nextSkillsStart - 556
+    shiftElementsFromY(elements, 556, delta)
+  }
   patchById(elements, 'd-social', (el) => ({
     ...el,
     socialLinks: setSocialUrls(el.socialLinks, {
@@ -267,7 +346,7 @@ function personalizeDesignerClean(elements: CanvasElement[], d: PortfolioStudioR
   const name = d.fullName.trim() || 'Your Name'
   const title = d.title?.trim() || 'Designer'
   const about = d.summary?.trim() || 'Creative professional focused on clear storytelling and craft.'
-  const email = d.email?.trim() || 'you@example.com'
+  const email = clampText(d.email?.trim() || 'you@example.com', 52)
   const [w1, w2, w3, w4] = workQuads(d.projects ?? '')
 
   patchById(elements, 'dc-h1', (el) => ({ ...el, content: name }))
@@ -282,6 +361,37 @@ function personalizeDesignerClean(elements: CanvasElement[], d: PortfolioStudioR
   patchById(elements, 'dc-w2', (el) => ({ ...el, content: normalizeWorkCardText(w2) }))
   patchById(elements, 'dc-w3', (el) => ({ ...el, content: normalizeWorkCardText(w3) }))
   patchById(elements, 'dc-w4', (el) => ({ ...el, content: normalizeWorkCardText(w4) }))
+
+  const aboutEl = getById(elements, 'dc-about')
+  if (aboutEl) {
+    const aboutH = Math.max(112, estimateTextBlockHeight(String(aboutEl.content || ''), aboutEl.width, 15, 1.8, 0))
+    patchById(elements, 'dc-about', (el) => ({ ...el, height: aboutH }))
+    const workHeaderY = aboutEl.y + aboutH + 22
+    const row1Y = workHeaderY + 52
+    patchById(elements, 'dc-work-h', (el) => ({ ...el, y: workHeaderY }))
+    patchById(elements, 'dc-w1', (el) => ({ ...el, y: row1Y }))
+    patchById(elements, 'dc-w2', (el) => ({ ...el, y: row1Y }))
+
+    const w1El = getById(elements, 'dc-w1')
+    const w2El = getById(elements, 'dc-w2')
+    const h1 = w1El ? Math.max(144, estimateTextBlockHeight(String(w1El.content || ''), w1El.width, 12, 1.6, 20)) : 144
+    const h2 = w2El ? Math.max(144, estimateTextBlockHeight(String(w2El.content || ''), w2El.width, 12, 1.6, 20)) : 144
+    const row1H = Math.max(h1, h2)
+    patchById(elements, 'dc-w1', (el) => ({ ...el, height: h1 }))
+    patchById(elements, 'dc-w2', (el) => ({ ...el, height: h2 }))
+
+    const row2Y = row1Y + row1H + 16
+    patchById(elements, 'dc-w3', (el) => ({ ...el, y: row2Y }))
+    patchById(elements, 'dc-w4', (el) => ({ ...el, y: row2Y }))
+    const w3El = getById(elements, 'dc-w3')
+    const w4El = getById(elements, 'dc-w4')
+    const h3 = w3El ? Math.max(144, estimateTextBlockHeight(String(w3El.content || ''), w3El.width, 12, 1.6, 20)) : 144
+    const h4 = w4El ? Math.max(144, estimateTextBlockHeight(String(w4El.content || ''), w4El.width, 12, 1.6, 20)) : 144
+    const row2H = Math.max(h3, h4)
+    patchById(elements, 'dc-w3', (el) => ({ ...el, height: h3 }))
+    patchById(elements, 'dc-w4', (el) => ({ ...el, height: h4 }))
+    patchById(elements, 'dc-btn', (el) => ({ ...el, y: row2Y + row2H + 20 }))
+  }
   patchById(elements, 'dc-social', (el) => ({
     ...el,
     socialLinks: setSocialUrls(el.socialLinks, {
@@ -294,19 +404,21 @@ function personalizeDesignerClean(elements: CanvasElement[], d: PortfolioStudioR
 
 function personalizeFreelancerClean(elements: CanvasElement[], d: PortfolioStudioResumeInput) {
   const name = d.fullName.trim() || 'Your Name'
-  const title = d.title?.trim() || 'Freelancer'
-  const sub =
+  const title = clampText(d.title?.trim() || 'Freelancer', 48)
+  const sub = (
     d.summary?.trim() ||
-    'Independent builder shipping web products end-to-end — from discovery to launch.'
+      'Independent builder shipping web products end-to-end — from discovery to launch.'
+  )
   const loc = d.location?.trim()
+  const contactLine = clampText(loc || d.email?.trim() || 'Available for new projects', 80)
 
   patchById(elements, 'fc-nav', (el) => ({
     ...el,
-    content: `${name}|Services|Work|Process|Contact`,
+    content: `${clampText(name, 28)}|Services|Work|Process|Contact`,
   }))
   patchById(elements, 'fc-h1', (el) => ({
     ...el,
-    content: `${name}\n${title}\n${loc || d.email?.trim() || 'Available for new projects'}`,
+    content: `${clampText(name, 32)}\n${title}\n${contactLine}`,
   }))
   patchById(elements, 'fc-img', (el) => ({
     ...el,
@@ -316,15 +428,15 @@ function personalizeFreelancerClean(elements: CanvasElement[], d: PortfolioStudi
   const sk = skillChunks(d.skills ?? '', 3)
   patchById(elements, 'fc-svc1', (el) => ({
     ...el,
-    content: normalizeServiceCardText(`Build & ship\n${sk[0]}`),
+    content: normalizeServiceCardText(`Build & ship\n${normalizeSkillCardText(sk[0] ?? '')}`),
   }))
   patchById(elements, 'fc-svc2', (el) => ({
     ...el,
-    content: normalizeServiceCardText(`Product & UX\n${sk[1]}`),
+    content: normalizeServiceCardText(`Product & UX\n${normalizeSkillCardText(sk[1] ?? '')}`),
   }))
   patchById(elements, 'fc-svc3', (el) => ({
     ...el,
-    content: normalizeServiceCardText(`Performance & quality\n${sk[2]}`),
+    content: normalizeServiceCardText(`Performance & quality\n${normalizeSkillCardText(sk[2] ?? '')}`),
   }))
   const testimonial =
     d.achievements?.trim() ||
@@ -332,8 +444,50 @@ function personalizeFreelancerClean(elements: CanvasElement[], d: PortfolioStudi
     '"Great collaboration — clear communication and fast delivery."'
   patchById(elements, 'fc-t1', (el) => ({
     ...el,
-    content: normalizeServiceCardText(`${testimonial}\n— Client reference`),
+    content: normalizeServiceCardText(`${clampText(testimonial, 220)}\n— Client reference`),
   }))
+
+  const h1El = getById(elements, 'fc-h1')
+  const subEl = getById(elements, 'fc-sub')
+  if (h1El && subEl) {
+    const h1Height = Math.max(180, estimateTextBlockHeight(String(h1El.content || ''), h1El.width, 64, 1.12, 0))
+    const subY = h1El.y + h1Height + 16
+    const subH = Math.max(48, estimateTextBlockHeight(String(subEl.content || ''), subEl.width, 14, 1.6, 0))
+    const btnY = subY + subH + 16
+    patchById(elements, 'fc-h1', (el) => ({ ...el, height: h1Height }))
+    patchById(elements, 'fc-sub', (el) => ({ ...el, y: subY, height: subH }))
+    patchById(elements, 'fc-btn1', (el) => ({ ...el, y: btnY }))
+    patchById(elements, 'fc-btn2', (el) => ({ ...el, y: btnY }))
+    patchById(elements, 'fc-social', (el) => ({ ...el, y: btnY + 58 }))
+    patchById(elements, 'fc-div', (el) => ({ ...el, y: btnY + 102 }))
+    patchById(elements, 'fc-svc-h', (el) => ({ ...el, y: btnY + 122 }))
+  }
+
+  const svcHeader = getById(elements, 'fc-svc-h')
+  if (svcHeader) {
+    const row1Y = svcHeader.y + 48
+    patchById(elements, 'fc-svc1', (el) => ({ ...el, y: row1Y }))
+    patchById(elements, 'fc-svc2', (el) => ({ ...el, y: row1Y }))
+    const s1 = getById(elements, 'fc-svc1')
+    const s2 = getById(elements, 'fc-svc2')
+    const h1 = s1 ? Math.max(88, estimateTextBlockHeight(String(s1.content || ''), s1.width, 12, 1.6, 16)) : 88
+    const h2 = s2 ? Math.max(88, estimateTextBlockHeight(String(s2.content || ''), s2.width, 12, 1.6, 16)) : 88
+    const row1H = Math.max(h1, h2)
+    patchById(elements, 'fc-svc1', (el) => ({ ...el, height: h1 }))
+    patchById(elements, 'fc-svc2', (el) => ({ ...el, height: h2 }))
+
+    const row2Y = row1Y + row1H + 16
+    patchById(elements, 'fc-svc3', (el) => ({ ...el, y: row2Y }))
+    patchById(elements, 'fc-t1', (el) => ({ ...el, y: row2Y }))
+    const s3 = getById(elements, 'fc-svc3')
+    const t1 = getById(elements, 'fc-t1')
+    const h3 = s3 ? Math.max(88, estimateTextBlockHeight(String(s3.content || ''), s3.width, 12, 1.6, 16)) : 88
+    const h4 = t1 ? Math.max(88, estimateTextBlockHeight(String(t1.content || ''), t1.width, 12, 1.6, 16)) : 88
+    patchById(elements, 'fc-svc3', (el) => ({ ...el, height: h3 }))
+    patchById(elements, 'fc-t1', (el) => ({ ...el, height: h4 }))
+
+    patchById(elements, 'fc-form', (el) => ({ ...el, y: svcHeader.y, height: Math.max(el.height, row2Y + Math.max(h3, h4) - svcHeader.y + 56) }))
+  }
   patchById(elements, 'fc-social', (el) => ({
     ...el,
     socialLinks: setSocialUrls(el.socialLinks, {

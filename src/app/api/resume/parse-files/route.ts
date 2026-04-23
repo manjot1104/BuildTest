@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/env'
 
-// Ensure Node.js runtime for pdf-parse
+// Node runtime: formData + OpenRouter + PDF text extraction.
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
 
@@ -34,123 +34,78 @@ export async function GET() {
 }
 
 /**
- * Extract text from PDF file using pdf-parse
+ * Extract text from PDF using pdfjs-dist legacy build.
+ * This avoids runtime-native canvas dependencies and works reliably in Node 20+.
  */
 async function extractTextFromPDF(file: File): Promise<string> {
   try {
-    console.log('[parse-files] Starting PDF extraction for:', file.name, 'Size:', file.size, 'bytes')
-    
-    // Check file size (limit to 10MB to prevent memory issues)
+    console.log('[parse-files] Starting PDF extraction (pdfjs-dist) for:', file.name, 'Size:', file.size, 'bytes')
+
     if (file.size > 10 * 1024 * 1024) {
       throw new Error('PDF file is too large (max 10MB). Please use a smaller file.')
     }
-    
-    // Load pdf-parse in an ESM-safe way; support both v1 and v2 exports
-    let PDFParseClass: null | (new (input: { data: Buffer }) => { getText: () => Promise<any> }) = null
-    let parseFunction: null | ((buffer: Buffer) => Promise<any>) = null
-    try {
-      console.log('[parse-files] Loading pdf-parse module...')
-      const pdfModule = await import('pdf-parse')
-      const moduleExports = (pdfModule as { default?: unknown; PDFParse?: unknown })
-      const defaultExport = moduleExports.default
-      const namedExport = moduleExports.PDFParse
 
-      if (typeof namedExport === 'function') {
-        PDFParseClass = namedExport as new (input: { data: Buffer }) => { getText: () => Promise<any> }
-      }
-
-      if (typeof defaultExport === 'function') {
-        parseFunction = defaultExport as (buffer: Buffer) => Promise<any>
-      }
-
-      // Some builds expose the parse function on a nested default
-      if (!parseFunction && defaultExport && typeof defaultExport === 'object') {
-        const nested = (defaultExport as { default?: unknown }).default
-        if (typeof nested === 'function') {
-          parseFunction = nested as (buffer: Buffer) => Promise<any>
-        }
-      }
-
-      if (!PDFParseClass && !parseFunction) {
-        throw new Error('No compatible pdf-parse export found')
-      }
-
-      console.log('[parse-files] ✅ pdf-parse module loaded successfully', {
-        hasV2Class: !!PDFParseClass,
-        hasV1Function: !!parseFunction,
-      })
-    } catch (importError) {
-      console.error('[parse-files] ❌ Failed to load pdf-parse:', importError)
-      const errorDetails = importError instanceof Error ? {
-        message: importError.message,
-        stack: importError.stack,
-        name: importError.name,
-      } : { message: String(importError) }
-      console.error('[parse-files] Import error details:', errorDetails)
-      throw new Error(`Failed to load PDF parser: ${importError instanceof Error ? importError.message : 'Unknown error'}`)
-    }
-    
     const arrayBuffer = await file.arrayBuffer()
     console.log('[parse-files] PDF buffer created, size:', arrayBuffer.byteLength, 'bytes')
-    
+
     if (arrayBuffer.byteLength === 0) {
       throw new Error('PDF file is empty or could not be read')
     }
-    
-    const buffer = Buffer.from(arrayBuffer)
-    console.log('[parse-files] Creating PDFParse instance with buffer size:', buffer.length)
-    
-    // Try to parse PDF with error handling using v2 API
-    let data: any
+
+    const uint8 = new Uint8Array(arrayBuffer)
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>>['promise'] extends Promise<infer T> ? T : never
     try {
-      console.log('[parse-files] Creating PDFParse instance...')
-      if (PDFParseClass) {
-        // pdf-parse v2 API: class instance + getText()
-        const parser = new PDFParseClass({ data: buffer })
-        console.log('[parse-files] Calling getText() with v2 parser...')
-        data = await parser.getText()
-      } else if (parseFunction) {
-        // pdf-parse v1 API: parse(buffer)
-        console.log('[parse-files] Calling parse function (v1 API)...')
-        data = await parseFunction(buffer)
-      } else {
-        throw new Error('PDF parser is loaded but no usable API is available')
-      }
-      
-      console.log('[parse-files] ✅ PDF parsed successfully')
-      console.log('[parse-files] PDF metadata:', {
-        numpages: data?.numpages || 'unknown',
-        textLength: data?.text?.length || 0,
+      const loadingTask = pdfjs.getDocument({
+        data: uint8,
+        isEvalSupported: false,
+        useSystemFonts: true,
+        disableFontFace: true,
       })
-    } catch (parseError) {
-      console.error('[parse-files] ❌ PDF parse error occurred')
-      console.error('[parse-files] Error type:', parseError instanceof Error ? parseError.constructor.name : typeof parseError)
-      console.error('[parse-files] Error message:', parseError instanceof Error ? parseError.message : String(parseError))
-      console.error('[parse-files] Error stack:', parseError instanceof Error ? parseError.stack : 'No stack trace')
-      
-      const errorMsg = parseError instanceof Error ? parseError.message : 'Unknown error'
-      
-      // Provide helpful error messages based on common issues
+      pdf = await loadingTask.promise
+    } catch (loadError) {
+      const errorMsg = loadError instanceof Error ? loadError.message : String(loadError)
+      console.error('[parse-files] ❌ PDF load failed:', loadError)
       if (errorMsg.includes('password') || errorMsg.includes('encrypted')) {
         throw new Error('PDF is password-protected. Please remove the password and try again.')
-      } else if (errorMsg.includes('corrupt') || errorMsg.includes('invalid')) {
-        throw new Error('PDF appears to be corrupted or invalid. Please try a different file.')
-      } else if (errorMsg.includes('image') || errorMsg.includes('scanned')) {
-        throw new Error('PDF appears to be image-based (scanned document). pdf-parse cannot extract text from images. Please use a text-based PDF or provide the content manually.')
-      } else {
-        throw new Error(`PDF parsing failed: ${errorMsg}. The PDF might be corrupted, password-protected, image-based, or in an unsupported format.`)
       }
+      if (errorMsg.includes('Invalid PDF')) {
+        throw new Error('PDF appears to be corrupted or invalid. Please try a different file.')
+      }
+      throw new Error(`PDF parsing failed: ${errorMsg}`)
     }
-    
-    const text = data?.text || ''
-    console.log('[parse-files] PDF extraction successful, text length:', text.length, 'characters')
-    
-    if (!text || text.trim().length === 0) {
-      console.warn('[parse-files] Warning: PDF extracted but text is empty. PDF might be image-based or corrupted.')
-      throw new Error('PDF appears to be image-based or contains no extractable text. Please use a text-based PDF or provide the content manually.')
+
+    const pageTexts: string[] = []
+    for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
+      const page = await pdf.getPage(pageNo)
+      const content = await page.getTextContent()
+      let pageText = ''
+      for (const item of content.items) {
+        if (!('str' in item)) continue
+        const token = item.str?.trim() || ''
+        if (!token) {
+          if ((item as { hasEOL?: boolean }).hasEOL) pageText += '\n'
+          continue
+        }
+        pageText += token
+        pageText += (item as { hasEOL?: boolean }).hasEOL ? '\n' : ' '
+      }
+      pageText = pageText.replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').trim()
+      pageTexts.push(pageText)
     }
-    
-    return text
+
+    const merged = pageTexts.join('\n').replace(/[ \t]+\n/g, '\n')
+    console.log('[parse-files] ✅ PDF parsed (pdfjs-dist), pages:', pdf.numPages, 'text length:', merged.length)
+
+    const trimmed = merged.trim()
+    if (!trimmed) {
+      console.warn('[parse-files] Warning: PDF parsed but text is empty (likely image-only pages).')
+      throw new Error(
+        'PDF appears to be image-based or contains no extractable text. Please use a text-based PDF or provide the content manually.',
+      )
+    }
+
+    return merged
   } catch (error) {
     console.error('[parse-files] Error extracting text from PDF:', error)
     const errorMessage = error instanceof Error ? error.message : 'Unknown error'
@@ -166,8 +121,276 @@ function isPdfFile(file: File): boolean {
   return mimeType === 'application/pdf' || lowerName.endsWith('.pdf')
 }
 
+function isDocxFile(file: File): boolean {
+  const mimeType = file.type?.toLowerCase() || ''
+  const lowerName = file.name.toLowerCase()
+  return (
+    mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    lowerName.endsWith('.docx')
+  )
+}
+
+function isDocFile(file: File): boolean {
+  const mimeType = file.type?.toLowerCase() || ''
+  const lowerName = file.name.toLowerCase()
+  return mimeType === 'application/msword' || lowerName.endsWith('.doc')
+}
+
+async function extractTextFromDocx(file: File): Promise<string> {
+  console.log('[parse-files] Starting DOCX extraction for:', file.name, 'Size:', file.size, 'bytes')
+  const arrayBuffer = await file.arrayBuffer()
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ arrayBuffer })
+  const text = normalizeResumeText(result.value || '')
+  console.log('[parse-files] ✅ DOCX extraction complete, text length:', text.length)
+  return text
+}
+
+async function extractTextFromDoc(file: File): Promise<string> {
+  // Legacy .doc is a binary format; use best-effort plain text extraction.
+  console.log('[parse-files] Starting DOC extraction (best-effort) for:', file.name, 'Size:', file.size, 'bytes')
+  const arrayBuffer = await file.arrayBuffer()
+  const raw = Buffer.from(arrayBuffer).toString('utf8')
+  const cleaned = normalizeResumeText(
+    raw
+      .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, ' ')
+      .replace(/\s{2,}/g, ' '),
+  )
+  console.log('[parse-files] ✅ DOC extraction complete (best-effort), text length:', cleaned.length)
+  return cleaned
+}
+
+async function extractTextFromFile(file: File): Promise<string> {
+  if (isPdfFile(file)) return extractTextFromPDF(file)
+  if (isDocxFile(file)) return extractTextFromDocx(file)
+  if (isDocFile(file)) return extractTextFromDoc(file)
+  return normalizeResumeText(await file.text())
+}
+
+function normalizeResumeText(rawText: string): string {
+  const base = rawText
+    .replace(/\r/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+
+  // Match explicit ALL-CAPS section headings only (avoid sentence words like "experience")
+  const headingPattern = /\b(PROFILE|SUMMARY|OBJECTIVE|TECHNICAL SKILLS|SKILLS|EXPERIENCE|WORK EXPERIENCE|EDUCATION|PROJECTS|CERTIFICATIONS|ACHIEVEMENTS|LANGUAGES)\b/g
+  return base
+    .replace(headingPattern, '\n$1\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+function getResumeSection(lines: string[], headings: string[]): string {
+  const normalizedHeadings = headings.map((h) => h.toLowerCase())
+  const isHeadingLine = (line: string) => {
+    const lower = line.toLowerCase().replace(/[:\-]/g, '').trim()
+    return normalizedHeadings.some((h) => lower === h || lower.startsWith(`${h} `))
+  }
+
+  const allStopHeadings = [
+    'summary',
+    'professional summary',
+    'professional profile',
+    'professional',
+    'objective',
+    'profile',
+    'skills',
+    'technical skills',
+    'expertise',
+    'core expertise',
+    'experience',
+    'work experience',
+    'employment',
+    'education',
+    'projects',
+    'certifications',
+    'achievements',
+    'recognitions',
+    'awards',
+    'languages',
+    'interests',
+    'front end',
+    'backend',
+    'back end',
+    'databases',
+    'cloud & serverless',
+    'leadership & communication',
+    'software design & architecture',
+  ]
+
+  const startIdx = lines.findIndex((line) => isHeadingLine(line))
+  if (startIdx === -1) return ''
+
+  const collected: string[] = []
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    const current = lines[i]!
+    const currentLower = current.toLowerCase().replace(/[:\-]/g, '').trim()
+
+    // Stop at next known heading once we already collected section content.
+    if (collected.length > 0 && allStopHeadings.some((h) => currentLower === h || currentLower.startsWith(`${h} `))) {
+      break
+    }
+
+    collected.push(current)
+  }
+
+  return collected.join('\n').trim()
+}
+
+function getSectionFromText(text: string, headings: string[]): string {
+  const headingRegex = headings.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const stopRegex =
+    'PROFILE|SUMMARY|PROFESSIONAL SUMMARY|PROFESSIONAL PROFILE|PROFESSIONAL|OBJECTIVE|TECHNICAL SKILLS|SKILLS|EXPERTISE|CORE EXPERTISE|EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|EDUCATION|PROJECTS|CERTIFICATIONS|ACHIEVEMENTS|RECOGNITIONS|AWARDS|LANGUAGES|FRONT END|BACK END|BACKEND|DATABASES|CLOUD & SERVERLESS|LEADERSHIP & COMMUNICATION|SOFTWARE DESIGN & ARCHITECTURE'
+  const re = new RegExp(
+    `(?:^|\\n)\\s*(?:${headingRegex})\\s*[:\\-]?\\s*\\n?([\\s\\S]*?)(?=\\n\\s*(?:${stopRegex})\\b|$)`,
+    'i',
+  )
+  const match = text.match(re)
+  return match?.[1]?.trim() || ''
+}
+
+function extractIntroSummary(lines: string[]): string {
+  const blocked = [
+    'summary', 'profile', 'professional', 'objective', 'experience', 'education', 'skills', 'projects',
+    'certifications', 'recognitions', 'achievements', 'languages', 'front end', 'back end', 'backend',
+  ]
+  const candidates = lines
+    .slice(0, 40)
+    .filter((line) => {
+      const lower = line.toLowerCase().trim()
+      if (!lower) return false
+      if (/@|https?:\/\/|\+?\d[\d\s\-()]{7,}/.test(lower)) return false
+      if (blocked.some((b) => lower === b || lower.startsWith(`${b} `))) return false
+      return line.length >= 40 && line.length <= 220
+    })
+    .slice(0, 2)
+  return candidates.join(' ').trim()
+}
+
+function cleanupSingleLineField(value: string, maxLen: number): string {
+  const cleaned = value.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return ''
+  const lower = cleaned.toLowerCase()
+  const noisyTokens = ['experience', 'education', 'projects', 'skills', 'certifications', 'achievements', 'profile']
+  if (cleaned.length > maxLen || noisyTokens.some((t) => lower.includes(t))) return ''
+  return cleaned
+}
+
+function detectPortfolioUrl(text: string): string {
+  const urlMatches = text.match(/https?:\/\/[^\s)]+/gi) || []
+  const blockedHosts = ['linkedin.com', 'github.com', 'leetcode.com', 'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com']
+  for (const rawUrl of urlMatches) {
+    const url = rawUrl.replace(/[),.;]+$/, '')
+    const lower = url.toLowerCase()
+    if (!blockedHosts.some((h) => lower.includes(h))) return url
+  }
+  return ''
+}
+
+function sanitizeParsedResumeData(data: ParsedResumeData): ParsedResumeData {
+  const cap = (value: string | undefined, maxLen: number) => (value || '').trim().slice(0, maxLen)
+  const cleanBlock = (value: string | undefined, maxLen: number) =>
+    cap(value, maxLen)
+      .replace(/^[|:\-\s]+/g, '')
+      .replace(/^[A-Za-z]\s*\n+/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  return {
+    fullName: cleanupSingleLineField(data.fullName || '', 80),
+    title: cleanupSingleLineField(data.title || '', 120),
+    email: cap(data.email, 120),
+    phone: cap(data.phone, 40),
+    location: cleanupSingleLineField(data.location || '', 120),
+    linkedin: cap(data.linkedin, 180),
+    github: cap(data.github, 180),
+    portfolio: cap(data.portfolio, 180),
+    summary: cleanBlock(data.summary, 1800),
+    skills: cleanBlock(data.skills, 1400),
+    experience: cleanBlock(data.experience, 4000),
+    education: cleanBlock(data.education, 2500),
+    projects: cleanBlock(data.projects, 3000),
+    certifications: cleanBlock(data.certifications, 1200),
+    achievements: cleanBlock(data.achievements, 1200),
+    languagesKnown: cleanBlock(data.languagesKnown, 600),
+  }
+}
+
+function applyFieldLevelRules(data: ParsedResumeData, rawText: string): ParsedResumeData {
+  const text = normalizeResumeText(rawText)
+  const sectionExperience = getSectionFromText(text, ['experience', 'work experience', 'employment', 'professional experience'])
+  const sectionEducation = getSectionFromText(text, ['education', 'academic'])
+  const sectionProjects = getSectionFromText(text, ['projects', 'project'])
+  const sectionSkills = getSectionFromText(text, ['technical skills', 'skills', 'core skills'])
+  const sectionSummary = getSectionFromText(text, ['summary', 'objective', 'profile'])
+  const sectionCerts = getSectionFromText(text, ['certification', 'certifications', 'certificate', 'licenses'])
+  const sectionAchievements = getSectionFromText(text, ['achievement', 'achievements', 'award', 'awards'])
+  const sectionLanguages = getSectionFromText(text, ['language', 'languages'])
+
+  const out = { ...data }
+  const isProbablyDump = (value?: string) =>
+    !!value &&
+    value.length > 900 &&
+    /(education|experience|projects|certifications|skills|profile)/i.test(value)
+
+  // Enforce single-line fields.
+  out.fullName = cleanupSingleLineField(out.fullName || '', 80)
+  out.title = cleanupSingleLineField(out.title || '', 120)
+  out.location = cleanupSingleLineField(out.location || '', 120)
+  if (out.location && /(https?:\/\/|@|github|linkedin)/i.test(out.location)) out.location = ''
+
+  // Reseed section fields from canonical section extraction if suspicious.
+  if (!out.experience || isProbablyDump(out.experience)) out.experience = sectionExperience || out.experience
+  if (!out.education || isProbablyDump(out.education)) out.education = sectionEducation || out.education
+  if (!out.projects || isProbablyDump(out.projects)) out.projects = sectionProjects || out.projects
+  if (!out.skills || isProbablyDump(out.skills)) out.skills = sectionSkills || out.skills
+  if (!out.summary || isProbablyDump(out.summary)) out.summary = sectionSummary || out.summary
+  if (!out.certifications || isProbablyDump(out.certifications)) out.certifications = sectionCerts || out.certifications
+  if (!out.achievements || isProbablyDump(out.achievements)) out.achievements = sectionAchievements || out.achievements
+  if (!out.languagesKnown || isProbablyDump(out.languagesKnown)) out.languagesKnown = sectionLanguages || out.languagesKnown
+
+  // Field-specific validity checks.
+  if (out.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.email)) out.email = ''
+  if (out.portfolio && /(linkedin\.com|github\.com|leetcode\.com|gmail\.com|yahoo\.com|hotmail\.com|outlook\.com)/i.test(out.portfolio)) {
+    out.portfolio = detectPortfolioUrl(text)
+  }
+  if (out.linkedin && !/linkedin\.com\/in\//i.test(out.linkedin)) out.linkedin = ''
+  if (out.github && !/github\.com\//i.test(out.github)) out.github = ''
+
+  return sanitizeParsedResumeData(out)
+}
+
+function mergeResumeData(primary: ParsedResumeData | null, fallback: ParsedResumeData): ParsedResumeData {
+  if (!primary) return fallback
+
+  const useFallback = (value?: string) =>
+    !value || value.trim() === '' || value.trim().toLowerCase() === 'not specified'
+
+  return {
+    fullName: useFallback(primary.fullName) ? fallback.fullName : primary.fullName,
+    title: useFallback(primary.title) ? fallback.title : primary.title,
+    email: useFallback(primary.email) ? fallback.email : primary.email,
+    phone: useFallback(primary.phone) ? fallback.phone : primary.phone,
+    location: useFallback(primary.location) ? fallback.location : primary.location,
+    linkedin: useFallback(primary.linkedin) ? fallback.linkedin : primary.linkedin,
+    github: useFallback(primary.github) ? fallback.github : primary.github,
+    portfolio: useFallback(primary.portfolio) ? fallback.portfolio : primary.portfolio,
+    summary: useFallback(primary.summary) ? fallback.summary : primary.summary,
+    skills: useFallback(primary.skills) ? fallback.skills : primary.skills,
+    experience: useFallback(primary.experience) ? fallback.experience : primary.experience,
+    education: useFallback(primary.education) ? fallback.education : primary.education,
+    projects: useFallback(primary.projects) ? fallback.projects : primary.projects,
+    certifications: useFallback(primary.certifications) ? fallback.certifications : primary.certifications,
+    achievements: useFallback(primary.achievements) ? fallback.achievements : primary.achievements,
+    languagesKnown: useFallback(primary.languagesKnown) ? fallback.languagesKnown : primary.languagesKnown,
+  }
+}
+
 function buildFallbackResumeData(rawText: string): ParsedResumeData {
-  const text = rawText.replace(/\r/g, '')
+  const text = normalizeResumeText(rawText)
   const lines = text
     .split('\n')
     .map((l) => l.trim())
@@ -177,17 +400,58 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
   const phoneMatch = text.match(/(\+?\d[\d\s\-()]{7,}\d)/)
   const linkedinMatch = text.match(/linkedin\.com\/in\/[\w-]+/i)
   const githubMatch = text.match(/github\.com\/[\w-]+/i)
-  const portfolioMatch = text.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+\.(?:dev|io|com|me|xyz|tech))\b/i)
+  const portfolio = detectPortfolioUrl(text)
 
   let fullName = ''
-  for (const line of lines.slice(0, 12)) {
-    if (line.length > 2 && line.length < 60 && /^[A-Za-z][A-Za-z\s.'-]+$/.test(line)) {
+  let title = ''
+  const blockedNameTokens = ['resume', 'curriculum vitae', 'profile', 'contact', 'email', 'phone', 'linkedin', 'github']
+  const blockedTitleTokens = [
+    'summary',
+    'profile',
+    'professional',
+    'objective',
+    'skills',
+    'technical skills',
+    'experience',
+    'education',
+    'projects',
+    'certifications',
+    'achievements',
+    'recognitions',
+    'expertise',
+  ]
+  for (let idx = 0; idx < Math.min(lines.length, 16); idx++) {
+    const line = lines[idx]!
+    const lower = line.toLowerCase()
+    if (
+      line.length > 2 &&
+      line.length < 60 &&
+      /^[A-Za-z][A-Za-z\s.'-]+$/.test(line) &&
+      !blockedNameTokens.some((token) => lower.includes(token))
+    ) {
       const words = line.split(/\s+/).filter(Boolean)
       if (words.length >= 2 && words.length <= 4) {
         fullName = line
+        const nextLine = lines[idx + 1]
+        if (
+          nextLine &&
+          nextLine.length > 3 &&
+          nextLine.length < 90 &&
+          !/@|linkedin|github|phone|\+?\d/.test(nextLine.toLowerCase()) &&
+          !blockedTitleTokens.some((token) => nextLine.toLowerCase() === token || nextLine.toLowerCase().startsWith(`${token} `))
+        ) {
+          title = nextLine
+        }
         break
       }
     }
+  }
+
+  if (
+    fullName &&
+    /(developer|engineer|profile|software|intern|experience|skills|education)/i.test(fullName)
+  ) {
+    fullName = ''
   }
 
   const skillKeywords = [
@@ -197,52 +461,87 @@ function buildFallbackResumeData(rawText: string): ParsedResumeData {
   ]
   const lowerText = text.toLowerCase()
   const foundSkills = skillKeywords.filter((s) => lowerText.includes(s)).slice(0, 15)
-  const skills = foundSkills.length > 0 ? foundSkills.join(', ') : ''
 
-  const sectionText = (markers: string[]): string => {
-    const lowerLines = lines.map((l) => l.toLowerCase())
-    const startIdx = lowerLines.findIndex((l) => markers.some((m) => l.includes(m)))
-    if (startIdx === -1) return ''
-    const out: string[] = []
-    for (let i = startIdx + 1; i < lines.length; i++) {
-      const cur = lowerLines[i]!
-      if (
-        ['experience', 'education', 'project', 'skills', 'summary', 'certification', 'achievement', 'language', 'award'].some(
-          (h) => cur.startsWith(h)
-        ) && out.length > 0
-      ) {
-        break
-      }
-      out.push(lines[i]!)
-      if (out.join('\n').length > 1200) break
-    }
-    return out.length > 0 ? out.join('\n') : ''
-  }
+  const experience =
+    getSectionFromText(text, ['experience', 'work experience', 'employment', 'professional experience']) ||
+    getResumeSection(lines, ['experience', 'work experience', 'employment', 'professional experience'])
+  const education =
+    getSectionFromText(text, ['education', 'academic']) || getResumeSection(lines, ['education', 'academic'])
+  const projects =
+    getSectionFromText(text, ['projects', 'project']) || getResumeSection(lines, ['projects', 'project'])
+  const summary =
+    getSectionFromText(text, ['summary', 'objective', 'profile']) ||
+    getResumeSection(lines, ['summary', 'objective', 'profile'])
+  const summaryFromIntro = extractIntroSummary(lines)
+  const certifications =
+    getSectionFromText(text, ['certification', 'certifications', 'certificate', 'licenses']) ||
+    getResumeSection(lines, ['certification', 'certifications', 'certificate', 'licenses'])
+  const achievements =
+    getSectionFromText(text, ['achievement', 'achievements', 'award', 'awards', 'accomplishments']) ||
+    getResumeSection(lines, ['achievement', 'achievements', 'award', 'awards', 'accomplishments'])
+  const languagesKnown =
+    getSectionFromText(text, ['language', 'languages']) || getResumeSection(lines, ['language', 'languages'])
 
-  const experience = sectionText(['experience', 'work history', 'employment'])
-  const education = sectionText(['education', 'academic'])
-  const projects = sectionText(['projects', 'project'])
-  const summary = sectionText(['summary', 'objective', 'profile'])
-  const certifications = sectionText(['certification', 'certificate'])
-  const achievements = sectionText(['achievement', 'award', 'accomplishment', 'honor'])
-  const languagesKnown = sectionText(['language'])
+  const skillsSection = getResumeSection(lines, ['skills', 'technical skills', 'core skills'])
+  const skills = skillsSection
+    ? skillsSection.replace(/\n/g, ', ').replace(/\s{2,}/g, ' ').trim()
+    : foundSkills.length > 0
+      ? foundSkills.join(', ')
+      : ''
 
-  return {
+  const locationRaw = lines
+    .slice(0, 14)
+    .find((line) =>
+      /(india|usa|united states|canada|punjab|haryana|delhi|mumbai|bangalore|chandigarh|hyderabad|noida|gurgaon)/i.test(
+        line,
+      ),
+    ) || ''
+  const location = cleanupSingleLineField(locationRaw, 120)
+
+  const educationFromKeywords =
+    education ||
+    lines
+      .filter((line) =>
+        /(b\.?tech|bachelor|master|m\.?tech|bca|mca|mba|university|college|school|cgpa|gpa|graduat)/i.test(line),
+      )
+      .slice(0, 5)
+      .join('\n')
+
+  const experienceFromKeywords =
+    experience ||
+    lines
+      .filter((line) =>
+        /(\b\d{4}\b|\bpresent\b|intern|engineer|developer|months?|years?)/i.test(line) &&
+        !/(front end|back end|backend|databases|cloud|skills|expertise|recognitions)/i.test(line),
+      )
+      .slice(0, 10)
+      .join('\n')
+
+  const projectsFromKeywords =
+    projects ||
+    lines
+      .filter((line) => /(project|github\.com|built|developed|implemented)/i.test(line))
+      .slice(0, 8)
+      .join('\n')
+
+  return sanitizeParsedResumeData({
     fullName,
+    title,
     email: emailMatch?.[0] || '',
     phone: phoneMatch?.[0] || '',
+    location,
     linkedin: linkedinMatch?.[0] || '',
     github: githubMatch?.[0] || '',
-    portfolio: portfolioMatch?.[0] || '',
-    summary,
+    portfolio,
+    summary: summary.length >= 30 ? summary : summaryFromIntro,
     skills,
-    experience,
-    education,
-    projects,
+    experience: experienceFromKeywords,
+    education: educationFromKeywords,
+    projects: projectsFromKeywords,
     certifications,
     achievements,
     languagesKnown,
-  }
+  })
 }
 
 /**
@@ -296,46 +595,26 @@ export async function POST(request: NextRequest) {
       
       // Extract resume text
       if (resumeFile) {
-        if (isPdfFile(resumeFile)) {
-          extractionPromises.push(
-            extractTextFromPDF(resumeFile).catch((error) => {
-              console.error('[parse-files] Resume PDF extraction failed:', error)
-              throw new Error(`Resume PDF extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-            })
-          )
-        } else {
-          extractionPromises.push(
-            resumeFile.text().catch((error) => {
-              console.error('[parse-files] Resume text extraction failed:', error)
-              throw new Error(`Resume text extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-            })
-          )
-        }
+        extractionPromises.push(
+          extractTextFromFile(resumeFile).catch((error) => {
+            console.error('[parse-files] Resume file extraction failed:', error)
+            throw new Error(`Resume extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          })
+        )
       } else {
         extractionPromises.push(Promise.resolve(''))
       }
       
       // Extract JD text
       if (jdFile) {
-        if (isPdfFile(jdFile)) {
-          extractionPromises.push(
-            extractTextFromPDF(jdFile).catch((error) => {
-              console.error('[parse-files] JD PDF extraction failed:', error)
-              // JD extraction failure is not critical
-              console.log('[parse-files] Continuing without JD text')
-              return ''
-            })
-          )
-        } else {
-          extractionPromises.push(
-            jdFile.text().catch((error) => {
-              console.error('[parse-files] JD text extraction failed:', error)
-              // JD extraction failure is not critical
-              console.log('[parse-files] Continuing without JD text')
-              return ''
-            })
-          )
-        }
+        extractionPromises.push(
+          extractTextFromFile(jdFile).catch((error) => {
+            console.error('[parse-files] JD extraction failed:', error)
+            // JD extraction failure is not critical
+            console.log('[parse-files] Continuing without JD text')
+            return ''
+          })
+        )
       } else {
         extractionPromises.push(Promise.resolve(''))
       }
@@ -490,7 +769,7 @@ IMPORTANT: Include ALL fields. If a field is not found, use empty string "".
 
 Return ONLY valid JSON, no markdown, no explanations, no code blocks.
 
-Resume text:\n${resumeText.substring(0, 6000)}`,
+Resume text:\n${resumeText.substring(0, 12000)}`,
                     },
                   ],
                   max_tokens: 2000,
@@ -615,8 +894,17 @@ Resume text:\n${resumeText.substring(0, 6000)}`,
     ])
 
     console.log('[parse-files] AI parsing complete')
+    const extractedResumeDataRaw =
+      resumeText && resumeText.trim().length > 0
+        ? mergeResumeData(
+            aiExtractedResumeData as ParsedResumeData | null,
+            buildFallbackResumeData(resumeText),
+          )
+        : null
     const extractedResumeData =
-      aiExtractedResumeData || (resumeText && resumeText.trim().length > 0 ? buildFallbackResumeData(resumeText) : null)
+      extractedResumeDataRaw && resumeText
+        ? applyFieldLevelRules(sanitizeParsedResumeData(extractedResumeDataRaw), resumeText)
+        : null
     console.log('[parse-files] Extracted resume data:', extractedResumeData)
     console.log('[parse-files] JD requirements (AI):', jdRequirements)
 

@@ -25,7 +25,7 @@ const config = {
     "@sparticuz/chromium",
     "@axe-core/puppeteer",
     "axe-core",
-    "pdf-parse",
+    "pdfjs-dist",
     "@remotion/bundler",
   ],
   webpack: (config, { isServer }) => {
@@ -60,7 +60,7 @@ const config = {
         "@sparticuz/chromium",
         "@axe-core/puppeteer",
         "axe-core",
-        "pdf-parse",
+        "pdfjs-dist",
       );
     }
     return config;
