@@ -4,6 +4,7 @@ import { env } from '@/env'
 // Node runtime: formData + OpenRouter + PDF text extraction.
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
+const PARSE_FILES_VERSION = '2026-04-23-parser-v3'
 
 type ParsedResumeData = {
   fullName: string
@@ -24,11 +25,30 @@ type ParsedResumeData = {
   languagesKnown?: string
 }
 
+type PdfJsModule = {
+  getDocument: (options: {
+    data: Uint8Array
+    isEvalSupported?: boolean
+    useSystemFonts?: boolean
+    disableFontFace?: boolean
+  }) => { promise: Promise<{ numPages: number; getPage: (pageNo: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string; hasEOL?: boolean }> }> }> }> }
+}
+
+async function loadPdfJsModule(): Promise<PdfJsModule> {
+  try {
+    return (await import('pdfjs-dist/legacy/build/pdf.mjs')) as unknown as PdfJsModule
+  } catch (legacyError) {
+    console.warn('[parse-files] legacy pdfjs import failed, falling back to main build', legacyError)
+    return (await import('pdfjs-dist')) as unknown as PdfJsModule
+  }
+}
+
 // Test endpoint to verify route is working
 export async function GET() {
   return NextResponse.json({ 
     status: 'ok', 
     message: 'Parse files endpoint is working',
+    parserVersion: PARSE_FILES_VERSION,
     timestamp: new Date().toISOString(),
   })
 }
@@ -53,7 +73,7 @@ async function extractTextFromPDF(file: File): Promise<string> {
     }
 
     const uint8 = new Uint8Array(arrayBuffer)
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const pdfjs = await loadPdfJsModule()
     let pdf: Awaited<ReturnType<typeof pdfjs.getDocument>>['promise'] extends Promise<infer T> ? T : never
     try {
       const loadingTask = pdfjs.getDocument({
@@ -366,26 +386,26 @@ function applyFieldLevelRules(data: ParsedResumeData, rawText: string): ParsedRe
 function mergeResumeData(primary: ParsedResumeData | null, fallback: ParsedResumeData): ParsedResumeData {
   if (!primary) return fallback
 
-  const useFallback = (value?: string) =>
+  const shouldUseFallback = (value?: string) =>
     !value || value.trim() === '' || value.trim().toLowerCase() === 'not specified'
 
   return {
-    fullName: useFallback(primary.fullName) ? fallback.fullName : primary.fullName,
-    title: useFallback(primary.title) ? fallback.title : primary.title,
-    email: useFallback(primary.email) ? fallback.email : primary.email,
-    phone: useFallback(primary.phone) ? fallback.phone : primary.phone,
-    location: useFallback(primary.location) ? fallback.location : primary.location,
-    linkedin: useFallback(primary.linkedin) ? fallback.linkedin : primary.linkedin,
-    github: useFallback(primary.github) ? fallback.github : primary.github,
-    portfolio: useFallback(primary.portfolio) ? fallback.portfolio : primary.portfolio,
-    summary: useFallback(primary.summary) ? fallback.summary : primary.summary,
-    skills: useFallback(primary.skills) ? fallback.skills : primary.skills,
-    experience: useFallback(primary.experience) ? fallback.experience : primary.experience,
-    education: useFallback(primary.education) ? fallback.education : primary.education,
-    projects: useFallback(primary.projects) ? fallback.projects : primary.projects,
-    certifications: useFallback(primary.certifications) ? fallback.certifications : primary.certifications,
-    achievements: useFallback(primary.achievements) ? fallback.achievements : primary.achievements,
-    languagesKnown: useFallback(primary.languagesKnown) ? fallback.languagesKnown : primary.languagesKnown,
+    fullName: shouldUseFallback(primary.fullName) ? fallback.fullName : primary.fullName,
+    title: shouldUseFallback(primary.title) ? fallback.title : primary.title,
+    email: shouldUseFallback(primary.email) ? fallback.email : primary.email,
+    phone: shouldUseFallback(primary.phone) ? fallback.phone : primary.phone,
+    location: shouldUseFallback(primary.location) ? fallback.location : primary.location,
+    linkedin: shouldUseFallback(primary.linkedin) ? fallback.linkedin : primary.linkedin,
+    github: shouldUseFallback(primary.github) ? fallback.github : primary.github,
+    portfolio: shouldUseFallback(primary.portfolio) ? fallback.portfolio : primary.portfolio,
+    summary: shouldUseFallback(primary.summary) ? fallback.summary : primary.summary,
+    skills: shouldUseFallback(primary.skills) ? fallback.skills : primary.skills,
+    experience: shouldUseFallback(primary.experience) ? fallback.experience : primary.experience,
+    education: shouldUseFallback(primary.education) ? fallback.education : primary.education,
+    projects: shouldUseFallback(primary.projects) ? fallback.projects : primary.projects,
+    certifications: shouldUseFallback(primary.certifications) ? fallback.certifications : primary.certifications,
+    achievements: shouldUseFallback(primary.achievements) ? fallback.achievements : primary.achievements,
+    languagesKnown: shouldUseFallback(primary.languagesKnown) ? fallback.languagesKnown : primary.languagesKnown,
   }
 }
 
@@ -720,6 +740,11 @@ export async function POST(request: NextRequest) {
         jdRequirements: null,
         resumeText: '',
         jdText: '',
+        parserVersion: PARSE_FILES_VERSION,
+        extractionMeta: {
+          resumeTextLength: 0,
+          jdTextLength: 0,
+        },
         // Don't include error field - this is not an error, just info
       })
     }
@@ -925,6 +950,13 @@ Resume text:\n${resumeText.substring(0, 12000)}`,
       jdRequirements: jdRequirementsOut || null,
       /** True when structured AI JD parse failed but raw JD text was folded into jdRequirements */
       jdUsedRawFallback,
+      parserVersion: PARSE_FILES_VERSION,
+      extractionMeta: {
+        resumeTextLength: resumeText.length,
+        jdTextLength: jdText.length,
+        hadResumeFile: !!resumeFile,
+        hadJdFile: !!jdFile,
+      },
     }
 
     console.log('[parse-files] Final response:', {
