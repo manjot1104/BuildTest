@@ -1025,6 +1025,17 @@ export default function AIResumeBuilderPage() {
           lineCount: number
           exceedsTwoPages: boolean
         } | null
+        extractionMeta?: {
+          resumeTextLength?: number
+          jdTextLength?: number
+          hadResumeFile?: boolean
+          hadJdFile?: boolean
+          diagnostics?: {
+            runtime?: string
+            resume?: string
+            jd?: string
+          }
+        }
       }
       console.log('[parse-files] API response:', result)
       console.log('[parse-files] Extracted resume data:', result.extractedResumeData)
@@ -1054,13 +1065,23 @@ export default function AIResumeBuilderPage() {
           clearTimeout(aiProgressTimer)
           aiProgressTimer = null
         }
+        const runtimeHint = result.extractionMeta?.diagnostics?.runtime
+        const resumeHint = result.extractionMeta?.diagnostics?.resume
+        const jdHint = result.extractionMeta?.diagnostics?.jd
+        const debugHint = [runtimeHint ? `Runtime ${runtimeHint}` : '', resumeHint, jdHint]
+          .filter(Boolean)
+          .join(' | ')
+
         // Show as info message - this is normal for image-based PDFs
         toast.info(
           'Files uploaded successfully',
           { 
             id: 'parse-files',
-            description: 'PDF text extraction wasn\'t possible (likely image-based PDFs). Please fill the form manually.',
-            duration: 4000,
+            description:
+              debugHint.length > 0
+                ? `Text extraction failed on server. ${debugHint}`
+                : 'PDF text extraction wasn\'t possible (likely image-based PDFs). Please fill the form manually.',
+            duration: 7000,
           }
         )
         setIsParsingFiles(false)

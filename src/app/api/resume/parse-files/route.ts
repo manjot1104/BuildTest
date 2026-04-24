@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import { env } from '@/env'
 
 // Node runtime: formData + OpenRouter + PDF text extraction.
@@ -42,6 +42,41 @@ async function loadPdfJsModule(): Promise<PdfJsModule> {
     console.warn('[parse-files] legacy pdfjs import failed, falling back to main build', legacyError)
     return (await import('pdfjs-dist')) as unknown as PdfJsModule
   }
+}
+
+type PdfParseResult = { text?: string } | string
+
+type PdfParseModuleShape = {
+  default?: (input: Buffer | Uint8Array) => Promise<PdfParseResult>
+  PDFParse?: (input: Buffer | Uint8Array) => Promise<PdfParseResult>
+}
+
+async function extractTextFromPdfParse(file: File): Promise<string> {
+  console.log('[parse-files] Trying PDF fallback parser (pdf-parse) for:', file.name)
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  const pdfParseModule = (await import('pdf-parse')) as unknown as PdfParseModuleShape
+  const parseFn = pdfParseModule.default ?? pdfParseModule.PDFParse
+
+  if (!parseFn) {
+    throw new Error('pdf-parse module loaded but parser function was not found')
+  }
+
+  const parsed = await parseFn(buffer)
+  const rawText =
+    typeof parsed === 'string'
+      ? parsed
+      : typeof parsed?.text === 'string'
+        ? parsed.text
+        : ''
+  const normalized = normalizeResumeText(rawText)
+
+  if (!normalized) {
+    throw new Error('pdf-parse returned empty text')
+  }
+
+  console.log('[parse-files] ✅ PDF parsed (pdf-parse fallback), text length:', normalized.length)
+  return normalized
 }
 
 // Test endpoint to verify route is working
@@ -129,12 +164,20 @@ async function extractTextFromPDF(file: File): Promise<string> {
     }
 
     return merged
-  } catch (error) {
-    console.error('[parse-files] Error extracting text from PDF:', error)
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    const errorStack = error instanceof Error ? error.stack : undefined
-    console.error('[parse-files] Error stack:', errorStack)
-    throw new Error(`Failed to extract text from PDF file: ${errorMessage}`)
+  } catch (pdfJsError) {
+    console.error('[parse-files] Error extracting text from PDF (pdfjs):', pdfJsError)
+    const pdfJsMessage = pdfJsError instanceof Error ? pdfJsError.message : 'Unknown error'
+    const pdfJsStack = pdfJsError instanceof Error ? pdfJsError.stack : undefined
+    console.error('[parse-files] Error stack (pdfjs):', pdfJsStack)
+
+    try {
+      return await extractTextFromPdfParse(file)
+    } catch (fallbackError) {
+      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Unknown error'
+      const mergedMessage = `pdfjs failed: ${pdfJsMessage}; pdf-parse fallback failed: ${fallbackMessage}`
+      console.error('[parse-files] PDF fallback parser failed:', fallbackError)
+      throw new Error(`Failed to extract text from PDF file: ${mergedMessage}`)
+    }
   }
 }
 
@@ -608,6 +651,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const extractionDiagnostics = {
+      runtime: process.version,
+      resume: '',
+      jd: '',
+    }
+
     // Extract text from files in parallel for faster processing
     let resumeText = ''
     let jdText = ''
@@ -621,6 +670,7 @@ export async function POST(request: NextRequest) {
         extractionPromises.push(
           extractTextFromFile(resumeFile).catch((error) => {
             console.error('[parse-files] Resume file extraction failed:', error)
+            extractionDiagnostics.resume = error instanceof Error ? error.message : String(error)
             throw new Error(`Resume extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
           })
         )
@@ -633,6 +683,7 @@ export async function POST(request: NextRequest) {
         extractionPromises.push(
           extractTextFromFile(jdFile).catch((error) => {
             console.error('[parse-files] JD extraction failed:', error)
+            extractionDiagnostics.jd = error instanceof Error ? error.message : String(error)
             // JD extraction failure is not critical
             console.log('[parse-files] Continuing without JD text')
             return ''
@@ -670,6 +721,7 @@ export async function POST(request: NextRequest) {
         // If it's a PDF and extraction failed, provide helpful error but don't fail completely
         if (resumeFile && isPdfFile(resumeFile)) {
           const errorMsg = errorReason instanceof Error ? errorReason.message : String(errorReason)
+          extractionDiagnostics.resume = errorMsg
           console.warn('[parse-files] PDF extraction failed, but continuing with empty text')
           resumeText = '' // Set to empty instead of throwing
           
@@ -684,6 +736,8 @@ export async function POST(request: NextRequest) {
         } else {
           // For non-PDF files, also set to empty instead of throwing
           console.warn('[parse-files] Text extraction failed, but continuing with empty text')
+          extractionDiagnostics.resume =
+            errorReason instanceof Error ? errorReason.message : String(errorReason)
           resumeText = ''
         }
       }
@@ -694,6 +748,10 @@ export async function POST(request: NextRequest) {
       } else {
         console.error('[parse-files] Error extracting JD text:', jdTextResult.reason)
         // JD extraction failure is not critical, continue without it
+        extractionDiagnostics.jd =
+          jdTextResult.reason instanceof Error
+            ? jdTextResult.reason.message
+            : String(jdTextResult.reason)
         jdText = ''
         console.log('[parse-files] Continuing without JD text')
       }
@@ -710,6 +768,7 @@ export async function POST(request: NextRequest) {
       // Always continue even if extraction failed - we'll return empty text
       // The frontend can handle empty extractedResumeData gracefully
       console.log('[parse-files] Continuing despite extraction errors - will return empty data')
+      extractionDiagnostics.resume = extractionDiagnostics.resume || errorDetails.message
       resumeText = resumeText || ''
       jdText = jdText || ''
     }
@@ -747,6 +806,13 @@ export async function POST(request: NextRequest) {
         extractionMeta: {
           resumeTextLength: 0,
           jdTextLength: 0,
+          hadResumeFile: !!resumeFile,
+          hadJdFile: !!jdFile,
+          resumeFile: resumeFile
+            ? { name: resumeFile.name, type: resumeFile.type, size: resumeFile.size }
+            : null,
+          jdFile: jdFile ? { name: jdFile.name, type: jdFile.type, size: jdFile.size } : null,
+          diagnostics: extractionDiagnostics,
         },
         // Don't include error field - this is not an error, just info
       })
@@ -959,6 +1025,11 @@ Resume text:\n${resumeText.substring(0, 12000)}`,
         jdTextLength: jdText.length,
         hadResumeFile: !!resumeFile,
         hadJdFile: !!jdFile,
+        resumeFile: resumeFile
+          ? { name: resumeFile.name, type: resumeFile.type, size: resumeFile.size }
+          : null,
+        jdFile: jdFile ? { name: jdFile.name, type: jdFile.type, size: jdFile.size } : null,
+        diagnostics: extractionDiagnostics,
       },
     }
 
