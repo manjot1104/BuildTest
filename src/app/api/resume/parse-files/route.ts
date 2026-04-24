@@ -4,7 +4,9 @@ import { env } from '@/env'
 // Node runtime: formData + OpenRouter + PDF text extraction.
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
-const PARSE_FILES_VERSION = '2026-04-23-parser-v3'
+const PARSE_FILES_VERSION = '2026-04-24-parser-v4'
+const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+const MIN_RESUME_TEXT_CHARS = 30
 
 type ParsedResumeData = {
   fullName: string
@@ -44,11 +46,13 @@ async function loadPdfJsModule(): Promise<PdfJsModule> {
   }
 }
 
-type PdfParseResult = { text?: string } | string
+type PdfParseTextResult = { text?: string }
 
 type PdfParseModuleShape = {
-  default?: (input: Buffer | Uint8Array) => Promise<PdfParseResult>
-  PDFParse?: (input: Buffer | Uint8Array) => Promise<PdfParseResult>
+  PDFParse?: new (options: { data: Buffer | Uint8Array }) => {
+    getText: () => Promise<PdfParseTextResult>
+    destroy?: () => Promise<void> | void
+  }
 }
 
 async function extractTextFromPdfParse(file: File): Promise<string> {
@@ -56,19 +60,16 @@ async function extractTextFromPdfParse(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   const pdfParseModule = (await import('pdf-parse')) as unknown as PdfParseModuleShape
-  const parseFn = pdfParseModule.default ?? pdfParseModule.PDFParse
+  const PdfParseClass = pdfParseModule.PDFParse
 
-  if (!parseFn) {
-    throw new Error('pdf-parse module loaded but parser function was not found')
+  if (!PdfParseClass) {
+    throw new Error('pdf-parse module loaded but PDFParse class was not found')
   }
 
-  const parsed = await parseFn(buffer)
-  const rawText =
-    typeof parsed === 'string'
-      ? parsed
-      : typeof parsed?.text === 'string'
-        ? parsed.text
-        : ''
+  const parser = new PdfParseClass({ data: buffer })
+  const parsed = await parser.getText()
+  await parser.destroy?.()
+  const rawText = typeof parsed?.text === 'string' ? parsed.text : ''
   const normalized = normalizeResumeText(rawText)
 
   if (!normalized) {
@@ -97,7 +98,7 @@ async function extractTextFromPDF(file: File): Promise<string> {
   try {
     console.log('[parse-files] Starting PDF extraction (pdfjs-dist) for:', file.name, 'Size:', file.size, 'bytes')
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > MAX_UPLOAD_FILE_BYTES) {
       throw new Error('PDF file is too large (max 10MB). Please use a smaller file.')
     }
 
@@ -634,6 +635,18 @@ export async function POST(request: NextRequest) {
   console.log('[parse-files] Request received')
   
   try {
+    const contentType = request.headers.get('content-type')?.toLowerCase() || ''
+    if (!contentType.includes('multipart/form-data')) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Invalid content type. Expected multipart/form-data.',
+          parserVersion: PARSE_FILES_VERSION,
+        },
+        { status: 400 },
+      )
+    }
+
     console.log('[parse-files] Parsing form data...')
     const formData = await request.formData()
     const resumeFile = formData.get('resume') as File | null
@@ -649,6 +662,35 @@ export async function POST(request: NextRequest) {
         { error: 'At least one file (resume or JD) is required' },
         { status: 400 }
       )
+    }
+
+    const filesToValidate = [
+      { label: 'resume', file: resumeFile },
+      { label: 'jd', file: jdFile },
+    ] as const
+
+    for (const { label, file } of filesToValidate) {
+      if (!file) continue
+      if (file.size <= 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `${label.toUpperCase()} file is empty or failed to upload properly.`,
+            parserVersion: PARSE_FILES_VERSION,
+          },
+          { status: 400 },
+        )
+      }
+      if (file.size > MAX_UPLOAD_FILE_BYTES) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `${label.toUpperCase()} file is too large (max 10MB).`,
+            parserVersion: PARSE_FILES_VERSION,
+          },
+          { status: 413 },
+        )
+      }
     }
 
     const extractionDiagnostics = {
@@ -778,7 +820,7 @@ export async function POST(request: NextRequest) {
       jdLength: jdText.length,
     })
 
-    // If no text was extracted, return success with null data (not an error)
+    // If no text was extracted, fail explicitly (do not silently return success).
     if (!resumeText && !jdText) {
       console.warn('[parse-files] ⚠️ No text extracted from either file')
       console.warn('[parse-files] File details:', {
@@ -794,10 +836,10 @@ export async function POST(request: NextRequest) {
         } : 'none',
       })
       
-      // Return success with null data - this is not an error, just means extraction wasn't possible
-      // Frontend will show a friendly message and let user fill manually
       return NextResponse.json({
-        success: true,
+        success: false,
+        error:
+          'Could not extract text from uploaded file(s). Please upload a text-based PDF/DOCX (not scanned image PDF).',
         extractedResumeData: null,
         jdRequirements: null,
         resumeText: '',
@@ -814,8 +856,37 @@ export async function POST(request: NextRequest) {
           jdFile: jdFile ? { name: jdFile.name, type: jdFile.type, size: jdFile.size } : null,
           diagnostics: extractionDiagnostics,
         },
-        // Don't include error field - this is not an error, just info
+      }, { status: 422 })
+    }
+
+    // Resume parsing must not silently succeed with unusable text.
+    if (resumeFile && resumeText.trim().length < MIN_RESUME_TEXT_CHARS) {
+      const extractedLength = resumeText.trim().length
+      console.error('[parse-files] Resume extraction below minimum threshold:', {
+        extractedLength,
+        requiredMinimum: MIN_RESUME_TEXT_CHARS,
       })
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Resume text extraction failed in production. Please try a different text-based PDF/DOCX or paste details manually.',
+          parserVersion: PARSE_FILES_VERSION,
+          extractionMeta: {
+            resumeTextLength: resumeText.length,
+            jdTextLength: jdText.length,
+            hadResumeFile: !!resumeFile,
+            hadJdFile: !!jdFile,
+            resumeFile: resumeFile
+              ? { name: resumeFile.name, type: resumeFile.type, size: resumeFile.size }
+              : null,
+            jdFile: jdFile ? { name: jdFile.name, type: jdFile.type, size: jdFile.size } : null,
+            diagnostics: extractionDiagnostics,
+            minimumResumeCharsRequired: MIN_RESUME_TEXT_CHARS,
+          },
+        },
+        { status: 422 },
+      )
     }
 
     // Use AI to extract structured data - process in parallel for faster results
