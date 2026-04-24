@@ -31,6 +31,7 @@ type PdfJsModule = {
     isEvalSupported?: boolean
     useSystemFonts?: boolean
     disableFontFace?: boolean
+    disableWorker?: boolean
   }) => { promise: Promise<{ numPages: number; getPage: (pageNo: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string; hasEOL?: boolean }> }> }> }> }
 }
 
@@ -81,6 +82,8 @@ async function extractTextFromPDF(file: File): Promise<string> {
         isEvalSupported: false,
         useSystemFonts: true,
         disableFontFace: true,
+        // Required for serverless/node runtimes where worker bundling is unreliable.
+        disableWorker: true,
       })
       pdf = await loadingTask.promise
     } catch (loadError) {
