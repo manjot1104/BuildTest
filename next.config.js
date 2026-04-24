@@ -26,6 +26,7 @@ const config = {
     "@axe-core/puppeteer",
     "axe-core",
     "pdfjs-dist",
+    "pdf-parse",
     "@remotion/bundler",
   ],
   webpack: (config, { isServer }) => {
@@ -61,6 +62,7 @@ const config = {
         "@axe-core/puppeteer",
         "axe-core",
         "pdfjs-dist",
+        "pdf-parse",
       );
     }
     return config;

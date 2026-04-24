@@ -4,8 +4,12 @@ import { env } from '@/env'
 // Node runtime: formData + OpenRouter + PDF text extraction.
 export const runtime = 'nodejs'
 export const maxDuration = 60 // 60 seconds max
-const PARSE_FILES_VERSION = '2026-04-24-parser-v4'
-const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+const PARSE_FILES_VERSION = '2026-04-24-parser-v5'
+const DEFAULT_MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024
+const VERCEL_SAFE_MAX_UPLOAD_FILE_BYTES = 4 * 1024 * 1024
+const MAX_UPLOAD_FILE_BYTES = process.env.VERCEL
+  ? VERCEL_SAFE_MAX_UPLOAD_FILE_BYTES
+  : DEFAULT_MAX_UPLOAD_FILE_BYTES
 const MIN_RESUME_TEXT_CHARS = 30
 
 type ParsedResumeData = {
@@ -99,7 +103,8 @@ async function extractTextFromPDF(file: File): Promise<string> {
     console.log('[parse-files] Starting PDF extraction (pdfjs-dist) for:', file.name, 'Size:', file.size, 'bytes')
 
     if (file.size > MAX_UPLOAD_FILE_BYTES) {
-      throw new Error('PDF file is too large (max 10MB). Please use a smaller file.')
+      const maxMb = Math.floor(MAX_UPLOAD_FILE_BYTES / (1024 * 1024))
+      throw new Error(`PDF file is too large (max ${maxMb}MB for this deployment). Please use a smaller file.`)
     }
 
     const arrayBuffer = await file.arrayBuffer()
@@ -648,7 +653,29 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('[parse-files] Parsing form data...')
-    const formData = await request.formData()
+    let formData: FormData
+    try {
+      formData = await request.formData()
+    } catch (formDataError) {
+      const message = formDataError instanceof Error ? formDataError.message : String(formDataError)
+      const lower = message.toLowerCase()
+      const likelyTooLarge =
+        lower.includes('body exceeded') ||
+        lower.includes('request entity too large') ||
+        lower.includes('payload too large') ||
+        lower.includes('file too large')
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: likelyTooLarge
+            ? `Upload payload too large for deployment limits. Keep each file <= ${Math.floor(MAX_UPLOAD_FILE_BYTES / (1024 * 1024))}MB.`
+            : 'Failed to read uploaded file payload. Please re-upload and try again.',
+          parserVersion: PARSE_FILES_VERSION,
+        },
+        { status: likelyTooLarge ? 413 : 400 },
+      )
+    }
     const resumeFile = formData.get('resume') as File | null
     const jdFile = formData.get('jd') as File | null
 
@@ -682,10 +709,11 @@ export async function POST(request: NextRequest) {
         )
       }
       if (file.size > MAX_UPLOAD_FILE_BYTES) {
+        const maxMb = Math.floor(MAX_UPLOAD_FILE_BYTES / (1024 * 1024))
         return NextResponse.json(
           {
             success: false,
-            error: `${label.toUpperCase()} file is too large (max 10MB).`,
+            error: `${label.toUpperCase()} file is too large (max ${maxMb}MB for this deployment).`,
             parserVersion: PARSE_FILES_VERSION,
           },
           { status: 413 },
@@ -695,6 +723,8 @@ export async function POST(request: NextRequest) {
 
     const extractionDiagnostics = {
       runtime: process.version,
+      deployment: process.env.VERCEL ? 'vercel' : 'non-vercel',
+      commitSha: process.env.VERCEL_GIT_COMMIT_SHA || '',
       resume: '',
       jd: '',
     }
