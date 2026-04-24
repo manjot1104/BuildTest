@@ -1796,15 +1796,15 @@ export default function AIResumeBuilderPage() {
 
             {(coverLetterMeta?.inferredTone || (coverLetterMeta?.focusedKeywords?.length ?? 0) > 0) && (
               <div className="rounded-xl border border-border/60 bg-card p-4 text-sm">
-                {coverLetterMeta.inferredTone ? (
+                {coverLetterMeta?.inferredTone ? (
                   <p className="text-muted-foreground">
                     <span className="font-medium text-foreground">Inferred tone:</span> {coverLetterMeta.inferredTone}
                   </p>
                 ) : null}
-                {(coverLetterMeta.focusedKeywords?.length ?? 0) > 0 ? (
+                {(coverLetterMeta?.focusedKeywords?.length ?? 0) > 0 ? (
                   <p className="mt-2 text-muted-foreground">
                     <span className="font-medium text-foreground">Keyword focus:</span>{' '}
-                    {coverLetterMeta.focusedKeywords?.slice(0, 10).join(', ')}
+                    {coverLetterMeta?.focusedKeywords?.slice(0, 10).join(', ')}
                   </p>
                 ) : null}
               </div>
